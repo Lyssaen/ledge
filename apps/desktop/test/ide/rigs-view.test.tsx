@@ -60,6 +60,14 @@ describe('the IDE Rigs view', () => {
     expect(within(rowOf('synapse-review')).getByRole('button', { name: /Réduire|Déplier|Replier/ })).toBeDisabled();
     expect(within(screen.getByRole('button', { name: 'Daemon' }).closest('.ide-rigs-row') as HTMLElement).getByText('0.7.10')).toBeInTheDocument();
   });
+  it('under Kernel, its row is « Opérations », its seats under it (the user, 2026-11-09)', () => {
+    running();
+    const row = rowOf('Opérations');
+    expect(row).toHaveAttribute('data-target', 'kernel');
+    expect(screen.queryByRole('button', { name: 'kernel' })).toBeNull();
+    expect(screen.getByText('a.one')).toBeInTheDocument();
+  });
+
   it('a stop asks under its row (nothing sent), with the command; confirming sends it on the machine', async () => {
     const m = running();
     await userEvent.click(screen.getByRole('button', { name: 'Arrêter ledge-dev' }));

@@ -35,7 +35,7 @@ export interface IdeFrameProps {
   blocked: boolean;
   /** The local daemon is down (`data-readonly`); an agent is dragged onto a project (`is-dragging`). */
   readOnly: boolean; dragging: boolean;
-  onTab(t: Tab): void; activeTab: Tab | null; badge: { perm: number; ask: number }; rigsAlert: boolean;
+  onTab(t: Tab): void; activeTab: Tab | null; badge: { perm: number; ask: number };
   waiting: readonly Session[]; onNextWaiting(): void;
 }
 
@@ -58,7 +58,7 @@ export function IdeFrame(p: IdeFrameProps): JSX.Element {
     <div className={`ide${p.dragging ? ' is-dragging' : ''}`} data-readonly={p.readOnly ? 'true' : undefined}>
       <IdeTitleBar layout={layout} onLayout={onLayout} onSearch={p.onSearch} blocked={p.blocked} rightShown={right} />
       <div className="ide-body" style={columns} inert={p.blocked}>
-        <ActivityBar layout={layout} onLayout={onLayout} onTab={p.onTab} activeTab={p.activeTab} badge={p.badge} rigsAlert={p.rigsAlert} />
+        <ActivityBar layout={layout} onLayout={onLayout} onTab={p.onTab} activeTab={p.activeTab} badge={p.badge} />
         {layout.sideOpen && <IdeExplorer width={layout.sideWidth} onLayout={onLayout}>{p.explorer}</IdeExplorer>}
         <section className="ide-editor" aria-label={t.ide.editorLabel}>
           {p.notice}

@@ -8,10 +8,8 @@ import '../styles/ide.css';
 
 /** The IDE's activity bar (mockup `activity()`): the three sidebar views, then the tabs that open in the workspace.
  *  « MR et PR » comes with lot 8. */
-export function ActivityBar({ layout, onLayout, onTab, activeTab, badge, rigsAlert }: {
+export function ActivityBar({ layout, onLayout, onTab, activeTab, badge }: {
   layout: IdeLayout; onLayout(a: LayoutAction): void; onTab(t: Tab): void; activeTab: Tab | null; badge: { perm: number; ask: number };
-  /** OpenRig is installed but its daemon is down: an amber « ! » on Rigs. */
-  rigsAlert: boolean;
 }) {
   const { t } = useI18n();
   const view = (v: SideView, d: readonly string[], label: string, extra?: React.ReactNode) => (
@@ -29,7 +27,7 @@ export function ActivityBar({ layout, onLayout, onTab, activeTab, badge, rigsAle
   return (
     <nav className="ide-activity" aria-label={t.ide.activityLabel}>
       {view('projects', SHELL_ICONS.files, t.ide.projects)}
-      {view('rigs', SHELL_ICONS.rig, t.ide.rigs, rigsAlert ? <span className="ide-badge amber">!</span> : null)}
+      {view('rigs', SHELL_ICONS.rig, t.ide.rigs)}
       {view('atoi', SHELL_ICONS.inbox, t.ide.atoi, mark)}
       {tab(ATELIER_TAB, SHELL_ICONS.grid, t.ide.atelierTab)}
       <span className="grow" />

@@ -3,7 +3,7 @@ import type { OpenRigState } from '@ledge/protocol';
 import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon, session, twoProjects } from './daemon';
 
-// The IDE's Rigs view (lot 7b, docs/mockups/ledge-ide-rigs.html): the activity bar's Rigs button, its « ! », the actions and their confirmation.
+// The IDE's Rigs view (lot 7b, docs/mockups/ledge-ide-rigs.html): the activity bar's Rigs button (no « ! » since 2026-11-09), the actions and their confirmation.
 test.use({ viewport: { width: 1920, height: 1080 }, reducedMotion: 'reduce' });
 
 const LONG = 'a-rig-with-a-really-long-name-that-cannot-fit';
@@ -49,9 +49,9 @@ test('the Rigs button opens the view: kernel, rigs and the Daemon row; a stop as
   await expect(page.getByRole('region', { name: 'Bottom panel' })).toContainText('rig down starter --snapshot');
 });
 
-test('a stopped daemon puts « ! » on Rigs and offers « Start OpenRig »', async ({ page }) => {
+test('a stopped daemon puts no « ! » on Rigs (the user, 2026-11-09) and offers « Start OpenRig »', async ({ page }) => {
   await boot(page, state('stopped'));
-  await expect(rigsButton(page).locator('.ide-badge.amber')).toHaveText('!');
+  await expect(rigsButton(page).locator('.ide-badge')).toHaveCount(0);
   await rigsButton(page).click();
   await expect(view(page).getByRole('button', { name: 'Start OpenRig' })).toBeVisible();
 });

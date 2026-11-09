@@ -183,14 +183,14 @@ export function Sidebar(p: {
       )}
       {section === 'projects' && (
         <div className="ide-ex-h">
+          {/* No « + N » beside it (the user, 2026-11-09): N still opens Nouvelle session. */}
           <span>{t.side.projects}</span>
-          <button type="button" className="ide-ex-kbd" title={t.ide.newSession} aria-label={t.ide.newSession} aria-keyshortcuts="N" onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'launch' } })}>+ N</button>
         </div>
       )}
-      <div className="st-scroll">
+      <div className={cls('st-scroll', section === 'atoi' && 'st-scroll-atoi')}>
         {(!section || section === 'atoi') && <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
           rigAsks={p.asks ?? []} sessions={p.sessions} {...(p.onSeeAsk ? { onSeeAsk: p.onSeeAsk } : {})}
-          usageAlerts={p.usageAlerts ?? []} {...(p.onAckUsage ? { onAckUsage: p.onAckUsage } : {})}
+          {...(section ? { empty: t.ide.atoiNone } : { usageAlerts: p.usageAlerts ?? [], ...(p.onAckUsage ? { onAckUsage: p.onAckUsage } : {}) })}
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
           decisions={decisions} answer={p.tasksApi?.answer} answerNote={p.tasksApi?.answerNote}
@@ -213,7 +213,7 @@ export function Sidebar(p: {
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}
             onToggleBranches={() => setPrefs(v => ({ ...v, byBranch: !v.byBranch }))}
-            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} />
+            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} ide={section !== undefined} />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>}
         {(!section || section === 'rigs') && byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}

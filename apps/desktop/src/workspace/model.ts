@@ -11,13 +11,14 @@
 export type TabKind = 'session' | 'seat' | 'changes' | 'terminal' | 'pr' | 'rig' | 'openrig' | 'atoi' | 'atelier' | 'settings';
 export type View = 'thread' | 'terminal' | 'role';
 export interface Tab { kind: TabKind; ref: string; /** session and seat tabs: the view in front. */ view?: View }
-export type Link = 'violet' | 'teal';
+/** The link colours (the user, 2026-11-09: more than two), none of them a state colour nor Ledge's coral. */
+export type Link = 'violet' | 'teal' | 'rose' | 'lime' | 'fuchsia' | 'sand';
 export interface Group { id: string; window: string; tabs: Tab[]; active: number; link: Link | null; /** split from: the session the user left. */ from?: string }
 export interface Workspace { version: 1; windows: string[]; groups: Group[]; focus: string; next: number }
 export type Where = 'active' | 'right' | 'window';
 
 export const MAIN = 'main';
-export const LINKS: readonly Link[] = ['violet', 'teal'];
+export const LINKS: readonly Link[] = ['violet', 'teal', 'rose', 'lime', 'fuchsia', 'sand'];
 
 /** The identity of a tab: two tabs with the same key are the same tab. The view is not part of it. */
 export const keyOf = (t: Tab): string => `${t.kind}:${t.ref}`;
@@ -288,11 +289,19 @@ export function split(w: Workspace, groupId: string): Workspace {
   return { ...replaceGroup(w1, from ? { ...group, from } : group), focus: group.id };
 }
 
-/** The square left of the tabs: no link → violet → teal → no link. */
+/** The next link colour after `link`, then none: no link → violet → teal → … → sand → no link. */
+const nextLink = (link: Link | null): Link | null => (link === null ? LINKS[0]! : LINKS[LINKS.indexOf(link) + 1] ?? null);
+
+/** The square left of the tabs, from the keyboard: the next colour. */
 export function cycleLink(w: Workspace, groupId: string): Workspace {
   const g = groupById(w, groupId);
-  if (!g) return w;
-  const link = g.link === null ? 'violet' : g.link === 'violet' ? 'teal' : null;
+  return g ? setLink(w, groupId, nextLink(g.link)) : w;
+}
+
+/** The colour chosen in the square's menu (or none): a linked group follows the session in front of its peers at once. */
+export function setLink(w: Workspace, groupId: string, link: Link | null): Workspace {
+  const g = groupById(w, groupId);
+  if (!g || g.link === link) return w;
   const out = replaceGroup(w, { ...g, link });
   const front = g.tabs[g.active];
   return link && front && isAgent(front) ? follow(out, g.id, link, front.ref) : out;

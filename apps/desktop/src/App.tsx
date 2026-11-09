@@ -27,7 +27,8 @@ import { TopBar } from './shell/TopBar';
 import { Footer } from './shell/Footer';
 import { UsageFooter } from './usage/UsageFooter';
 import { useUsageView } from './usage/useUsageView';
-import { resetIsDate, resetLong } from './usage/model';
+import { resetIsDate, resetLong, resetShort } from './usage/model';
+import { useUsageTold } from './ide/usageTold';
 import { alertWindowName } from './usage/alertName';
 import { LaunchModalPlace, LaunchPlace } from './launch/lazy';
 import type { LaunchWhere } from './launch/LaunchModal';
@@ -46,9 +47,7 @@ import { Atelier } from './atelier/Atelier';
 import { OpenRigPage } from './openrig/OpenRigPage';
 import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
 import { createRigOutput, useRigOutput } from './openrig/rigOutput';
-import { SIDEBAR_POLL_MS, useSidebarOpenRig } from './openrig/sidebarState';
-import { useOpenRig } from '@ledge/fleet/openrig';
-import { rigsAlert } from './ide/rigs/model';
+import { useSidebarOpenRig } from './openrig/sidebarState';
 import { offersRigs, setGrouping, useGrouping } from './openrig/grouping';
 import { AtelierAway } from './atelier/Away';
 import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
@@ -206,9 +205,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [nav, navDispatch] = useReducer(shellReducer, undefined, () => initialNav(loadOverview()));
   // « Interface IDE (aperçu) » (Settings › General): its tabs (`ledge.ide.workspace`) and panels (`ledge.ide.layout`).
   const [ide] = useIdeEnabled();
-  // The amber « ! » on the activity bar's Rigs: the displayed machine's daemon is down. The same shared read as the Rigs view (one subscription); off while the old UI shows.
+  // The machine the Rigs view shows (the rig launch modal opens on it). No « ! » on Rigs any more (the user, 2026-11-09).
   const [rigsMachine] = useRigsMachine(machines);
-  const rigsAlertOn = rigsAlert(useOpenRig(fleetClient, ide && machines.some(m => m.id === rigsMachine && m.ready) ? rigsMachine : null, SIDEBAR_POLL_MS).state ?? undefined);
   // Read (and re-rendered on) only while the IDE shows the panel's Sortie.
   const rigEntries = useRigOutput(rigOutput, ide);
   // A bottom-panel shell's tab closed by the user (its ×, middle click, Ctrl+W, the menu) kills the shell (R9); a tab the model
@@ -428,6 +426,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
   const { notice, action: noticeAction, notify, undo } = useToast();
+  // The IDE's « À toi » has no usage card: each alert is told once, in a toast (the user, 2026-11-09).
+  useUsageTold(ide, usage.alerts, notify, a => {
+    const u = t.usage, w = a.window;
+    const at = w.resetsAt ? resetShort(w.resetsAt, Date.now(), lang) : null;
+    const line = a.level === 'full' ? u.alertFull(at, !!w.resetsAt && resetIsDate(w.resetsAt, Date.now())) : u.alertThreshold(w.pct, at);
+    return t.ide.usageOnce(u.harness[a.harness] ?? a.harness, alertWindowName(u, a.harness, w), line);
+  });
   const filing = useFiling({ fleet, projects, sessions, projectIdOf, notify });
   // Allow / Deny from the session (and the sidebar): one send per request; a refusal or a silence is said in the toast.
   // End, archive, resume, restore, delete (lot 8): the confirmation below; the atelier and the session page hand it their menus.
@@ -794,7 +799,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     return (
       <IdePlace layout={layout} onLayout={onLayout} blocked={blocked} readOnly={localDown} dragging={!!filing.dragging}
         onSearch={() => dispatch({ type: 'modal', modal: { kind: 'search' } })}
-        onTab={onTab} activeTab={front ?? null} badge={badge} rigsAlert={rigsAlertOn}
+        onTab={onTab} activeTab={front ?? null} badge={badge}
         waiting={waiting} onNextWaiting={() => { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id }); }}
         notice={tokenMissing && <DaemonOutdated />}
         explorer={layout.sideView === 'rigs'
@@ -829,7 +834,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             projects={projects} notify={notify} onProposal={openProposal} />
         }
         footer={<Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines} />}
-        usage={showUsage ? <UsageFooter groups={usage.groups} threshold={usage.threshold} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} /> : undefined} />
+        // No amber in the IDE's status bar: the alert is told once, in a toast (red stays at 100 %).
+        usage={showUsage ? <UsageFooter groups={usage.groups} threshold={Infinity} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} /> : undefined} />
     );
   })();
   return (

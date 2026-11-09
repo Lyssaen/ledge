@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { HumanAsk, OpenRigAction, OpenRigState, Rig, RigSeat, Session } from '@ledge/protocol';
 import type { MachineState } from '@ledge/fleet';
-import { confirmOf, displayedMachine, machineEntries, powerOf, rigsAlert, rigsViewOf } from '../../src/ide/rigs/model';
+import { confirmOf, displayedMachine, machineEntries, powerOf, rigsViewOf } from '../../src/ide/rigs/model';
 import { commandsOf } from '../../src/openrig/model';
 
 const seat = (logicalId: string, rig: string, o: Partial<RigSeat> = {}): RigSeat => ({ logicalId, session: `${logicalId.replace('.', '-')}@${rig}`, runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0, ...o });
@@ -83,11 +83,5 @@ describe('power and actions', () => {
     expect(confirmOf(state(), a, [build({ name: 'Bix' })], 'local')).toEqual({ working: ['Bix'], commands: commandsOf(a), restart: false });
     expect(confirmOf(state(), a, [], 'local').working).toEqual(['dev.build']);
     expect(confirmOf(state(), { kind: 'rig.restart', rig: 'ledge-dev' }, [], 'local').restart).toBe(true);
-  });
-  it('rigsAlert', () => {
-    expect(rigsAlert(state({ daemon: { state: 'stopped' } }))).toBe(true);
-    expect(rigsAlert(state({ installed: false }))).toBe(false);
-    expect(rigsAlert(undefined)).toBe(false);
-    expect(rigsAlert(state())).toBe(false);
   });
 });
