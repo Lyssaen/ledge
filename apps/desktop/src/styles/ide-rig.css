@@ -53,7 +53,8 @@
 .ide-rig-top .ide-rigs-conf { margin: 0; }
 .ide-rig-fail { margin: 0; font-size: 11.5px; color: var(--destructive); }
 
-.ide-rig-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+/* One column (the user, 2026-11-09): the topology on top, the roles and settings, then the queue, under it. */
+.ide-rig-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
 .ide-rig-grid > * { min-width: 0; }
 .ide-rig-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .ide-rig .mono { font-family: 'Geist Mono', monospace; }
@@ -74,8 +75,12 @@
 .ide-rig-kv { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; }
 .ide-rig-kv > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
 .ide-rig-step { display: inline-flex; align-items: center; gap: 6px; }
-.ide-rig .ide-rig-step button { width: 22px; height: 22px; border: 1px solid var(--input); border-radius: var(--radius-sm); background: transparent; color: var(--foreground); font: inherit; cursor: pointer; }
+/* − / +: the glyph centred in its square (no padding of the browser's own, which pushed it aside), the count a fixed width. */
+.ide-rig .ide-rig-step button { display: inline-flex; align-items: center; justify-content: center; flex: none; box-sizing: border-box; width: 22px; height: 22px; padding: 0; border: 1px solid var(--input); border-radius: var(--radius-sm); background: transparent; color: var(--foreground); font-size: 14px; line-height: 1; cursor: pointer; }
+.ide-rig .ide-rig-step button:hover:not(:disabled) { background: var(--muted); }
+.ide-rig .ide-rig-step button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 .ide-rig .ide-rig-step button:disabled { opacity: .4; cursor: default; }
+.ide-rig-step > span { min-width: 2ch; text-align: center; font: 12px 'Geist Mono', monospace; font-variant-numeric: tabular-nums; }
 .ide-rig-plan { display: flex; flex-direction: column; gap: 4px; padding: 7px 9px; border: 1px solid var(--input); border-radius: var(--radius-md); font-size: 11.5px; }
 .ide-rig-warn { color: var(--warning); }
 .ide-rig-go { display: flex; gap: 6px; }

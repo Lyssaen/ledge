@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { useToast } from '../src/shell/Toast';
-import { focusThread, useKeys } from '../src/nav/useKeys';
+import { focusFrontTab, focusThread, useKeys } from '../src/nav/useKeys';
 import { initialNav } from '../src/nav/state';
 import type { Overview } from '../src/nav/overview';
 import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -360,7 +360,7 @@ describe('IDE shortcuts (the ide option)', () => {
 describe('the shortcuts help names the tab keys when the IDE is on (lot 3 follow-up)', () => {
   afterEach(() => saveIdeEnabled(false));
   const FR = [['Ctrl W', 'Fermer l’onglet, ou le groupe vide'], ['Ctrl ⇧ T', 'Rouvrir le dernier onglet fermé'], ['Ctrl Tab / Ctrl ⇧ Tab', 'Onglet suivant / précédent du groupe'],
-    ['Ctrl Pg↓ / Pg↑', 'Onglet suivant / précédent du groupe'], ['Ctrl 1…9', 'Aller au groupe N'], ['Ctrl Alt ← / →', 'Déplacer l’onglet vers le groupe de gauche / de droite'], ['Ctrl \\', 'Diviser à droite']];
+    ['Ctrl Pg↓ / Pg↑', 'Onglet suivant / précédent du groupe'], ['Ctrl 1…9', 'Aller au groupe N, depuis un terminal aussi'], ['Ctrl ⇧ `', 'Sortir du terminal vers son onglet (← / → parcourent les onglets), ou y revenir'], ['Ctrl Alt ← / →', 'Déplacer l’onglet vers le groupe de gauche / de droite'], ['Ctrl \\', 'Diviser à droite']];
   it('? : an « Onglets et groupes » block after the others, only with the IDE on', () => {
     const { unmount } = render(<LangProvider lang="fr"><ShortcutsHelp onClose={() => {}} /></LangProvider>);
     expect(screen.queryByRole('heading', { name: 'Onglets et groupes' })).toBeNull();
@@ -381,7 +381,7 @@ describe('the shortcuts help names the tab keys when the IDE is on (lot 3 follow
     render(<LangProvider lang="en"><Shortcuts ctx={ctx} /></LangProvider>);
     const rows = [...screen.getByRole('region', { name: 'Tabs and groups' }).querySelectorAll('.set-row')].map(r => [r.querySelector('kbd')!.textContent, r.querySelector('.set-label')!.textContent]);
     expect(rows).toEqual([['Ctrl W', 'Close the tab, or the empty group'], ['Ctrl ⇧ T', 'Reopen the last closed tab'], ['Ctrl Tab / Ctrl ⇧ Tab', 'Next / previous tab of the group'],
-      ['Ctrl PgDn / PgUp', 'Next / previous tab of the group'], ['Ctrl 1…9', 'Go to group N'], ['Ctrl Alt ← / →', 'Move the tab to the group on the left / right'], ['Ctrl \\', 'Split right']]);
+      ['Ctrl PgDn / PgUp', 'Next / previous tab of the group'], ['Ctrl 1…9', 'Go to group N, from a terminal too'], ['Ctrl ⇧ `', 'Leave the terminal for its tab (← / → walk the tabs), or go back into it'], ['Ctrl Alt ← / →', 'Move the tab to the group on the left / right'], ['Ctrl \\', 'Split right']]);
   });
 });
 
@@ -407,6 +407,38 @@ describe('IDE tab shortcuts (lot 3 follow-up)', () => {
     key({ key: 'ArrowRight', ctrlKey: true, altKey: true }, el);
     key({ key: 'ArrowLeft', ctrlKey: true, altKey: true }, el);
   };
+
+  it('Ctrl Shift ² outside a terminal goes back into the front tab\'s one, never the thread flip; it waits behind a dialog', () => {
+    const enterTerminal = vi.fn(() => true);
+    const toTerminal = vi.fn(() => true);
+    function Enter(p: { modal?: boolean }) {
+      const base = initialNav({ helpers: [], paused: false } as never);
+      useKeys((() => {}) as never, { state: p.modal ? { ...base, modal: { kind: 'search' } } : base, order: [], screen: { current: null }, undo: () => false, toTerminal, ide: { ...make(), enterTerminal } } as never);
+      return null;
+    }
+    const { rerender } = render(<Enter />);
+    expect(fireEvent.keyDown(window, { key: '³', code: 'Backquote', ctrlKey: true, shiftKey: true })).toBe(false);
+    expect(enterTerminal).toHaveBeenCalledTimes(1);
+    expect(toTerminal).not.toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: '²', code: 'Backquote', ctrlKey: true });
+    expect(toTerminal).toHaveBeenCalledTimes(1);
+    rerender(<Enter modal />);
+    fireEvent.keyDown(window, { key: '³', code: 'Backquote', ctrlKey: true, shiftKey: true });
+    expect(enterTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  it('focusFrontTab: the keyboard on the front tab of the terminal\'s group, else of the active group; false without a tab', () => {
+    render(<div>
+      <div className="dv-groupview dv-active-group"><div className="dv-tab dv-active-tab" tabIndex={0}>A</div></div>
+      <div className="dv-groupview"><div className="dv-tab" tabIndex={-1}>B1</div><div className="dv-tab dv-active-tab" tabIndex={0}>B2</div><div data-terminal><textarea aria-label="xterm" /></div></div>
+      <div className="dv-groupview"><div data-terminal><textarea aria-label="vide" /></div></div>
+    </div>);
+    expect(focusFrontTab(screen.getByLabelText('xterm'))).toBe(true);
+    expect(document.activeElement).toHaveTextContent('B2');
+    expect(focusFrontTab()).toBe(true);
+    expect(document.activeElement).toHaveTextContent('A');
+    expect(focusFrontTab(screen.getByLabelText('vide'))).toBe(false);
+  });
 
   it('each chord calls its callback (Ctrl or ⌘; Ctrl+digit by its place, so AZERTY too); Ctrl+W is always prevented', () => {
     const ide = make();

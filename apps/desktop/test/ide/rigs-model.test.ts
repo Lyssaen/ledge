@@ -30,10 +30,10 @@ describe('rigsViewOf', () => {
   });
   it('joins a seat to its session, on the same machine only', () => {
     const v = view({ sessions: [build()] });
-    expect(v.rigs[0]!.seats[0]).toMatchObject({ logicalId: 'dev.build', name: 'Bix', dot: 'perm', ctx: 25 });
+    expect(v.rigs[0]!.seats[0]).toMatchObject({ logicalId: 'dev.build', name: 'Bix', role: 'dev.build', dot: 'perm', ctx: 25 });
     expect(v.rigs[0]!.dot).toBe('perm');
     const s2 = v.rigs[0]!.seats[1]!;
-    expect(s2).toMatchObject({ name: 'dev.review', dot: 'idle' }); expect(s2.session).toBeUndefined();
+    expect(s2).toMatchObject({ name: 'dev.review', dot: 'idle' }); expect(s2.session).toBeUndefined(); expect(s2.role).toBeUndefined();
     const other = view({ sessions: [build({ machineId: 'srv' })] }).rigs[0]!.seats[0]!;
     expect(other.session).toBeUndefined(); expect(other.name).toBe('dev.build'); expect(other.dot).toBe('work');
   });

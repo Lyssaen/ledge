@@ -46,7 +46,9 @@ export function osc52Text(data: string): string | null {
   }
 }
 
-export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void; /** The IDE is on: Ctrl+J, typed here, toggles the bottom panel (`onPanel`). */ panelKey?(): boolean; onPanel?(): void }): TermSurface {
+export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void; /** The IDE is on: Ctrl+J, typed here, toggles the bottom panel (`onPanel`). */ panelKey?(): boolean; onPanel?(): void;
+  /** The IDE is on: Ctrl+Shift+², typed here, gives the keyboard back to Ledge (`from` is this terminal's element). */ onLeave?(from: HTMLElement): void;
+  /** The IDE is on: Ctrl+1…9, typed here, go to the group N. */ onGroup?(n: number): void }): TermSurface {
   const host = document.createElement('div');
   host.setAttribute('data-terminal', '');
   // Capped scrollback: an agent redrawing its screen emits megabytes, memory must not follow.
@@ -141,6 +143,12 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     } else if (action === 'panel') {
       e.stopPropagation();
       opts.onPanel?.();
+    } else if (action === 'leave') {
+      e.stopPropagation();
+      opts.onLeave?.(host);
+    } else if (action === 'group') {
+      e.stopPropagation();
+      opts.onGroup?.(Number(e.code.slice(5)));
     } else if (action === 'copy') {
       const text = term.getSelection();
       if (text) void navigator.clipboard.writeText(text).catch(() => undefined);

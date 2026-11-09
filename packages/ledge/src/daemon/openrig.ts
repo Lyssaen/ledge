@@ -130,14 +130,26 @@ export function findRig(env: NodeJS.ProcessEnv, exists: (p: string) => boolean =
   return candidates.find(dir => exists(join(dir, 'rig'))) ?? null;
 }
 
+/**
+ * The environment `rig` runs with: the base one, its folder first on the PATH. No NO_COLOR / CLICOLOR / FORCE_COLOR:
+ * `rig daemon start`, `rig up`, `rig start`… can start OpenRig's daemon, which hands its environment to its tmux server
+ * and to every seat, and the seats' agents would then draw without colour. Its output is uncoloured by `stripAnsi`.
+ */
+export function rigEnv(base: NodeJS.ProcessEnv, dir: string): NodeJS.ProcessEnv {
+  return { ...base, PATH: [dir, base.PATH].filter(Boolean).join(delimiter) };
+}
+
+/** Text without its terminal escape sequences (colours, styles, OSC titles and links). */
+// eslint-disable-next-line no-control-regex
+export const stripAnsi = (s: string): string => s.replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u001b\[[0-?]*[ -/]*[@-~]|\u001b[@-Z\\-_]/g, '');
+
 export const execRun = (env: () => Promise<NodeJS.ProcessEnv>): RigRun => async (args, timeoutMs) => {
   const base = await env(), dir = findRig(base);
   if (!dir) return { code: null, stdout: '', stderr: 'rig: command not found' };
-  const e = { ...base, PATH: [dir, base.PATH].filter(Boolean).join(delimiter), NO_COLOR: '1', CLICOLOR: '0', FORCE_COLOR: '0' };
   return new Promise(res => {
-    execFile(join(dir, 'rig'), args, { env: e, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(join(dir, 'rig'), args, { env: rigEnv(base, dir), timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
       const code = !err ? 0 : (err as NodeJS.ErrnoException).code === 'ENOENT' ? null : typeof err.code === 'number' ? err.code : 1;
-      res({ code, stdout: String(stdout), stderr: String(stderr) || (err && code !== 0 ? err.message : '') });
+      res({ code, stdout: stripAnsi(String(stdout)), stderr: stripAnsi(String(stderr)) || (err && code !== 0 ? err.message : '') });
     });
   });
 };
