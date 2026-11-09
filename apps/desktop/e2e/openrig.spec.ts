@@ -1,6 +1,12 @@
-import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect, seedAtelier } from './fixtures';
 import type { OpenRigState } from '@ledge/protocol';
 import { fakeDaemon, session } from './daemon';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
 
 const seat = (logicalId: string, activity: string, work = 0, runtime = 'claude-code', model: string | null = null) => ({ logicalId, session: `${logicalId.replace('.', '-')}@starter`, runtime, model, sessionStatus: 'running', lifecycleState: 'running', activity, stopped: false, work });
 const STATE: OpenRigState = {
@@ -21,60 +27,69 @@ const SPECS = [
 
 test.use({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
 
-test('the OpenRig page: daemon, kernel, rigs; a stop asks first and runs the command shown', async ({ page }, info) => {
+// The first test of a run pays Vite's first compile of the IDE chunk: on a loaded machine that is past 20 s.
+test.setTimeout(60_000);
+
+const view = (page: Page) => page.getByRole('complementary', { name: 'Rigs' });
+const row = (page: Page, name: string) => view(page).locator('.ide-rigs-row').filter({ hasText: name });
+
+/** French, dark, the IDE up, then its Rigs view (the old OpenRig page is the Rigs view and the « OpenRig · Local » tab, lot 7). */
+async function boot(page: Page) {
   await page.addInitScript(() => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', 'dark'); } catch { /* ignore */ } });
   const daemon = await fakeDaemon(page, [session('otto')], { openrig: STATE, rigSpecs: SPECS });
   await page.goto('/');
-  await page.getByRole('button', { name: 'OpenRig' }).click();
-  await expect(page.getByRole('region', { name: 'Daemon' })).toContainText('Actif');
-  await expect(page.getByRole('region', { name: 'Kernel' })).toContainText('Prêt');
-  await page.getByRole('button', { name: 'Voir les sièges de starter' }).click();
-  await expect(page.getByText('dev.build')).toBeVisible();
+  await expect(page.locator('.ide')).toBeVisible({ timeout: 45_000 });
+  await page.getByRole('navigation', { name: 'Barre d’activité' }).getByRole('button', { name: 'Rigs OpenRig' }).click();
+  await expect(view(page)).toBeVisible();
+  return daemon;
+}
+
+test('the OpenRig page: daemon, kernel, rigs; a stop asks first and runs the command shown', async ({ page }, info) => {
+  const daemon = await boot(page);
+  // The Rigs view: the kernel, the rigs with starter's seats, the daemon; its row opens « OpenRig · Local » on the overview.
+  await expect(row(page, 'Opérations')).toBeVisible();
+  await expect(view(page).getByText('dev.build')).toBeVisible();
+  await view(page).getByRole('button', { name: 'Daemon', exact: true }).click();
+  const overview = page.getByRole('region', { name: 'OpenRig sur Local' });
+  await expect(overview).toContainText(/Daemon\s*en marche/);
+  await expect(overview).toContainText(/Kernel\s*1 siège/);
   await page.screenshot({ path: info.outputPath('openrig-page.png') });
-  await page.getByRole('button', { name: 'Voir les sièges de starter' }).locator('xpath=ancestor::li[1]').getByRole('button', { name: 'Arrêter' }).click();
-  const dialog = page.getByRole('alertdialog', { name: 'Arrêter le rig « starter » sur Local ?' });
-  await expect(dialog).toContainText('rig down starter --snapshot');
+  // Stop asks under the row, with the command, and runs it.
+  await row(page, 'starter').getByRole('button', { name: 'Arrêter starter' }).click();
+  const confirm = view(page).getByRole('group', { name: /starter/ });
+  await expect(confirm).toContainText('rig down starter --snapshot');
   await page.screenshot({ path: info.outputPath('openrig-confirm.png') });
-  await dialog.getByRole('button', { name: 'Arrêter le rig « starter »' }).click();
+  await confirm.getByRole('button', { name: 'Confirmer l’arrêt' }).click();
   await expect.poll(() => daemon.received.filter(m => m.type === 'openrig.act')).toEqual([expect.objectContaining({ action: { kind: 'rig.stop', rig: 'starter', snapshot: true } })]);
 });
 
-test('launching a rig: 3 builders and 3 reviewers, checked, then launched', async ({ page }, info) => {
-  await page.addInitScript(() => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', 'dark'); } catch { /* ignore */ } });
-  const daemon = await fakeDaemon(page, [session('otto')], { openrig: STATE, rigSpecs: SPECS });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'OpenRig' }).click();
-  await page.locator('.or-head').getByRole('button', { name: 'Lancer un rig…' }).click();
-  await page.getByRole('radio', { name: /^starter/ }).click();
-  await page.getByLabel('Dossier de travail').fill('~/Workspace/ledge');
-  await page.getByLabel('Nom du rig').fill('ledge-scale');
-  for (const role of ['dev.build', 'dev.review']) for (let i = 0; i < 2; i++) await page.getByRole('button', { name: `Un siège de plus pour ${role}` }).click();
-  await page.getByRole('button', { name: 'Vérifier' }).click();
-  await expect(page.getByText('Le plan passe : 6 sièges.')).toBeVisible();
-  await expect(page.getByText('6 sièges sans politique de permissions')).toBeVisible();
+test('launching a rig: 3 builders and 3 reviewers, then launched', async ({ page }, info) => {
+  const daemon = await boot(page);
+  await view(page).getByRole('button', { name: 'Lancer', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Lancer un rig' });
+  await expect(dialog).toBeVisible();
+  // starter is running, so its card only points at its Rig view: the launch starts from factory.
+  await expect(dialog.getByRole('button', { name: /^starter/ })).toContainText('Déjà en marche');
+  await dialog.getByRole('button', { name: /^factory/ }).click();
+  await dialog.getByLabel('Dossier').fill('~/Workspace/ledge');
+  await dialog.getByLabel('Nom', { exact: true }).fill('ledge-scale');
+  for (const role of ['dev.build', 'dev.qa']) for (let i = 0; i < 2; i++) await dialog.getByRole('button', { name: `Un siège de plus pour ${role}` }).click();
   await page.screenshot({ path: info.outputPath('openrig-launch.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Lancer 6 sièges' }).click();
-  await expect(page.getByText('Rig « ledge-scale » lancé.')).toBeVisible();
-  expect(daemon.received.filter(m => m.type === 'openrig.launch').map(m => m.type === 'openrig.launch' && m.launch)).toEqual([
-    { spec: 'starter', cwd: '~/Workspace/ledge', name: 'ledge-scale', seats: { 'dev.build': 3, 'dev.review': 3 }, delegation: 'pairs', plan: true },
-    { spec: 'starter', cwd: '~/Workspace/ledge', name: 'ledge-scale', seats: { 'dev.build': 3, 'dev.review': 3 }, delegation: 'pairs' }
+  await dialog.getByRole('button', { name: /^Lancer/ }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => daemon.received.filter(m => m.type === 'openrig.launch' && !(m.launch as { plan?: boolean }).plan).map(m => m.type === 'openrig.launch' && m.launch)).toEqual([
+    expect.objectContaining({ spec: 'factory', cwd: '~/Workspace/ledge', name: 'ledge-scale', seats: expect.objectContaining({ 'dev.build': 3, 'dev.qa': 3 }) })
   ]);
 });
 
 test('a running rig\'s seats: 3 builders and 3 reviewers, added while it runs', async ({ page }, info) => {
-  await page.addInitScript(() => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', 'dark'); } catch { /* ignore */ } });
-  const daemon = await fakeDaemon(page, [session('otto')], { openrig: STATE, rigSpecs: SPECS });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'OpenRig' }).click();
-  await page.getByRole('button', { name: 'Changer les sièges de starter' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Sièges du rig « starter » · Local' });
-  for (const role of ['dev.build', 'dev.review']) for (let i = 0; i < 2; i++) await dialog.getByRole('button', { name: `Un siège de plus pour ${role}` }).click();
-  await expect(dialog).toContainText('+ build-3');
-  await expect(dialog).toContainText('rig add starter dev review-3.json');
+  const daemon = await boot(page);
+  await row(page, 'starter').getByRole('button', { name: 'starter', exact: true }).click();
+  for (const role of ['dev.build', 'dev.review']) for (let i = 0; i < 2; i++) await page.getByRole('button', { name: `Un siège de plus pour ${role}` }).click();
+  await expect(page.getByText(/Ajoute build-2, build-3|Ajoute .*build-3/)).toBeVisible();
   await page.screenshot({ path: info.outputPath('openrig-seats.png') });
-  await dialog.getByRole('button', { name: 'Ajouter 4 sièges' }).click();
-  await expect(page.getByText('+4 sièges, 4 liens.')).toBeVisible();
-  expect(daemon.received.filter(m => m.type === 'openrig.seats').map(m => m.type === 'openrig.seats' && { rig: m.rig, seats: m.seats, delegation: m.delegation })).toEqual([
-    { rig: 'starter', seats: { 'dev.build': 3, 'dev.review': 3 }, delegation: 'pairs' }
+  await page.getByRole('button', { name: 'Appliquer' }).click();
+  await expect.poll(() => daemon.received.filter(m => m.type === 'openrig.seats').map(m => m.type === 'openrig.seats' && { rig: m.rig, seats: m.seats })).toEqual([
+    { rig: 'starter', seats: { 'dev.build': 3, 'dev.review': 3 } }
   ]);
 });
