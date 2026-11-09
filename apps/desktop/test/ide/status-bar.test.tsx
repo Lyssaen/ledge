@@ -46,12 +46,13 @@ async function mount({ waitUsage = true } = {}) {
 }
 
 describe('the IDE status bar', () => {
-  it('ends with the usage limits, after the waiting requests', async () => {
+  it('ends with the usage limits, after the waiting requests, then the disposition (v27, lot 10)', async () => {
     const { bar } = await mount();
     const wait = within(bar).getByRole('button', { name: '1 demande' });
     const limits = bar.querySelector('.usage-foot')!;
-    // The limits are the bar's own last item, not inside the footer that starts it.
-    expect(bar.lastElementChild).toBe(limits);
+    // The limits are the bar's own item, not inside the footer that starts it; the disposition comes last.
+    expect(bar.lastElementChild).toHaveClass('ide-lay-wrap');
+    expect(bar.lastElementChild!.previousElementSibling).toBe(limits);
     expect(wait.compareDocumentPosition(limits) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(bar.querySelector('.workspace-footer .usage-foot')).toBeNull();
   });

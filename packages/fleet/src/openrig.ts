@@ -106,6 +106,36 @@ function subscribe(client: DaemonClient, machine: string, pollMs: number, notify
   };
 }
 const seenOf = (client: DaemonClient, machine: string): Seen => stores.get(client)?.entries.get(machine)?.seen ?? UNSEEN;
+/**
+ * The machine's OpenRig once, through the shared read: what is known if it was read less than FRESH_MS ago, else the next answer,
+ * or what is known when `timeoutMs` passes first (`state` null: nothing known). No loop is left behind.
+ */
+export function readOpenRigOnce(client: DaemonClient, machine: string, timeoutMs: number): Promise<OpenRigSeen> {
+  const e = stores.get(client)?.entries.get(machine);
+  if (e && e.answeredAt > 0 && Date.now() - e.answeredAt < FRESH_MS) return Promise.resolve(e.seen);
+  return new Promise(resolve => {
+    let off: (() => void) | null = null;
+    let done = false;
+    const end = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      const seen = seenOf(client, machine);
+      off?.();
+      resolve(seen);
+    };
+    const timer = setTimeout(end, timeoutMs);
+    off = subscribe(client, machine, OPENRIG_IDLE_POLL_MS, end);
+    if (done) off();
+  });
+}
+
+/** Whether OpenRig, as read, says `rig` no longer exists on its machine: only when it runs there (stopped or unread, nobody knows). */
+export function rigGone(seen: OpenRigSeen, rig: string): boolean {
+  const s = seen.state;
+  return seen.error === undefined && s !== null && s.installed && s.daemon.state === 'running' && !s.rigs.some(r => r.name === rig);
+}
+
 /** Reads the machine's OpenRig again now (after an action, a refresh button). */
 function reread(client: DaemonClient, machine: string): void {
   const e = stores.get(client)?.entries.get(machine);

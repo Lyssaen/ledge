@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge IDE — Dispositions et palette</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Complement to the IDE prototype v27 (ledge-ide-interactive.html), lot 10 « Dispositions et palette ». Only the states v27 lacks.
+   Tokens: packages/ui tokens.css (light + dark); menu, palette, status bar and settings rows as in the prototype. */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--popover:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--accent:oklch(0.269 0 0);--primary:oklch(0.444 0.177 26.899);
+  --border:#ffffff1a;--input:#ffffff26;--shadow-overlay:0 20px 40px -12px rgba(0,0,0,0.7);
+  --shell:#0d0d0d;--pane:#111112;--page:#000;--hover:#ffffff14;--sel:#ffffff12;--note:#a78bfa;
+  --st-perm:#f87171;--st-ask:#fbbf24;--st-work:#60a5fa;--st-idle:#34d399;--st-off:#71717a;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --background:oklch(1 0 0);--foreground:oklch(0.145 0 0);--card:oklch(1 0 0);--popover:oklch(1 0 0);--muted:oklch(0.97 0 0);
+  --muted-foreground:oklch(0.556 0 0);--accent:oklch(0.97 0 0);--primary:oklch(0.505 0.213 27.518);
+  --border:oklch(0.922 0 0);--input:oklch(0.922 0 0);--shadow-overlay:0 20px 40px -12px rgba(0,0,0,0.25);
+  --shell:oklch(0.985 0 0);--pane:#fff;--page:oklch(0.96 0 0);--hover:#0000000d;--sel:#0000000a;--note:#7c3aed;
+  --st-perm:#dc2626;--st-ask:#b45309;--st-work:#2563eb;--st-idle:#059669;--st-off:#a1a1aa;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Geist','Segoe UI',system-ui,sans-serif;background:var(--page);color:var(--foreground);font-size:13px;line-height:18px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+code,.mono{font-family:'Geist Mono',ui-monospace,Consolas,monospace;font-size:11.5px}
+.mut{color:var(--muted-foreground)}
+header{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 20px;background:var(--shell);border-bottom:1px solid var(--border)}
+header h1{font-size:14px;font-weight:600;margin:0}
+header .sub{color:var(--muted-foreground);font-size:12px}
+.seg{display:inline-flex;border:1px solid var(--input);border-radius:7px;overflow:hidden}
+.seg button{padding:3px 10px;font-size:12px;color:var(--muted-foreground)}
+.seg button.on{background:var(--muted);color:var(--foreground)}
+main{padding:20px;display:grid;grid-template-columns:repeat(auto-fill,minmax(460px,1fr));gap:18px;max-width:1560px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.card.wide{grid-column:span 2}
+@media (max-width:1000px){.card.wide{grid-column:auto}}
+.card h2{font-size:12.5px;font-weight:600;margin:0;padding:10px 14px 0;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.card h2 .n{font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted-foreground)}
+.card .why{padding:4px 14px 8px;color:var(--muted-foreground);font-size:12px}
+.card .why b{color:var(--foreground);font-weight:500}
+.keys{padding:0 14px 10px;font-size:10.5px;color:var(--muted-foreground);font-family:'Geist Mono',monospace;word-break:break-word}
+.tag{font-size:10.5px;border-radius:8px;padding:0 6px;border:1px solid;font-weight:400}
+.tag.new{color:var(--note);border-color:color-mix(in srgb,var(--note) 45%,transparent)}
+.tag.q{color:var(--st-ask);border-color:color-mix(in srgb,var(--st-ask) 45%,transparent)}
+.scene{position:relative;background:var(--pane);border-top:1px solid var(--border);flex:1;min-height:250px;overflow:hidden}
+/* status bar */
+.status{position:absolute;left:0;right:0;bottom:0;height:24px;display:flex;align-items:center;gap:14px;padding:0 10px;background:var(--shell);border-top:1px solid var(--border);font-size:11.5px;color:var(--muted-foreground);white-space:nowrap}
+.status .sp{flex:1}
+.status .lay{display:flex;align-items:center;gap:6px;color:var(--foreground);padding:0 6px;height:20px;border-radius:4px}
+.status .lay.open{background:var(--hover)}
+.status .lay.none{color:var(--muted-foreground)}
+.status .mod{color:var(--muted-foreground)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--st-off);flex-shrink:0;display:inline-block}
+.dot.idle{background:var(--st-idle)}.dot.work{background:var(--st-work)}.dot.perm{background:var(--st-perm)}.dot.ask{background:var(--st-ask)}
+/* menu */
+.menu{position:absolute;z-index:3;width:340px;background:var(--popover);border:1px solid var(--input);border-radius:8px;padding:4px;box-shadow:var(--shadow-overlay);font-size:12.5px}
+.menu button,.menu .it{display:flex;width:100%;align-items:center;gap:8px;padding:6px 9px;border-radius:5px;text-align:left}
+.menu button.sel,.menu button.hov{background:var(--hover)}
+.menu .r{margin-left:auto;font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.menu .sep{height:1px;background:var(--border);margin:4px 2px}
+.menu .mh{padding:4px 9px 2px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground)}
+.menu .empty{padding:6px 9px 8px;color:var(--muted-foreground);font-size:12px}
+.save-in{margin:4px 6px 2px;width:calc(100% - 12px);height:26px;border:1px solid var(--input);border-radius:6px;background:var(--background);color:var(--foreground);padding:0 8px;font:inherit;font-size:12px;outline:none}
+.save-in.warn{border-color:var(--st-ask)}
+.save-hint{padding:2px 9px 6px;font-size:11.5px;color:var(--st-ask)}
+/* toast */
+.toast{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);z-index:5;padding:12px 18px;background:var(--popover);border:1px solid var(--input);box-shadow:var(--shadow-overlay);border-radius:8px;font-size:12px;width:max-content;max-width:calc(100% - 28px)}
+/* settings */
+.fld{display:grid;grid-template-columns:130px 1fr;gap:12px 16px;align-items:start;font-size:12.5px;padding:18px}
+.fld>label{color:var(--muted-foreground);padding-top:1px}
+.radios{display:flex;flex-direction:column;gap:8px}
+.radio{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.radio i{width:14px;height:14px;border-radius:50%;border:1px solid var(--input);display:grid;place-items:center;flex-shrink:0}
+.radio i.on::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--foreground)}
+.radio.dis{opacity:.5}
+.hint{color:var(--muted-foreground);font-size:11.5px;margin-left:22px}
+.select{display:inline-flex;align-items:center;gap:8px;height:24px;padding:0 8px;border:1px solid var(--input);border-radius:6px;background:var(--background);font-size:12px}
+.select .car{font-size:9px;color:var(--muted-foreground)}
+.cell2{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{height:24px;padding:0 9px;border-radius:6px;border:1px solid var(--input);font-size:12px;display:inline-flex;align-items:center}
+/* palette */
+.palette{position:absolute;left:50%;top:16px;transform:translateX(-50%);width:min(560px,calc(100% - 24px));background:var(--popover);border:1px solid var(--input);border-radius:10px;box-shadow:var(--shadow-overlay);overflow:hidden}
+.palette .pin{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px}
+.palette .it{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12.5px}
+.palette .it.sel{background:var(--sel)}
+.palette .it .r{margin-left:auto;color:var(--muted-foreground);font-size:11px;white-space:nowrap}
+.palette .foot{display:flex;gap:14px;padding:7px 12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted-foreground)}
+section.fiche{grid-column:1/-1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;font-size:12.5px}
+section.fiche h2{font-size:13px;margin:0 0 6px}
+section.fiche table{border-collapse:collapse;width:100%;font-size:12px}
+section.fiche td,section.fiche th{border-top:1px solid var(--border);padding:5px 8px;text-align:left;vertical-align:top}
+section.fiche th{color:var(--muted-foreground);font-weight:500}
+section.fiche td:last-child{font-family:'Geist Mono',monospace;font-size:11px;color:var(--muted-foreground)}
+@media (max-width:620px){main{grid-template-columns:1fr;padding:12px}.fld{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="h1"></h1><span class="sub" id="hsub"></span><span style="flex:1"></span>
+  <span class="seg" id="theme"><button data-v="dark"></button><button data-v="light"></button></span>
+  <span class="seg" id="lang"><button data-v="fr">FR</button><button data-v="en">EN</button></span>
+</header>
+<main id="main"></main>
+<script>
+const layI = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 4v16"/></svg>';
+const logoA = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><g stroke="#d97757" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="3" x2="12" y2="21"/><line x1="12" y1="3" x2="12" y2="21" transform="rotate(60 12 12)"/><line x1="12" y1="3" x2="12" y2="21" transform="rotate(120 12 12)"/></g></svg>';
+const dot = c => `<span class="dot ${c||''}"></span>`;
+
+const T = {
+  fr:{
+    h1:'Dispositions et palette — états du lot 10', hsub:'Complément de la maquette IDE v27 · seuls les états absents', theme:['Sombre','Clair'],
+    layouts:'Dispositions', none:'Disposition', noneTip:'Aucune disposition enregistrée', empty:'Aucune disposition enregistrée.',
+    saveCurrent:'Enregistrer la disposition actuelle…', saveInto:n=>`Enregistrer dans « ${n} »`, saveAs:'Enregistrer sous un nouveau nom…',
+    manage:'Gérer les dispositions', settings:'Réglages', current:'actuelle', modified:'modifiée', modTip:'Modifiée depuis qu’elle a été appliquée',
+    shape:(g,w)=>`${g} groupe${g>1?'s':''}${w?` · ${w} fenêtre${w>1?'s':''}`:''}`,
+    namePh:'Nom, puis Entrée', taken:n=>`« ${n} » existe déjà : Entrée pour la remplacer.`, saved:n=>`Disposition « ${n} » enregistrée`, replaced:n=>`Disposition « ${n} » remplacée`,
+    gone:(l,n)=>`« ${l} » : ${n} onglet${n>1?'s ne sont':' n’est'} pas rouvert${n>1?'s':''}, ${n>1?'leur':'sa'} session ou ${n>1?'leur':'son'} rig n’existe plus.`,
+    applied:n=>`Disposition « ${n} »`,
+    boot:'Au démarrage', bootLast:'La dernière disposition', bootFixed:'La disposition', bootAtelier:'L’atelier seul',
+    bootNone:'Enregistrez d’abord une disposition.', bootDeleted:n=>`« ${n} » a été supprimée : Ledge rouvre la dernière disposition.`,
+    apply:'Appliquer', del:'Supprimer',
+    palPh:'Session (@), commande (>), ou un mot…', choose:'↑↓ choisir', enter:'Entrée ouvrir', esc:'Échap fermer',
+    launch:'Lancer un rig…', rigView:r=>`Vue Rig : ${r}`, stopped:'arrêté', showMachine:m=>`Afficher la machine : ${m}`,
+    orSec:s=>`OpenRig : ${s}`, orSecs:['Vue d’ensemble','Rigs','Rôles','Machines','Daemon','Sortie'],
+    prs:'MR et PR', layoutCmd:n=>`Disposition : ${n}`, saveLayoutCmd:'Enregistrer la disposition…',
+    st:{draft:'brouillon', open:'ouverte', review:'en revue'}, pipe:{ok:'pipeline réussi', fail:'pipeline échoué', run:'pipeline en cours'},
+    fiche:'Fiche de passation', fh:['État','Où','Texte','Clés']
+  },
+  en:{
+    h1:'Layouts and palette — lot 10 states', hsub:'Complement to the IDE mockup v27 · only the missing states', theme:['Dark','Light'],
+    layouts:'Layouts', none:'Layout', noneTip:'No saved layout', empty:'No saved layout.',
+    saveCurrent:'Save the current layout…', saveInto:n=>`Save into “${n}”`, saveAs:'Save under a new name…',
+    manage:'Manage layouts', settings:'Settings', current:'current', modified:'modified', modTip:'Changed since it was applied',
+    shape:(g,w)=>`${g} group${g>1?'s':''}${w?` · ${w} window${w>1?'s':''}`:''}`,
+    namePh:'Name, then Enter', taken:n=>`“${n}” already exists: Enter to replace it.`, saved:n=>`Layout “${n}” saved`, replaced:n=>`Layout “${n}” replaced`,
+    gone:(l,n)=>`“${l}”: ${n} tab${n>1?'s were':' was'} not reopened, ${n>1?'their':'its'} session or rig no longer exists.`,
+    applied:n=>`Layout “${n}”`,
+    boot:'At startup', bootLast:'The last layout', bootFixed:'The layout', bootAtelier:'The atelier only',
+    bootNone:'Save a layout first.', bootDeleted:n=>`“${n}” was deleted: Ledge reopens the last layout.`,
+    apply:'Apply', del:'Delete',
+    palPh:'Session (@), command (>), or a word…', choose:'↑↓ choose', enter:'Enter open', esc:'Esc close',
+    launch:'Launch a rig…', rigView:r=>`Rig view: ${r}`, stopped:'stopped', showMachine:m=>`Show machine: ${m}`,
+    orSec:s=>`OpenRig: ${s}`, orSecs:['Overview','Rigs','Roles','Machines','Daemon','Output'],
+    prs:'MRs and PRs', layoutCmd:n=>`Layout: ${n}`, saveLayoutCmd:'Save the layout…',
+    st:{draft:'draft', open:'open', review:'in review'}, pipe:{ok:'pipeline passed', fail:'pipeline failed', run:'pipeline running'},
+    fiche:'Handoff sheet', fh:['State','Where','Text','Keys']
+  }
+};
+let lang = 'fr', theme = 'dark';
+try { lang = localStorage.getItem('lp-lang') || lang; theme = localStorage.getItem('lp-theme') || theme; } catch(e) {}
+const q = new URLSearchParams(location.search); if (q.get('theme')) theme = q.get('theme'); if (q.get('lang')) lang = q.get('lang');
+
+const status = (t, lay, {open=false, mod=false, none=false}={}) => `<div class="status">${dot('idle')}<span>WSL · daemon</span><span>OpenRig · 1 rig</span><span class="sp"></span><span>Claude 5 h 84 %</span><span class="lay ${open?'open':''} ${none?'none':''}" title="${none?t.noneTip:mod?t.modTip:''}">${layI}${none?t.none:lay}${mod?`<span class="mod" title="${t.modTip}">•</span>`:''}<span style="font-size:9px">▴</span></span></div>`;
+const menuAt = html => `<div class="menu" style="right:10px;bottom:30px">${html}</div>`;
+const L3 = t => [['Revue Pim + Nova', 3, 1], ['ledge-dev', 3, 0], ['Terminaux', 3, 0]];
+const items = (t, cur, mod) => L3(t).map(([n,g,w]) => `<button class="${n===cur?'sel':''}">${n}<span class="r">${t.shape(g,w)}${n===cur?` · ${t.current}${mod?` · ${t.modified}`:''}`:''}</span></button>`).join('');
+const palette = (t, query, list) => `<div class="palette"><div class="pin"><span class="mut">›</span><span>${query}</span><span style="width:1px;height:16px;background:var(--foreground)"></span></div>${list.map((x,i)=>`<div class="it ${i===0?'sel':''}">${x[2]||''}${x[0]}<span class="r">${x[1]||''}</span></div>`).join('')}<div class="foot"><span>${t.choose}</span><span>${t.enter}</span><span>${t.esc}</span></div></div>`;
+const radio = (on, label, extra='', dis=false) => `<span class="radio ${dis?'dis':''}"><i class="${on?'on':''}"></i>${label}${extra}</span>`;
+const select = n => ` <span class="select">${n}<span class="car">▾</span></span>`;
+
+function cards(t){
+  const C = [];
+  C.push({title:'Première utilisation : aucune disposition', tag:'new',
+    why:'La barre d’état montre <b>« Disposition »</b> en gris (pas de nom inventé). Le menu dit qu’il n’y en a pas, puis propose d’enregistrer et de gérer. La maquette v27 en a trois d’office : ce n’était que pour la démo.',
+    keys:'ide.layout.none · ide.layout.noneTip · ide.layout.empty · ide.layout.saveCurrent · ide.layout.manage',
+    scene: menuAt(`<div class="mh">${t.layouts}</div><div class="empty">${t.empty}</div><div class="sep"></div><button class="hov">${t.saveCurrent}</button><button>${t.manage}<span class="r">${t.settings}</span></button>`) + status(t, '', {open:true, none:true})});
+  C.push({title:'Disposition modifiée depuis qu’on l’a appliquée', tag:'q',
+    why:'Le nom reste, suivi d’un <b>•</b> (comme un fichier non enregistré), avec l’infobulle « Modifiée depuis qu’elle a été appliquée ». Dans le menu : « actuelle · modifiée », et <b>« Enregistrer dans « X » »</b> la met à jour sans question. « Enregistrer sous un nouveau nom… » remplace « Enregistrer la disposition actuelle… » dès qu’une disposition est en cours. Modifier = groupes, onglets, fenêtres, panneaux.',
+    keys:'ide.layout.modified · ide.layout.modTip · ide.layout.saveInto(name) · ide.layout.saveAs · ide.layout.shape(groups, windows)',
+    scene: menuAt(`<div class="mh">${t.layouts}</div>${items(t,'Revue Pim + Nova',true)}<div class="sep"></div><button class="hov">${t.saveInto('Revue Pim + Nova')}</button><button>${t.saveAs}</button><button>${t.manage}<span class="r">${t.settings}</span></button>`) + status(t, 'Revue Pim + Nova', {open:true, mod:true})});
+  C.push({title:'Enregistrer sous un nom déjà pris', tag:'new',
+    why:'Le champ reste ouvert, bordé d’ambre, avec « « Terminaux » existe déjà : Entrée pour la remplacer. ». Un second Entrée remplace (toast « Disposition « Terminaux » remplacée »), Échap annule, taper un autre nom efface l’avertissement. Nom vide : Entrée ne fait rien. Les espaces autour du nom sont retirés.',
+    keys:'ide.layout.namePh · ide.layout.taken(name) · ide.layout.saved(name) · ide.layout.replaced(name)',
+    scene: menuAt(`<div class="mh">${t.layouts}</div>${items(t,'ledge-dev',false)}<div class="sep"></div><input class="save-in warn" value="Terminaux"><div class="save-hint">${t.taken('Terminaux')}</div>`) + status(t, 'ledge-dev', {open:true})});
+  C.push({title:'Appliquer : des onglets ne reviennent pas', tag:'new',
+    why:'Seuls les onglets de ce qui <b>n’existe plus</b> (session supprimée, rig ou machine retirés) sont abandonnés, et un toast le dit avec leur nombre. Une session archivée revient en lecture seule, un siège d’un rig arrêté et une machine hors ligne gardent leur onglet dans leur état habituel. Un groupe vidé disparaît, une fenêtre détachée vide ne s’ouvre pas. Les shells ouverts qui ne sont pas dans la disposition passent dans le panneau du bas : rien n’est tué. Sans onglet perdu : toast « Disposition « X » », comme la v27.',
+    keys:'ide.layout.gone(layout, n) · ide.layout.applied(name)',
+    scene: `<div class="toast">${t.gone('ledge-dev', 2)}</div>` + status(t, 'ledge-dev')});
+  C.push({title:'Réglages › Au démarrage', tag:'new', wide:true,
+    why:'« Une disposition fixe » devient <b>« La disposition [liste ▾] »</b> : la liste propose les dispositions enregistrées. <b>Aucune disposition</b> : la radio est grisée, avec « Enregistrez d’abord une disposition. ». <b>Disposition choisie supprimée</b> : la radio repasse sur « La dernière disposition » et une ligne le dit. Les dispositions de la section affichent « N groupes · N fenêtres ». « Au démarrage, reprendre les sessions ouvertes » (Général) ne change pas.',
+    keys:'settings.workspace.boot · settings.workspace.bootLast · settings.workspace.bootFixed · settings.workspace.bootAtelier · settings.workspace.bootNone · settings.workspace.bootDeleted(name)',
+    scene: `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
+      <div class="fld"><label>${t.boot}</label><div class="radios">${radio(false,t.bootLast)}${radio(true,t.bootFixed, select('Revue Pim + Nova'))}${radio(false,t.bootAtelier)}</div>
+        <label>${t.layouts}</label><div class="radios">${L3(t).map(([n,g,w])=>`<span class="cell2">${n}<span class="mut">${t.shape(g,w)}</span><button class="btn">${t.apply}</button><button class="btn">${t.del}</button></span>`).join('')}</div></div>
+      <div style="border-left:1px solid var(--border)"><div class="fld"><label>${t.boot}</label><div class="radios">${radio(true,t.bootLast)}${radio(false,t.bootFixed, select('—'), true)}<span class="hint">${t.bootNone}</span>${radio(false,t.bootAtelier)}</div></div>
+      <div class="fld" style="border-top:1px solid var(--border)"><label>${t.boot}</label><div class="radios">${radio(true,t.bootLast)}<span class="hint" style="margin-left:22px;color:var(--st-ask)">${t.bootDeleted('Revue Pim + Nova')}</span>${radio(false,t.bootFixed, select('ledge-dev'))}${radio(false,t.bootAtelier)}</div></div></div></div>`});
+  C.push({title:'La pastille devant chaque disposition', tag:'q',
+    why:'Dans la v27, la pastille de couleur du menu ne voulait rien dire (violet pour toutes, vert d’eau pour « Terminaux »). <b>Recommandé : la retirer.</b> À droite, la forme : « 3 groupes · 1 fenêtre ». Voir les cartes 2 et 3.',
+    keys:'ide.layout.shape(groups, windows)',
+    scene: menuAt(`<div class="mh">${t.layouts}</div>${items(t,'Revue Pim + Nova',false)}<div class="sep"></div><button>${t.saveAs}</button><button>${t.manage}<span class="r">${t.settings}</span></button>`) + status(t, 'Revue Pim + Nova', {open:true})});
+  C.push({title:'Palette · rigs, OpenRig et machines', tag:'new', wide:true,
+    why:'Des entrées à plat, sans sous-liste (le filtre suffit) : <b>une Vue Rig par rig et une pour le kernel</b>, avec la machine à droite (et « arrêté »). Les six sections de la page OpenRig, préfixées « OpenRig : » pour qu’un mot les trouve. <b>« Afficher la machine : X »</b> une par machine, seulement avec deux machines ou plus, la machine affichée marquée « actuelle ». « OpenRig : Vue d’ensemble » remplace « Ouvrir OpenRig » de la v27.',
+    keys:'ide.palette.launchRig · ide.palette.rigView(rig) · ide.palette.orSection(section) · ide.palette.showMachine(machine) · ide.palette.current · ide.palette.stopped',
+    scene: `<div style="display:grid;grid-template-columns:1fr 1fr;min-height:330px"><div style="position:relative">${palette(t, '&gt;rig', [[t.launch,''],[t.rigView('kernel'),'WSL'],[t.rigView('ledge-dev'),'WSL'],[t.rigView('pilot'),`srv-build · ${t.stopped}`],[t.orSec(t.orSecs[1]),''],[t.showMachine('WSL'), t.current],[t.showMachine('srv-build'),'']].map(x=>['› '+x[0],x[1]]))}</div>
+      <div style="position:relative;border-left:1px solid var(--border)">${palette(t, '&gt;openrig', t.orSecs.map(s=>['› '+t.orSec(s), '']))}</div></div>`});
+  C.push({title:'Palette · MR et PR, dispositions', tag:'q', wide:true,
+    why:'<b>« MR et PR »</b> ouvre la vue, puis <b>une entrée par MR ou PR ouverte</b> (les fusionnées non), trouvable par son numéro ou son titre, avec la forge, le dépôt et l’état à droite ; Entrée l’ouvre en onglet. Les dispositions : une entrée chacune, « actuelle » à droite, puis « Enregistrer la disposition… ». Sans préfixe, les MR et PR viennent après les commandes, comme les sessions qui n’attendent rien.',
+    keys:'ide.palette.prs · ide.palette.pr(ref, title) · ide.palette.layout(name) · ide.palette.saveLayout',
+    scene: `<div style="display:grid;grid-template-columns:1fr 1fr;min-height:290px"><div style="position:relative">${palette(t, '&gt;#2', [['› #226 Coque IDE : WorkspaceShell',`GitHub · ledge · ${t.st.draft}`],['› #225 layout.ts : sérialiser les dispositions',`GitHub · ledge · ${t.pipe.ok}`],['› #222 Terminal de siège : capture et copie',`GitHub · ledge · ${t.st.review}`]])}</div>
+      <div style="position:relative;border-left:1px solid var(--border)">${palette(t, '&gt;dispo'.replace('dispo', lang==='fr'?'dispo':'layout'), [['› '+t.layoutCmd('Revue Pim + Nova'), t.current],['› '+t.layoutCmd('ledge-dev'),''],['› '+t.layoutCmd('Terminaux'),''],['› '+t.saveLayoutCmd,'']])}</div></div>`});
+  return C;
+}
+function fiche(){
+  const L = T[lang];
+  const rows = [
+    ['Aucune disposition','barre d’état, menu', `${L.none} · ${L.noneTip} · ${L.empty}`, 'ide.layout.none, noneTip, empty'],
+    ['Disposition modifiée','barre d’état (•), menu', `${L.modTip} · ${L.current} · ${L.modified} · ${L.saveInto('X')} · ${L.saveAs}`, 'ide.layout.modTip, modified, saveInto, saveAs'],
+    ['Nom déjà pris','champ du menu', `${L.taken('X')} → ${L.replaced('X')} · ${L.saved('X')}`, 'ide.layout.taken, replaced, saved, namePh'],
+    ['Onglets qui ne reviennent pas','toast', L.gone('X', 2), 'ide.layout.gone'],
+    ['Forme d’une disposition','menu, Réglages', L.shape(3,1), 'ide.layout.shape'],
+    ['Au démarrage','Réglages › Espace de travail', `${L.bootLast} / ${L.bootFixed} [▾] / ${L.bootAtelier} · ${L.bootNone} · ${L.bootDeleted('X')}`, 'settings.workspace.boot*'],
+    ['Palette rigs','palette', `› ${L.launch} · › ${L.rigView('ledge-dev')} · › ${L.orSec(L.orSecs[0])} … ${L.orSecs.join(', ')} · › ${L.showMachine('WSL')} (${L.current})`, 'ide.palette.launchRig, rigView, orSection, showMachine'],
+    ['Palette MR et PR','palette', `› ${L.prs} · › #225 layout.ts : sérialiser les dispositions`, 'ide.palette.prs, pr'],
+    ['Palette dispositions','palette', `› ${L.layoutCmd('X')} · › ${L.saveLayoutCmd}`, 'ide.palette.layout, saveLayout'],
+  ];
+  return `<section class="fiche"><h2>${L.fiche}</h2><table><tr>${L.fh.map(h=>`<th>${h}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table></section>`;
+}
+function render(){
+  document.documentElement.dataset.theme = theme; document.documentElement.lang = lang;
+  const t = T[lang];
+  document.getElementById('h1').textContent = t.h1; document.getElementById('hsub').textContent = t.hsub;
+  const th = document.querySelectorAll('#theme button'); th[0].textContent = t.theme[0]; th[1].textContent = t.theme[1];
+  th.forEach(b=>b.classList.toggle('on', b.dataset.v===theme));
+  document.querySelectorAll('#lang button').forEach(b=>b.classList.toggle('on', b.dataset.v===lang));
+  document.getElementById('main').innerHTML = cards(t).map((c,i) => `<article class="card ${c.wide?'wide':''}" id="s${i+1}"><h2><span class="n">${i+1}</span>${c.title}<span class="tag ${c.tag}">${c.tag==='q'?'question pour jde':'nouveau'}</span></h2><div class="why">${c.why}</div><div class="keys">${c.keys}</div><div class="scene">${c.scene}</div></article>`).join('') + fiche();
+}
+document.getElementById('theme').onclick = e => { const v = e.target.dataset.v; if (!v) return; theme = v; try{localStorage.setItem('lp-theme',v)}catch(_){} render(); };
+document.getElementById('lang').onclick = e => { const v = e.target.dataset.v; if (!v) return; lang = v; try{localStorage.setItem('lp-lang',v)}catch(_){} render(); };
+render();
+</script>
+</body>
+</html>

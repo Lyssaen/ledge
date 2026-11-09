@@ -164,9 +164,10 @@ test('N opens the modal; Escape closes it and gives the focus back', async ({ pa
 test('the palette\'s « New session » line opens the modal', async ({ page }) => {
   await boot(page);
   await page.keyboard.press('Control+k');
-  const palette = page.getByRole('dialog', { name: 'Go to a session' });
+  // The IDE's palette (lot 10).
+  const palette = page.getByRole('dialog', { name: 'Palette' });
   await expect(palette).toBeVisible();
-  await page.getByRole('combobox').fill('new');
+  await page.getByRole('combobox', { name: 'Palette' }).fill('new');
   await palette.getByRole('option', { name: /^New session/ }).click();
   await expect(palette).toBeHidden();
   await expect(page.getByRole('dialog', { name: 'New session' }).locator('.launch-modal')).toBeVisible();

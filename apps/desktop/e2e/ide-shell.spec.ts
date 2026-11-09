@@ -84,9 +84,9 @@ test('two sessions are two more dockview tabs, named; a click on the first bring
   await page.screenshot({ path: 'e2e/.results/ide-shell.png' });
 });
 
-// The status bar's usage limits (mockup `statusbar()`, `.lmt`, `.limpop`): at the bar's far right, their detail opening above it,
-// whole in the window and drawn on top (the bar does not clip it).
-test('the usage limits sit at the status bar\'s right end; each one\'s detail opens whole above it', async ({ page }) => {
+// The status bar's usage limits (mockup `statusbar()`, `.lmt`, `.limpop`): at the bar's right, just before the disposition (v27,
+// lot 10), their detail opening above it, whole in the window and drawn on top (the bar does not clip it).
+test('the usage limits sit at the status bar\'s right end, before the disposition; each one\'s detail opens whole above it', async ({ page }) => {
   const SHOTS = process.env.LEDGE_STATUSBAR_SHOTS;
   const at = (min: number) => new Date(Date.now() + min * 60_000).toISOString();
   const usage = {
@@ -106,7 +106,10 @@ test('the usage limits sit at the status bar\'s right end; each one\'s detail op
   await shot('bar');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/bar-full.png`, clip: { x: 0, y: 1080 - 40, width: vw, height: 40 } });
   const edge = await box(limits);
-  expect.soft(vw - (edge.x + edge.width)).toBeLessThanOrEqual(24);
+  const lay = await box(bar.locator('.ide-lay'));
+  expect.soft(lay.x - (edge.x + edge.width)).toBeLessThanOrEqual(24);
+  expect.soft(lay.x).toBeGreaterThanOrEqual(edge.x + edge.width);
+  expect.soft(vw - (lay.x + lay.width)).toBeLessThanOrEqual(24);
   for (const [name, title] of [['Claude Code', 'claude'], ['Cursor Agent', 'cursor']] as const) {
     await limits.getByRole('button', { name: new RegExp(name) }).click();
     const pop = page.getByRole('dialog', { name: new RegExp(name) });

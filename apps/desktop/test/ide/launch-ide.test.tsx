@@ -141,15 +141,15 @@ describe('the IDE’s New session', () => {
     await waitFor(() => expect(groups()[0]).toHaveClass('dv-active-group'));
     (document.activeElement as HTMLElement | null)?.blur();
     await user.keyboard('{Control>}k{/Control}');
-    const palette = await screen.findByRole('dialog', { name: 'Aller à une session' });
+    const palette = await screen.findByRole('dialog', { name: 'Palette' });
     // Otto, the front tab, goes: its tab closes and Nova's group comes to the front.
     d.remove('otto');
     await waitFor(() => expect(allTabs()).not.toContain('Otto'));
     await waitFor(() => expect(document.querySelector('.ide-dock .dv-active-group [role="tab"].dv-active-tab')).toHaveAttribute('aria-label', 'Nova'));
-    expect(screen.getByRole('dialog', { name: 'Aller à une session' })).toBe(palette);
+    expect(screen.getByRole('dialog', { name: 'Palette' })).toBe(palette);
     await user.keyboard('Mila');
     await user.keyboard('{Enter}');
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Aller à une session' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Palette' })).toBeNull());
     await waitFor(() => expect(allTabs()).toContain('Mila'));
   });
 
