@@ -30,4 +30,11 @@ describe('the IDE palette', () => {
     const many = Array.from({ length: 15 }, (_, i) => s(`s${i}`));
     expect(paletteRows('@', many, [])).toHaveLength(PALETTE_MAX);
   });
+
+  it('puts the open MRs and PRs after the commands, before the sessions that wait for nothing; > keeps them', () => {
+    const prs = [c('#225 layout.ts')];
+    expect(paletteRows('', sessions, commands, prs).map(r => r.id)).toEqual(['Nova', 'Nouvelle session', 'Ouvrir les réglages', 'Diviser le groupe à droite', '#225 layout.ts', 'Pim', 'dev-front']);
+    expect(paletteRows('>#22', sessions, commands, prs).map(r => r.id)).toEqual(['#225 layout.ts']);
+    expect(paletteRows('@', sessions, commands, prs).map(r => r.id)).toEqual(['Pim', 'Nova', 'dev-front']);
+  });
 });

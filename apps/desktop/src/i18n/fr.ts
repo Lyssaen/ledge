@@ -351,7 +351,12 @@ export const fr = {
       webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`,
       /** « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html): the editor, what this PC lacks, Zed's limit. */
       openIn: 'Ouvrir dans…', notInstalled: 'non installé', zedNoWsl: 'pas les dossiers WSL',
-      openInSaved: (editor: string) => `Ouvrir dans… : ${editor}`
+      openInSaved: (editor: string) => `Ouvrir dans… : ${editor}`,
+      boot: 'Au démarrage', bootLast: 'La dernière disposition', bootFixed: 'La disposition', bootAtelier: 'L’atelier seul',
+      bootNone: 'Enregistrez d’abord une disposition.', bootDeleted: (name: string) => `« ${name} » a été supprimée : Ledge rouvre la dernière disposition.`,
+      bootList: 'Disposition ouverte au démarrage',
+      bootSaved: (choice: string) => `Au démarrage : ${choice}`,
+      dispositions: 'Dispositions', apply: 'Appliquer', del: 'Supprimer'
     },
     general: {
       lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.',
@@ -1552,19 +1557,25 @@ export const fr = {
     /** « Dispositions » (mockup menuHtml() `layout`): the status bar's menu, the palette's commands, Settings › Workspace. */
     dispositions: {
       title: 'Dispositions', tip: 'Dispositions : appliquer, enregistrer',
-      groups: (n: number) => (n > 1 ? `${n} groupes` : '1 groupe'), current: 'actuelle',
-      save: 'Enregistrer la disposition actuelle…', namePlaceholder: 'Nom, puis Entrée', nameLabel: 'Nom de la disposition',
+      none: 'Disposition', noneTip: 'Aucune disposition enregistrée', empty: 'Aucune disposition enregistrée.',
+      current: 'actuelle', modified: 'modifiée', modTip: 'Modifiée depuis qu’elle a été appliquée',
+      shape: (g: number, w: number): string => `${g} groupe${g > 1 ? 's' : ''}${w ? ` · ${w} fenêtre${w > 1 ? 's' : ''}` : ''}`,
+      saveCurrent: 'Enregistrer la disposition actuelle…', saveInto: (name: string) => `Enregistrer dans « ${name} »`, saveAs: 'Enregistrer sous un nouveau nom…',
+      namePlaceholder: 'Nom, puis Entrée', nameLabel: 'Nom de la disposition', taken: (name: string) => `« ${name} » existe déjà : Entrée pour la remplacer.`,
       manage: 'Gérer les dispositions', manageHint: 'Réglages',
-      applied: (name: string) => `Disposition « ${name} »`, saved: (name: string) => `Disposition « ${name} » enregistrée`
+      applied: (name: string) => `Disposition « ${name} »`, saved: (name: string) => `Disposition « ${name} » enregistrée`, replaced: (name: string) => `Disposition « ${name} » remplacée`,
+      gone: (name: string, n: number): string => (n > 1 ? `« ${name} » : ${n} onglets ne sont pas rouverts, leur session ou leur rig n’existe plus.` : `« ${name} » : 1 onglet n’est pas rouvert, sa session ou son rig n’existe plus.`)
     },
     /** The IDE palette (Ctrl+K; mockup `palItems`): `@` the sessions and seats, `>` the commands. */
     palette: {
       label: 'Palette', placeholder: 'Session (@), commande (>), ou un mot…', results: 'Résultats', empty: 'Rien ne correspond.',
       browse: '↑↓ choisir', open: 'Entrée ouvrir', close: 'Échap fermer', archived: (project: string) => `${project} · archivée`,
+      current: 'actuelle', stopped: 'arrêté',
       commands: {
-        newSession: 'Nouvelle session', openrig: 'Ouvrir OpenRig', atelier: 'Ouvrir l’atelier', settings: 'Ouvrir les réglages', prs: 'MR et PR',
-        atoi: 'Page À toi (nouvelle fenêtre)', terminal: 'Nouveau terminal', split: 'Diviser le groupe à droite', bottom: 'Afficher ou masquer le panneau du bas',
-        saveDisposition: 'Enregistrer la disposition', disposition: (name: string) => `Disposition : ${name}`
+        newSession: 'Nouvelle session', atelier: 'Ouvrir l’atelier', settings: 'Ouvrir les réglages', prs: 'MR et PR',
+        terminal: 'Nouveau terminal', split: 'Diviser le groupe à droite', bottom: 'Afficher ou masquer le panneau du bas',
+        launchRig: 'Lancer un rig…', rigView: (rig: string) => `Vue Rig : ${rig}`, orSection: (section: string) => `OpenRig : ${section}`, showMachine: (machine: string) => `Afficher la machine : ${machine}`,
+        saveDisposition: 'Enregistrer la disposition…', disposition: (name: string) => `Disposition : ${name}`
       }
     },
     /** The explorer's session menu, IDE only (mockup menuHtml() `ctx`): where to open, and the agent's terminal tab. */

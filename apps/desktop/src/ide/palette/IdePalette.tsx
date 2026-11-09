@@ -4,12 +4,22 @@ import { useI18n } from '../../i18n/lang';
 import { dotOf, type Dot } from '../../nav/agents';
 import { providerOf } from '../../workspace/sessionTab';
 import { ProviderLogo } from '../ProviderLogo';
+import type { DaemonClient, MachineState } from '@ledge/fleet';
+import { useOpenRigStates } from '@ledge/fleet/openrig';
+import { SIDEBAR_POLL_MS } from '../../openrig/sidebarState';
 import { paletteRows, type PaletteCommand, type PaletteRow, type PaletteSession } from './model';
+import { rigCommands, type RigPaletteActions } from './rigCommands';
 import '../../styles/ide.css';
 import '../../styles/ide-rigs.css';
 
 export interface IdePaletteProps {
-  sessions: readonly PaletteSession[]; commands: readonly PaletteCommand[];
+  sessions: readonly PaletteSession[];
+  /** The commands, around OpenRig's (rigCommands): « Nouvelle session » before, the others after. */
+  commands: { before: readonly PaletteCommand[]; after: readonly PaletteCommand[] };
+  /** OpenRig's commands: the rigs of every machine, read from the states the Rigs view already polls. */
+  rigs: { client: DaemonClient; machines: readonly MachineState[]; shown: string; act: RigPaletteActions };
+  /** The open MRs and PRs (lot 8b): after the commands. */
+  prs?: readonly PaletteCommand[];
   /** The session behind a row, for its state dot. */
   sessionOf(id: string): Session | undefined;
   onClose(): void;
@@ -20,12 +30,17 @@ const DOT: Record<Dot, string> = { approval: 'perm', question: 'ask', working: '
 
 /** The IDE palette (Ctrl+K, the title bar's field; mockup `openPal`, `palList`): a field, ten rows at most, the keys' reminder.
  *  ↑ ↓ choose, Enter runs, Escape or a click outside closes. */
-export function IdePalette({ sessions, commands, sessionOf, onClose }: IdePaletteProps): JSX.Element {
+export function IdePalette({ sessions, commands, rigs, prs = [], sessionOf, onClose }: IdePaletteProps): JSX.Element {
   const { t } = useI18n();
   const p = t.ide.palette;
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
-  const rows = useMemo(() => paletteRows(query, sessions, commands), [query, sessions, commands]);
+  const seen = useOpenRigStates(rigs.client, useMemo(() => rigs.machines.filter(m => m.ready).map(m => m.id), [rigs.machines]), SIDEBAR_POLL_MS);
+  const all = useMemo(() => {
+    const text = { ...p.commands, sections: t.ide.openrigPage.sections, current: p.current, stopped: p.stopped };
+    return [...commands.before, ...rigCommands(rigs.machines, seen, rigs.shown, text, rigs.act), ...commands.after];
+  }, [commands, rigs, seen, p, t]);
+  const rows = useMemo(() => paletteRows(query, sessions, all, prs), [query, sessions, all, prs]);
   const at = Math.min(index, Math.max(0, rows.length - 1));
   const list = useId();
   const box = useRef<HTMLDivElement>(null);

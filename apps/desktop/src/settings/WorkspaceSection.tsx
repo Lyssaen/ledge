@@ -1,5 +1,6 @@
 import { useId, type JSX } from 'react';
 import { useUsage } from '@ledge/fleet';
+import { Button } from '@ledge/ui/ui/Button';
 import { USAGE_ALERT_MAX, USAGE_ALERT_MIN } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
 import { usageThreshold } from '../usage/model';
@@ -8,6 +9,7 @@ import { useOpenSession, type OpenSession } from '../workspace/openPrefs';
 import { useWebglMax } from '../term/webglPrefs';
 import { WEBGL_MAX, WEBGL_MIN } from '../term/webgl';
 import { EDITORS, EDITOR_NAMES, useEditor, useEditorsInstalled } from '../ide/openIn';
+import { bootShown, loadCurrent, remove, saveBoot, saveCurrent, saveDispositions, shapeOf, useBoot, useDispositions, type Boot } from '../workspace/dispositions';
 import { Card, Row } from './controls';
 import type { SettingsContext } from './SettingsPage';
 
@@ -19,8 +21,9 @@ const ALERT_MAX = Math.round(USAGE_ALERT_MAX * 100);
 /** Settings › Workspace (mockup settingsPage(), IDE only): « Ouvrir une session », in the active group or to its right, as radios;
  *  the status bar (the usage limits shown or not, the alert threshold the daemons keep, General's own); the terminals' WebGL budget.
  *  « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html states 3 and 5): Cursor, VS Code or Zed; « non installé » in grey after an
- *  editor this PC lacks, once known (nothing before), and « pas les dossiers WSL » after Zed, always. « Nouvelle fenêtre » waits for lot 9,
- *  the start-up and layouts rows for lot 10. */
+ *  editor this PC lacks, once known (nothing before), and « pas les dossiers WSL » after Zed, always. « Au démarrage » (the last
+ *  disposition, one chosen in a list, the atelier alone) and the saved dispositions, applied or deleted here (lot 10,
+ *  docs/mockups/ledge-ide-layouts-palette.html). « Nouvelle fenêtre » waits for lot 9. */
 export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   const w = t.settings.workspace;
@@ -41,6 +44,20 @@ export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element
     try { ctx.fleet.setUsageAlert(pct / 100); ctx.saved(t.settings.general.usageAlertSaved(pct)); }
     catch (e) { ctx.notify((e as Error).message); }
   };
+  const list = useDispositions();
+  const shown = bootShown(useBoot(), list);
+  const bootName = useId();
+  // The list's choice: the one set, or the first saved (the radio picks it).
+  const fixed = shown.boot.kind === 'fixed' ? shown.boot.name : list[0]?.name ?? '';
+  const setBoot = (b: Boot) => {
+    saveBoot(b);
+    ctx.saved(w.bootSaved(b.kind === 'last' ? w.bootLast : b.kind === 'atelier' ? w.bootAtelier : `${w.bootFixed} « ${b.name} »`));
+  };
+  const del = (name: string) => {
+    saveDispositions(remove(list, name));
+    // The status bar names no disposition that is gone.
+    if (loadCurrent()?.name === name) saveCurrent(null);
+  };
   const step = (d: number) => { const n = Math.max(WEBGL_MIN, Math.min(WEBGL_MAX, webgl + d)); if (n === webgl) return; setWebgl(n); ctx.saved(w.webglSaved(n)); };
   return (
     <>
@@ -56,6 +73,36 @@ export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element
           </div>
         )}
       </Row>
+      <Row label={w.boot} hint={shown.deleted !== null ? <span className="set-warn">{w.bootDeleted(shown.deleted)}</span> : list.length === 0 ? w.bootNone : undefined}>
+        {describedBy => (
+          <div className="set-radios set-boot" role="radiogroup" aria-label={w.boot} aria-describedby={describedBy}>
+            <label><input type="radio" name={bootName} checked={shown.boot.kind === 'last'} onChange={() => setBoot({ kind: 'last' })} />{w.bootLast}</label>
+            <label className={list.length === 0 ? 'off' : undefined}>
+              <input type="radio" name={bootName} disabled={list.length === 0} checked={shown.boot.kind === 'fixed'} onChange={() => setBoot({ kind: 'fixed', name: fixed })} />{w.bootFixed}
+              <select className="set-input" aria-label={w.bootList} disabled={list.length === 0} value={fixed} onChange={e => setBoot({ kind: 'fixed', name: e.target.value })}>
+                {list.length === 0 ? <option value="">—</option> : list.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+              </select>
+            </label>
+            <label><input type="radio" name={bootName} checked={shown.boot.kind === 'atelier'} onChange={() => setBoot({ kind: 'atelier' })} />{w.bootAtelier}</label>
+          </div>
+        )}
+      </Row>
+      {list.length > 0 && (
+        <Row label={w.dispositions}>
+          <ul className="set-dispositions" aria-label={w.dispositions}>
+            {list.map(d => {
+              const sh = shapeOf(d);
+              return (
+                <li key={d.name}>
+                  <span className="set-disp-name">{d.name}</span><span className="set-disp-shape">{t.ide.dispositions.shape(sh.groups, sh.windows)}</span>
+                  <Button size="sm" aria-label={`${w.apply} « ${d.name} »`} onClick={() => ctx.applyDisposition?.(d.name)}>{w.apply}</Button>
+                  <Button size="sm" aria-label={`${w.del} « ${d.name} »`} onClick={() => del(d.name)}>{w.del}</Button>
+                </li>
+              );
+            })}
+          </ul>
+        </Row>
+      )}
     </Card>
     <Card title={w.statusBar}>
       <Row label={w.usage}>

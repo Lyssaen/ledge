@@ -51,6 +51,8 @@ export interface SettingsContext {
   lang: Lang;
   setLang(l: Lang): Promise<'ok' | 'failed'>;
   paused: boolean;
+  /** The IDE only: applies a saved disposition (Settings › Workspace › « Appliquer »). */
+  applyDisposition?(name: string): void;
 }
 
 /** The sections' line icons, as the mockup draws them (settings.tsx, SECTIONS). */
