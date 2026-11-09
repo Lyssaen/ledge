@@ -6,7 +6,8 @@ const { version } = JSON.parse(readFileSync(new URL('./package.json', import.met
 export default defineConfig({
   // The reduce worker is its own file beside the CLI (daemon/captureReducer.ts starts `./reduceWorker.js` from the bundle);
   // no splitting, so each stays one self-contained file.
-  entry: { index: 'src/cli/index.ts', reduceWorker: 'src/daemon/reduceWorker.ts' },
+  // index.js is the bin and imports nothing when it loads (see src/cli/index.ts): it loads hook.js for `ledge hook`, main.js for the rest.
+  entry: { index: 'src/cli/index.ts', main: 'src/cli/main.ts', hook: 'src/cli/hook.ts', reduceWorker: 'src/daemon/reduceWorker.ts' },
   splitting: false,
   format: ['esm'],
   target: 'node22',
