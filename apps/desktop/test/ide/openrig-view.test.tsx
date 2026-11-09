@@ -60,7 +60,7 @@ describe('the OpenRig page shell', () => {
     await userEvent.click(within(screen.getByRole('navigation')).getByRole('button', { name: /^Daemon$/ }));
     expect(m.dispatch).toHaveBeenCalledWith({ type: 'openrig', machine: 'local', section: 'daemon' });
   });
-  it('the current section has a titled placeholder', () => {
+  it('the current section has a titled body', () => {
     const m = mount({ section: 'daemon' }); m.f.state('local', state());
     expect(screen.getByRole('heading', { name: 'Daemon' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Daemon' })).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe('the OpenRig page shell', () => {
     const m = mount(); m.f.state('local', state());
     await userEvent.click(screen.getByRole('button', { name: 'Arrêter le daemon' }));
     expect(m.f.acts().map(a => a.action.kind)).toEqual(['daemon.stop']);
-    expect(screen.queryByRole('group')).toBeNull();
+    expect(screen.queryByRole('group', { name: /Arrêter le daemon/ })).toBeNull();
   });
   it('with the confirmation off, a seat that started working since the display still asks (decided at the click)', async () => {
     saveDaemonPrefs('local', { askAlways: false });

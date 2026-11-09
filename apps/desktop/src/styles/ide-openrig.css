@@ -28,6 +28,90 @@
 .ide-orp-absent p { margin: 0; color: var(--muted-foreground); }
 .ide-orp .ide-orp-absent button { height: 26px; padding: 0 10px; border: 1px solid var(--input); border-radius: var(--radius-md); color: var(--foreground); }
 
+/* The sections (Task 5). The body scrolls in .ide-orp-main; the Roles section fills it and scrolls its own columns. */
+/* 900 px of content, as the mockup's .orb-main > *, plus the side padding: three rig cards side by side. */
+.ide-orp-body { display: flex; flex-direction: column; gap: 14px; max-width: 936px; }
+.ide-orp-body.s-roles { flex: 1; min-height: 0; max-width: none; padding: 0; }
+.ide-orp-main:has(.s-roles) { overflow: hidden; }
+.ide-orp .ide-orp-roles { flex: 1; min-height: 0; padding: 0; gap: 0; overflow: hidden; border-top: 1px solid var(--border); }
+.ide-orp .ide-orp-roles > .orr-state { margin: 18px; }
+.ide-orp-note.flat { padding: 0; }
+.ide-orp-mut { color: var(--muted-foreground); }
+.ide-orp .mono { font-family: 'Geist Mono', monospace; font-size: 11.5px; }
+.ide-orp-sp { flex: 1; }
+.ide-orp .ide-orp-lnk { font-size: 12px; color: var(--foreground); white-space: nowrap; }
+.ide-orp .ide-orp-lnk:hover { text-decoration: underline; }
+.ide-orp-pill { flex: none; font-size: 11px; line-height: 16px; padding: 1px 8px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted-foreground); white-space: nowrap; }
+.ide-orp-pill.run { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
+
+/* Blocks (mockup .blk). */
+.ide-orp-blk { border: 1px solid var(--border); border-radius: 9px; background: var(--card); min-width: 0; }
+.ide-orp-blk-h { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.ide-orp-blk-h b { font-weight: 600; }
+.ide-orp-blk-b { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+.ide-orp-blk-b.row { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ide-orp-term { display: flex; min-height: 0; border-radius: 0 0 9px 9px; overflow: hidden; }
+.ide-orp-term .ide-output { min-height: 60px; max-height: 60vh; }
+.ide-orp-term.short .ide-output { max-height: 120px; }
+
+/* Vue d'ensemble: the tiles (mockup .orb-tile), the seats waiting. */
+.ide-orp-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.ide-orp .ide-orp-tile { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); text-align: left; color: var(--foreground); }
+.ide-orp .ide-orp-tile:hover { border-color: var(--input); }
+.ide-orp-tile small { font-size: 11px; color: var(--muted-foreground); }
+.ide-orp-tile b { font-size: 16px; font-weight: 600; }
+.ide-orp-tile span { font-size: 11.5px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ide-orp-tile.warn b { color: var(--warning); }
+.ide-orp .ide-orp-wait { display: flex; align-items: center; gap: 8px; min-width: 0; height: 26px; padding: 0 6px; border-radius: 6px; color: var(--foreground); text-align: left; white-space: nowrap; }
+.ide-orp .ide-orp-wait:hover { background: var(--muted); }
+.ide-orp-wait .ide-orp-mut { overflow: hidden; text-overflow: ellipsis; }
+.ide-orp-meta { margin-left: auto; font: 11px 'Geist Mono', monospace; color: var(--muted-foreground); }
+
+/* Rigs: the cards (mockup .orb-card), the dashed launch card. */
+.ide-orp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.ide-orp-card { display: flex; flex-direction: column; gap: 9px; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); }
+.ide-orp-card.off .ide-orp-comp { opacity: .55; }
+.ide-orp-card-h { display: flex; align-items: center; gap: 5px; min-width: 0; }
+/* Tight (a 280 px card, the kernel's two pills): the pills give way before the name. */
+.ide-orp-card-h .ide-orp-pill { flex: 0 6 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; font-size: 10.5px; }
+.ide-orp .ide-orp-name { flex: 0 1 auto; min-width: 4ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); font-family: 'Geist Mono', monospace; font-size: 12.5px; }
+.ide-orp .ide-orp-name b { font-weight: 500; }
+.ide-orp .ide-orp-name:hover { text-decoration: underline; }
+/* The buttons sit in a fixed column, so a card's header does not jump between running and stopped. */
+.ide-orp-pw.ide-orp-cpw { flex: none; flex-basis: auto; justify-content: flex-end; width: 46px; gap: 2px; }
+.ide-orp .ide-orp-ib.icon { width: 22px; height: 22px; padding: 0; justify-content: center; }
+.ide-orp-card > .ide-rigs-conf { margin: 0; }
+.ide-orp-comp { display: flex; flex-wrap: wrap; gap: 5px; }
+.ide-orp-chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); font-size: 11.5px; }
+.ide-orp-card-f { display: flex; align-items: center; gap: 8px; margin-top: auto; font-size: 11.5px; color: var(--muted-foreground); }
+.ide-orp-card-f .ide-orp-lnk { margin-left: auto; font-size: 11.5px; }
+.ide-orp .ide-orp-new { align-items: flex-start; justify-content: center; gap: 4px; min-height: 110px; border: 1px dashed var(--border); background: transparent; color: var(--muted-foreground); text-align: left; }
+.ide-orp .ide-orp-new b { font-weight: 600; color: var(--foreground); }
+.ide-orp .ide-orp-new span { font-size: 11.5px; }
+.ide-orp .ide-orp-new:hover { border-color: var(--foreground); }
+
+/* Machines: one row each (mockup .orb-mach). */
+.ide-orp-machs { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.ide-orp-mach { display: grid; grid-template-columns: auto minmax(0, 1fr) 110px 80px 60px 90px; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.ide-orp-mach.on { background: color-mix(in srgb, var(--muted) 45%, transparent); }
+.ide-orp-mt { display: flex; flex-direction: column; min-width: 0; }
+.ide-orp-mt b { font: 500 12.5px 'Geist Mono', monospace; overflow: hidden; text-overflow: ellipsis; }
+.ide-orp-mt small { font-size: 11px; color: var(--muted-foreground); }
+.ide-orp-mach > .ide-orp-ib, .ide-orp-mach > .ide-orp-pill { justify-self: end; }
+
+/* Daemon: the preferences (mockup .fld, .chk). */
+.ide-orp-fld { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 12px 16px; align-items: start; }
+.ide-orp-fld > span { padding-top: 2px; color: var(--muted-foreground); }
+.ide-orp-checks { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+.ide-orp-chk { display: flex; align-items: center; gap: 8px; color: var(--muted-foreground); cursor: pointer; }
+.ide-orp-chk input { width: 14px; height: 14px; margin: 0; accent-color: var(--primary); }
+.ide-orp-chk:has(input:disabled) { opacity: .5; cursor: default; }
+.ide-orp .ide-perm-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--input); border-radius: 7px; overflow: hidden; }
+.ide-orp .ide-perm-seg button { padding: 4px 10px; border-right: 1px solid var(--input); font-size: 12px; color: var(--muted-foreground); }
+.ide-orp .ide-perm-seg button:last-child { border-right: 0; }
+.ide-orp .ide-perm-seg button[aria-checked=true] { background: var(--muted); color: var(--foreground); }
+.ide-orp .ide-perm-seg button.risky[aria-checked=true] { background: var(--status-danger-soft); color: var(--danger-text); }
+
 /* A narrow group (R18): the rail becomes a row of tabs above the body, the launch button an icon on the right. */
 @container (max-width: 640px) {
   .ide-orp { flex-direction: column; }
@@ -38,4 +122,17 @@
   .ide-orp-rail .ide-rigs-conf { flex-basis: 100%; order: 3; }
   .ide-orp .ide-orp-launch { margin: 0 0 0 auto; width: 28px; padding: 0; }
   .ide-orp .ide-orp-launch span { display: none; }
+  .ide-orp-top { padding: 10px 12px 6px; }
+  .ide-orp-body { padding: 0 12px 12px; }
+  .ide-orp-note { padding: 0 12px; }
+  .ide-orp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ide-orp-cards { grid-template-columns: minmax(0, 1fr); }
+  .ide-orp-mach { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .ide-orp-mach > span:nth-child(n+3):nth-child(-n+5) { display: none; }
+  .ide-orp-fld { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .ide-orp-fld > .ide-orp-checks { margin-bottom: 8px; }
+  /* The Roles section: the list above the role, as the old page does on a narrow window. */
+  .ide-orp .orr-rp { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: auto; }
+  .ide-orp .orr-list { border-right: 0; border-bottom: 1px solid var(--border); max-height: 300px; }
+  .ide-orp .orr-detail { overflow: visible; }
 }

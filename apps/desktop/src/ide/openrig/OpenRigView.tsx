@@ -8,20 +8,22 @@ import { OPENRIG_SECTIONS, type NavAction, type OpenRigSection } from '../../nav
 import { OPENRIG_INSTALL_URL } from '../../openrig/OpenRigPage';
 import { targetOf } from '../../openrig/model';
 import type { RigOutputEntry } from '../../openrig/rigOutput';
+import { RolesView } from '../../openrig/roles/RolesView';
 import { SIDEBAR_POLL_MS } from '../../openrig/sidebarState';
-import { SHELL_ICONS } from '../../shell/icons';
 import { openUrl } from '../../tauri/bridge';
 import type { Tab } from '../../workspace/model';
+import { OutputView } from '../OutputView';
 import { rigErrorText } from '../rig/errors';
 import { RigConfirm, useRigConfirm } from '../rigs/RigConfirm';
 import { powerOf } from '../rigs/model';
+import { POWER_GLYPH } from './glyphs';
 import { prefAction, useDaemonPrefs } from './prefs';
 import { navCounts } from './model';
+import { Daemon } from './sections/Daemon';
+import { Machines } from './sections/Machines';
+import { Overview } from './sections/Overview';
+import { Rigs } from './sections/Rigs';
 import '../../styles/ide-openrig.css';
-
-const RESTART = ['M20 12a8 8 0 1 1-2.3-5.7', 'M20 4v5h-5'];
-type Verb = 'start' | 'restart' | 'stop';
-const GLYPH: Record<Verb, readonly string[]> = { start: SHELL_ICONS.play, restart: RESTART, stop: SHELL_ICONS.stop };
 
 /** The OpenRig page of the IDE (docs/mockups/ledge-ide-rigs.html `orPageB`): a rail (daemon, sections, launch) and the section's body. */
 export interface OpenRigViewProps {
@@ -30,7 +32,7 @@ export interface OpenRigViewProps {
   dispatch(a: NavAction): void; onTab(tab: Tab): void; onLaunch(machine: string): void;
 }
 
-export function OpenRigView({ client, machines, machine, section, sessions, output, dispatch, onLaunch }: OpenRigViewProps): JSX.Element {
+export function OpenRigView({ client, machines, machine, section, role, seat, sessions, asks, output, dispatch, onTab, onLaunch }: OpenRigViewProps): JSX.Element {
   const { t } = useI18n();
   const o = t.openrig, v = t.ide.rigsView, p = t.ide.openrigPage;
   const shown = machines.find(m => m.id === machine);
@@ -58,7 +60,7 @@ export function OpenRigView({ client, machines, machine, section, sessions, outp
         const name = v[verb](v.whatDaemon);
         // The decision (confirm or send) is made at the click, from the latest state of useOpenRig.
         return <button key={verb} type="button" className={`ide-orp-ib ${verb}`} title={name} aria-label={name} disabled={pending}
-          onClick={e => conf.ask(prefAction('daemon', verb, prefs), e.currentTarget)}><Icon d={GLYPH[verb]} size={13} />{t.ide.rigTab[verb]}</button>;
+          onClick={e => conf.ask(prefAction('daemon', verb, prefs), e.currentTarget)}><Icon d={POWER_GLYPH[verb]} size={13} />{t.ide.rigTab[verb]}</button>;
       })}
     </span>
   );
@@ -73,13 +75,36 @@ export function OpenRigView({ client, machines, machine, section, sessions, outp
       <button type="button" onClick={() => openUrl(OPENRIG_INSTALL_URL)}>{o.howToInstall}</button>
     </section>
   );
-  // What does not depend on this machine's OpenRig (the machines, the output, the roles' own read) shows whatever its state.
+  // What does not depend on this machine (the machines, the output) shows whatever its state. The roles have their own read, and say
+  // themselves why they cannot show (stopped, not installed…) once the machine answers.
+  const note = (text: string): ReactNode => <p className="ide-orp-note" role="status">{text}</p>;
+  const ofMachine = section !== 'machines' && section !== 'output';
   const needsState = section === 'overview' || section === 'rigs' || section === 'daemon';
-  const unavailable: ReactNode = !needsState ? null
-    : error ? <p className="ide-orp-note" role="status">{error === 'outdated' ? o.outdated : o.offline}</p>
-    : !state ? <p className="ide-orp-note" role="status">{o.loading}</p>
+  const unavailable: ReactNode = !ofMachine ? null
+    // A machine removed while its tab was open: nothing will ever answer for it.
+    : !shown ? note(p.unknownMachine)
+    : error ? note(error === 'outdated' ? o.outdated : o.offline)
+    : !needsState ? null
+    : !state ? note(o.loading)
     : !installed ? absent : null;
   const title = p.sections[section];
+  // A role picked in the Roles section stays on this tab's machine: an `openrig` action without one would land on the local machine's tab.
+  const onMachine = (a: NavAction) => dispatch(a.type === 'openrig' && a.machine === undefined ? { ...a, machine } : a);
+
+  const content = (): ReactNode => {
+    if (section === 'machines') return <Machines client={client} machines={machines} dispatch={dispatch} onTab={onTab} />;
+    if (section === 'output') return (
+      <section className="ide-orp-blk">
+        <div className="ide-orp-blk-h"><b>{p.sections.output}</b><span className="ide-orp-mut">{p.outputSub}</span></div>
+        <div className="ide-orp-term"><OutputView entries={output} /></div>
+      </section>
+    );
+    if (section === 'roles') return <div className="or-page ide-orp-roles"><RolesView client={client} machine={machine} machineLabel={label} roles={roles} {...(role !== undefined ? { roleId: role } : {})} {...(seat !== undefined ? { seat } : {})} dispatch={onMachine} /></div>;
+    if (!state) return null;
+    if (section === 'rigs') return <Rigs client={client} view={view} state={state} machine={machine} label={label} prefs={prefs} sessions={sessions} asks={asks} onTab={onTab} onLaunch={onLaunch} />;
+    if (section === 'daemon') return <Daemon state={state} machine={machine} />;
+    return <Overview state={state} machine={machine} label={label} sessions={sessions} asks={asks} output={output} dispatch={dispatch} onTab={onTab} />;
+  };
 
   return (
     <div className="ide-orp" role="region" aria-label={p.rail(label)}>
@@ -102,7 +127,7 @@ export function OpenRigView({ client, machines, machine, section, sessions, outp
       </aside>
       <div className="ide-orp-main">
         <div className="ide-orp-top"><h3>{title}</h3></div>
-        {unavailable ?? <section className="ide-orp-body" role="region" aria-label={title} />}
+        {unavailable ?? <section className={`ide-orp-body s-${section}`} role="region" aria-label={title}>{content()}</section>}
       </div>
     </div>
   );

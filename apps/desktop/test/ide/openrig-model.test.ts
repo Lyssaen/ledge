@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { OpenRigState, Rig, RigSeat, Session } from '@ledge/protocol';
-import { navCounts, recentCommands, roleChips, tilesOf, waitingSeats } from '../../src/ide/openrig/model';
+import { navCounts, recentCommands, roleChips, roleLabel, tilesOf, waitingSeats } from '../../src/ide/openrig/model';
 import type { RigOutputEntry } from '../../src/openrig/rigOutput';
 
 const seat = (logicalId: string, rig: string, o: Partial<RigSeat> = {}): RigSeat => ({ logicalId, session: `${logicalId.replace('.', '-')}@${rig}`, runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0, ...o });
@@ -32,7 +32,7 @@ describe('tilesOf', () => {
     const t = tilesOf(state(), [], [], 'local', 'fr');
     expect(t.rigs).toEqual({ running: 1, total: 2 });
     expect(t.daemon).toMatchObject({ up: true, version: '0.7.10', since: new Date(STARTED).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) });
-    expect(t.kernel).toEqual({ up: true, seats: 2, roles: ['advisor', 'operator'].map(r => r + '.lead').sort() });
+    expect(t.kernel).toEqual({ up: true, seats: 2, roles: ['advisor', 'operator'] });
   });
   it('counts a seat whose session waits for a permission as waiting', () => {
     const t = tilesOf(state(), [waiting()], [], 'local', 'en');
@@ -68,5 +68,17 @@ describe('roleChips', () => {
   it('groups the seats by role', () => {
     const r = rig('x', 'running', [seat('dev.build', 'x'), seat('dev.build-2', 'x', { runtime: 'codex' }), seat('dev.review', 'x', { runtime: 'codex' })]);
     expect(roleChips(r)).toEqual([{ role: 'build', runtime: 'claude-code', count: 2 }, { role: 'review', runtime: 'codex', count: 1 }]);
+  });
+  it('names the kernel’s roles by their pod (its members are all lead, agent or worker)', () => {
+    const k = rig('kernel', 'running', [seat('operator.agent', 'kernel'), seat('advisor.lead', 'kernel'), seat('queue.worker', 'kernel')]);
+    expect(roleChips(k).map(c => c.role)).toEqual(['operator', 'advisor', 'queue']);
+  });
+});
+
+describe('roleLabel', () => {
+  it('drops the pod and the copy number of a rig’s seat, keeps the pod of a kernel seat', () => {
+    expect(roleLabel('ledge-dev', 'dev.build-3')).toBe('build');
+    expect(roleLabel('kernel', 'advisor.lead')).toBe('advisor');
+    expect(roleLabel('x', 'solo')).toBe('solo');
   });
 });

@@ -1433,7 +1433,22 @@ export const fr = {
     /** The OpenRig page of the IDE (lot 7d, mockup orPageB()). */
     openrigPage: {
       sections: { overview: 'Vue d’ensemble', rigs: 'Rigs', roles: 'Rôles', machines: 'Machines', daemon: 'Daemon', output: 'Sortie' } as Record<'overview' | 'rigs' | 'roles' | 'machines' | 'daemon' | 'output', string>,
-      nav: 'Sections d’OpenRig', rail: (machine: string) => `OpenRig sur ${machine}`
+      nav: 'Sections d’OpenRig', rail: (machine: string) => `OpenRig sur ${machine}`,
+      unknownMachine: 'Machine inconnue : elle ne fait plus partie de tes machines.',
+      running: 'en marche', stopped: 'arrêté', since: (version: string, time: string) => `${version} · depuis ${time}`,
+      seats: (n: number) => `${n} ${n > 1 ? 'sièges' : 'siège'}`, rigsOf: (running: number, total: number) => `${running} sur ${total}`, runningOn: (machine: string) => `en marche sur ${machine}`,
+      active: (n: number) => `${n} ${n > 1 ? 'actifs' : 'actif'}`, waiting: (n: number) => (n === 0 ? 'personne n’attend' : `${n} t’attend${n > 1 ? 'ent' : ''}`),
+      waitingTitle: 'T’attendent', kind: { perm: 'permission', ask: 'question' } as Record<'perm' | 'ask', string>,
+      recent: 'Dernières commandes', seeAll: 'Tout voir',
+      system: 'système', kernelSub: 'Le rig d’OpenRig lui-même', openRig: 'Ouvrir la vue Rig →', newSub: 'Depuis une spec, un rig vide ou avec l’operator',
+      local: 'local', ssh: (alias: string) => `ssh · ${alias}`, notInstalled: 'non installé', rigs: (n: number) => `${n} ${n > 1 ? 'rigs' : 'rig'}`,
+      latency: (ms: number) => `${ms} ms`, measuring: '…', shown: 'affichée', show: 'Afficher', showLabel: (machine: string) => `Afficher ${machine}`,
+      addNote: 'La machine affichée pilote l’explorateur Rigs, cette page et la fenêtre de lancement.',
+      address: (port: number | undefined, pid: number | undefined) => [port !== undefined ? `127.0.0.1:${port}` : '', pid !== undefined ? `pid ${pid}` : ''].filter(Boolean).join(' · '),
+      onStart: 'Au démarrage', relaunch: 'Relancer les rigs qui tournaient', noKernel: 'Démarrer sans le kernel',
+      perm: 'Permissions au lancement', permHint: 'Valeur proposée quand tu lances un rig. Chaque rig garde la sienne.',
+      beforeStop: 'Avant un arrêt', snapshot: 'Prendre un snapshot du rig', askBusy: 'Demander confirmation si un siège travaille',
+      outputSub: 'les commandes rig lancées depuis Ledge'
     },
     /** The « Lancer un rig » modal (IDE lot 7d, mockup rigLaunchModal()). */
     launchRig: {

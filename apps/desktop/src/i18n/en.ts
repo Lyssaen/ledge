@@ -1367,7 +1367,22 @@ export const en: Messages = {
     /** The IDE's OpenRig page (lot 7d, mockup orPageB()). */
     openrigPage: {
       sections: { overview: 'Overview', rigs: 'Rigs', roles: 'Roles', machines: 'Machines', daemon: 'Daemon', output: 'Output' } as Record<'overview' | 'rigs' | 'roles' | 'machines' | 'daemon' | 'output', string>,
-      nav: 'OpenRig sections', rail: (machine: string) => `OpenRig on ${machine}`
+      nav: 'OpenRig sections', rail: (machine: string) => `OpenRig on ${machine}`,
+      unknownMachine: 'Unknown machine: it is no longer one of your machines.',
+      running: 'running', stopped: 'stopped', since: (version: string, time: string) => `${version} · since ${time}`,
+      seats: (n: number) => `${n} ${n === 1 ? 'seat' : 'seats'}`, rigsOf: (running: number, total: number) => `${running} of ${total}`, runningOn: (machine: string) => `running on ${machine}`,
+      active: (n: number) => `${n} active`, waiting: (n: number) => (n === 0 ? 'nobody waiting' : `${n} waiting for you`),
+      waitingTitle: 'Waiting for you', kind: { perm: 'permission', ask: 'question' } as Record<'perm' | 'ask', string>,
+      recent: 'Recent commands', seeAll: 'See all',
+      system: 'system', kernelSub: 'OpenRig’s own rig', openRig: 'Open the Rig view →', newSub: 'From a spec, an empty rig or with the operator',
+      local: 'local', ssh: (alias: string) => `ssh · ${alias}`, notInstalled: 'not installed', rigs: (n: number) => `${n} ${n === 1 ? 'rig' : 'rigs'}`,
+      latency: (ms: number) => `${ms} ms`, measuring: '…', shown: 'shown', show: 'Show', showLabel: (machine: string) => `Show ${machine}`,
+      addNote: 'The shown machine drives the Rigs explorer, this page and the launch window.',
+      address: (port: number | undefined, pid: number | undefined) => [port !== undefined ? `127.0.0.1:${port}` : '', pid !== undefined ? `pid ${pid}` : ''].filter(Boolean).join(' · '),
+      onStart: 'On start', relaunch: 'Relaunch the rigs that were running', noKernel: 'Start without the kernel',
+      perm: 'Permissions at launch', permHint: 'The level offered when you launch a rig. Each rig keeps its own.',
+      beforeStop: 'Before a stop', snapshot: 'Take a snapshot of the rig', askBusy: 'Ask for confirmation if a seat is working',
+      outputSub: 'the rig commands run from Ledge'
     },
     /** The “Launch a rig” modal (IDE lot 7d, mockup rigLaunchModal()). */
     launchRig: {

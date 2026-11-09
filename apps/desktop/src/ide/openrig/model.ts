@@ -1,4 +1,4 @@
-import { roleOf, seatsByRole, type HumanAsk, type OpenRigState, type Rig, type Session } from '@ledge/protocol';
+import { KERNEL_RIG, roleOf, seatsByRole, type HumanAsk, type OpenRigState, type Rig, type Session } from '@ledge/protocol';
 import { isRunning, kernelRig, listedRigs } from '../../openrig/model';
 import type { OpenRigSection } from '../../nav/state';
 import type { RigOutputEntry } from '../../openrig/rigOutput';
@@ -38,7 +38,7 @@ export function tilesOf(state: OpenRigState, sessions: readonly Session[], asks:
   const active = running(state).flatMap(r => r.nodes.map(n => seatLine(n, machine, sessions, asks))).filter(s => s.dot !== 'off').length;
   return {
     daemon: { up, ...(state.version ? { version: state.version } : {}), ...(since ? { since } : {}) },
-    kernel: { up: kernelUp, seats: kernelUp ? k.nodes.length : 0, roles: kernelUp ? [...new Set(k.nodes.map(n => roleOf(n.logicalId)))].sort() : [] },
+    kernel: { up: kernelUp, seats: kernelUp ? k.nodes.length : 0, roles: kernelUp ? [...new Set(k.nodes.map(n => roleLabel(KERNEL_RIG, n.logicalId)))].sort() : [] },
     rigs: { running: up ? listed.filter(isRunning).length : 0, total: listed.length },
     seats: { active, waiting: waitingSeats(state, sessions, asks, machine).length }
   };
@@ -48,9 +48,16 @@ export function tilesOf(state: OpenRigState, sessions: readonly Session[], asks:
 export const recentCommands = (entries: readonly RigOutputEntry[], machine: string, n = 5): RigOutputEntry[] =>
   entries.filter(e => e.machine === machine).slice(-n);
 
-/** A rig's roles as chips: `build ×2`, `review`. The role is the seat's name without its pod and its copy number. */
+/** A seat's role as the page writes it, without its copy number: the member for a rig (`dev.build-2` → `build`), the pod for the
+ *  kernel, whose members are all `lead`, `agent` or `worker` (`advisor.lead` → `advisor`). */
+export function roleLabel(rig: string, logicalId: string): string {
+  const [pod, member] = roleOf(logicalId).split('.') as [string, string | undefined];
+  return rig === KERNEL_RIG || member === undefined ? pod : member;
+}
+
+/** A rig's roles as chips: `build ×2`, `review` (`roleLabel`). */
 export function roleChips(rig: Rig): Array<{ role: string; runtime: string; count: number }> {
-  return [...seatsByRole(rig.nodes)].map(([key, ids]) => ({
-    role: key.slice(key.indexOf('.') + 1), runtime: rig.nodes.find(n => n.logicalId === ids[0])?.runtime ?? '', count: ids.length
+  return [...seatsByRole(rig.nodes)].map(([, ids]) => ({
+    role: roleLabel(rig.name, ids[0]!), runtime: rig.nodes.find(n => n.logicalId === ids[0])?.runtime ?? '', count: ids.length
   }));
 }
