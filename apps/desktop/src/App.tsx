@@ -215,6 +215,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [askFocus, setAskFocus] = useState<{ id: string; n: number } | null>(null);
   // Never counts down: « À toi » forgets `askFocus` once taken in, and the next « Voir » must still be new to it.
   const askSeq = useRef(0);
+  // The same for « Résumer la journée »: the right panel forgets `ask` once sent, and stays mounted with the last `n` it sent.
+  const summarizeSeq = useRef(0);
   const island = useIsland(fleetClient);
   const usage = useUsageView(fleetClient, machines);
   const footMachines = useMemo(() => machines.map(m => ({ id: m.id, label: m.label, offline: m.status === 'unreachable', count: sessions.filter(s => (s.machineId ?? 'local') === m.id).length })), [machines, sessions]);
@@ -900,7 +902,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           onAskFix={p => { const a = prAgentOf(p); if (!a) return; fleet.prDetail(p.id, p.machineId).then(d => { const j = d.jobs.find(x => x.status === 'fail'); if (j && decisions.reply(a, t.forge.fixText(p.ref, j.name))) dispatch({ type: 'open', id: a.id, where: 'right' }); }, () => {}); }}
           fleet={fleet} machineLabel={machineLabel} notify={notify}
           tasks={tasksApi} onSeeTask={id => dispatch({ type: 'ledge', tab: 'tasks', task: id })} onHandover={id => { void tasksApi.handover(id); }} onLater={s => tasksApi.putLater(s)}
-          onSummarize={() => { setRightTab(x => ({ ...x, tab: 'conversation', ask: { text: t.home.point.summarizeQuestion, n: (x.ask?.n ?? 0) + 1 } })); onLayout({ type: 'show', panel: 'right', on: true }); }}
+          onSummarize={() => { setRightTab(x => ({ ...x, tab: 'conversation', ask: { text: t.home.point.summarizeQuestion, n: ++summarizeSeq.current } })); onLayout({ type: 'show', panel: 'right', on: true }); }}
           summarizeOff={!localMachine?.ready} asks={asks} askFocus={askFocus} onAskFocused={() => setAskFocus(null)} asksMachine={localMachine?.label ?? 'local'}
           askSourceOf={ask => { const s = sessionOfAsk(ask, sessions); return s ? (path: string) => dispatch({ type: 'open', id: s.id, doc: path }) : null; }}
           onOpenSeat={id => dispatch({ type: 'open', id })} />;

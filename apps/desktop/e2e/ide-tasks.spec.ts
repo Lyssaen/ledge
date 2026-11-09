@@ -226,3 +226,18 @@ test('after a sidebar « Voir », « À toi » closed and opened again: the card
   await expect(card).toBeVisible();
   await expect(card).toHaveClass(/lit/);
 });
+
+// Review of lot 12 (review-qa2, second reading): each « Résumer la journée » is a new question, the panel open all along.
+test('« Résumer la journée » twice, the right panel open all along: two questions go', async ({ page }) => {
+  const daemon = await boot(page);
+  await page.getByRole('navigation', { name: /activité/ }).getByRole('button', { name: 'À toi', exact: true }).click();
+  await page.getByRole('button', { name: 'Page', exact: true }).click();
+  const summarize = page.getByRole('tabpanel', { name: /^À toi/ }).getByRole('button', { name: 'Résumer la journée' });
+  await summarize.click();
+  await expect.poll(() => daemon.received.filter(m => m.type === 'chat.ask').length).toBe(1);
+  await expect(panel(page).locator('[data-question]')).toHaveCount(1);
+  // The fake daemon answers at once: the second question is not refused as « busy ».
+  await expect(summarize).toBeEnabled();
+  await summarize.click();
+  await expect.poll(() => daemon.received.filter(m => m.type === 'chat.ask').length).toBe(2);
+});
