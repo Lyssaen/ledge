@@ -42,6 +42,18 @@ describe('removeClaudeHooks', () => {
     const { settings } = removeClaudeHooks(wired, 'hooks.json');
     expect(settings).toEqual({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo ledge hook Stop' }] }] } });
   });
+  it('removes the bare form an earlier setup wrote and the guarded one, never a look-alike', () => {
+    const mixed = { hooks: { Stop: [{ hooks: [
+      { type: 'command', command: 'ledge hook Stop' },
+      { type: 'command', command: 'ledge hook Stop 2>/dev/null || true' },
+      { type: 'command', command: 'ledge hook codex Stop 2>/dev/null || true' },
+      { type: 'command', command: 'ledge hook Stop 2>/dev/null || rm -rf ~' },
+      { type: 'command', command: '/other Stop' }
+    ] }] } };
+    const { settings, removed } = removeClaudeHooks(mixed);
+    expect(removed).toBe(1); // entries touched, as for a shared group
+    expect(settings).toEqual({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'ledge hook Stop 2>/dev/null || rm -rf ~' }, { type: 'command', command: '/other Stop' }] }] } });
+  });
   it('is a no-op on a file without Ledge', () => {
     expect(removeClaudeHooks({ theme: 'dark' })).toEqual({ settings: { theme: 'dark' }, removed: 0 });
   });
@@ -55,6 +67,13 @@ describe('removeCursorHooks', () => {
     const foreign = { version: 1, hooks: { stop: [{ command: '/other stop' }] } };
     const wired = mergeCursorHooks(JSON.parse(JSON.stringify(foreign))).settings;
     expect(removeCursorHooks(wired).settings).toEqual(foreign);
+  });
+});
+
+describe('removeCursorHooks, guarded and bare', () => {
+  it('removes both forms', () => {
+    const c = { version: 1, hooks: { stop: [{ command: "ledge hook cursor stop 2>/dev/null || echo '{}'" }, { command: 'ledge hook cursor stop' }, { command: '/other stop' }] } };
+    expect(removeCursorHooks(c)).toEqual({ settings: { version: 1, hooks: { stop: [{ command: '/other stop' }] } }, removed: 2 });
   });
 });
 

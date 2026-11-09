@@ -15,8 +15,54 @@ export const CODEX_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', '
 type HookEntry = { matcher?: string; hooks: Array<{ type: string; command: string; timeout?: number }> };
 
 /**
- * Appends a `<command> <Event>` entry to each event that lacks one, after any existing entry: other tools' hooks are
- * kept where they are (Codex trusts a hook by its place in the file). `file` names the file in errors.
+ * The command an agent runs for `ledge hook … <event>`, guarded: while npm reinstalls Ledge, `ledge` itself can be
+ * missing (exit 127) or fail to load, and the agent would show a hook error on every tool call. stderr is dropped and
+ * the shell answers `fallback` instead: `true` (nothing, exit 0), or Cursor's `{}`. An agent that runs the command
+ * without a shell passes the extra words to `ledge hook` as arguments, which it ignores.
+ */
+export const guardedHook = (bare: string, fallback: string): string => `${bare} 2>/dev/null || ${fallback}`;
+const GO_ON = 'true';
+/** Cursor Agent reads a JSON answer on stdout; `{}` lets the agent go on. */
+const CURSOR_GO_ON = "echo '{}'";
+
+/**
+ * Where Ledge's command stands in an event's list: the guarded form is kept; the bare form an earlier `ledge setup`
+ * wrote is replaced where it is (Codex trusts a hook by its place in the file), or dropped when the guarded one is
+ * already there; otherwise the guarded command is appended after any existing entry.
+ */
+interface HookShape<E> {
+  /** The commands an entry holds. */
+  commands(e: E): string[];
+  /** The entry without the bare command; null when nothing would be left of it. */
+  drop(e: E): E | null;
+  /** The entry with the bare command turned into the guarded one. */
+  upgrade(e: E): E;
+  /** A new entry running the guarded command. */
+  make(): E;
+}
+
+function placeHook<E>(list: E[], bare: string, guarded: string, shape: HookShape<E>): { list: E[]; changed: boolean } {
+  const holds = (e: E, c: string) => shape.commands(e).includes(c);
+  const hasBare = list.some(e => holds(e, bare));
+  if (list.some(e => holds(e, guarded))) {
+    if (!hasBare) return { list, changed: false };
+    return { list: list.map(e => (holds(e, bare) ? shape.drop(e) : e)).filter((e): e is E => e !== null), changed: true };
+  }
+  if (!hasBare) return { list: [...list, shape.make()], changed: true };
+  // The first bare entry becomes the guarded one where it stands; any other is dropped.
+  let upgraded = false;
+  const out = list.map(e => {
+    if (!holds(e, bare)) return e;
+    if (upgraded) return shape.drop(e);
+    upgraded = true;
+    return shape.upgrade(e);
+  }).filter((e): e is E => e !== null);
+  return { list: out, changed: true };
+}
+
+/**
+ * Wires `<command> <Event>`, guarded, in each event; other tools' hooks are kept where they are. `file` names the
+ * file in errors.
  */
 function mergeHooks(settings: unknown, events: readonly string[], command: string, file: string): { settings: object; changed: boolean } {
   if (settings === undefined) settings = {};
@@ -27,13 +73,17 @@ function mergeHooks(settings: unknown, events: readonly string[], command: strin
   let changed = false;
   for (const ev of events) {
     if (hooks[ev] !== undefined && !Array.isArray(hooks[ev])) throw new Error(`${file} hooks.${ev} is not an array, not modified`);
-    const list = [...(hooks[ev] ?? [])];
-    const mine = `${command} ${ev}`;
-    if (!list.some(e => e.hooks?.some(h => h.command === mine))) {
-      list.push({ hooks: [{ type: 'command', command: mine, timeout: 5 }] });
-      changed = true;
-    }
-    hooks[ev] = list;
+    const bare = `${command} ${ev}`;
+    const guarded = guardedHook(bare, GO_ON);
+    // Inside a group: the group's other commands, its matcher and the timeout stay; a group left empty is dropped.
+    const r = placeHook<HookEntry>(hooks[ev] ?? [], bare, guarded, {
+      commands: e => (e.hooks ?? []).map(h => h.command),
+      drop: e => { const rest = (e.hooks ?? []).filter(h => h.command !== bare); return rest.length ? { ...e, hooks: rest } : null; },
+      upgrade: e => ({ ...e, hooks: e.hooks.map(h => (h.command === bare ? { ...h, command: guarded } : h)) }),
+      make: () => ({ hooks: [{ type: 'command', command: guarded, timeout: 5 }] })
+    });
+    changed ||= r.changed;
+    hooks[ev] = r.list;
   }
   return { settings: { ...base, hooks }, changed };
 }
@@ -52,7 +102,8 @@ export const CURSOR_EVENTS = ['sessionStart', 'beforeSubmitPrompt', 'preToolUse'
 
 type CursorHookEntry = { command: string; timeout?: number };
 
-/** Adds `ledge hook cursor <event>` to `~/.cursor/hooks.json` (`{ version: 1, hooks: { event: [{ command }] } }`), keeping the rest. */
+/** Wires `ledge hook cursor <event>`, guarded so that Cursor gets `{}` even when `ledge` cannot run, in `~/.cursor/hooks.json`
+ *  (`{ version: 1, hooks: { event: [{ command }] } }`), keeping the rest; the bare form an earlier setup wrote is replaced. */
 export function mergeCursorHooks(config: unknown, command = 'ledge hook cursor'): { settings: object; changed: boolean } {
   if (config === undefined) config = {};
   if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('hooks.json root is not an object, not modified');
@@ -62,13 +113,16 @@ export function mergeCursorHooks(config: unknown, command = 'ledge hook cursor')
   let changed = base.version === undefined;
   for (const ev of CURSOR_EVENTS) {
     if (hooks[ev] !== undefined && !Array.isArray(hooks[ev])) throw new Error(`hooks.json hooks.${ev} is not an array, not modified`);
-    const list = [...(hooks[ev] ?? [])];
-    const mine = `${command} ${ev}`;
-    if (!list.some(e => e?.command === mine)) {
-      list.push({ command: mine, timeout: 5 });
-      changed = true;
-    }
-    hooks[ev] = list;
+    const bare = `${command} ${ev}`;
+    const guarded = guardedHook(bare, CURSOR_GO_ON);
+    const r = placeHook<CursorHookEntry>(hooks[ev] ?? [], bare, guarded, {
+      commands: e => (typeof e?.command === 'string' ? [e.command] : []),
+      drop: () => null,
+      upgrade: e => ({ ...e, command: guarded }),
+      make: () => ({ command: guarded, timeout: 5 })
+    });
+    changed ||= r.changed;
+    hooks[ev] = r.list;
   }
   return { settings: { version: 1, ...base, hooks }, changed };
 }

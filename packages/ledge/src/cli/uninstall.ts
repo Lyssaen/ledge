@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { paths } from '../paths.js';
 import { BIN_MARK, SERVICE, execRunner, stopDetachedDaemon, type Runner } from './setup.js';
 
-/** Every command `ledge setup` ever wired, whatever the event: `ledge hook <Event>`, `ledge hook codex|cursor <event>`. */
-const LEDGE_HOOK = /^ledge hook (?:(?:codex|cursor) )?[A-Za-z]+$/;
+/** Every command `ledge setup` ever wired, whatever the event: `ledge hook <Event>`, `ledge hook codex|cursor <event>`, bare
+ *  (before 0.54.2) or guarded (`… 2>/dev/null || true`, Cursor's `… || echo '{}'`). */
+const LEDGE_HOOK = /^ledge hook (?:(?:codex|cursor) )?[A-Za-z]+(?: 2>\/dev\/null \|\| (?:true|echo '\{\}'))?$/;
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
