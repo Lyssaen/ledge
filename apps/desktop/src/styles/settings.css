@@ -68,6 +68,8 @@
 .set-radios input:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 .set-radios label:hover{color:var(--foreground)}
 .set-radios label:hover input{border-color:var(--ring)}
+/* A note in grey after a radio's name (« non installé », « pas les dossiers WSL »; docs/mockups/ledge-ide-open-in.html `.radio .hint`). */
+.set-radio-note{color:var(--muted-foreground);font-size:11.5px}
 
 .set-input{height:32px;padding:0 10px;font-size:13px;background:var(--well)!important}
 .set-input.hex{width:96px}

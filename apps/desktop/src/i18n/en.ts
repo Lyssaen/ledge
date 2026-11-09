@@ -324,7 +324,9 @@ export const en: Messages = {
       alertBefore: 'Alert at', alertAfter: '% of a window (amber beyond)',
       alertLess: 'Lower the alert threshold by 5 %', alertMore: 'Raise the alert threshold by 5 %',
       terminals: 'Terminals', webglBefore: 'Fast rendering (WebGL) for', webglAfter: 'visible terminals at most',
-      webglLess: 'One less terminal in WebGL', webglMore: 'One more terminal in WebGL', webglSaved: (n: number) => `Fast rendering (WebGL): ${n} visible terminals at most`
+      webglLess: 'One less terminal in WebGL', webglMore: 'One more terminal in WebGL', webglSaved: (n: number) => `Fast rendering (WebGL): ${n} visible terminals at most`,
+      openIn: 'Open in…', notInstalled: 'not installed', zedNoWsl: 'no WSL folders',
+      openInSaved: (editor: string) => `Open in…: ${editor}`
     },
     general: {
       lang: 'Language', langHint: 'Applies at once, the notification area menu included.',
@@ -1469,6 +1471,14 @@ export const en: Messages = {
     menu: {
       open: 'Open', openKey: 'Enter', openRight: 'Open to the right', openRightKey: 'Ctrl click',
       terminal: 'Its terminal', capture: 'Capture in a terminal', message: 'Send a message…'
+    },
+    openIn: {
+      menu: (editor: string) => `Open in ${editor}`,
+      missing: (editor: string) => `${editor} isn’t installed on this PC: choose another editor.`,
+      zedWsl: 'Zed can’t open WSL folders: choose Cursor or VS Code.',
+      settings: 'Settings',
+      failed: (editor: string, reason: string) => `${editor} couldn’t open: ${reason}`,
+      reason: { exe: 'the program won’t start.', distro: 'the WSL distribution isn’t answering.', path: 'WSL can’t receive this path.' }
     },
     welcome: {
       brand: 'Ledge', start: 'Start', recent: 'Recent', terminal: (name) => `Terminal · ${name}`, capture: (name) => `Capture · ${name}`,

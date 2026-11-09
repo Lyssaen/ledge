@@ -300,7 +300,9 @@ describe('the IDE session tab (lot 2)', () => {
     fireEvent.contextMenu(tabOf('Otto'));
     const menu = await screen.findByRole('menu', { name: /Otto/ });
     expect(within(menu).getByText('Otto')).toBeVisible();
-    expect(within(menu).queryByText(/role\.md|Ouvrir dans/)).toBeNull();
+    expect(within(menu).queryByText(/role\.md/)).toBeNull();
+    // « Ouvrir dans Cursor », the setting's default editor (lot 11).
+    expect(within(menu).getByRole('menuitem', { name: 'Ouvrir dans Cursor' })).toBeTruthy();
     // « Diviser à droite », Ctrl \ on its right (lot 3).
     expect(within(menu).getByRole('menuitem', { name: /Diviser à droite/ })).toHaveTextContent('Ctrl \\');
     await user.click(within(menu).getByRole('menuitem', { name: /Basculer sur le terminal/ }));

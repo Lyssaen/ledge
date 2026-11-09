@@ -348,7 +348,10 @@ export const fr = {
       alertBefore: 'Alerte à', alertAfter: '% d’une fenêtre (ambre au-delà)',
       alertLess: 'Baisser le seuil d’alerte de 5 %', alertMore: 'Monter le seuil d’alerte de 5 %',
       terminals: 'Terminaux', webglBefore: 'Rendu rapide (WebGL) pour', webglAfter: 'terminaux visibles au plus',
-      webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`
+      webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`,
+      /** « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html): the editor, what this PC lacks, Zed's limit. */
+      openIn: 'Ouvrir dans…', notInstalled: 'non installé', zedNoWsl: 'pas les dossiers WSL',
+      openInSaved: (editor: string) => `Ouvrir dans… : ${editor}`
     },
     general: {
       lang: 'Langue', langHint: 'S’applique tout de suite, menu de la zone de notification compris.',
@@ -1540,6 +1543,15 @@ export const fr = {
     menu: {
       open: 'Ouvrir', openKey: 'Entrée', openRight: 'Ouvrir à droite', openRightKey: 'Ctrl clic',
       terminal: 'Son terminal', capture: 'Capture dans un terminal', message: 'Envoyer un message…'
+    },
+    /** « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html): the entry, and the toasts when the editor does not open. */
+    openIn: {
+      menu: (editor: string) => `Ouvrir dans ${editor}`,
+      missing: (editor: string) => `${editor} n’est pas installé sur ce PC : choisissez un autre éditeur.`,
+      zedWsl: 'Zed n’ouvre pas les dossiers WSL : choisissez Cursor ou VS Code.',
+      settings: 'Réglages',
+      failed: (editor: string, reason: string) => `${editor} n’a pas pu s’ouvrir : ${reason}`,
+      reason: { exe: 'le programme ne démarre pas.', distro: 'la distribution WSL ne répond pas.', path: 'WSL ne peut pas recevoir ce chemin.' }
     },
     /** A group without tabs (mockup docs/mockups/accueil-vide): the welcome, in the window's only group as in a split. */
     welcome: {

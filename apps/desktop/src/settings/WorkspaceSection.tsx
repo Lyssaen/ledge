@@ -7,6 +7,7 @@ import { useShowUsage } from '../workspace/prefs';
 import { useOpenSession, type OpenSession } from '../workspace/openPrefs';
 import { useWebglMax } from '../term/webglPrefs';
 import { WEBGL_MAX, WEBGL_MIN } from '../term/webgl';
+import { EDITORS, EDITOR_NAMES, useEditor, useEditorsInstalled } from '../ide/openIn';
 import { Card, Row } from './controls';
 import type { SettingsContext } from './SettingsPage';
 
@@ -17,12 +18,17 @@ const ALERT_MAX = Math.round(USAGE_ALERT_MAX * 100);
 
 /** Settings › Workspace (mockup settingsPage(), IDE only): « Ouvrir une session », in the active group or to its right, as radios;
  *  the status bar (the usage limits shown or not, the alert threshold the daemons keep, General's own); the terminals' WebGL budget.
- *  « Nouvelle fenêtre » waits for lot 9, the start-up and layouts rows for lot 10, « Ouvrir dans… » for lot 11. */
+ *  « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html states 3 and 5): Cursor, VS Code or Zed; « non installé » in grey after an
+ *  editor this PC lacks, once known (nothing before), and « pas les dossiers WSL » after Zed, always. « Nouvelle fenêtre » waits for lot 9,
+ *  the start-up and layouts rows for lot 10. */
 export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   const w = t.settings.workspace;
   const [where, setWhere] = useOpenSession();
   const name = useId();
+  const editorName = useId();
+  const [editor, setEditor] = useEditor();
+  const installed = useEditorsInstalled();
   const [webgl, setWebgl] = useWebglMax();
   const [showUsage, setShowUsage] = useShowUsage();
   // The usage alert: the same threshold as General's (one for every window and harness, kept by each machine's daemon), by 5 %.
@@ -65,6 +71,23 @@ export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element
             </span>
             {w.alertAfter}
           </span>
+        )}
+      </Row>
+    </Card>
+    <Card>
+      <Row label={w.openIn}>
+        {describedBy => (
+          <div className="set-radios" role="radiogroup" aria-label={w.openIn} aria-describedby={describedBy}>
+            {EDITORS.map(e => {
+              const notes = [installed && !installed[e] ? w.notInstalled : null, e === 'zed' ? w.zedNoWsl : null].filter(Boolean).join(' · ');
+              return (
+                <label key={e}>
+                  <input type="radio" name={editorName} value={e} checked={editor === e} onChange={() => { setEditor(e); ctx.saved(w.openInSaved(EDITOR_NAMES[e])); }} />
+                  {EDITOR_NAMES[e]}{notes && <span className="set-radio-note">{notes}</span>}
+                </label>
+              );
+            })}
+          </div>
         )}
       </Row>
     </Card>
