@@ -1,0 +1,130 @@
+/* MR et PR (lot 8b; docs/mockups/ledge-ide-interactive.html: explorer `prs`, prPage(), pipeGraph(), statusbar()). */
+
+/* The pipeline's dot (mockup pipeDot: ok idle, run work, fail perm, the rest off). */
+.fg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted-foreground); }
+.fg-dot.ok { background: var(--success); }
+.fg-dot.run { background: var(--info); }
+.fg-dot.fail { background: var(--destructive); box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 20%, transparent); }
+
+/* The sidebar view (mockup explorer `prs`). */
+.fg-side { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.fg-side-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 32px; padding: 0 14px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); flex: none; }
+.fg-side-h small { font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.fg-tree { display: flex; flex-direction: column; padding: 0 8px; }
+.fg-row { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 5px 6px; border-radius: 6px; text-align: left; color: var(--foreground); font-size: 12.5px; line-height: 17px; }
+.fg-row:hover { background: var(--muted); }
+.fg-row.on { background: var(--muted); }
+.fg-row > .fg-dot { margin-top: 5px; }
+.fg-row-t { min-width: 0; flex: 1; }
+.fg-row-t b { font-weight: 600; }
+.fg-row-t small { display: block; font-size: 11px; color: var(--muted-foreground); }
+.fg-foot { font-size: 11.5px; padding: 8px 14px; color: var(--muted-foreground); }
+
+/* The tab (mockup prPage .page). */
+.fg-page { flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 22px; display: flex; flex-direction: column; gap: 16px; }
+.fg-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fg-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.fg-sp { flex: 1; }
+.fg-sub { color: var(--muted-foreground); font-size: 12px; }
+.fg-mono, .fg-page .mono { font-family: 'Geist Mono', monospace; }
+.fg-mut { color: var(--muted-foreground); }
+.fg-pill { font-size: 11px; line-height: 16px; border-radius: 10px; padding: 1px 8px; border: 1px solid var(--border); color: var(--muted-foreground); white-space: nowrap; }
+.fg-pill.run { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
+.fg-page .fg-btn, .fg-btn { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid var(--input); border-radius: 6px; background: transparent; font: inherit; font-size: 12px; color: var(--foreground); cursor: pointer; white-space: nowrap; }
+.fg-page .fg-btn:hover:not(:disabled) { background: var(--muted); }
+.fg-page .fg-btn.pri { border-color: transparent; background: var(--primary); color: var(--primary-foreground); }
+.fg-page .fg-btn.pri:hover:not(:disabled) { background: var(--primary-hover); }
+.fg-page .fg-btn:disabled { opacity: .5; cursor: default; }
+.fg-seg { display: inline-flex; flex-wrap: wrap; align-self: flex-start; border: 1px solid var(--input); border-radius: 7px; overflow: hidden; }
+.fg-seg button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 12px; color: var(--muted-foreground); border-right: 1px solid var(--input); }
+.fg-seg button:last-child { border-right: 0; }
+.fg-seg button[aria-selected="true"] { background: var(--muted); color: var(--foreground); }
+
+.fg-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.fg-blk { border: 1px solid var(--border); border-radius: 9px; background: var(--card); min-width: 0; }
+.fg-blk-h { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.fg-blk-h b { font-weight: 600; }
+.fg-blk-b { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; min-width: 0; }
+.fg-desc p { margin: 0 0 6px; line-height: 19px; }
+.fg-desc ul { margin: 0 0 6px; padding-left: 18px; line-height: 19px; list-style: disc; }
+.fg-kv { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; font-size: 12px; align-items: center; }
+.fg-kv > span:nth-child(odd) { color: var(--muted-foreground); }
+.fg-cell { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; }
+.fg-go { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fg-cin { flex: 1; min-width: 160px; height: 30px; border: 1px solid var(--border); border-radius: 7px; background: var(--background); color: var(--foreground); padding: 0 10px; font: inherit; font-size: 12.5px; outline: none; }
+.fg-cin.small { height: 26px; }
+.fg-log { max-height: 120px; overflow: auto; border-radius: 6px; padding: 8px 10px; background: var(--well, var(--background)); font-family: 'Geist Mono', monospace; font-size: 11.5px; line-height: 17px; white-space: pre; }
+
+/* The pipeline's graph (mockup .pgraph .pnode .pcol). */
+.fg-graph-wrap { overflow-x: auto; padding: 2px 0 4px; }
+.fg-graph { position: relative; }
+.fg-graph svg { position: absolute; inset: 0; }
+.fg-col { position: absolute; top: 0; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.fg-node { position: absolute; display: flex; align-items: center; gap: 7px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 0 9px; font-size: 12px; white-space: nowrap; }
+.fg-node-name { overflow: hidden; text-overflow: ellipsis; }
+.fg-node-t { margin-left: auto; font-size: 10.5px; color: var(--muted-foreground); }
+.fg-node.ok { border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+.fg-node.run { border-color: color-mix(in srgb, var(--info) 60%, transparent); }
+.fg-node.fail { border-color: color-mix(in srgb, var(--destructive) 67%, transparent); background: color-mix(in srgb, var(--destructive) 12%, var(--card)); }
+.fg-node.wait, .fg-node.skip, .fg-node.none { opacity: .7; }
+
+/* Discussion (mockup .pth .pc .av), files and commits (mockup .files .code .crow). */
+.fg-th { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 7px; background: color-mix(in srgb, var(--foreground) 2%, transparent); }
+.fg-th.res { opacity: .6; }
+.fg-code + .fg-th { margin-top: 8px; border-left: 2px solid var(--ide-link-violet); }
+.fg-c { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12.5px; }
+.fg-c > div { flex-basis: 100%; padding-left: 28px; line-height: 18px; white-space: pre-wrap; }
+.fg-av { width: 20px; height: 20px; border-radius: 50%; background: var(--muted); display: grid; place-items: center; font-size: 10.5px; font-weight: 600; }
+.fg-c-at { font-size: 11px; color: var(--muted-foreground); }
+.fg-files { display: flex; flex-direction: column; gap: 2px; font-family: 'Geist Mono', monospace; font-size: 11.5px; }
+.fg-files button { display: flex; gap: 8px; padding: 2px 4px; border-radius: 4px; text-align: left; color: var(--foreground); }
+.fg-files button.on { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
+.fg-files .p { margin-left: auto; display: flex; gap: 6px; }
+.fg-add { color: var(--success); }
+.fg-del { color: var(--destructive); }
+.fg-code { font-family: 'Geist Mono', monospace; font-size: 11.5px; line-height: 17px; border: 1px solid var(--border); border-radius: 6px; overflow: auto; }
+.fg-code div { padding: 0 8px; white-space: pre; }
+.fg-code .a { background: color-mix(in srgb, var(--success) 14%, transparent); }
+.fg-code .d { background: color-mix(in srgb, var(--destructive) 14%, transparent); }
+.fg-code .h { color: var(--muted-foreground); background: color-mix(in srgb, var(--foreground) 3%, transparent); }
+.fg-crow { display: grid; grid-template-columns: 70px 1fr auto; gap: 10px; font-size: 12.5px; padding: 3px 0; }
+.fg-crow .sha { font-family: 'Geist Mono', monospace; color: var(--ide-link-violet); }
+
+/* The session's chip (mockup `.chip`, in the tab's bottom bar) and the status bar's count (mockup statusbar `.it`). */
+.fg-chip { display: inline-flex; align-items: center; gap: 5px; }
+.ide-status-prs { display: flex; align-items: center; gap: 6px; height: 20px; padding: 0 8px; border-radius: 5px; color: var(--foreground); white-space: nowrap; }
+.ide-status-prs:hover { background: var(--accent); }
+
+/* The states (docs/mockups/ledge-ide-prs-states.html): the head's lines, a stale request, the empty view. */
+.fg-strip { display: flex; flex-direction: column; gap: 6px; padding: 0 8px 8px; }
+.fg-line { border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent); background: color-mix(in srgb, var(--warning) 9%, transparent); border-radius: 7px; padding: 7px 9px; font-size: 12px; display: flex; flex-direction: column; gap: 5px; }
+.fg-line.err { border-color: color-mix(in srgb, var(--destructive) 40%, transparent); background: color-mix(in srgb, var(--destructive) 9%, transparent); }
+.fg-line.off { border-color: var(--border); background: var(--muted); }
+.fg-line .h { display: flex; gap: 7px; align-items: flex-start; }
+.fg-line .h .fg-dot { margin-top: 5px; }
+.fg-line .cmd { display: flex; gap: 6px; align-items: center; }
+.fg-line .cmd code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--background); border: 1px solid var(--border); border-radius: 5px; padding: 2px 6px; font-family: 'Geist Mono', monospace; font-size: 11.5px; }
+.fg-line small { color: var(--muted-foreground); font-size: 11px; word-break: break-word; }
+.fg-btn.sm, .fg-page .fg-btn.sm { height: 22px; font-size: 11.5px; padding: 0 8px; flex-shrink: 0; }
+.fg-row.stale { opacity: .6; }
+.fg-empty { display: flex; flex-direction: column; gap: 4px; padding: 6px 14px 4px; font-size: 12.5px; }
+.fg-empty span { color: var(--muted-foreground); font-size: 12px; }
+.fg-dot.wait { background: var(--warning); }
+.fg-banner { border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent); background: color-mix(in srgb, var(--warning) 9%, transparent); border-radius: 8px; padding: 8px 11px; font-size: 12px; display: flex; gap: 8px; align-items: flex-start; }
+.fg-banner.off { border-color: var(--border); background: var(--muted); }
+.fg-banner .fg-dot { margin-top: 5px; }
+.fg-check { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.fg-check > div { display: flex; gap: 8px; align-items: baseline; }
+.fg-check > div > span { width: 12px; flex-shrink: 0; }
+.fg-check .y > span { color: var(--success); }
+.fg-check .n > span { color: var(--destructive); }
+.fg-confirm { display: flex; flex-direction: column; gap: 7px; border: 1px solid color-mix(in srgb, var(--destructive) 40%, transparent); background: color-mix(in srgb, var(--destructive) 9%, transparent); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; }
+.fg-confirm code { color: var(--muted-foreground); word-break: break-all; font-family: 'Geist Mono', monospace; font-size: 11.5px; }
+.fg-confirm .e, .fg-ferr { color: var(--danger-text, var(--destructive)); }
+.fg-ferr { font-size: 11.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fg-cin.bad { border-color: color-mix(in srgb, var(--destructive) 45%, transparent); }
+.fg-page .fg-cin:disabled { opacity: .5; }
+/* State 2: « PR ? », the forge of the session's repository unreadable on its machine. */
+.ide-bar .fg-chip-unknown, .fg-chip-unknown { border: 1px dashed var(--input); border-radius: 5px; padding: 0 5px; color: var(--muted-foreground); }
+/* The tab scrolls as a whole: its blocks keep their height (a flex column would squeeze them, the view switch first). */
+.fg-page > * { flex-shrink: 0; }

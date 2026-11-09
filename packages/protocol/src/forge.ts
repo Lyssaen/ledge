@@ -58,12 +58,25 @@ export const PullRequestSchema = z.object({
 });
 export type PullRequest = z.infer<typeof PullRequestSchema>;
 
+/**
+ * A session the daemon follows (its branch is not its repository's default one): the forge and host its repository is on, so a
+ * front can tell « no request » from « that forge cannot be read here » (the chip « PR ? »). The fleet qualifies `session`.
+ */
+export const FollowedSessionSchema = z.object({ session: z.string(), forge: ForgeKindSchema, host: z.string(), repo: z.string() });
+export type FollowedSession = z.infer<typeof FollowedSessionSchema>;
+
 /** Whether a forge could be read on the machine: its CLI missing, not signed in, or another error, with its (redacted) message. */
 export const ForgeStatusSchema = z.object({
   forge: ForgeKindSchema, host: z.string(),
   status: z.enum(['ok', 'missing', 'unauthenticated', 'error']),
   message: z.string().optional(),
-  at: z.string().datetime()
+  at: z.string().datetime(),
+  /** Not `ok`: since when the forge cannot be read, whatever its messages since (« le relevé échoue depuis 10:42 »). */
+  since: z.string().datetime().optional(),
+  /** After a failed read (`error` mostly): when the daemon reads it again, its backoff of 2 to 10 minutes (« Nouvel essai à 10:50 »). */
+  retryAt: z.string().datetime().optional(),
+  /** Not `ok`: when its requests, still shown, were last read; absent when they never were. */
+  readAt: z.string().datetime().optional()
 });
 export type ForgeStatus = z.infer<typeof ForgeStatusSchema>;
 
@@ -81,6 +94,8 @@ export const ForgeStateMessageSchema = z.object({
   type: z.literal('forge.state'),
   prs: z.preprocess(dropUnknownPrs, z.array(PullRequestSchema)),
   forges: z.preprocess(dropUnknownForges, z.array(ForgeStatusSchema)),
+  /** Absent from a daemon older than this field. */
+  followed: z.preprocess(dropUnknownForges, z.array(FollowedSessionSchema)).optional(),
   machineId: z.string().optional()
 });
 export type ForgeStateMessage = z.infer<typeof ForgeStateMessageSchema>;
@@ -132,7 +147,12 @@ export const PrDetailSchema = z.object({
   commits: z.array(PrCommitSchema),
   /** The exact command a merge runs, for the front's confirmation (R5). */
   mergeCommand: z.string(),
-  /** Why a merge is refused now; empty: it can be merged (R5). */
+  /**
+   * Why a merge is refused now, as codes; empty: it can be merged (R5). `not_open`, `draft`, `approvals`, `changes_requested`;
+   * `pipeline`: the pipeline is not green (`pr.pipeline` says how); `pipeline_not_started`: no pipeline yet on the head, in a
+   * repository with CI or whose CI is unknown (`pr.pipeline` reads `wait`). A repository without any CI gives `none` and no code.
+   * A front shows a code it does not know as is.
+   */
   mergeBlockers: z.array(z.string())
 });
 export type PrDetail = z.infer<typeof PrDetailSchema>;

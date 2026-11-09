@@ -3,8 +3,11 @@ import { classify, errorText, type ForgeRepo, type ForgeRunResult } from './run.
 
 /** A request as a reader gives it: no sessions yet, and why it could not be merged apart from its pipeline (R5). */
 export type PrCore = Omit<PullRequest, 'sessions'>;
-/** `head`: the repository path its source branch lives in (a fork's, for a request from a fork). */
-export type ReadPr = PrCore & { blockers: MergeBlocker[]; head: string };
+/**
+ * `head`: the repository path its source branch lives in (a fork's, for a request from a fork). `notStarted`: no pipeline yet on
+ * its head, in a repository with CI or whose CI is unknown (set by the service, never by a reader).
+ */
+export type ReadPr = PrCore & { blockers: MergeBlocker[]; head: string; notStarted?: true };
 /**
  * What a session follows (R1): its branch, in the repository the branch is pushed to (`head`: the branch's push remote or
  * upstream, `origin` by default), on the same host as the repository listed. Two forks with the same branch name are two targets.
@@ -24,19 +27,21 @@ export type ReadDetail = Omit<PrDetail, 'pr'> & { pr: ReadPr };
 
 /**
  * Why a merge is refused (R5), as `mergeBlockers` carries them: not open (merged or closed), a draft, the pipeline not green,
- * an approval missing, changes requested.
+ * no pipeline started yet on the head of a repository with CI, an approval missing, changes requested.
  */
-export const MERGE_BLOCKERS = ['not_open', 'draft', 'pipeline', 'approvals', 'changes_requested'] as const;
+export const MERGE_BLOCKERS = ['not_open', 'draft', 'pipeline', 'pipeline_not_started', 'approvals', 'changes_requested'] as const;
 export type MergeBlocker = (typeof MERGE_BLOCKERS)[number];
 const BLOCKER_TEXT: Record<MergeBlocker, string> = {
   not_open: 'the request is not open', draft: 'the request is a draft', pipeline: 'the pipeline is not green',
+  pipeline_not_started: 'no pipeline has started yet on the last commit',
   approvals: 'an approval is missing', changes_requested: 'changes are requested'
 };
 /** R5: a pipeline that failed, runs or waits blocks a merge; 'none' does not. 'none' reaches here only for a repository without
  *  any CI (decision of the user, 2026-11-09): with CI, a head whose pipeline has not started yet reads 'wait' (forge/service.ts). */
 export const pipelineBlocks = (p: PipeStatus): boolean => p !== 'ok' && p !== 'none';
 /** Every reason a merge is refused now: the request's own, then its pipeline. */
-export const mergeBlockersOf = (pr: Pick<ReadPr, 'blockers' | 'pipeline'>): MergeBlocker[] => [...pr.blockers, ...(pipelineBlocks(pr.pipeline) ? ['pipeline' as const] : [])];
+export const mergeBlockersOf = (pr: Pick<ReadPr, 'blockers' | 'pipeline' | 'notStarted'>): MergeBlocker[] =>
+  [...pr.blockers, ...(pr.notStarted ? ['pipeline_not_started' as const] : pipelineBlocks(pr.pipeline) ? ['pipeline' as const] : [])];
 export const blockerText = (b: readonly MergeBlocker[]): string => b.map(x => BLOCKER_TEXT[x]).join('; ');
 
 /** R5 apart from the pipeline: what `mergeable` sums up. */

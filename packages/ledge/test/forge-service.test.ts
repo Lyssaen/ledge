@@ -216,6 +216,53 @@ describe('forges', () => {
   });
 });
 
+// Lot 8b contract (N2): « le relevé échoue depuis 10:42. Nouvel essai à 10:50. », « relevé 10:42 ».
+describe('a forge in error: since, retryAt, readAt', () => {
+  it('keeps the start of the failure across messages, gives the next read and the last good one, drops them once read again', async () => {
+    store.upsert(mk('a'));
+    const gh = fakeReader([pr(226, 'feat/x')]);
+    const s = service(gh);
+    await s.refresh();
+    expect(s.state().forges[0]).toEqual({ forge: 'github', host: 'github.com', status: 'ok', at: at(0) });
+    gh.fail = new ForgeError('error', 'HTTP 502');
+    clock = T0 + 60_000; await s.refresh();
+    expect(s.state().forges[0]).toMatchObject({ status: 'error', message: 'HTTP 502', since: at(60_000), retryAt: at(180_000), readAt: at(0) });
+    expect(s.state().prs.map(p => p.number)).toEqual([226]);
+    gh.fail = new ForgeError('error', 'HTTP 503');
+    clock = T0 + 180_000; await s.refresh();
+    expect(s.state().forges[0]).toMatchObject({ status: 'error', message: 'HTTP 503', at: at(180_000), since: at(60_000), retryAt: at(420_000), readAt: at(0) });
+    gh.fail = undefined;
+    clock = T0 + 420_000; await s.refresh();
+    expect(s.state().forges[0]).toEqual({ forge: 'github', host: 'github.com', status: 'ok', at: at(420_000) });
+  });
+  it('a host never read: since, and no readAt', async () => {
+    store.upsert(mk('g', { repoId: 'gitlab.example.com/team/app', branch: 'fix/x' }));
+    const s = service(fakeReader(), fakeReader(), []);
+    await s.refresh();
+    const f = s.state().forges[0]!;
+    expect(f).toMatchObject({ status: 'unauthenticated', since: at(0) });
+    expect(f).not.toHaveProperty('readAt');
+    expect(f).not.toHaveProperty('retryAt');
+  });
+});
+
+// Lot 8b contract (N2): the chip « PR ? » needs the forge of each followed session, with or without a request.
+describe('followed sessions', () => {
+  it('lists each followed session with its forge, host and repository; a default branch is not followed', async () => {
+    store.upsert(mk('a'));
+    store.upsert(mk('b', { branch: 'feat/y' }));
+    store.upsert(mk('g', { repoId: 'gitlab.com/synapse/synapse', branch: 'fix/s3' }));
+    store.upsert(mk('m', { branch: 'main' }));
+    const s = service(fakeReader([pr(226, 'feat/x')]), fakeReader(), ['github.com']);
+    await s.refresh();
+    expect(s.state().followed).toEqual([
+      { session: 'a', forge: 'github', host: 'github.com', repo: 'Lyssaen/ledge' },
+      { session: 'b', forge: 'github', host: 'github.com', repo: 'Lyssaen/ledge' },
+      { session: 'g', forge: 'gitlab', host: 'gitlab.com', repo: 'synapse/synapse' }]);
+    expect(s.state().forges).toEqual(expect.arrayContaining([expect.objectContaining({ forge: 'gitlab', host: 'gitlab.com', status: 'unauthenticated' })]));
+  });
+});
+
 describe('the pace (R2)', () => {
   it('reads every 15 s while a pipeline runs, 60 s once it is green', async () => {
     store.upsert(mk('a'));
@@ -275,10 +322,15 @@ describe('actions (R5, R6)', () => {
     const s = service(gh);
     await s.refresh();
     expect(s.state().prs[0]).toMatchObject({ pipeline: 'wait', mergeable: true });
-    await expect(s.act('github.com/Lyssaen/ledge#226', { kind: 'merge', headSha: 'a'.repeat(40) })).rejects.toMatchObject({ code: 'not_offered', message: 'the pipeline is not green' });
+    expect(s.state().prs[0]).not.toHaveProperty('notStarted');
+    await expect(s.act('github.com/Lyssaen/ledge#226', { kind: 'merge', headSha: 'a'.repeat(40) })).rejects.toMatchObject({ code: 'not_offered', message: 'no pipeline has started yet on the last commit' });
     const d = await s.detail('github.com/Lyssaen/ledge#226', {});
     expect(d.pr.pipeline).toBe('wait');
-    expect(d.mergeBlockers).toContain('pipeline');
+    expect(d.pr).not.toHaveProperty('notStarted');
+    // Lot 8b contract: its own code, apart from a pipeline that exists and waits.
+    expect(d.mergeBlockers).toEqual(['pipeline_not_started']);
+    gh.prs = [pr(226, 'feat/x', { pipeline: 'wait' })];
+    await expect(s.act('github.com/Lyssaen/ledge#226', { kind: 'merge', headSha: 'a'.repeat(40) })).rejects.toMatchObject({ message: 'the pipeline is not green' });
     expect(gh.acts).toEqual([]);
   });
 

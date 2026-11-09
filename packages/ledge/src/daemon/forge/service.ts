@@ -63,7 +63,8 @@ export function headOf(config: string, branch: string, listed: ForgeRepo): { hea
 interface Entry { pr: ReadPr; repo: ForgeRepo }
 const kindOf = (cli: ForgeCli): ForgeKind => (cli === 'gh' ? 'github' : 'gitlab');
 const hostKey = (repo: ForgeRepo): string => `${repo.cli}:${repo.host}`;
-const strip = ({ blockers: _b, head: _h, ...pr }: ReadPr, sessions: string[]): PullRequest => ({ ...pr, sessions });
+const strip = ({ blockers: _b, head: _h, notStarted: _n, ...pr }: ReadPr, sessions: string[]): PullRequest => ({ ...pr, sessions });
+const isoAt = (ms: number): string => new Date(ms).toISOString();
 
 export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => number; readers?: Partial<Record<ForgeCli, ForgeReader>>;
   /** The hosts each CLI is signed in to (signedInHosts by default); a test gives its own. */ signedIn?: (cli: ForgeCli) => Promise<Set<string>> }): ForgeService {
@@ -96,7 +97,9 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
    * when that is unknown, a head without a pipeline is one whose pipeline has not started yet (a push seconds ago): it waits.
    */
   const withCi = <P extends { pipeline: PipeStatus }>(pr: P, repo: ForgeRepo): P =>
-    (pr.pipeline === 'none' && ci.get(repo.repo)?.has !== false ? { ...pr, pipeline: 'wait' as const } : pr);
+    (pr.pipeline === 'none' && ci.get(repo.repo)?.has !== false ? { ...pr, pipeline: 'wait' as const, notStarted: true as const } : pr);
+  /** Per forge host, when it was last read without error. */
+  const readAt = new Map<string, number>();
   const listeners = new Set<() => void>();
   let last = '';
   let timer: NodeJS.Timeout | null = null;
@@ -149,10 +152,17 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
   /** What decides the targets, before their heads are read: a session's repository, branch and folder. */
   const sourceKey = (): string => JSON.stringify(deps.store.all().flatMap(s => (candidate(s) ? [[s.id, s.repoId, s.branch, s.workdir || s.cwd]] : [])));
 
-  function setStatus(repo: ForgeRepo, status: ForgeStatus['status'], message?: string): void {
+  /** `retryAt`: after a failed read, when its backoff ends. `at` moves only when the status or its message changes. */
+  function setStatus(repo: ForgeRepo, status: ForgeStatus['status'], message?: string, retryAt?: number): void {
     const k = hostKey(repo), had = statuses.get(k);
-    if (had && had.status === status && had.message === message) return;
-    statuses.set(k, { forge: kindOf(repo.cli), host: repo.host, status, ...(message ? { message } : {}), at: new Date(now()).toISOString() });
+    const at = had && had.status === status && had.message === message ? had.at : isoAt(now());
+    const failing = status !== 'ok';
+    const since = failing ? (had && had.status !== 'ok' ? had.since ?? had.at : at) : undefined;
+    const read = failing ? readAt.get(k) : undefined;
+    statuses.set(k, {
+      forge: kindOf(repo.cli), host: repo.host, status, ...(message ? { message } : {}), at,
+      ...(since ? { since } : {}), ...(retryAt !== undefined ? { retryAt: isoAt(retryAt) } : {}), ...(read !== undefined ? { readAt: isoAt(read) } : {})
+    });
   }
 
   async function readRepo(f: Followed): Promise<void> {
@@ -172,13 +182,15 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
       const targets = [...f.targets.values()].map(t => t.target).filter(t => t.branch !== defaults.get(f.repo.repo));
       byRepo.set(f.repo.repo, (await reader.list(f.repo, targets)).map(p => withCi(p, f.repo)));
       backoff.delete(k);
+      readAt.set(k, now());
       setStatus(f.repo, 'ok');
     } catch (e) {
       const failures = (b?.failures ?? 0) + 1;
-      backoff.set(k, { failures, until: now() + Math.min(BACKOFF_MAX_MS, SLOW_MS * 2 ** failures) });
+      const until = now() + Math.min(BACKOFF_MAX_MS, SLOW_MS * 2 ** failures);
+      backoff.set(k, { failures, until });
       const status = e instanceof ForgeError ? e.status : 'error';
       const message = e instanceof Error ? e.message : String(e);
-      setStatus(f.repo, status, message);
+      setStatus(f.repo, status, message, until);
       log(`forge: ${f.repo.host}/${f.repo.path} not read (${status}): ${message}`);
     }
   }
@@ -208,7 +220,9 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
     const fl = followed();
     const prs = [...entries.values()].map(e => strip(e.pr, sessionsOf(e.pr, fl))).filter(p => p.sessions.length).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
     const used = new Set([...fl.values()].map(f => hostKey(f.repo)));
-    return { type: 'forge.state', prs, forges: [...statuses].filter(([k]) => used.has(k)).map(([, s]) => s) };
+    const followedSessions = [...fl.values()].flatMap(f => [...f.targets.values()].flatMap(t => t.sessions.map(s => ({ session: s.id, forge: kindOf(f.repo.cli), host: f.repo.host, repo: f.repo.path }))))
+      .sort((a, b) => a.session.localeCompare(b.session));
+    return { type: 'forge.state', prs, forges: [...statuses].filter(([k]) => used.has(k)).map(([, s]) => s), followed: followedSessions };
   }
 
   async function refreshOnce(): Promise<void> {
@@ -280,7 +294,7 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
       if (hit && now() - hit.at < DETAIL_TTL_MS) return hit.detail;
       const d = await readers[e.repo.cli].detail(e.repo, e.pr.number, opts);
       const pr = withCi(d.pr, e.repo);
-      const mergeBlockers = pr !== d.pr && !d.mergeBlockers.includes('pipeline') ? [...d.mergeBlockers, 'pipeline' as const] : d.mergeBlockers;
+      const mergeBlockers = pr.notStarted ? [...d.mergeBlockers.filter(b => b !== 'pipeline' && b !== 'pipeline_not_started'), 'pipeline_not_started' as const] : d.mergeBlockers;
       const detail: PrDetail = { ...d, mergeBlockers, pr: strip(pr, sessionsOf(e.pr)) };
       details.set(key, { at: now(), detail });
       return detail;

@@ -8,7 +8,7 @@ export type TabBody = (tab: Tab) => ReactNode;
 
 /** A tab's title (mockup `tabLabel()`): the session's name, « Atelier », « Réglages », « OpenRig · <machine> », « >_ <shell> ». A session
  *  not (or no longer) known keeps its ref; a machine without a label, its id. */
-export function tabTitle(t: Tab, ctx: { session(id: string): Session | undefined; t: Messages; machine?(id: string): string | undefined; shell?(id: string): string | undefined }): string {
+export function tabTitle(t: Tab, ctx: { session(id: string): Session | undefined; t: Messages; machine?(id: string): string | undefined; shell?(id: string): string | undefined; /** A request's ref (`#226`, `!41`) by its id (lot 8b). */ pr?(id: string): string | undefined }): string {
   switch (t.kind) {
     case 'session': case 'seat': return ctx.session(t.ref)?.name ?? t.ref;
     case 'atelier': return ctx.t.side.atelier;
@@ -23,6 +23,7 @@ export function tabTitle(t: Tab, ctx: { session(id: string): Session | undefined
       return sid === null ? t.ref : ctx.t.ide.terminalTitle(ctx.session(sid)?.name ?? sid);
     }
     case 'atoi': return ctx.t.ide.atoi;
+    case 'pr': return ctx.pr?.(t.ref) ?? t.ref;
     default: return t.ref;
   }
 }

@@ -1,4 +1,4 @@
-import type { FleetForgeStatus, FleetPullRequest } from './forge';
+import type { FleetFollowedSession, FleetForgeStatus, FleetPullRequest } from './forge';
 import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState, type UsageStateMessage, type ForgeAction, type PrDetail } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage, type Task } from '@ledge/protocol';
@@ -70,6 +70,8 @@ export interface Fleet {
   prs(): FleetPullRequest[];
   /** Each machine's forges (`gh` / `glab` missing, not signed in, in error), with the machine. */
   forges(): FleetForgeStatus[];
+  /** Each machine's followed sessions (qualified) and the forge of their repository: for the chip « PR ? » (`sessionForge`). */
+  followed(): FleetFollowedSession[];
   /** Called when a machine's requests or forges change, or a machine falls. */
   onForge(cb: () => void): () => void;
   /** A request's detail, from the machine that read it (`log`: a job's log too). Rejects with `{ code, message }`: `offline`

@@ -1,3 +1,4 @@
+import type { FleetForgeStatus, FleetPullRequest } from '@ledge/fleet';
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type KeyboardEvent, type MutableRefObject } from 'react';
 import { useContextNear, type DaemonClient } from '@ledge/fleet';
 import { SessionMeta } from '../usage/SessionMeta';
@@ -80,6 +81,9 @@ export interface SessionPageProps {
   /** Read only with `ide`, for the bottom bar: the project line (projectLabel), the colour of the linked group showing this
    *  session's Changes (null: none), and « +N −N », which opens them beside. */
   project?: string; besideLink?: Link | null; onChanges?(): void;
+  /** The session's request (lot 8b): its chip in the bar opens it (`onPr`). */
+  pr?: FleetPullRequest | null; onPr?(): void;
+  prUnknown?: FleetForgeStatus | null; prMachine?: string; onPrUnknown?(): void;
 }
 
 /** After the last scroll, the reading position is written down this late (and when the page closes). */
@@ -567,7 +571,7 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
           {view === 'thread' && !archived && seat === null && <Reply session={session} helper={helper} asker={asker} since={waitedFor} decisions={p.decisions} memory={memory} memoKey={key}
             notify={p.notify} dispatch={p.dispatch} focusOnArrival={place.kind === 'session' && place.focus === 'reply'} keys={replyKeys} onReadPlan={readPlan} client={p.client} modelChip={!p.ide} ide={p.ide} />}
           {/* In an IDE tab, on the thread as on the terminal: the model, the context, where it works, and its changes. */}
-          {p.ide && <SessionBar client={p.client} session={session} project={p.project ?? ''} files={files} besideLink={p.besideLink ?? null} notify={p.notify} onChanges={p.onChanges ?? noop}
+          {p.ide && <SessionBar client={p.client} session={session} project={p.project ?? ''} files={files} besideLink={p.besideLink ?? null} notify={p.notify} onChanges={p.onChanges ?? noop} pr={p.pr ?? null} onPr={p.onPr ?? noop} prUnknown={p.prUnknown ?? null} prMachine={p.prMachine ?? ''} onPrUnknown={p.onPrUnknown ?? noop}
             terminal={termChip ? (agent.remote ? t.session.terminal.remote(agent.host) : t.session.terminal.local) : null}
             kids={kids.length} onShowKids={p.onShowKids} browser={pill === null ? null : { pill, captures: captures.length }} onBrowser={() => openCapture(null)} />}
         </div>

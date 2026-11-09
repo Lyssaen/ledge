@@ -77,7 +77,7 @@ describe('the IDE chrome', () => {
     activity();
     const nav = screen.getByRole('navigation');
     const names = Array.from(nav.children).map(e => e.classList.contains('grow') ? 'grow' : e.getAttribute('aria-label'));
-    expect(names).toEqual(['Projets', 'Rigs OpenRig', 'À toi', 'Atelier (onglet)', 'grow', 'Réglages (onglet)']);
+    expect(names).toEqual(['Projets', 'Rigs OpenRig', 'À toi', 'MR et PR', 'Atelier (onglet)', 'grow', 'Réglages (onglet)']);
   });
 
   it('no « ! » on Rigs (the user, 2026-11-09)', () => {
@@ -85,9 +85,16 @@ describe('the IDE chrome', () => {
     expect(screen.getByRole('button', { name: 'Rigs OpenRig' }).querySelector('.ide-badge')).toBeNull();
   });
 
-  it('no MR et PR yet', () => {
-    activity();
-    expect(screen.queryByRole('button', { name: /MR/ })).toBeNull();
+  it('MR et PR (lot 8b): a sidebar view, badged with the open requests whose pipeline failed, none at zero', () => {
+    const onLayout = vi.fn();
+    const { unmount } = activity(L, none, { prsFailing: 2, onLayout });
+    const b = screen.getByRole('button', { name: 'MR et PR' });
+    expect(b.querySelector('.ide-badge')).toHaveTextContent('2');
+    fireEvent.click(b);
+    expect(onLayout).toHaveBeenCalledWith({ type: 'view', view: 'prs' });
+    unmount();
+    activity(L, none, { prsFailing: 0 });
+    expect(screen.getByRole('button', { name: 'MR et PR' }).querySelector('.ide-badge')).toBeNull();
   });
 
   it('status bar waiting', () => {

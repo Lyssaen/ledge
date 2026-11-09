@@ -460,6 +460,8 @@ body.ide-resizing-y { cursor: row-resize; user-select: none; }
 
 /* « À toi » with nothing waiting (the user, 2026-11-09): one line in the middle of the sidebar. */
 .st-scroll-atoi { display: flex; flex-direction: column; }
+/* Its header is the view's (« À toi », Y / N, « Page »: mockup explorer `atoi`), not the list's own label. */
+.st-scroll-atoi .st-label { display: none; }
 .st-attn-none { flex: 1; display: grid; place-items: center; margin: 0; padding: 16px; text-align: center; font-size: 12.5px; color: var(--muted-foreground); }
 
 /* Lot 9: a detached window (a dockview popout of the same page; v27, mockup `win2()`). Its body takes the IDE's tokens; its
@@ -480,3 +482,8 @@ body.ide-popout > .dv-popout-window { flex: 1 1 auto; min-height: 0; position: r
   border-radius: 9px; padding: 8px 14px; font-size: 12.5px; white-space: nowrap;
 }
 .ide-tear-banner.out { background: color-mix(in srgb, var(--ide-link-violet) 14%, var(--card)); border-style: solid; }
+
+/* The « À toi » view's header (mockup explorer `atoi`): the keys and « Page ». */
+.ide-ex-tools { display: flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; }
+.ide-ex-btn { height: 20px; padding: 0 7px; border: 1px solid var(--input); border-radius: 5px; font-size: 11px; color: var(--foreground); }
+.ide-ex-btn:hover { background: var(--muted); }
