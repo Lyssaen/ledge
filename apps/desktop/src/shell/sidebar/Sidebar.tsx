@@ -61,9 +61,9 @@ export function Sidebar(p: {
   /** The harnesses' usage alerts (docs/mockups/ledge-harness-usage.html), first in « À toi »; « Compris » acks one. */
   usageAlerts?: readonly UsageAlert[];
   onAckUsage?(id: string): void;
-  /** The IDE's sidebar: only this view's content, without Ledge's entry, the views, the grouping or the foot. */
   /** The IDE's « À toi » view: « Page » opens the page « À toi ». */
   onAtoiPage?(): void;
+  /** The IDE's sidebar: only this view's content, without Ledge's entry, the views, the grouping or the foot. */
   section?: SideView;
 }): JSX.Element {
   const { t } = useI18n();

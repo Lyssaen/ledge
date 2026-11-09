@@ -1,5 +1,6 @@
 import { useEffect, useState, type JSX } from 'react';
 import type { Fleet, FleetPullRequest } from '@ledge/fleet';
+import type { ShownPr } from '../../forge/useForge';
 import { isArchived, type Session } from '@ledge/protocol';
 import { useI18n } from '../../i18n/lang';
 import { readJson, writeJson } from '../../state/storage';
@@ -31,7 +32,7 @@ export interface AtoiPageProps {
   /** A permission: allowed or refused. A question: one of its options, as an answer. */
   onDecide(s: Session, ok: boolean): void; onAnswer(s: Session, option: string): void;
   /** The requests waiting for the user: a failed pipeline, or ready to merge (prsWaitingForYou). */
-  prs: readonly FleetPullRequest[];
+  prs: readonly ShownPr[];
   agentOf(pr: FleetPullRequest): { name: string } | null;
   onOpenPr(pr: FleetPullRequest): void;
   /** « Demander à X de corriger »: the failed job's name is read from the detail. */
@@ -51,7 +52,8 @@ export function AtoiPage(p: AtoiPageProps): JSX.Element {
   // The last visit, read once: this one is noted for the next.
   const [since] = useState(() => { const v = readJson(ATOI_SEEN_KEY); return typeof v === 'number' ? v : 0; });
   useEffect(() => { writeJson(ATOI_SEEN_KEY, Date.now()); }, []);
-  const [merging, setMerging] = useState<{ id: string; command: string } | null>(null);
+  // The confirmation open under a row: its command, and whether the detail read at the click refuses the merge (its blockers).
+  const [merging, setMerging] = useState<{ id: string; command: string; blocked: boolean } | null>(null);
   const done = finishedSince(p.sessions, since);
   const perm = p.waiting.some(s => s.pending?.kind === 'permission');
 
@@ -73,23 +75,28 @@ export function AtoiPage(p: AtoiPageProps): JSX.Element {
       </div>
     );
   };
-  const merge = (pr: FleetPullRequest) => {
-    p.fleet.prDetail(pr.id, pr.machineId).then(d => setMerging({ id: pr.id, command: d.mergeCommand }), (e: { message?: string }) => { if (e?.message) p.notify(e.message); });
+  const merge = (pr: ShownPr) => {
+    if (merging?.id === pr.id) return;
+    p.fleet.prDetail(pr.id, pr.machineId).then(d => setMerging({ id: pr.id, command: d.mergeCommand, blocked: d.mergeBlockers.length > 0 }),
+      (e: { message?: string }) => { if (e?.message) p.notify(e.message); });
   };
-  const prRow = (pr: FleetPullRequest) => {
+  /** A request of a machine down, as last read (state 4): dimmed, its actions off with the reason, as in its tab. */
+  const prRow = (pr: ShownPr) => {
     const agent = p.agentOf(pr);
     const fail = pr.pipeline === 'fail';
+    const down = !!pr.stale;
+    const why = down ? f.machineOffline(p.machineLabel(pr.machineId)) : undefined;
     return (
-      <div key={pr.id} className="atoi-pr">
+      <div key={pr.id} className={`atoi-pr${down ? ' stale' : ''}`}>
         <div className="atoi-line">
           <PipeDot status={pr.pipeline} />
           <span className="grow"><b>{pr.ref}</b> {pr.title} <span className="fg-mut">· {f.host[pr.forge]} · {fail ? a.prFailed : a.prReady}</span></span>
           <button type="button" className="fg-btn" onClick={() => p.onOpenPr(pr)}>{a.open}</button>
-          {fail && agent && <button type="button" className="fg-btn pri" onClick={() => p.onAskFix(pr)}>{f.askFix(agent.name)}</button>}
-          {!fail && <button type="button" className="fg-btn pri" disabled={merging?.id === pr.id} onClick={() => merge(pr)}>{f.merge}</button>}
+          {fail && agent && <button type="button" className="fg-btn pri" disabled={down} title={why} onClick={() => p.onAskFix(pr)}>{f.askFix(agent.name)}</button>}
+          {!fail && <button type="button" className="fg-btn pri" disabled={down} title={why} aria-expanded={merging?.id === pr.id} onClick={() => merge(pr)}>{f.merge}</button>}
         </div>
         {merging?.id === pr.id && <MergeConfirm pr={pr} fleet={p.fleet} command={merging.command} machine={p.machineLabel(pr.machineId)} notify={p.notify}
-          onDone={() => setMerging(null)} onReload={() => { setMerging(null); p.onOpenPr(pr); }} onCancel={() => setMerging(null)} />}
+          blocked={merging.blocked || down} why={why} onDone={() => setMerging(null)} onReload={() => { setMerging(null); p.onOpenPr(pr); }} onCancel={() => setMerging(null)} />}
       </div>
     );
   };

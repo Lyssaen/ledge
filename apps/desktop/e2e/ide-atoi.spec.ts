@@ -44,6 +44,8 @@ for (const theme of ['dark', 'light'] as const) {
     await nav.getByRole('button', { name: 'À toi', exact: true }).click();
     await page.getByRole('button', { name: 'Page', exact: true }).click();
     const tab = page.getByRole('tabpanel', { name: /^À toi/ });
+    // « À toi 1 » (mockup v27): the requests waiting.
+    await expect(page.locator('.dv-tab').filter({ hasText: 'À toi' }).locator('.tab-count')).toHaveText('1');
     await expect(tab.locator('.atoi-row')).toHaveCount(1);
     await expect(tab.locator('.atoi-row code')).toHaveText('pnpm --filter desktop exec playwright test e2e/workspace.spec.ts');
     // MRs and PRs: the failed one and the ready one; the running one does not wait for you.

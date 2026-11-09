@@ -753,7 +753,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       ? <SessionTabLabel session={known.find(s => s.id === tab.ref)} tab={tab} title={title(tab)} client={fleetClient}
         helper={nav.place.kind === 'session' && nav.place.id === tab.ref && nav.place.helper ? { id: nav.place.helper } : null} />
       : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} />
-      : tab.kind === 'pr' ? <IdePrTabLabel pr={prOf(tab.ref)} title={title(tab)} /> : title(tab));
+      : tab.kind === 'pr' ? <IdePrTabLabel pr={prOf(tab.ref)} title={title(tab)} />
+      // « À toi 2 » (mockup v27): the requests waiting, the tab's name staying its title.
+      : tab.kind === 'atoi' ? <>{title(tab)}{waitingSessions(sessions, waits).length > 0 && <span className="tab-count mono" aria-hidden="true">{waitingSessions(sessions, waits).length}</span>}</> : title(tab));
     const alert = (tab: Tab) => (tab.kind === 'session' || tab.kind === 'seat' ? tabAlert(known.find(s => s.id === tab.ref)) : null);
     const body: TabBody = tab => {
       const tnav = tabNav(nav, tab, lastSettings.current);
