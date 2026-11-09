@@ -14,8 +14,10 @@ export interface AtelierBarProps {
   grouping: Grouping | null; onGrouping(g: Grouping): void;
   helpers: boolean; onHelpers(): void;
   paused: boolean; onPaused(): void;
-  /** R4: undefined hides « Détacher » (the Atelier cannot be detached here, or already is). */
+  /** « Détacher »: the atelier tab, alone, in a new window (lot 9, v27). */
   onDetach?: () => void;
+  /** « Ramener », in place of « Détacher » when the atelier is in a detached window: back to the main window's active group. */
+  onAttach?: () => void;
 }
 
 /** The IDE's Atelier tab bar (mockup atelierPage() `.abar`): what the old top bar gave the atelier, above it. The atelier itself
@@ -46,6 +48,7 @@ export function AtelierBar(p: AtelierBarProps): JSX.Element {
         <Icon d={p.paused ? SHELL_ICONS.play : SHELL_ICONS.pause} size={14} />
       </button>
       {p.onDetach && <button type="button" className="ide-abar-btn" title={t.detached.detachTitle} onClick={p.onDetach}>{t.ide.atelierDetach}</button>}
+      {!p.onDetach && p.onAttach && <button type="button" className="ide-abar-btn" title={t.detached.attachTitle} onClick={p.onAttach}>{t.ide.atelierBack}</button>}
     </div>
   );
 }

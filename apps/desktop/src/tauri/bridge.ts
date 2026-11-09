@@ -183,21 +183,28 @@ export async function openInEditor(editor: EditorId, path: string, ssh?: string)
   } catch { return { kind: 'failed', reason: 'exe' }; }
 }
 
-/** The title bar's window buttons (the native bar is off: `decorations: false`). Without Tauri they do nothing. */
-async function appWindow() { return (await import('@tauri-apps/api/window')).getCurrentWindow(); }
-export function minimizeWindow(): void { if (isTauri()) void appWindow().then(w => w.minimize()).catch(() => {}); }
-export function toggleMaximizeWindow(): void { if (isTauri()) void appWindow().then(w => w.toggleMaximize()).catch(() => {}); }
+/** The title bar's window buttons (the native bar is off: `decorations: false`). Without Tauri they do nothing. `label`
+ *  names another window than the page's own: a detached IDE window (lot 9), a popout of this same page, whose own
+ *  `getCurrentWindow()` would be the main one. */
+async function appWindow(label?: string) {
+  if (label) { const w = await (await import('@tauri-apps/api/webviewWindow')).WebviewWindow.getByLabel(label); if (!w) throw new Error(`no window ${label}`); return w; }
+  return (await import('@tauri-apps/api/window')).getCurrentWindow();
+}
+export function minimizeWindow(label?: string): void { if (isTauri()) void appWindow(label).then(w => w.minimize()).catch(() => {}); }
+export function toggleMaximizeWindow(label?: string): void { if (isTauri()) void appWindow(label).then(w => w.toggleMaximize()).catch(() => {}); }
 export function closeWindow(): void { if (isTauri()) void appWindow().then(w => w.close()).catch(() => {}); }
+/** A window's title in the taskbar (lot 9: a detached window's « {tab} — Ledge »). */
+export function setWindowTitle(label: string, title: string): void { if (isTauri()) void appWindow(label).then(w => w.setTitle(title)).catch(() => {}); }
 /** Whether the window is maximised; false outside Tauri or when the shell cannot tell. */
-export async function isWindowMaximized(): Promise<boolean> {
+export async function isWindowMaximized(label?: string): Promise<boolean> {
   if (!isTauri()) return false;
-  try { return await (await appWindow()).isMaximized(); } catch { return false; }
+  try { return await (await appWindow(label)).isMaximized(); } catch { return false; }
 }
 /** Calls back after each resize of the window (maximising and restoring resize it). Never fires outside Tauri; the
  *  unsubscription is safe before the subscription completes. */
-export function onWindowResized(fn: () => void): () => void {
+export function onWindowResized(fn: () => void, label?: string): () => void {
   if (!isTauri()) return () => {};
   let off = () => {}; let disposed = false;
-  void appWindow().then(w => w.onResized(() => { if (!disposed) fn(); })).then(un => { if (disposed) un(); else off = un; }).catch(() => {});
+  void appWindow(label).then(w => w.onResized(() => { if (!disposed) fn(); })).then(un => { if (disposed) un(); else off = un; }).catch(() => {});
   return () => { disposed = true; off(); };
 }

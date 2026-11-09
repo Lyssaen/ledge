@@ -40,19 +40,22 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
   const changeRef = useRef(onOpenChange);
   changeRef.current = onOpenChange;
 
+  // The page the menu is drawn in: a detached IDE window (lot 9) is another document of this same app.
+  const doc = () => wrap.current?.ownerDocument ?? document;
+  const view = () => doc().defaultView ?? window;
   const [placed, setPlaced] = useState<{ left: number; top: number } | null>(null);
   const atX = at?.x, atY = at?.y;
   useLayoutEffect(() => {
     if (!open || atX === undefined || atY === undefined) { setPlaced(null); return; }
     const r = (popup.current ?? menu.current)?.getBoundingClientRect();
     const w = r?.width ?? 0, h = r?.height ?? 0;
-    setPlaced({ left: Math.max(0, Math.min(atX, window.innerWidth - w)), top: Math.max(0, Math.min(atY, window.innerHeight - h)) });
+    setPlaced({ left: Math.max(0, Math.min(atX, view().innerWidth - w)), top: Math.max(0, Math.min(atY, view().innerHeight - h)) });
   }, [open, atX, atY]);
 
   useLayoutEffect(() => {
     if (!open || !flip) { setUp(false); return; }
     const r = button.current?.getBoundingClientRect();
-    setUp(!!r && r.bottom > window.innerHeight * 0.55);
+    setUp(!!r && r.bottom > view().innerHeight * 0.55);
   }, [open, flip]);
 
   useEffect(() => {
@@ -63,15 +66,16 @@ export function Menu({ open, onOpenChange, label, className, menuClassName, flip
     if (!open) return;
     const outside = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) changeRef.current(false); };
     const escape = (e: KeyboardEvent) => { if (e.key !== 'Escape') return; e.preventDefault(); e.stopPropagation(); closeRef.current(); };
-    document.addEventListener('mousedown', outside);
-    window.addEventListener('keydown', escape, true);
-    return () => { document.removeEventListener('mousedown', outside); window.removeEventListener('keydown', escape, true); };
+    const d = doc(), w = view();
+    d.addEventListener('mousedown', outside);
+    w.addEventListener('keydown', escape, true);
+    return () => { d.removeEventListener('mousedown', outside); w.removeEventListener('keydown', escape, true); };
   }, [open]);
 
   const onKeyDown = (e: ReactKeyboardEvent) => {
     const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? [])];
     if (items.length === 0) return;
-    const at = items.indexOf(document.activeElement as HTMLElement);
+    const at = items.indexOf(doc().activeElement as HTMLElement);
     let to: number;
     if (e.key === 'ArrowDown') to = (at + 1) % items.length;
     else if (e.key === 'ArrowUp') to = (at <= 0 ? items.length : at) - 1;

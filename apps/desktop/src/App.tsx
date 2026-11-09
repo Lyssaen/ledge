@@ -49,8 +49,6 @@ import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
 import { createRigOutput, useRigOutput } from './openrig/rigOutput';
 import { useSidebarOpenRig } from './openrig/sidebarState';
 import { offersRigs, setGrouping, useGrouping } from './openrig/grouping';
-import { AtelierAway } from './atelier/Away';
-import { atelierOpen, attachAtelier, canDetach, detachAtelier, onAtelier, showMainWindow } from './atelier/detach';
 import { Modal } from './shell/Modal';
 import { SearchPalette } from './shell/SearchPalette';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
@@ -84,7 +82,7 @@ import { useOpenSession } from './workspace/openPrefs';
 import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, rigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, MAIN, moveActive, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
+import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, MAIN, move as moveTab, moveActive, moveTo as moveTabTo, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, windowOf, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, providerOf, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
@@ -325,13 +323,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     else if (target) dispatch(targetAction(target));
   }), [showTerminal]);
   // The Atelier in its own window (#21): what it opens shows here, this window brought forward; its closing gives it back.
-  const [detached, setDetached] = useState(false);
-  useEffect(() => {
-    void atelierOpen().then(open => { if (open) setDetached(true); });
-    return onAtelier({ action: a => { dispatch(a); showMainWindow(); }, terminal: id => { showTerminal(id); showMainWindow(); }, closed: () => setDetached(false) });
-  }, [showTerminal]);
-  const detach = () => { void detachAtelier().then(ok => { if (ok) setDetached(true); }); };
-  const attach = () => { attachAtelier(); setDetached(false); };
   // The tray speaks the app's language and names the way back from do not disturb.
   const [dnd] = useDnd();
   useEffect(() => {
@@ -609,7 +600,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   }, [termStore, panelStore, onLayout, t]);
   // A tile dragged into the dock: its terminal tab where it was dropped, the same shell or agent screen (its view moves the
   // xterm, nothing is relaunched). The panel emptied so hides, without « Dernier terminal fermé » (nothing was closed).
-  const panelToDock = useCallback((ref: string, to: { group: string; index?: number } | { rightOf: string }) => {
+  const panelToDock = useCallback((ref: string, to: { group: string; index?: number } | { rightOf: string } | { window: 'new' }) => {
     const r = tileToDock({ ws: wsStore, panel: panelStore, terms: termStore }, ref, to);
     if (r.moved && r.empty) onLayout({ type: 'show', panel: 'bottom', on: false });
   }, [termStore, panelStore, wsStore, onLayout]);
@@ -757,6 +748,20 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   /** A request's agent: the session or seat on its branch (the most recently active). */
   const prAgentOf = (p: FleetPullRequest) => p.sessions.map(id => known.find(s => s.id === id)).find((s): s is Session => !!s);
   const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title, pr: id => prOf(id)?.ref });
+  // The main window's active group, kept while the focus is in a detached window: where « Ramener » gives the atelier back.
+  const mainFocus = useRef<string | null>(null);
+  if (ws.groups.some(g => g.id === ws.focus && g.window === MAIN)) mainFocus.current = ws.focus;
+  // « Détacher » (v27): the atelier tab, alone, in a new window; « Ramener », back to the main window's active group.
+  const detachAtelier = () => wsStore.update(w => moveTab(w, keyOf(ATELIER_TAB), { window: 'new' }));
+  const attachAtelier = () => wsStore.update(w => {
+    const main = w.groups.find(g => g.id === mainFocus.current && g.window === MAIN) ?? w.groups.find(g => g.window === MAIN)!;
+    return moveTabTo(w, keyOf(ATELIER_TAB), { group: main.id });
+  });
+  // A detached window's name (lot 9, v27): « Pim · ledge » for a session, « dev-front · ledge-dev » for a seat, else the tab's title.
+  const windowTitle = (tab: Tab) => {
+    const s = tab.kind === 'session' || tab.kind === 'seat' ? known.find(x => x.id === tab.ref) : undefined;
+    return s ? `${s.name} · ${s.rig ? s.rig.name : projectName(s)}` : title(tab);
+  };
   // The IDE shell (switch on): the same pieces, in tabs and panels. Its chunk is fetched only then.
   const ideShell = (() => {
     if (!ide) return null;
@@ -803,7 +808,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       // The atelier as it is, under the bar the old top bar gave it (lot 6): its filter, « Projets | Rigs », the subagents, the
       // animations, « Détacher ». Detached, the tab says where it went (no bar).
       if (tab.kind === 'atelier') {
-        if (detached) return <AtelierAway onShow={detach} onAttach={attach} />;
         const pf = tnav.place.kind === 'settings' ? tnav.place.back.project : tnav.place.project;
         const fp = pf === 'all' || pf === 'none' ? null : projects?.projects.find(x => x.id === pf);
         return (
@@ -811,7 +815,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             <IdeAtelierBar filter={pf === 'all' ? null : { name: fp?.name ?? t.side.unassigned, color: fp?.color ?? null }} onClearFilter={() => dispatch({ type: 'home', project: 'all' })}
               grouping={offersRigs(sessions, sidebarOpenRig?.installed) ? grouping : null} onGrouping={setGrouping}
               helpers={nav.helpers} onHelpers={() => dispatch({ type: 'helpers' })} paused={nav.paused} onPaused={() => dispatch({ type: 'paused' })}
-              {...(canDetach() ? { onDetach: detach } : {})} />
+              {...(windowOf(ws, keyOf(ATELIER_TAB)) === MAIN ? { onDetach: detachAtelier } : { onAttach: attachAtelier })} />
             <Atelier nav={tnav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
               tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />
           </div>
@@ -904,7 +908,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             onClose={panelClose} onHide={() => onLayout({ type: 'show', panel: 'bottom', on: false })}
             onDockDrop={dockToPanel} onArrange={next => panelStore.update(() => next)} onRefused={() => notify(t.ide.panel.onlyTerms)} />
         }
-        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={gid => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); }} emptyGroup={emptyGroup} onPanelDrop={panelToDock} />}
+        editor={<IdeDock ws={ws} store={wsStore} title={title} body={body} label={label} alert={alert} onTabMenu={(tab, at) => setTabMenu({ tab, at })} onNewSession={gid => { wsStore.update(w => focusGroup(w, gid)); dispatch({ type: 'modal', modal: { kind: 'launch', from: 'plus' } }); }} emptyGroup={emptyGroup} onPanelDrop={panelToDock} windowTitle={windowTitle} onWindowClosed={n => notify(t.ide.windows.closed(n))} />}
         chat={
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus - (ideChatFrom.current ?? 0)} askedOnly
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
@@ -930,7 +934,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         <section className="workspace">
           {tokenMissing && <DaemonOutdated />}
           <TopBar nav={nav} dispatch={dispatch} session={session} helper={helper} projects={projects} projectIdOf={projectIdOf} terminal={sessionPrefs.terminal} onTerminal={toggleTerminal}
-            onRevealArchives={() => setRevealArchives(n => n + 1)} onDetach={canDetach() && !detached ? detach : undefined}
+            onRevealArchives={() => setRevealArchives(n => n + 1)}
             manage={{ open: sessionMenu.menu?.target.kind === 'session' && sessionMenu.menu.target.id === session?.id, onOpen: (at, opener) => session && sessionMenu.open(session.id, at, opener) }} />
           {place.kind === 'settings' ? <SettingsPlace section={place.section} ctx={settings} />
             : place.kind === 'home' ? <HomePlace label={t.side.ledgeHome} client={fleetClient} view={fleetView} tasks={tasksApi} decisions={decisions} waits={waits} tab={place.tab} task={place.task} dispatch={dispatch}
@@ -939,7 +943,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
             : place.kind === 'openrig' ? <OpenRigPage client={fleetClient} machines={machines} machine={place.machine} section={place.section ?? 'rigs'} role={place.role} seat={place.seat} open={place.open} projects={projects} sessions={sessions} dispatch={dispatch} />
             : session && place.kind === 'session' ? <SessionPlace client={fleetClient} session={session} nav={nav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
                 prefs={shownPrefs} setPrefs={setShownPrefs} onRevealCurrent={() => setRevealCurrent(n => n + 1)} />
-            : detached ? <AtelierAway onShow={detach} onAttach={attach} />
             : <Atelier nav={nav} dispatch={dispatch} sessions={sessions} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing} actions={actions} menu={sessionMenu}
                 tasks={tasksApi.tasks} broadcast={canBroadcast(machines)} />}
           <Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines}
@@ -970,7 +973,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         return <TabMenu at={tabMenu.at} tab={tab} name={title(tab)} terminal={view === 'terminal'} others={hit.group.tabs.length > 1}
           {...(session && { session, editor: { name: editorEntry.name, open: () => openInEditor(session) } })} tags={menuExtras?.tags ?? null} {...(external && { onExternal: external })} onOpenSession={id => dispatch({ type: 'open', id })}
           {...(canSwitch && { onView: () => wsStore.update(w => setView(w, key, view === 'terminal' ? 'thread' : 'terminal')) })}
-          onSplit={() => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; })}
+          {...(hit.group.window === MAIN && { onSplit: () => wsStore.update(w => { const h = findTab(w, key); return h ? splitGroup(w, h.group.id) : w; }) })}
           onClose={() => wsStore.close(key)} onCloseOthers={() => wsStore.closeOthers(key)} onDismiss={() => setTabMenu(null)} />;
       })()}
       {nav.modal?.kind === 'search' && <SearchPalette sessions={sessions} projectName={projectName} order={order} onOpen={id => dispatch({ type: 'open', id })} onClose={close}

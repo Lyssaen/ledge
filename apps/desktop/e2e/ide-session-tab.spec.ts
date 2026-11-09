@@ -188,9 +188,10 @@ test('the bottom bar: 28 px, model, context, branch, project, then +N −N at th
   await second.locator('.dv-content-container').click({ position: { x: 40, y: 200 } });
   await expect(second).toHaveClass(/dv-active-group/);
   await expect(first).not.toHaveClass(/dv-active-group/);
-  // The focused group's front tab carries the 2 px line on top.
-  const stripe = (t: Locator) => t.evaluate(el => getComputedStyle(el, '::before').height);
-  expect(await stripe(changes)).toBe('2px');
+  // The focused group's front tab is underlined (2 px), nothing on top (docs/mockups/ledge-ide-tab-front.html).
+  const stripe = (t: Locator) => t.evaluate(el => ({ under: getComputedStyle(el).boxShadow, top: getComputedStyle(el, '::before').content }));
+  expect((await stripe(changes)).under).toMatch(/0px -2px 0px 0px inset$/);
+  expect((await stripe(changes)).top).toBe('none');
   await page.screenshot({ path: 'e2e/.results/ide-session-beside.png' });
 
   // Review Focus 5: narrower and narrower, the first group goes under 560, 470, 400 px; project, then %, then branch go,
@@ -300,9 +301,13 @@ test('the mockup\'s look: 8 px dots with a halo on a request, the tab in front o
   expect(await bg(strip)).not.toBe(await bg(front));
   expect(await bg(behind)).toBe(await bg(strip));
   expect(await bg(bar(page, 'Nova'))).toBe(await bg(strip));
-  // The focused group's stripe: 2 px in Ledge's coral (the user, 2026-11-09).
-  const stripe = await front.evaluate(el => { const s = getComputedStyle(el, '::before'); return { h: s.height, c: s.backgroundColor }; });
-  expect(stripe).toEqual({ h: '2px', c: await token(page, '--sidebar-primary') });
+  // The focused group's tab in front: 2 px under it in Ledge's factory coral, not the factory --sidebar-primary (a red), nothing
+  // on top (docs/mockups/ledge-ide-tab-front.html, jde 2026-11-09); the tab behind has none.
+  const coral = await token(page, '--ide-tab-front');
+  expect(['rgb(234, 106, 88)', 'rgb(204, 82, 65)']).toContain(coral);
+  expect(await front.evaluate(el => getComputedStyle(el).boxShadow)).toBe(`${coral} 0px -2px 0px 0px inset`);
+  expect(await front.evaluate(el => getComputedStyle(el, '::before').content)).toBe('none');
+  expect(await behind.evaluate(el => getComputedStyle(el).boxShadow)).not.toContain(coral);
   // The reply box and the thread span the group, 12 px in from each side.
   const group = await box(page.locator('.ide-dockview .dv-groupview').first());
   const form = await box(pane(page, 'Nova').locator('.session-reply form'));

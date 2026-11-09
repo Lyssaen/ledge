@@ -46,12 +46,14 @@ export function find(w: Workspace, key: string): { group: Group; index: number }
 
 function replaceGroup(w: Workspace, g: Group): Workspace { return { ...w, groups: w.groups.map(x => (x.id === g.id ? g : x)) }; }
 
-/** A new empty group right after `after` (same window), or at the end of a new window. */
+/** A new empty group right after `after` (same window), or at the end of a new window. A detached window holds one group
+ *  (lot 9, option A): a group asked right of one of its groups opens in the main window, after its last (v27). */
 function addGroup(w: Workspace, place: { after: Group } | { window: 'new' }): { w: Workspace; group: Group } {
   const id = `g${w.next}`;
   if ('after' in place) {
-    const group: Group = { id, window: place.after.window, tabs: [], active: 0, link: null };
-    const i = w.groups.indexOf(place.after);
+    const after = place.after.window === MAIN ? place.after : w.groups.filter(g => g.window === MAIN).at(-1)!;
+    const group: Group = { id, window: MAIN, tabs: [], active: 0, link: null };
+    const i = w.groups.indexOf(after);
     return { w: { ...w, next: w.next + 1, groups: [...w.groups.slice(0, i + 1), group, ...w.groups.slice(i + 1)] }, group };
   }
   const win = `w${w.next}`;
@@ -188,19 +190,40 @@ export function moveTo(w: Workspace, key: string, to: { group: string; index?: n
 }
 
 /** `tab` put at a place of the dock: `moveTo` when it is already open; else added in group `to.group` (at `index`, clamped,
- *  else at the end) or in a new group right of `to.rightOf`. It becomes active, its group focused. A missing group: no change.
+ *  else at the end), in a new group right of `to.rightOf`, or in a new window (a bottom-panel terminal torn out of the
+ *  window). It becomes active, its group focused. A missing group: no change.
  *  (A terminal brought from the bottom panel: no other group is touched, an empty focused one stays.) */
-export function place(w: Workspace, tab: Tab, to: { group: string; index?: number } | { rightOf: string }): Workspace {
-  if (find(w, keyOf(tab))) return moveTo(w, keyOf(tab), to);
+export function place(w: Workspace, tab: Tab, to: { group: string; index?: number } | { rightOf: string } | { window: 'new' }): Workspace {
+  if (find(w, keyOf(tab))) return 'window' in to ? move(w, keyOf(tab), to) : moveTo(w, keyOf(tab), to);
   let out = w;
   let target: Group | undefined;
   if ('group' in to) target = groupById(w, to.group);
+  else if ('window' in to) { const r = addGroup(w, { window: 'new' }); out = r.w; target = r.group; }
   else { const ref = groupById(w, to.rightOf); if (ref) { const r = addGroup(w, { after: ref }); out = r.w; target = r.group; } }
   if (!target) return w;
   const g = groupById(out, target.id)!;
   const at = 'group' in to && to.index !== undefined ? Math.max(0, Math.min(to.index, g.tabs.length)) : g.tabs.length;
   const tabs = [...g.tabs.slice(0, at), tab, ...g.tabs.slice(at)];
   return activate(replaceGroup(out, { ...g, tabs }), g.id, at);
+}
+
+/** The window a tab is in (MAIN or a secondary window's id), null when it is not open. */
+export function windowOf(w: Workspace, key: string): string | null { return find(w, key)?.group.window ?? null; }
+
+/** A secondary window closed by the user (its ×, Alt+F4): its tabs come back to the main window in one group right of
+ *  its last, keeping the window's link colour, the front tab kept; the group focused. Nothing else is closed. The main
+ *  window is never closed this way (v27, validated by jde on 2026-11-09). */
+export function closeWindow(w: Workspace, win: string): Workspace {
+  if (win === MAIN || !w.windows.includes(win)) return w;
+  const leaving = w.groups.filter(g => g.window === win);
+  const tabs = leaving.flatMap(g => g.tabs);
+  const rest: Workspace = { ...w, windows: w.windows.filter(x => x !== win), groups: w.groups.filter(g => g.window !== win) };
+  const last = rest.groups.filter(g => g.window === MAIN).at(-1)!;
+  if (!tabs.length) return { ...rest, focus: rest.groups.some(g => g.id === w.focus) ? w.focus : last.id };
+  const { w: out, group } = addGroup(rest, { after: last });
+  const from = leaving[0]!;
+  const front = from.tabs[from.active] ?? tabs[0]!;
+  return { ...replaceGroup(out, { ...group, tabs, active: tabs.indexOf(front), link: from.link }), focus: group.id };
 }
 
 /** What an empty group offers:the Terminal of the session it was split from (the UI checks that session still exists).
@@ -248,7 +271,8 @@ export function focusNth(w: Workspace, n: number): Workspace {
 export function moveActive(w: Workspace, step: 1 | -1): Workspace {
   const g = focused(w);
   const tab = g.tabs[g.active];
-  if (!tab) return w;
+  // A detached window has one group: nothing on its left or right (v27).
+  if (!tab || g.window !== MAIN) return w;
   const siblings = w.groups.filter(x => x.window === g.window);
   const next = siblings[siblings.indexOf(g) + step];
   if (next) return moveTo(w, keyOf(tab), { group: next.id });
@@ -280,10 +304,11 @@ export function reopenLast(w: Workspace, stack: readonly Closed[], keep: (t: Tab
   return { w, stack: rest };
 }
 
-/** Ctrl+\: an empty group right of `groupId`, remembering the session left (its Changes and Terminal are offered). */
+/** Ctrl+\: an empty group right of `groupId`, remembering the session left (its Changes and Terminal are offered). Not in a
+ *  detached window (v27: one group there). */
 export function split(w: Workspace, groupId: string): Workspace {
   const g = groupById(w, groupId);
-  if (!g) return w;
+  if (!g || g.window !== MAIN) return w;
   const { w: w1, group } = addGroup(w, { after: g });
   const from = sessionOf(g.tabs[g.active]);
   return { ...replaceGroup(w1, from ? { ...group, from } : group), focus: group.id };
@@ -323,7 +348,9 @@ export function beside(w: Workspace, groupId: string, kind: 'changes' | 'termina
   if (hit && hit.group.link === g.link) return { ...activate(out, hit.group.id, hit.index), focus: g.id };
   if (hit) out = close(out, keyOf(want));
   g = groupById(out, g.id)!;
-  let peer = out.groups.find(x => x.id !== g!.id && x.window === g!.window && x.link === g!.link);
+  // The linked group is looked for in every window (v27); none, it opens right of this one, in the main window when this
+  // one is detached (addGroup).
+  let peer = out.groups.find(x => x.id !== g!.id && x.link === g!.link);
   if (!peer) { const r = addGroup(out, { after: g }); out = replaceGroup(r.w, { ...r.group, link: g.link }); peer = groupById(out, r.group.id)!; }
   const tabs = [...peer.tabs, want];
   out = replaceGroup(out, { ...peer, tabs, active: tabs.length - 1 });

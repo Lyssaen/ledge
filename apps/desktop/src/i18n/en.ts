@@ -1348,6 +1348,7 @@ export const en: Messages = {
     setting: 'IDE interface (preview)',
     /** The Atelier tab's bar (mockup atelierPage() `.abar`): its « Détacher ». */
     atelierDetach: 'Detach',
+    atelierBack: 'Bring back',
     /** R2: the same session's screen is shown in another group; this tab brings it back. */
     agentElsewhere: 'Terminal shown in the other group', showHere: 'Show here',
     /** An agent's terminal tab: its title (mockup termFor()) and its kind chip (R3: a seat's is a read-only capture). */
@@ -1468,6 +1469,15 @@ export const en: Messages = {
     atoiNone: 'Nothing waits for you.', operations: 'Operations', usageOnce: (harness, window, line) => `${harness} · ${window}: ${line}`,
     closeGroupTip: 'Close group (Ctrl+W)',
     dropNew: ['Drop here:', 'new group'],
+    // Lot 9, v27 (docs/ide-workspace.md, « Fenêtres détachées »).
+    windows: {
+      taskbar: (tab: string) => `${tab} — Ledge`,
+      closeTip: 'Close: the tabs go back to the main window',
+      closed: (n: number) => (n > 1 ? `Window closed: its ${n} tabs are back in the main window.` : 'Window closed: its tab is back in the main window.'),
+      tearTab: 'Drop the tab outside the window to open it in a new window',
+      tearTerm: 'Drop the terminal outside the window to open it in a new window',
+      tearOut: 'Drop: new window'
+    },
     menu: {
       open: 'Open', openKey: 'Enter', openRight: 'Open to the right', openRightKey: 'Ctrl click',
       terminal: 'Its terminal', capture: 'Capture in a terminal', message: 'Send a message…'

@@ -25,7 +25,8 @@ const xt = vi.hoisted(() => {
     constructor(o: Record<string, unknown>) { this.options = { ...o }; terms.push(this); }
     attachCustomKeyEventHandler(fn: (e: KeyboardEvent) => boolean) { this.keys = fn; }
     onData(fn: (d: string) => void) { this.data.push(fn); return { dispose() {} }; }
-    onResize() { return { dispose() {} }; }
+    resized: ((e: { cols: number; rows: number }) => void)[] = [];
+    onResize(fn: (e: { cols: number; rows: number }) => void) { this.resized.push(fn); return { dispose() {} }; }
     hasSelection() { return this.selection !== ''; }
     getSelection() { return this.selection; }
   }
@@ -42,7 +43,8 @@ vi.mock('@xterm/addon-webgl', () => ({
   }
 }));
 
-import { createSurface } from '../src/term/surface';
+import { createSurface, REPLAY_MAX } from '../src/term/surface';
+import { placeSurface } from '../src/term/place';
 
 const clip = { text: '', readText: vi.fn(async () => clip.text), writeText: vi.fn(async (t: string) => { clip.text = t; }) };
 const key = (o: Partial<KeyboardEvent>) => {
@@ -226,4 +228,76 @@ it('read-only over a program that holds the mouse: a plain press reaches xterm a
   // Nothing is written to the screen by going read-only and back.
   s.setReadOnly(false);
   expect(t.write).not.toHaveBeenCalled();
+});
+
+// Lot 9 (docs/ide-workspace-l0.md, point 1): an xterm keeps the document it was opened in; shown in a popout, it is made again.
+it('adopt: another document makes a new xterm there, fed the output, with the same listeners and the WebGL slot kept', () => {
+  const { s, t } = surface();
+  const input = vi.fn(); const resize = vi.fn();
+  s.onInput(input); s.onResize(resize);
+  s.write('hello'); s.write(new Uint8Array([33]));
+  s.setWebgl(true);
+  s.setReadOnly(true);
+  s.adopt!(document);
+  expect(xt.terms).toHaveLength(1);
+  const other = document.implementation.createHTMLDocument('popout');
+  s.adopt!(other);
+  expect(t.dispose).toHaveBeenCalled();
+  expect(xt.webgl[0]!.dispose).toHaveBeenCalled();
+  const n = xt.terms.at(-1)!;
+  expect(n).not.toBe(t);
+  expect(n.open).toHaveBeenCalledWith(s.host);
+  expect(n.write.mock.calls).toEqual([['hello'], [new Uint8Array([33])]]);
+  expect(xt.webgl).toHaveLength(2);
+  // Read-only survives: its cursor stays hidden.
+  expect(n.options.theme).toMatchObject({ cursor: '#101112' });
+  n.data[0]!('x');
+  expect(input).not.toHaveBeenCalled();
+  n.data[0]!('\x1b[2;3R');
+  expect(input).toHaveBeenCalledWith('\x1b[2;3R');
+  n.resized[0]!({ cols: 100, rows: 30 });
+  expect(resize).toHaveBeenCalledWith(100, 30);
+  // Written after: straight to the new one. Back in the same document: nothing re-made.
+  s.write('more');
+  expect(n.write).toHaveBeenLastCalledWith('more');
+  s.adopt!(other);
+  expect(xt.terms.at(-1)).toBe(n);
+});
+
+it('Ctrl+Shift+` and Ctrl+1…9 work in an xterm made again in a popout, `from` being the terminal in its new document', () => {
+  const onLeave = vi.fn(); const onGroup = vi.fn();
+  const s = createSurface({ theme: { background: '#101112' }, onThread: vi.fn(), openUrl: vi.fn(), panelKey: () => true, onLeave, onGroup });
+  const other = document.implementation.createHTMLDocument('popout');
+  other.body.append(other.adoptNode(s.host));
+  s.adopt!(other);
+  const n = xt.terms.at(-1)!;
+  expect(xt.terms).toHaveLength(2);
+  const leave = key({ ctrlKey: true, shiftKey: true, code: 'Backquote', key: '`' });
+  expect(n.keys(leave)).toBe(false);
+  expect(onLeave).toHaveBeenCalledWith(s.host);
+  expect((onLeave.mock.calls[0]![0] as HTMLElement).ownerDocument).toBe(other);
+  expect(leave.stopPropagation).toHaveBeenCalled();
+  const group = key({ ctrlKey: true, code: 'Digit3', key: '3' });
+  expect(n.keys(group)).toBe(false);
+  expect(onGroup).toHaveBeenCalledWith(3);
+  expect(group.stopPropagation).toHaveBeenCalled();
+});
+
+it('adopt replays only the last REPLAY_MAX bytes of the output', () => {
+  const { s } = surface();
+  const chunk = 'x'.repeat(64 * 1024);
+  for (let i = 0; i < 6; i++) s.write(chunk);
+  s.adopt!(document.implementation.createHTMLDocument('popout'));
+  const replayed = xt.terms.at(-1)!.write.mock.calls.reduce((n, [b]) => n + (b as string).length, 0);
+  expect(replayed).toBe(REPLAY_MAX);
+});
+
+it('placeSurface puts the element alone in its place and lets it adopt that document', () => {
+  const { s } = surface();
+  const adopt = vi.spyOn(s, 'adopt');
+  const el = document.createElement('div');
+  el.append(document.createElement('span'));
+  placeSurface(s, el);
+  expect([...el.children]).toEqual([s.host]);
+  expect(adopt).toHaveBeenCalledWith(document);
 });

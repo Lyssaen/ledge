@@ -33,7 +33,7 @@ export const panelDragRef = (): string | null => { const d = current; return d?.
  *  moved and whether the panel is left empty. */
 export function tileToDock(
   d: { ws: WorkspaceStore; panel: PanelStore; terms: Pick<TermStore, 'handOver'> },
-  ref: string, to: { group: string; index?: number } | { rightOf: string }
+  ref: string, to: { group: string; index?: number } | { rightOf: string } | { window: 'new' }
 ): { moved: boolean; empty: boolean } {
   const w = d.ws.get();
   const next = place(w, { kind: 'terminal', ref }, to);

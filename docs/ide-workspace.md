@@ -1,6 +1,6 @@
 # Ledge Desktop en espace de travail IDE
 
-Design validé par l'utilisateur le 2026-11-05, puis dans sa version 26 le 2026-11-06. La fenêtre principale de Ledge Desktop devient un espace de travail à la manière de VS Code ou de Cursor. Il est centré sur les agents, avec des panneaux divisés, plusieurs fenêtres et plusieurs terminaux. OpenRig, l'atelier, et les MR et PR y sont intégrés.
+Design validé par l'utilisateur le 2026-11-05, puis dans sa version 26 le 2026-11-06. La version 27 (2026-11-09, à valider) ne change que les fenêtres détachées : une fenêtre détachée porte un seul groupe (décision de l'utilisateur, option A du lot 9). La fenêtre principale de Ledge Desktop devient un espace de travail à la manière de VS Code ou de Cursor. Il est centré sur les agents, avec des panneaux divisés, plusieurs fenêtres et plusieurs terminaux. OpenRig, l'atelier, et les MR et PR y sont intégrés.
 
 - **Référence pour coder :** [`docs/mockups/ledge-ide-interactive.html`](mockups/ledge-ide-interactive.html), version 26, publiée sur https://claude.ai/artifact/GFWW4nhGxs2DLSxFW5R62B. C'est un prototype interactif en 1920×1080, où chaque bouton et chaque option agissent. En cas de doute, c'est lui qui fait foi.
 - **Rigs et OpenRig :** [`docs/mockups/ledge-ide-rigs.html`](mockups/ledge-ide-rigs.html), validée par l'utilisateur le 2026-11-07. Elle part de la version 26 et la remplace pour tout ce qui touche aux rigs : la vue Rigs, la vue Rig d'un rig, la fenêtre « Lancer un rig » et la page OpenRig.
@@ -44,13 +44,46 @@ Types d'onglets : **session**, **siège OpenRig**, **modifications** d'une sessi
 
 - **Ouvrir.** Un clic dans l'explorateur ouvre selon le réglage « Ouvrir une session » : dans le groupe actif, à droite, ou dans une nouvelle fenêtre. `Ctrl`+clic ouvre à droite. Le clic droit propose : ouvrir, ouvrir à droite, ouvrir dans une nouvelle fenêtre, son terminal (ou sa capture pour un siège), envoyer un message et redémarrer le siège (pour un siège), ouvrir dans l'éditeur. Un onglet déjà ouvert est mis au premier plan, jamais dupliqué.
 - **Le bouton + d'un groupe** ouvre directement « Nouvelle session » (voir plus bas), et rien d'autre.
-- **Diviser** (`Ctrl+\`) crée un groupe vide à droite. Il propose le terminal de la session qu'on quittait, ainsi que Nouvelle session, OpenRig, Réglages, Atelier et Terminal.
-- **Glisser** un onglet vers un autre groupe l'y déplace. Pendant le glisser, une zone « nouveau groupe » apparaît à droite. Un groupe vidé disparaît, sauf le dernier de la fenêtre.
-- **Nouvelle fenêtre.** On glisse un onglet **hors de la fenêtre** : il s'ouvre dans une nouvelle fenêtre (sur un autre écran). On le glisse dans un groupe pour le ramener.
+- **Diviser** (`Ctrl+\`) crée un groupe vide à droite, dans la fenêtre principale seulement. Il propose le terminal de la session qu'on quittait, ainsi que Nouvelle session, OpenRig, Réglages, Atelier et Terminal.
+- **Glisser** un onglet vers un autre groupe l'y déplace. Pendant le glisser, une zone « nouveau groupe » apparaît à droite de la fenêtre principale. Un groupe vidé disparaît, sauf le dernier de la fenêtre.
+- **Nouvelle fenêtre.** On glisse un onglet **hors de la fenêtre** : il s'ouvre dans une nouvelle fenêtre (sur un autre écran). On le glisse dans un groupe pour le ramener. Une fenêtre détachée porte **un seul groupe** : voir « Fenêtres détachées ».
 - **Clic droit sur un onglet :** basculer fil ⇄ terminal (`Ctrl+``), lire role.md (siège), ouvrir dans l'éditeur, diviser à droite, fermer l'onglet, fermer les autres.
-- **Groupes liés.** Le carré à gauche des onglets lie un groupe en violet, en vert d'eau ou à rien. Quand on change de session dans un groupe lié, les onglets Modifications et Terminal des groupes de la même couleur passent sur cette session. Le lien vaut aussi d'une fenêtre à l'autre.
+- **Groupes liés.** Le carré à gauche des onglets lie un groupe en violet, en vert d'eau ou à rien. Quand on change de session dans un groupe lié, les onglets Modifications et Terminal des groupes de la même couleur passent sur cette session. Le lien vaut aussi d'une fenêtre à l'autre. Ouvrir les modifications ou le terminal « à côté » cherche un groupe de la même couleur dans toutes les fenêtres ; s'il n'y en a pas et que l'on est dans une fenêtre détachée, le groupe lié se crée dans la fenêtre principale.
 - **Dispositions.** On enregistre sous un nom l'ensemble des groupes, des fenêtres et des panneaux, puis on l'applique depuis le menu de la barre d'état, la palette ou les réglages.
 - **Beaucoup de groupes.** Chacun garde une largeur minimale, la zone défile à l'horizontale, et les onglets défilent dans leur barre.
+
+## Fenêtres détachées
+
+Version 27, lot 9. Une fenêtre détachée est une popout dockview du même document : une seule application, une seule connexion au daemon, les mêmes terminaux. **Elle porte un seul groupe**, avec ses onglets (option A, retenue par l'utilisateur le 2026-11-09).
+
+| Geste ou situation | Comportement |
+|---|---|
+| Glisser un onglet hors de la fenêtre (principale ou détachée) | Une **nouvelle** fenêtre, avec ce seul onglet. Pas de toast : la fenêtre qui apparaît suffit. |
+| Glisser hors de la fenêtre le **seul** onglet d'une fenêtre détachée | La fenêtre se déplace là où on le lâche ; aucune fenêtre n'est créée. |
+| « Ouvrir dans une nouvelle fenêtre » (menu, réglage, palette, page À toi, Nouvelle session) | Une nouvelle fenêtre à chaque fois. Un onglet déjà ouvert est seulement mis au premier plan, où qu'il soit. |
+| Diviser (`Ctrl+\`, bouton du groupe, menu de l'onglet) | **Absent** dans une fenêtre détachée : le bouton et l'entrée du menu ne s'affichent pas, et `Ctrl+\` n'y fait rien. |
+| « Ouvrir à droite », `Ctrl`+clic, quand le groupe actif est dans une fenêtre détachée | L'onglet s'ouvre dans la fenêtre principale, dans un groupe à droite. |
+| Zone « nouveau groupe » pendant un glisser | Seulement dans la fenêtre principale. Déposer sur le groupe d'une fenêtre détachée y ajoute l'onglet. |
+| Groupe vidé | La fenêtre détachée se ferme. |
+| **Fermer** une fenêtre détachée (son ✕, `Alt+F4`) | Ses onglets **reviennent dans la fenêtre principale**, en un groupe à droite qui garde sa couleur de lien. Rien n'est fermé : les shells ne sont pas tués, un terminal attaché reste attaché. Toast : « Fenêtre fermée : ses 2 onglets reviennent dans la fenêtre principale. » |
+| Fermer la fenêtre principale (✕) | Elle se cache déjà dans la zone de notification ; les fenêtres détachées se cachent avec elle et réapparaissent avec elle, à leur place. Aucun avertissement. « Quitter » (zone de notification) ferme tout, sans avertissement. |
+| Redémarrage de Ledge | Avec « Au démarrage : la dernière disposition », les fenêtres détachées rouvrent sur leur écran, à leur taille et à leur place, avec leurs onglets. Une disposition fixe ou « L'atelier seul » s'applique telle quelle. |
+| Écran débranché | La fenêtre rouvre sur l'écran principal, à sa taille (réduite à l'écran si besoin), centrée. |
+| Panneau du bas | Seulement dans la fenêtre principale. Un terminal glissé dans une fenêtre détachée y devient un onglet ; pour le ranger dans le panneau du bas, on le glisse sur celui de la fenêtre principale. Fermer la fenêtre le ramène comme onglet, pas dans le panneau. |
+| Atelier | « Détacher » envoie l'onglet atelier, seul, dans une nouvelle fenêtre. Hors de la fenêtre principale, le bouton devient « Ramener » et rend l'onglet au groupe actif de la fenêtre principale. L'onglet atelier se glisse aussi comme les autres. |
+| Dispositions | Elles enregistrent les fenêtres détachées (une par groupe), leur écran et leur taille. |
+
+**Barre de titre d'une fenêtre détachée.** Comme la principale (`decorations: false`), sans la recherche ni les bascules de panneaux : la marque Ledge, au centre le nom de l'onglet actif, à droite les boutons Réduire, Agrandir et Fermer (`WindowCaps`). Le nom suit l'onglet actif : « dev-front · ledge-dev » pour un siège, « Pim · ledge » pour une session, sinon le titre de l'onglet sans compteur (« À toi », « Atelier »). Titre dans la barre des tâches Windows : « {onglet actif} — Ledge ». La fenêtre principale garde « Ledge Desktop ».
+
+**Pendant un glisser.** Un bandeau en bas de la fenêtre d'où part l'onglet :
+
+| État | FR | EN |
+|---|---|---|
+| Glisser un onglet | Lâchez l'onglet hors de la fenêtre pour l'ouvrir dans une nouvelle fenêtre | Drop the tab outside the window to open it in a new window |
+| Glisser un terminal (panneau du bas ou onglet terminal) | Lâchez le terminal hors de la fenêtre pour l'ouvrir dans une nouvelle fenêtre | Drop the terminal outside the window to open it in a new window |
+| Le pointeur a quitté la fenêtre (le bandeau reste visible dans la fenêtre) | Lâchez : nouvelle fenêtre | Drop: new window |
+
+Autres textes : toast de fermeture « Fenêtre fermée : son onglet revient dans la fenêtre principale. » / « Fenêtre fermée : ses {n} onglets reviennent dans la fenêtre principale. » (EN : “Window closed: its tab is back in the main window.” / “Window closed: its {n} tabs are back in the main window.”). Infobulle du ✕ : « Fermer : les onglets reviennent dans la fenêtre principale » (EN : “Close: the tabs go back to the main window”).
 
 ## Une session ou un siège dans un onglet
 
@@ -174,7 +207,7 @@ Au-delà du seuil d'alerte (80 % par défaut, réglable), la valeur passe en amb
 
 ## Atelier
 
-L'atelier validé (l'open-space en quinconce) est gardé **tel quel**, dans un onglet. Seuls changent les gestes : un clic sur un agent ouvre sa session selon le réglage, `Ctrl`+clic l'ouvre à droite. « Projets | Rigs », « Masquer les sous-agents » et « Détacher » restent. Le bureau de Ledge ouvre le chat dans le panneau de droite.
+L'atelier validé (l'open-space en quinconce) est gardé **tel quel**, dans un onglet. Seuls changent les gestes : un clic sur un agent ouvre sa session selon le réglage, `Ctrl`+clic l'ouvre à droite. « Projets | Rigs », « Masquer les sous-agents » et « Détacher » restent. Détaché, l'atelier est un onglet dans une fenêtre détachée, et le bouton devient « Ramener » (voir « Fenêtres détachées »). Le bureau de Ledge ouvre le chat dans le panneau de droite.
 
 ## Réglages
 

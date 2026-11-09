@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeGroup, closeOthers, CLOSED_MAX, cycleLink, setLink, cycleTab, deserialize, emptyProposals, empty, find, focusGroup, focusNth, focused, keyOf, MAIN, move, moveActive, moveTo, open, place, reconcile, remember, reopenLast, serialize, setView, split, type Closed, type Tab, type Workspace } from '../../src/workspace/model';
+import { activate, agentTerminalTab, beside, changesBeside, changesTab, close, closeGroup, closeWindow, windowOf, closeOthers, CLOSED_MAX, cycleLink, setLink, cycleTab, deserialize, emptyProposals, empty, find, focusGroup, focusNth, focused, keyOf, MAIN, move, moveActive, moveTo, open, place, reconcile, remember, reopenLast, serialize, setView, split, type Closed, type Tab, type Workspace } from '../../src/workspace/model';
 
 const S = (id: string): Tab => ({ kind: 'session', ref: id });
 const keys = (w: Workspace, groupId: string) => w.groups.find(g => g.id === groupId)!.tabs.map(keyOf);
@@ -496,5 +496,95 @@ describe('closed tabs (Ctrl+Shift+T)', () => {
     expect(stack.at(-1)!.tab).toEqual(S('s24'));
     expect(stack[0]!.tab).toEqual(S('s5'));
     expect(remember(stack, w, 'session:nope')).toBe(stack);
+  });
+});
+
+// Lot 9: several windows. A secondary window holds one group (jde, 2026-11-09, option A).
+describe('a bottom-panel terminal torn out of the window', () => {
+  const T: Tab = { kind: 'terminal', ref: 'shell:1' };
+  it('opens alone in a new window, focused; the main window keeps its groups', () => {
+    const w = open(empty(), S('a'));
+    const r = place(w, T, { window: 'new' });
+    const g = r.groups.find(x => x.tabs.some(t => keyOf(t) === keyOf(T)))!;
+    expect(g.window).not.toBe(MAIN);
+    expect(r.windows).toEqual([MAIN, g.window]);
+    expect(r.focus).toBe(g.id);
+    expect(keys(r, 'g1')).toEqual(['session:a']);
+    expect(windowOf(r, keyOf(T))).toBe(g.window);
+    expect(windowOf(r, 'session:a')).toBe(MAIN);
+    expect(windowOf(r, 'session:nope')).toBeNull();
+  });
+  it('already open as a tab: that tab moves to a new window', () => {
+    const w = open(open(empty(), S('a')), T);
+    const r = place(w, T, { window: 'new' });
+    expect(windowOf(r, keyOf(T))).not.toBe(MAIN);
+    expect(keys(r, 'g1')).toEqual(['session:a']);
+  });
+});
+
+describe('closeWindow (v27: the tabs come back to the main window in a group on the right)', () => {
+  const torn = () => {
+    const w = move(open(open(open(empty(), S('a')), S('b')), S('c')), 'session:b', { window: 'new' });
+    const win = windowOf(w, 'session:b')!;
+    const g = w.groups.find(x => x.window === win)!;
+    return setLink(activate(moveTo(w, 'session:c', { group: g.id }), g.id, 0), g.id, 'teal');
+  };
+  it('one group right of the main window\'s last, the same tabs, front tab and colour; the window gone, the group focused', () => {
+    const w = torn();
+    const win = windowOf(w, 'session:b')!;
+    const r = closeWindow(w, win);
+    expect(r.windows).toEqual([MAIN]);
+    expect(r.groups.map(g => g.tabs.map(keyOf))).toEqual([['session:a'], ['session:b', 'session:c']]);
+    const back = r.groups[1]!;
+    expect(back.window).toBe(MAIN);
+    expect(back.link).toBe('teal');
+    expect(front(r, back.id)).toBe('session:b');
+    expect(r.focus).toBe(back.id);
+  });
+  it('the main window, or one unknown: no change', () => {
+    const w = torn();
+    expect(closeWindow(w, MAIN)).toBe(w);
+    expect(closeWindow(w, 'w99')).toBe(w);
+  });
+  it('linked groups across windows: a session chosen in the main window moves the secondary window\'s Changes', () => {
+    let w = open(open(empty(), S('a')), S('b'));
+    w = place(w, changesTab('a'), { window: 'new' });
+    const g2 = find(w, keyOf(changesTab('a')))!.group;
+    w = setLink(setLink(w, 'g1', 'violet'), g2.id, 'violet');
+    w = activate(w, 'g1', find(w, 'session:b')!.index);
+    expect(front(w, g2.id)).toBe(keyOf(changesTab('b')));
+    expect(find(w, keyOf(changesTab('b')))!.group.window).toBe(g2.window);
+  });
+});
+
+describe('a detached window holds one group (v27)', () => {
+  /** a and c in the main window, b alone in a detached one, focused. */
+  const detached = () => {
+    const w = move(open(open(open(empty(), S('a')), S('b')), S('c')), 'session:b', { window: 'new' });
+    return { w, g: find(w, 'session:b')!.group };
+  };
+  it('split and Ctrl+Alt+→ do nothing there', () => {
+    const { w, g } = detached();
+    expect(split(w, g.id)).toBe(w);
+    expect(w.focus).toBe(g.id);
+    expect(moveActive(w, 1)).toBe(w);
+  });
+  it('« à droite » from it opens in the main window, right of its last group', () => {
+    const { w, g } = detached();
+    const r = open(w, S('d'), 'right');
+    const d = find(r, 'session:d')!.group;
+    expect(d.window).toBe(MAIN);
+    expect(r.groups.filter(x => x.window === MAIN).at(-1)!.id).toBe(d.id);
+    expect(r.groups.filter(x => x.window === g.window)).toHaveLength(1);
+  });
+  it('« +N −N » from it: a linked group found in another window; none, one in the main window', () => {
+    const { w, g } = detached();
+    const r = beside(w, g.id, 'changes', 'b');
+    const c = find(r, keyOf(changesTab('b')))!.group;
+    expect(c.window).toBe(MAIN);
+    expect(c.link).toBe(r.groups.find(x => x.id === g.id)!.link);
+    // A second session's Changes from the same window go to that same group.
+    const r2 = beside(place(r, S('e'), { group: g.id }), g.id, 'changes', 'e');
+    expect(find(r2, keyOf(changesTab('e')))!.group.id).toBe(c.id);
   });
 });

@@ -21,6 +21,8 @@ export interface TermSurface {
    *  frees it by itself and is reported through `onWebglLost`: the budget gives it back only at the next `setWebgl(true)`. */
   setWebgl(on: boolean): void;
   onWebglLost(fn: () => void): void;
+  /** Its element now in `doc` (another window): the xterm is made again there. Absent on fakes. */
+  adopt?(doc: Document): void;
   dispose(): void;
 }
 
@@ -46,26 +48,89 @@ export function osc52Text(data: string): string | null {
   }
 }
 
+/** The end of a terminal's output kept for a replay (lot 0, point 1): an xterm moved to another window is made again there. */
+export const REPLAY_MAX = 256 * 1024;
+
 export function createSurface(opts: { theme: TermTheme; onThread(): void; openUrl(url: string): void; /** The IDE is on: Ctrl+J, typed here, toggles the bottom panel (`onPanel`). */ panelKey?(): boolean; onPanel?(): void;
   /** The IDE is on: Ctrl+Shift+², typed here, gives the keyboard back to Ledge (`from` is this terminal's element). */ onLeave?(from: HTMLElement): void;
   /** The IDE is on: Ctrl+1…9, typed here, go to the group N. */ onGroup?(n: number): void }): TermSurface {
   const host = document.createElement('div');
   host.setAttribute('data-terminal', '');
+  let theme = opts.theme;
+  let readOnly = false;
+  const inputs: ((data: string) => void)[] = [];
+  const resizes: ((cols: number, rows: number) => void)[] = [];
+  const lost: (() => void)[] = [];
+  // Read-only drops the keys, not the replies: disableStdin would drop both, and the screen would wait forever.
+  const send = (data: string) => { if (!readOnly || REPORT.test(data)) for (const fn of inputs) fn(data); };
+  // What was written, its last REPLAY_MAX bytes: what a new xterm is fed when the terminal changes window.
+  const replay: (Uint8Array | string)[] = [];
+  let replayBytes = 0;
+  const keep = (b: Uint8Array | string) => {
+    replay.push(b);
+    replayBytes += typeof b === 'string' ? b.length : b.byteLength;
+    while (replayBytes > REPLAY_MAX && replay.length > 1) { const x = replay.shift()!; replayBytes -= typeof x === 'string' ? x.length : x.byteLength; }
+  };
+
   // Capped scrollback: an agent redrawing its screen emits megabytes, memory must not follow.
   // Every link the screen prints (plain URLs, OSC 8) goes to the system browser: `window.open` opens nothing useful in the webview.
-  const term = new Terminal({
-    scrollback: 5000, fontFamily: 'Geist Mono, monospace', theme: opts.theme,
-    linkHandler: { activate: (_, uri) => opts.openUrl(uri), allowNonHttpProtocols: false }
-  });
-  const fitter = new FitAddon();
-  term.loadAddon(fitter);
-  term.loadAddon(new WebLinksAddon((_, uri) => opts.openUrl(uri)));
-  term.open(host);
-  // A tab moved to another IDE group puts this scroll back (DockHost's keepScroll).
-  host.querySelector('.xterm-viewport')?.setAttribute('data-keep-scroll', '');
+  const make = () => {
+    const t = new Terminal({
+      scrollback: 5000, fontFamily: 'Geist Mono, monospace', theme: readOnly ? { ...theme, cursor: theme.background, cursorAccent: theme.foreground } : theme,
+      linkHandler: { activate: (_, uri) => opts.openUrl(uri), allowNonHttpProtocols: false }
+    });
+    const f = new FitAddon();
+    t.loadAddon(f);
+    t.loadAddon(new WebLinksAddon((_, uri) => opts.openUrl(uri)));
+    t.onData(send);
+    t.onResize(({ cols, rows }) => { for (const fn of resizes) fn(cols, rows); });
+    // A program's own copy (OSC 52: Claude Code's selection, tmux, vim) reaches the clipboard. Writing only: a read (`?`) is
+    // refused, a program never sees what you copied elsewhere.
+    t.parser.registerOscHandler(52, data => {
+      const text = osc52Text(data);
+      if (text) void navigator.clipboard.writeText(text).catch(() => undefined);
+      return true;
+    });
+    t.attachCustomKeyEventHandler(e => {
+      const action = termKey(e, t.hasSelection(), opts.panelKey?.() ?? false);
+      if (action === 'pass') return true;
+      e.preventDefault();
+      if (action === 'thread') {
+        // Focus has left the terminal by the time the window sees the key, and `useKeys` would send it straight back.
+        e.stopPropagation();
+        opts.onThread();
+      } else if (action === 'panel') {
+        e.stopPropagation();
+        opts.onPanel?.();
+      } else if (action === 'leave') {
+        // The host, wherever it lives now: adopted by a popout, its ownerDocument is that window's.
+        e.stopPropagation();
+        opts.onLeave?.(host);
+      } else if (action === 'group') {
+        e.stopPropagation();
+        opts.onGroup?.(Number(e.code.slice(5)));
+      } else if (action === 'copy') {
+        const text = t.getSelection();
+        if (text) void navigator.clipboard.writeText(text).catch(() => undefined);
+        t.clearSelection();
+      } else if (!readOnly) {
+        void paste();
+      }
+      return false;
+    });
+    t.open(host);
+    // A tab moved to another IDE group puts this scroll back (DockHost's keepScroll).
+    host.querySelector('.xterm-viewport')?.setAttribute('data-keep-scroll', '');
+    return { t, f };
+  };
+
+  let { t: term, f: fitter } = make();
+  // The document the xterm was opened in. An xterm keeps it for good: its host adopted by another window's document (a
+  // popout), it stays blank there (lot 0, point 1). `element.ownerDocument` follows the adoption, so it is kept here.
+  let openedIn: Document = host.ownerDocument;
+
   // Born without WebGL: the store gives it to the terminals shown most recently (term/webgl.ts), the others stay on the DOM renderer.
   let webgl: WebglAddon | null = null;
-  const lost: (() => void)[] = [];
   const setWebgl = (on: boolean) => {
     if (on === (webgl !== null)) return;
     if (!on) { webgl?.dispose(); webgl = null; return; }
@@ -86,21 +151,6 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
       for (const fn of lost) fn();
     }
   };
-
-  let theme = opts.theme;
-  let readOnly = false;
-  const inputs: ((data: string) => void)[] = [];
-  // Read-only drops the keys, not the replies: disableStdin would drop both, and the screen would wait forever.
-  const send = (data: string) => { if (!readOnly || REPORT.test(data)) for (const fn of inputs) fn(data); };
-  term.onData(send);
-
-  // A program's own copy (OSC 52: Claude Code's selection, tmux, vim) reaches the clipboard. Writing only: a read (`?`) is
-  // refused, a program never sees what you copied elsewhere.
-  term.parser.registerOscHandler(52, data => {
-    const text = osc52Text(data);
-    if (text) void navigator.clipboard.writeText(text).catch(() => undefined);
-    return true;
-  });
 
   // A read-only screen keeps the mouse for selecting: its clicks would reach no one. A plain press is handed to xterm as the
   // Shift + press it already takes as « select over the program's mouse »: the program's mouse modes stay exactly as it set them.
@@ -132,32 +182,19 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     else send(PASTE_BYTE);
   };
 
-  term.attachCustomKeyEventHandler(e => {
-    const action = termKey(e, term.hasSelection(), opts.panelKey?.() ?? false);
-    if (action === 'pass') return true;
-    e.preventDefault();
-    if (action === 'thread') {
-      // Focus has left the terminal by the time the window sees the key, and `useKeys` would send it straight back.
-      e.stopPropagation();
-      opts.onThread();
-    } else if (action === 'panel') {
-      e.stopPropagation();
-      opts.onPanel?.();
-    } else if (action === 'leave') {
-      e.stopPropagation();
-      opts.onLeave?.(host);
-    } else if (action === 'group') {
-      e.stopPropagation();
-      opts.onGroup?.(Number(e.code.slice(5)));
-    } else if (action === 'copy') {
-      const text = term.getSelection();
-      if (text) void navigator.clipboard.writeText(text).catch(() => undefined);
-      term.clearSelection();
-    } else if (!readOnly) {
-      void paste();
-    }
-    return false;
-  });
+  /** Shown in another window's document: a new xterm opened there, fed the end of the output. The PTY does not move, nor
+   *  do the listeners; the WebGL slot is given up (its context belonged to the old canvas) and the store gives it back. */
+  const adopt = (doc: Document) => {
+    if (doc === openedIn) return;
+    const gl = webgl !== null;
+    setWebgl(false);
+    term.dispose();
+    host.replaceChildren();
+    ({ t: term, f: fitter } = make());
+    openedIn = doc;
+    for (const b of replay) term.write(b);
+    if (gl) setWebgl(true);
+  };
 
   // The e2e build only: the screen is a canvas, so Playwright reads the buffer here instead of its pixels.
   if (import.meta.env.VITE_LEDGE_E2E) {
@@ -176,9 +213,9 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
 
   return {
     host,
-    write: b => term.write(b),
+    write: b => { keep(b); term.write(b); },
     onInput: fn => { inputs.push(fn); },
-    onResize: fn => { term.onResize(({ cols, rows }) => fn(cols, rows)); },
+    onResize: fn => { resizes.push(fn); },
     size: () => ({ cols: term.cols, rows: term.rows }),
     fit: () => fitter.fit(),
     focus: () => term.focus(),
@@ -186,6 +223,7 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     setTheme: t => { theme = t; applyTheme(); },
     setWebgl,
     onWebglLost: fn => { lost.push(fn); },
+    adopt,
     dispose: () => term.dispose()
   };
 }

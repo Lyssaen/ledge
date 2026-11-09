@@ -63,18 +63,25 @@ describe('accentTokens', () => {
   });
 });
 
+it('the factory coral\'s sidebar shade is the one Desktop\'s ide.css writes as --ide-tab-front', () => {
+  expect(accentTokens('#e85d4a', 'light').sidebarPrimary).toBe('#cc5241');
+  expect(accentTokens('#e85d4a', 'dark').sidebarPrimary).toBe('#ea6a58');
+});
+
 describe('applyAccent', () => {
   it('writes the derived tokens and leaves danger-text alone; null restores the factory vars', () => {
     const el = document.createElement('div');
     el.style.setProperty('--danger-text', 'oklch(0.7 0.2 22)');
     applyAccent('#3366ff', 'dark', el);
     expect(el.style.getPropertyValue('--sidebar-primary')).toMatch(/^#[0-9a-f]{6}$/);
+    expect(el.style.getPropertyValue('--ide-tab-front')).toBe(el.style.getPropertyValue('--sidebar-primary'));
     expect(el.style.getPropertyValue('--primary')).toMatch(/^#[0-9a-f]{6}$/);
     expect(el.style.getPropertyValue('--ledge-glow')).toMatch(/^#[0-9a-f]{6}$/);
     expect(el.style.getPropertyValue('--ledge-eye')).toMatch(/^#[0-9a-f]{6}$/);
     expect(el.style.getPropertyValue('--danger-text')).toBe('oklch(0.7 0.2 22)');
     applyAccent(null, 'dark', el);
     expect(el.style.getPropertyValue('--sidebar-primary')).toBe('');
+    expect(el.style.getPropertyValue('--ide-tab-front')).toBe('');
     expect(el.style.getPropertyValue('--ledge-glow')).toBe('');
     expect(el.style.getPropertyValue('--danger-text')).toBe('oklch(0.7 0.2 22)');
   });
