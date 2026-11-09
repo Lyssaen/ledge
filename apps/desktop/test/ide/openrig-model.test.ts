@@ -67,11 +67,15 @@ describe('recentCommands', () => {
 describe('roleChips', () => {
   it('groups the seats by role', () => {
     const r = rig('x', 'running', [seat('dev.build', 'x'), seat('dev.build-2', 'x', { runtime: 'codex' }), seat('dev.review', 'x', { runtime: 'codex' })]);
-    expect(roleChips(r)).toEqual([{ role: 'build', runtime: 'claude-code', count: 2 }, { role: 'review', runtime: 'codex', count: 1 }]);
+    expect(roleChips(r)).toEqual([{ key: 'dev.build', role: 'build', runtime: 'claude-code', count: 2 }, { key: 'dev.review', role: 'review', runtime: 'codex', count: 1 }]);
   });
   it('names the kernel’s roles by their pod (its members are all lead, agent or worker)', () => {
     const k = rig('kernel', 'running', [seat('operator.agent', 'kernel'), seat('advisor.lead', 'kernel'), seat('queue.worker', 'kernel')]);
     expect(roleChips(k).map(c => c.role)).toEqual(['operator', 'advisor', 'queue']);
+  });
+  it('keys each chip by the full role, so two pods with the same member stay apart', () => {
+    const r = rig('x', 'running', [seat('dev.build', 'x'), seat('qa.build', 'x')]);
+    expect(roleChips(r).map(c => [c.key, c.role])).toEqual([['dev.build', 'build'], ['qa.build', 'build']]);
   });
 });
 

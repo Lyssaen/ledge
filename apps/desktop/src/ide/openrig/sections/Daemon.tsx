@@ -3,6 +3,8 @@ import type { OpenRigState } from '@ledge/protocol';
 import { useI18n } from '../../../i18n/lang';
 import { PermSegment } from '../../PermSegment';
 import { useDaemonPrefs } from '../prefs';
+// The permission segment's look lives with the launch modal's, scoped to both screens.
+import '../../../styles/ide-launch-rig.css';
 
 function Check({ label, on, disabled = false, onChange }: { label: string; on: boolean; disabled?: boolean; onChange(on: boolean): void }): JSX.Element {
   return <label className="ide-orp-chk"><input type="checkbox" checked={on} disabled={disabled} onChange={e => onChange(e.currentTarget.checked)} /><span>{label}</span></label>;

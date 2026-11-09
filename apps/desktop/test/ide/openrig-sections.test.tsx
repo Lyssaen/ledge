@@ -28,7 +28,9 @@ function fake() {
     roles: () => emit({ type: 'openrig.roleList', requestId: last('openrig.roles')!.requestId, roles: ROLES } as ServerMessage),
     permissions: (rig: string, seats: RigSeatPermission[]) => emit({ type: 'openrig.permissionList', requestId: last('openrig.permissions', m => m.rig === rig)!.requestId, rig, seats } as ServerMessage),
     pong: (machineId: string, error?: 'outdated') => emit({ type: 'pong', requestId: last('ping', m => m.machineId === machineId)!.requestId, machineId, ...(error ? { error } : {}) } as ServerMessage),
-    acts: () => sent.filter(m => m.type === 'openrig.act') as Array<{ action: { kind: string } }>
+    acts: () => sent.filter(m => m.type === 'openrig.act') as Array<{ action: { kind: string } }>,
+    /** Ends the last action sent, ok or with an error. */
+    done: (error?: string) => emit({ type: 'openrig.done', requestId: last('openrig.act')!.requestId, ok: error === undefined, commands: [], ...(error ? { error } : {}) } as ServerMessage)
   };
 }
 const machine = (id: string, label: string, ssh?: string) => ({ id, label, ...(ssh ? { ssh } : {}), ready: true, status: 'open', recents: [], sessions: [], launcher: null }) as unknown as MachineState;
@@ -164,6 +166,44 @@ describe('Rigs (R13)', () => {
     const m = mount({ section: 'rigs' }); m.f.state('local', state());
     await userEvent.click(within(card('synapse-review')).getByRole('button', { name: 'Démarrer synapse-review' }));
     expect(m.f.acts().map(a => a.action)).toEqual([{ kind: 'rig.start', rig: 'synapse-review' }]);
+  });
+});
+
+describe('the page’s one confirmation (rail and cards)', () => {
+  const rail = () => document.querySelector<HTMLElement>('.ide-orp-rail')!;
+  const card = (name: string) => screen.getByRole('article', { name });
+  const BUSY = 'Une autre action OpenRig est en cours sur cette machine.';
+  it('a rig started from its card, then a daemon restart that fails: the error shows under the rail only', async () => {
+    const m = mount({ section: 'rigs' }); m.f.state('local', state());
+    await userEvent.click(within(card('synapse-review')).getByRole('button', { name: 'Démarrer synapse-review' }));
+    m.f.done();
+    await userEvent.click(within(rail()).getByRole('button', { name: 'Redémarrer le daemon' }));
+    await userEvent.click(within(within(rail()).getByRole('group')).getByRole('button', { name: 'Confirmer le redémarrage' }));
+    m.f.done('busy');
+    expect(within(rail()).getByRole('alert')).toHaveTextContent(BUSY);
+    expect(within(card('synapse-review')).queryByRole('alert')).toBeNull();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+  it('a daemon restart from the rail, then a rig stop that fails: the error shows under the card only', async () => {
+    const m = mount({ section: 'rigs' }); m.f.state('local', state());
+    await userEvent.click(within(rail()).getByRole('button', { name: 'Redémarrer le daemon' }));
+    await userEvent.click(within(within(rail()).getByRole('group')).getByRole('button', { name: 'Confirmer le redémarrage' }));
+    m.f.done();
+    await userEvent.click(within(card('ledge-dev')).getByRole('button', { name: 'Arrêter ledge-dev' }));
+    await userEvent.click(within(within(card('ledge-dev')).getByRole('group')).getByRole('button', { name: 'Confirmer l’arrêt' }));
+    m.f.done('busy');
+    expect(within(card('ledge-dev')).getByRole('alert')).toHaveTextContent(BUSY);
+    expect(within(rail()).queryByRole('alert')).toBeNull();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+  it('one confirmation at a time: asking on the rail closes the card’s', async () => {
+    const m = mount({ section: 'rigs' }); m.f.state('local', state());
+    await userEvent.click(within(card('ledge-dev')).getByRole('button', { name: 'Arrêter ledge-dev' }));
+    expect(within(card('ledge-dev')).getByRole('group')).toBeInTheDocument();
+    await userEvent.click(within(rail()).getByRole('button', { name: 'Arrêter le daemon' }));
+    expect(within(card('ledge-dev')).queryByRole('group')).toBeNull();
+    expect(screen.getAllByRole('group', { name: /Arrêter/ })).toHaveLength(1);
+    expect(within(rail()).getByRole('group')).toHaveTextContent('rig daemon stop');
   });
 });
 

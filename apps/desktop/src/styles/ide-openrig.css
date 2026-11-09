@@ -106,11 +106,6 @@
 .ide-orp-chk { display: flex; align-items: center; gap: 8px; color: var(--muted-foreground); cursor: pointer; }
 .ide-orp-chk input { width: 14px; height: 14px; margin: 0; accent-color: var(--primary); }
 .ide-orp-chk:has(input:disabled) { opacity: .5; cursor: default; }
-.ide-orp .ide-perm-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--input); border-radius: 7px; overflow: hidden; }
-.ide-orp .ide-perm-seg button { padding: 4px 10px; border-right: 1px solid var(--input); font-size: 12px; color: var(--muted-foreground); }
-.ide-orp .ide-perm-seg button:last-child { border-right: 0; }
-.ide-orp .ide-perm-seg button[aria-checked=true] { background: var(--muted); color: var(--foreground); }
-.ide-orp .ide-perm-seg button.risky[aria-checked=true] { background: var(--status-danger-soft); color: var(--danger-text); }
 
 /* A narrow group (R18): the rail becomes a row of tabs above the body, the launch button an icon on the right. */
 @container (max-width: 640px) {

@@ -48,7 +48,7 @@ export function RigCard({ client, machine, rig, kernel, running, dot, power, und
       {under}
       <div className="ide-orp-comp">
         {roleChips(rig).map(c => (
-          <span key={c.role} className="ide-orp-chip"><ProviderLogo provider={providerOf(toolOf(c.runtime))} size={11} /><span data-testid="role-chip">{c.role}{c.count > 1 ? ` ×${c.count}` : ''}</span></span>
+          <span key={c.key} className="ide-orp-chip"><ProviderLogo provider={providerOf(toolOf(c.runtime))} size={11} /><span data-testid="role-chip">{c.role}{c.count > 1 ? ` ×${c.count}` : ''}</span></span>
         ))}
       </div>
       <div className="ide-orp-card-f"><span>{foot}</span><button type="button" className="ide-orp-lnk" onClick={onOpen}>{p.openRig}</button></div>

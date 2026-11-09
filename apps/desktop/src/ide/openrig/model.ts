@@ -55,9 +55,9 @@ export function roleLabel(rig: string, logicalId: string): string {
   return rig === KERNEL_RIG || member === undefined ? pod : member;
 }
 
-/** A rig's roles as chips: `build ×2`, `review` (`roleLabel`). */
-export function roleChips(rig: Rig): Array<{ role: string; runtime: string; count: number }> {
-  return [...seatsByRole(rig.nodes)].map(([, ids]) => ({
-    role: roleLabel(rig.name, ids[0]!), runtime: rig.nodes.find(n => n.logicalId === ids[0])?.runtime ?? '', count: ids.length
+/** A rig's roles as chips: `build ×2`, `review` (`roleLabel`). `key` is the role's full name (`dev.build`): two pods can share a label. */
+export function roleChips(rig: Rig): Array<{ key: string; role: string; runtime: string; count: number }> {
+  return [...seatsByRole(rig.nodes)].map(([key, ids]) => ({
+    key, role: roleLabel(rig.name, ids[0]!), runtime: rig.nodes.find(n => n.logicalId === ids[0])?.runtime ?? '', count: ids.length
   }));
 }

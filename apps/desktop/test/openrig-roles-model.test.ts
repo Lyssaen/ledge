@@ -62,6 +62,7 @@ describe('the Roles view model', () => {
     expect(s.place).toMatchObject({ kind: 'openrig', machine: 'ec2', section: 'roles' });
     expect(s.place).not.toHaveProperty('role');
     s = navReducer(s, { type: 'openrig', section: 'rigs' });
-    expect(s.place).not.toHaveProperty('section');
+    // The IDE's OpenRig page needs « rigs » kept apart from its default « overview »; the old page draws its rigs for anything but « roles ».
+    expect(s.place).toMatchObject({ kind: 'openrig', machine: 'ec2', section: 'rigs' });
   });
 });

@@ -6,7 +6,7 @@ import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../../i18n/lang';
 import { OPENRIG_SECTIONS, type NavAction, type OpenRigSection } from '../../nav/state';
 import { OPENRIG_INSTALL_URL } from '../../openrig/OpenRigPage';
-import { targetOf } from '../../openrig/model';
+import { isRunning, kernelRig, listedRigs, targetOf } from '../../openrig/model';
 import type { RigOutputEntry } from '../../openrig/rigOutput';
 import { RolesView } from '../../openrig/roles/RolesView';
 import { SIDEBAR_POLL_MS } from '../../openrig/sidebarState';
@@ -46,8 +46,16 @@ export function OpenRigView({ client, machines, machine, section, role, seat, se
   const installed = state?.installed === true;
   const up = installed && state.daemon.state === 'running';
 
-  // A confirmation lives only while its action is still offered: here, the daemon is still running.
-  const offered = (a: OpenRigAction): boolean => up && targetOf(a) === 'daemon';
+  // ONE confirmation for the page, shared by the rail (the daemon) and the Rigs section (the kernel, the rigs): one at a time, and the
+  // last action's failure (`view.last`, shared) shows under its own target only. It lives while its action is still offered: the
+  // daemon, or the rig it is about, still runs.
+  const offered = (a: OpenRigAction): boolean => {
+    if (!up || !state) return false;
+    const target = targetOf(a);
+    if (target === 'daemon') return true;
+    const r = target === 'kernel' ? kernelRig(state) : listedRigs(state).find(x => x.name === target);
+    return !!r && isRunning(r);
+  };
   const conf = useRigConfirm(view, offered, { prefs, state });
   useEffect(() => { conf.reset(); }, [machine]); // eslint-disable-line react-hooks/exhaustive-deps
   const pending = view.pending !== null && targetOf(view.pending) === 'daemon';
@@ -101,7 +109,7 @@ export function OpenRigView({ client, machines, machine, section, role, seat, se
     );
     if (section === 'roles') return <div className="or-page ide-orp-roles"><RolesView client={client} machine={machine} machineLabel={label} roles={roles} {...(role !== undefined ? { roleId: role } : {})} {...(seat !== undefined ? { seat } : {})} dispatch={onMachine} /></div>;
     if (!state) return null;
-    if (section === 'rigs') return <Rigs client={client} view={view} state={state} machine={machine} label={label} prefs={prefs} sessions={sessions} asks={asks} onTab={onTab} onLaunch={onLaunch} />;
+    if (section === 'rigs') return <Rigs client={client} view={view} conf={conf} state={state} machine={machine} label={label} prefs={prefs} sessions={sessions} asks={asks} onTab={onTab} onLaunch={onLaunch} />;
     if (section === 'daemon') return <Daemon state={state} machine={machine} />;
     return <Overview state={state} machine={machine} label={label} sessions={sessions} asks={asks} output={output} dispatch={dispatch} onTab={onTab} />;
   };
@@ -113,7 +121,7 @@ export function OpenRigView({ client, machines, machine, section, role, seat, se
           <i className={`ide-orp-dot ${up ? 'on' : 'off'}`} aria-hidden="true" /><b>OpenRig</b><span className="ide-orp-mach">{label}</span>
           {power()}
         </div>
-        {conf.confirm && state && <RigConfirm action={conf.confirm} state={state} sessions={sessions} machine={machine} label={label} onConfirm={() => conf.run(conf.confirm!)} onCancel={conf.close} />}
+        {conf.confirm && targetOf(conf.confirm) === 'daemon' && state && <RigConfirm action={conf.confirm} state={state} sessions={sessions} machine={machine} label={label} onConfirm={() => conf.run(conf.confirm!)} onCancel={conf.close} />}
         {failure()}
         <nav aria-label={p.nav}>
           {OPENRIG_SECTIONS.map(k => (
