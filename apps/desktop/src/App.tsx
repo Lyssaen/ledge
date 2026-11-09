@@ -737,6 +737,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' })
   };
   // Lot 8b: every machine's pull and merge requests.
+  // A machine down keeps its last read, dimmed; a reachable one shows what it sends (review P2, useForge).
   const forge = useForge(fleet);
   const prOf = (id: string) => forge.prs.find(p => p.id === id);
   const machineLabel = (id: string) => machines.find(m => m.id === id)?.label ?? id;

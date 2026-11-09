@@ -62,8 +62,9 @@ function Patch({ file, empty }: { file: PrFile; empty: string }): JSX.Element {
  *  envoyer à X », a new comment. « Modifications »: the files and the chosen one's patch with its threads. « Commits ». The
  *  detail is asked of the machine that read the request, again when it changes. */
 type Failure = { code?: string; message?: string };
-/** A merge being confirmed (states 7, 8): open, sending, or refused (`stale`: the head moved; else the forge's reason). */
-type Merge = { state: 'open' | 'sending' } | { state: 'stale'; sha: string } | { state: 'refused'; reason: string };
+/** A merge being confirmed (states 7, 8): open, sending, or refused (`stale`: the head moved; else the forge's reason). `seen` is
+ *  the head shown when the confirmation opened: the one sent, so the daemon's `stale` check guards what the person read. */
+type Merge = { state: 'open' | 'sending'; seen: string } | { state: 'stale'; seen: string; sha: string } | { state: 'refused'; seen: string; reason: string };
 
 export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, notify, reach = 'ok', machine = pr.machineId, readAt = null }: PrPageProps): JSX.Element {
   const { t } = useI18n();
@@ -109,11 +110,17 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
       });
   };
   const doMerge = () => {
-    setMerge({ state: 'sending' });
-    fleet.prAct(pr.id, pr.machineId, { kind: 'merge', headSha: pr.headSha }).then(
+    if (!merge) return;
+    const seen = merge.seen;
+    setMerge({ state: 'sending', seen });
+    fleet.prAct(pr.id, pr.machineId, { kind: 'merge', headSha: seen }).then(
       () => { setMerge(null); notify(f.mergedToast(pr.ref)); reload(); },
-      (e: Failure) => setMerge(e?.code === 'stale' ? { state: 'stale', sha: pr.headSha.slice(0, 7) } : { state: 'refused', reason: reason(e) }));
+      (e: Failure) => setMerge(e?.code === 'stale' ? { state: 'stale', seen, sha: pr.headSha.slice(0, 7) } : { state: 'refused', seen, reason: reason(e) }));
   };
+  // A push while the confirmation is open (review P1): straight to « Relire », the new head named; nothing merges unread.
+  useEffect(() => {
+    if (merge && merge.state !== 'stale' && merge.state !== 'sending' && pr.headSha !== merge.seen) setMerge({ state: 'stale', seen: merge.seen, sha: pr.headSha.slice(0, 7) });
+  }, [pr.headSha, merge]);
   const draft = (k: string) => drafts[k] ?? '';
   const setDraft = (k: string, v: string) => setDrafts(d => ({ ...d, [k]: v }));
   const onEnter = (k: string, send: (body: string) => void) => (e: KeyboardEvent<HTMLInputElement>) => {
@@ -254,8 +261,8 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
         <div className="fg-blk-h"><b>{f.review}</b><span className="fg-sub">{f.reviewSub(appr, unresolved.length)}</span><span className="fg-sp" />
           <button type="button" className="fg-btn" onClick={() => setView('disc')}>{f.seeDiscussion}</button>
           {/* State 6: visible, off while a condition is missing; state 7: the main button once they all are met. */}
-          {!merged && <button type="button" className={`fg-btn${ready ? ' pri' : ''}`} disabled={!ready || down || merge !== null} title={why}
-            aria-expanded={merge !== null} onClick={() => setMerge({ state: 'open' })}>{f.merge}</button>}
+          {!merged && <button type="button" className={`fg-btn${ready ? ' pri' : ''}`} disabled={!ready || down} title={why}
+            aria-expanded={merge !== null} onClick={() => { if (!merge) setMerge({ state: 'open', seen: pr.headSha }); }}>{f.merge}</button>}
         </div>
         <div className="fg-blk-b">
           {!merged && <div className="fg-check" role="list" aria-label={f.toMerge}>
@@ -271,7 +278,7 @@ export function PrPage({ pr, fleet, agent, onAskAgent, onOpenAgent, onOpenUrl, n
             <div className="fg-go">
               {merge.state === 'stale'
                 ? <button type="button" className="fg-btn pri" onClick={() => { setMerge(null); reload(); }}>{f.reload}</button>
-                : <button type="button" className="fg-btn pri" disabled={merge.state === 'sending'} onClick={doMerge}>{merge.state === 'sending' ? f.merging : f.merge}</button>}
+                : <button type="button" className="fg-btn pri" disabled={merge.state === 'sending' || !ready || down} title={why} onClick={doMerge}>{merge.state === 'sending' ? f.merging : f.merge}</button>}
               <button type="button" className="fg-btn" disabled={merge.state === 'sending'} onClick={() => setMerge(null)}>{f.cancel}</button>
             </div>
           </div>}

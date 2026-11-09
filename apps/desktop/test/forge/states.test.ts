@@ -83,9 +83,11 @@ describe('foldForge: a machine that falls keeps its last read', () => {
     const a = pr({ machineId: 'local' }), b = pr({ id: 'x', machineId: 'srv-build' });
     const one = foldForge(new Map(), [a, b], [], 100);
     expect(one.get('srv-build')).toEqual({ prs: [b], at: 100 });
-    const two = foldForge(one, [a], [], 200);
+    const two = foldForge(one, [a], [], 200, ['srv-build']);
     expect(two.get('local')!.at).toBe(200);
     expect(two.get('srv-build')).toEqual({ prs: [b], at: 100 });
+    // Reachable and silent: it follows nothing any more.
+    expect(foldForge(one, [a], [], 200).has('srv-build')).toBe(false);
   });
 });
 
