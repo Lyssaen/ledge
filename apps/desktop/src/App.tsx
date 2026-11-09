@@ -95,6 +95,7 @@ import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
 import { IdeAtelierBar, IdeAtoi, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
 import { useForge } from './forge/useForge';
+import { AtoiTabLabel } from './ide/atoi/AtoiTabLabel';
 import { forgeLines, noForgeReadable, reachOf } from './forge/states';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
@@ -755,7 +756,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} />
       : tab.kind === 'pr' ? <IdePrTabLabel pr={prOf(tab.ref)} title={title(tab)} />
       // « À toi 2 » (mockup v27): the requests waiting, the tab's name staying its title.
-      : tab.kind === 'atoi' ? <>{title(tab)}{waitingSessions(sessions, waits).length > 0 && <span className="tab-count mono" aria-hidden="true">{waitingSessions(sessions, waits).length}</span>}</> : title(tab));
+      : tab.kind === 'atoi' ? <AtoiTabLabel title={title(tab)} waiting={waitingSessions(sessions, waits).length} /> : title(tab));
     const alert = (tab: Tab) => (tab.kind === 'session' || tab.kind === 'seat' ? tabAlert(known.find(s => s.id === tab.ref)) : null);
     const body: TabBody = tab => {
       const tnav = tabNav(nav, tab, lastSettings.current);
