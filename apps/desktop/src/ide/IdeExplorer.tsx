@@ -3,7 +3,7 @@ import { useI18n } from '../i18n/lang';
 import type { LayoutAction } from '../workspace/layout';
 import '../styles/ide.css';
 
-/** The IDE's sidebar shell: the explorer's content, its resizable right edge (mockup `.resize`) and the « Réduire » foot. The reducer clamps the widths. */
+/** The IDE's sidebar shell: the explorer's content, its resizable right edge (mockup `.resize`); no « Réduire » foot (the user, 2026-11-09): Ctrl + B and the title bar fold it. The reducer clamps the widths. */
 export function IdeExplorer(p: { width: number; onLayout(a: LayoutAction): void; children: ReactNode }) {
   const { t } = useI18n();
   const root = useRef<HTMLElement>(null);
@@ -26,9 +26,6 @@ export function IdeExplorer(p: { width: number; onLayout(a: LayoutAction): void;
   return (
     <aside ref={root} className="ide-explorer" style={{ width: p.width }}>
       <div className="ide-explorer-body">{p.children}</div>
-      <div className="ide-explorer-foot">
-        <button type="button" title={t.ide.collapseTip} onClick={() => p.onLayout({ type: 'show', panel: 'side', on: false })}>{t.ide.collapse}</button>
-      </div>
       <div className="ide-resize" title={t.ide.resizeEdge} onMouseDown={start} onDoubleClick={() => p.onLayout({ type: 'resetWidth' })} />
     </aside>
   );

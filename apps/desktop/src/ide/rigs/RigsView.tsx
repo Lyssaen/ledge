@@ -98,6 +98,8 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
     <div key={s.logicalId} className="ide-rigs-row seat off"><Dot dot={s.dot} /><span className="ide-rigs-name"><b>{s.name}</b></span><span className="ide-rigs-meta" /></div>
   );
 
+  // Under « Kernel », its row is « Opérations » (the user, 2026-11-09: Kernel › Opérations › its seats, not Kernel › kernel).
+  const kernelName = t.ide.operations;
   const rigRow = (r: RigLine, isKernel: boolean): JSX.Element => {
     const target: PowerTarget = isKernel ? { kind: 'kernel' } : { kind: 'rig', name: r.name };
     const open = r.running && r.seats.length > 0, unfolded = isKernel || fold.rig(r.name);
@@ -107,7 +109,7 @@ export function RigsView({ client, machines, sessions, asks, activeTab, dispatch
           {isKernel ? <span className="ide-rigs-chev">·</span>
             : <button type="button" className="ide-rigs-chev" disabled={!open} aria-label={(unfolded ? v.fold : v.unfold)(r.name)} onClick={() => fold.toggle(`r:${r.name}`)}>{open ? (unfolded ? '▾' : '▸') : '·'}</button>}
           <Dot dot={r.dot} />
-          <button type="button" className="ide-rigs-name" onClick={e => { const t = rigTab(machine, r.name); if (e.ctrlKey || e.metaKey) onTab(t, 'right'); else onTab(t); }}><b>{r.name}</b></button>
+          <button type="button" className="ide-rigs-name" onClick={e => { const t = rigTab(machine, r.name); if (e.ctrlKey || e.metaKey) onTab(t, 'right'); else onTab(t); }}><b>{isKernel ? kernelName : r.name}</b></button>
           <span className="ide-rigs-meta">{r.running ? r.count : ''}</span>
           {power(target, r.running)}
         </div>

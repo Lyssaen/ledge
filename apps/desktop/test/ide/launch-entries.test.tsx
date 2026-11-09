@@ -13,7 +13,7 @@ import { loadComposer } from '../../src/launch/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { PROJECTS } from '../helpers';
 
-/** Lot 4, task 4: the Projects view's « + N » header and the palette's « Nouvelle session » line (R8, R9). */
+/** Lot 4, task 4: the Projects view's header (its « + N » removed on 2026-11-09) and the palette's « Nouvelle session » line (R8, R9). */
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
@@ -40,15 +40,14 @@ const options = () => within(screen.getByRole('listbox', { name: 'Sessions' })).
 const NEW = /^Nouvelle session/;
 
 describe('the Projects view’s « + N » header (R9)', () => {
-  it('a « PROJETS » header with a « + N » button that opens the modal', async () => {
+  it('a « PROJETS » header, without « + N » (the user, 2026-11-09): N still opens the modal', async () => {
     const { side, user } = await mount();
     const head = document.querySelector('.ide-ex-h')!;
     expect(head).not.toBeNull();
     expect(within(head as HTMLElement).getByText('Projets')).toBeVisible();
-    const btn = side.getByRole('button', { name: 'Nouvelle session (N)' });
-    expect(btn).toHaveTextContent('+ N');
-    expect(head.contains(btn)).toBe(true);
-    await user.click(btn);
+    expect(within(head as HTMLElement).queryByRole('button')).toBeNull();
+    void side;
+    await user.keyboard('n');
     const form = await screen.findByRole('dialog', { name: 'Nouvelle session' });
     expect(form.querySelector('.launch-modal')).not.toBeNull();
   });

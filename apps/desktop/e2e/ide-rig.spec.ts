@@ -69,7 +69,8 @@ test('a rig opens in a « Rig · ledge-survey » tab: header, topology, settings
 test('the kernel offers « Talk to the operator »', async ({ page }) => {
   await boot(page);
   await rigsButton(page).click();
-  await view(page).locator('.ide-rigs-row').filter({ hasText: 'kernel' }).getByRole('button', { name: 'kernel', exact: true }).click();
+  // Under Kernel, its row is « Operations » (the user, 2026-11-09); it opens the kernel's Rig tab.
+  await view(page).locator('.ide-rigs-row[data-target="kernel"]').getByRole('button', { name: 'Operations', exact: true }).click();
   await expect(page.locator('.dv-tab').filter({ hasText: 'Rig · kernel' })).toBeVisible();
   await expect(page$(page).getByRole('button', { name: 'Talk to the operator' })).toBeVisible();
 });

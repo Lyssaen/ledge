@@ -1517,7 +1517,7 @@ export const fr = {
     sideToggle: 'Barre latérale (Ctrl+B)', bottomToggle: 'Panneau du bas (Ctrl+J)', rightToggle: 'Panneau de droite (Ctrl+/)',
     activityLabel: 'Barre d’activité', projects: 'Projets', rigs: 'Rigs OpenRig', atoi: 'À toi',
     atelierTab: 'Atelier (onglet)', settingsTab: 'Réglages (onglet)',
-    resizeEdge: 'Glisser pour redimensionner · double-clic : largeur par défaut', resizeBottom: 'Glisser pour redimensionner · double-clic : hauteur par défaut', collapse: '« Réduire', collapseTip: 'Réduire la barre latérale (Ctrl+B)',
+    resizeEdge: 'Glisser pour redimensionner · double-clic : largeur par défaut', resizeBottom: 'Glisser pour redimensionner · double-clic : hauteur par défaut',
     waiting: (n: number) => (n === 1 ? '1 demande' : `${n} demandes`),
     tabTerminalView: 'Vue terminal', tagLine: (label: string, value: string) => `${label} : ${value}`, toTerminal: 'Basculer sur le terminal', toThread: 'Revenir au fil', viewKey: (key: string) => `Ctrl ${key}`, relievedByEntry: (name: string) => `Relevée par ${name}`, relievesEntry: (name: string) => `Relève de ${name}`,
     closeThisTab: 'Fermer l’onglet', closeOthers: 'Fermer les autres', tabMenu: 'Onglet', changesTitle: (name: string) => `Modifications · ${name}`,
@@ -1530,7 +1530,9 @@ export const fr = {
     replyPlaceholderSeat: (name: string) => `Répondre à ${name} (rig send)…  Entrée envoie, Maj+Entrée passe à la ligne`,
     newSession: 'Nouvelle session (N)',
     // Lot 3: split (Ctrl+\), the empty group (mockup emptyGroup()), the link square (mockup .lkbtn).
-    split: 'Diviser à droite', splitTip: 'Diviser à droite (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Lier ce groupe (violet, vert d’eau, aucun)',
+    split: 'Diviser à droite', splitTip: 'Diviser à droite (Ctrl+\\)', splitKey: 'Ctrl \\', linkTip: 'Lier ce groupe : choisir une couleur', linkMenu: 'Lier ce groupe', linkNone: 'Aucune liaison', linkCurrent: 'actuelle', linkGroups: (n: number) => (n > 1 ? `${n} groupes` : '1 groupe'),
+    links: { violet: 'Violet', teal: 'Vert d’eau', rose: 'Rose', lime: 'Citron vert', fuchsia: 'Fuchsia', sand: 'Sable' } as Record<'violet' | 'teal' | 'rose' | 'lime' | 'fuchsia' | 'sand', string>,
+    atoiNone: 'Rien ne t’attend.', operations: 'Opérations', usageOnce: (harness: string, window: string, line: string) => `${harness} · ${window} : ${line}`,
     closeGroupTip: 'Fermer le groupe (Ctrl+W)',
     /** The zone at the right end of the editing area while a tab is dragged (mockup `.dropnew`), on two lines. */
     dropNew: ['Déposer ici :', 'nouveau groupe'],

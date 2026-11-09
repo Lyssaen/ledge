@@ -61,6 +61,8 @@ export function Attention(p: {
    *  away until the window starts again. */
   usageAlerts?: readonly UsageAlert[];
   onAckUsage?(id: string): void;
+  /** Shown in place of the section when nothing waits (the IDE's « À toi » view: one line in the middle); without it, nothing. */
+  empty?: string;
 }): JSX.Element | null {
   const { t, lang } = useI18n();
   const [all, setAll] = useState(false);
@@ -71,7 +73,7 @@ export function Attention(p: {
   const rigAsks = p.rigAsks ?? [];
   const limits = p.usageAlerts ?? [];
   const count = limits.length + p.items.length + asked.length + tasks.length + near.length + rigAsks.length;
-  if (count === 0) return null;
+  if (count === 0) return p.empty ? <p className="st-attn-none">{p.empty}</p> : null;
   const shown = all ? p.items : p.items.slice(0, CAP);
   const units = t.list.when.units;
   return (

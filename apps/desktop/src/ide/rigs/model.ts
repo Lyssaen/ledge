@@ -73,5 +73,3 @@ export function confirmOf(state: OpenRigState, action: OpenRigAction, sessions: 
   return { working, commands: commandsOf(action), restart: action.kind.endsWith('.restart') };
 }
 
-/** The Rigs icon's alert: OpenRig is installed but its daemon is not running. */
-export const rigsAlert = (state: OpenRigState | undefined): boolean => !!state && state.installed && state.daemon.state !== 'running';

@@ -158,11 +158,11 @@ describe('split, the empty group, the link square, many groups', () => {
     expect(groupviews()).toHaveLength(2);
   });
 
-  it('the link square, left of the tabs: three clicks → violet, teal, none', async () => {
+  it('the link square, left of the tabs, opens the six colours and « Aucune liaison » (the user, 2026-11-09)', async () => {
     const store = createWorkspaceStore(open(empty(), A));
     render(<Host store={store} />);
     await waitFor(() => expect(groupviews()).toHaveLength(1));
-    const square = () => screen.getByRole('button', { name: 'Lier ce groupe (violet, vert d’eau, aucun)' });
+    const square = () => screen.getByRole('button', { name: 'Lier ce groupe : choisir une couleur' });
     // dockview's prefix slot comes before the tabs (its left actions would come after them).
     const pre = square().closest('.dv-pre-actions-container');
     expect(pre).not.toBeNull();
@@ -170,13 +170,16 @@ describe('split, the empty group, the link square, many groups', () => {
     const swatch = () => square().querySelector('.ide-lk')!;
     expect(swatch()).toHaveClass('none');
     const user = userEvent.setup();
-    const seen: (string | null)[] = [];
-    for (let i = 0; i < 3; i++) {
-      await user.click(square());
-      seen.push(store.get().groups[0]!.link);
-      await waitFor(() => expect(swatch()).toHaveClass(seen[i] ?? 'none'));
-    }
-    expect(seen).toEqual(['violet', 'teal', null]);
+    await user.click(square());
+    const menu = screen.getByRole('menu', { name: 'Lier ce groupe' });
+    expect(within(menu).getAllByRole('menuitem').map(b => b.textContent)).toEqual(['Violet', 'Vert d’eau', 'Rose', 'Citron vert', 'Fuchsia', 'Sable', 'Aucune liaison']);
+    await user.click(within(menu).getByRole('menuitem', { name: 'Rose' }));
+    expect(store.get().groups[0]!.link).toBe('rose');
+    await waitFor(() => expect(swatch()).toHaveClass('rose'));
+    await user.click(square());
+    expect(within(screen.getByRole('menu', { name: 'Lier ce groupe' })).getByRole('menuitem', { name: /^Rose/ })).toHaveTextContent('Roseactuelle');
+    await user.click(screen.getByRole('menuitem', { name: 'Aucune liaison' }));
+    expect(store.get().groups[0]!.link).toBeNull();
   });
 
   it('each group is 300 px wide at least: the dock is as wide as its groups need, and scrolls inside its area', async () => {

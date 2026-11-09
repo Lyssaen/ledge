@@ -13,7 +13,7 @@ const L: IdeLayout = { sideOpen: true, sideWidth: 248, sideView: 'projects', bot
 const fr = (ui: React.ReactElement) => render(<LangProvider lang="fr">{ui}</LangProvider>);
 const none = { perm: 0, ask: 0 };
 const activity = (layout = L, badge = none, extra: Partial<Parameters<typeof ActivityBar>[0]> = {}) =>
-  fr(<ActivityBar layout={layout} onLayout={vi.fn()} onTab={vi.fn()} activeTab={null} badge={badge} rigsAlert={false} {...extra} />);
+  fr(<ActivityBar layout={layout} onLayout={vi.fn()} onTab={vi.fn()} activeTab={null} badge={badge} {...extra} />);
 
 describe('the IDE chrome', () => {
   it('title bar toggles', () => {
@@ -80,13 +80,9 @@ describe('the IDE chrome', () => {
     expect(names).toEqual(['Projets', 'Rigs OpenRig', 'À toi', 'Atelier (onglet)', 'grow', 'Réglages (onglet)']);
   });
 
-  it('rigsAlert puts an amber « ! » on Rigs, and only then', () => {
-    const { unmount } = activity();
+  it('no « ! » on Rigs (the user, 2026-11-09)', () => {
+    activity();
     expect(screen.getByRole('button', { name: 'Rigs OpenRig' }).querySelector('.ide-badge')).toBeNull();
-    unmount();
-    activity(L, none, { rigsAlert: true });
-    const b = screen.getByRole('button', { name: 'Rigs OpenRig' }).querySelector('.ide-badge.amber');
-    expect(b).toHaveTextContent('!');
   });
 
   it('no MR et PR yet', () => {

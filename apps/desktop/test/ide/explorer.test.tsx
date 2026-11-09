@@ -43,10 +43,10 @@ describe('IdeExplorer', () => {
     expect(onLayout).toHaveBeenCalledWith({ type: 'resetWidth' });
   });
 
-  it('« Réduire » hides the sidebar', () => {
-    const { onLayout } = mount();
-    fireEvent.click(screen.getByTitle('Réduire la barre latérale (Ctrl+B)'));
-    expect(onLayout).toHaveBeenCalledWith({ type: 'show', panel: 'side', on: false });
+  it('no « Réduire » foot (the user, 2026-11-09): Ctrl + B and the title bar fold the sidebar', () => {
+    mount();
+    expect(screen.queryByRole('button', { name: /Réduire/ })).toBeNull();
+    expect(document.querySelector('.ide-explorer-foot')).toBeNull();
   });
 });
 
@@ -63,6 +63,26 @@ describe('Sidebar section', () => {
     expect(screen.queryByRole('region', { name: 'Archives' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Projects' })).toBeNull();
     expect(document.querySelector('.st-ledge, .st-views, .st-foot')).toBeNull();
+  });
+
+  it('atoi with nothing waiting: one line, « Rien ne t’attend. », in the middle (the user, 2026-11-09)', () => {
+    render(<LangProvider lang="fr">
+      <Sidebar section="atoi" nav={initialNav({ helpers: [], paused: false } as never)} dispatch={vi.fn()} sessions={[]} archived={[]} machines={[]} projects={null} order={[]} projectIdOf={() => null}
+        filing={{ dragging: null } as unknown as Filing} actions={{ pending: null, allowed: () => true } as unknown as SessionActions} decisions={{ decide: vi.fn() } as unknown as Decisions}
+        waits={new Map()} menu={{ menu: null } as unknown as ContextMenuState} notify={vi.fn()} onTerminal={vi.fn()} revealArchives={0} revealCurrent={0} /></LangProvider>);
+    const line = screen.getByText('Rien ne t’attend.');
+    expect(line).toHaveClass('st-attn-none');
+    expect(line.parentElement).toHaveClass('st-scroll-atoi');
+  });
+
+  it('atoi: no usage card, the IDE tells it once in a toast', () => {
+    const alert = { id: 'claude|five_hour|1', harness: 'claude', level: 'threshold', at: new Date().toISOString(), window: { kind: 'five_hour', pct: 84 } } as never;
+    render(<LangProvider lang="en">
+      <Sidebar section="atoi" nav={initialNav({ helpers: [], paused: false } as never)} dispatch={vi.fn()} sessions={[]} archived={[]} machines={[]} projects={null} order={[]} projectIdOf={() => null}
+        filing={{ dragging: null } as unknown as Filing} actions={{ pending: null, allowed: () => true } as unknown as SessionActions} decisions={{ decide: vi.fn() } as unknown as Decisions}
+        waits={new Map()} menu={{ menu: null } as unknown as ContextMenuState} notify={vi.fn()} onTerminal={vi.fn()} revealArchives={0} revealCurrent={0} usageAlerts={[alert]} /></LangProvider>);
+    expect(document.querySelector('.st-usage')).toBeNull();
+    expect(screen.getByText('Nothing waits for you.')).toBeVisible();
   });
 
   it('projects: Archives, without Ledge\'s entry', () => {
