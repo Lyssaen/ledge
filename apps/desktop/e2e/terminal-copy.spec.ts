@@ -1,7 +1,13 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './fixtures';
-import { fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, twoProjects } from './daemon';
+import { ideReady } from './ide';
 import { fleet } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 // Copying from a terminal (C1–C3): a program's own OSC 52 copy, and Shift + drag over a program that holds the mouse.
 test.setTimeout(90_000);
@@ -13,7 +19,7 @@ test.beforeEach(async ({ context }) => { await context.grantPermissions(['clipbo
 
 test('a program\'s OSC 52 lands in the clipboard; Shift + drag selects over its mouse, Ctrl C copies', async ({ page }) => {
   await fakeDaemon(page, fleet, { launcher: ['ledge'], projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await page.getByRole('tree').getByRole('button', { name: /^Nova/ }).click();
   await expect(page.locator('.session-page')).toBeVisible({ timeout: 20_000 });
   await page.keyboard.press('Control+Backquote');

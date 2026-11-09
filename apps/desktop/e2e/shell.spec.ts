@@ -1,9 +1,15 @@
-import { test, expect } from './fixtures';
-import { eight, fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { eight, fakeDaemon, twoProjects } from './daemon';
+import { ideReady } from './ide';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 test('projects from the daemon in the sidebar, a filter from a click, cleared with Escape', async ({ page }) => {
   await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await page.getByRole('button', { name: /^ledge/i }).click();
   await expect(page.getByRole('banner').getByText('ledge', { exact: false })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -12,7 +18,7 @@ test('projects from the daemon in the sidebar, a filter from a click, cleared wi
 
 test('Ctrl K finds a session by its task and opens it; Escape comes back', async ({ page }) => {
   await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await expect(page.locator('aside.sidebar').getByText('8 active')).toBeVisible();   // the app is up and its keys are bound
   await page.keyboard.press('Control+k');
   await page.getByRole('combobox').fill('Luna');
@@ -28,10 +34,10 @@ test('a stored list preference opens the atelier', async ({ page }) => {
     try { localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false })); }
     catch { /* about:blank denies storage; the app page does not */ }
   });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'List' })).toHaveCount(0);
-  await page.reload(); await openAtelier(page);
+  await page.reload(); await ideReady(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'List' })).toHaveCount(0);
 });
@@ -39,7 +45,7 @@ test('a stored list preference opens the atelier', async ({ page }) => {
 test('at 520 px the sidebar is hidden and Ctrl+/ opens the chat', async ({ page }) => {
   await page.setViewportSize({ width: 520, height: 800 });
   await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
   await expect(page.locator('aside.sidebar')).toBeHidden();
   await page.keyboard.press('Control+/');
@@ -49,7 +55,7 @@ test('at 520 px the sidebar is hidden and Ctrl+/ opens the chat', async ({ page 
 test('at 1000 px the top bar stays on one line with a long project name', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 700 });
   await fakeDaemon(page, eight, { projects: { projects: [{ id: 'ledge', name: 'Payment Service Platform Migration Europe', color: 'blue', description: '', repos: [{ machine: 'local', path: '/w/ledge' }] }], rules: [] } });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   const project = page.getByRole('tree').getByRole('button', { name: /^Payment Service Platform/ });
   await project.click();   // the atelier's rug names the project too
   const full = 'Payment Service Platform Migration Europe';
@@ -66,7 +72,7 @@ test('at 1000 px the top bar stays on one line with a long project name', async 
 
 test('the Commande bar is 32 px over the sidebar, without a search field; Ctrl K opens the palette under it', async ({ page }) => {
   await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   const bar = page.getByRole('group', { name: 'Window bar' });
   await expect(page.locator('aside.sidebar').getByText('8 active')).toBeVisible();
   const box = (await bar.boundingBox())!, side = (await page.locator('aside.sidebar').boundingBox())!;

@@ -1,7 +1,13 @@
 import type { Page } from '@playwright/test';
 import type { ClientMessage } from '@ledge/protocol';
-import { test, expect } from './fixtures';
-import { eight, fakeDaemon, twoProjects, type ChatReply, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { eight, fakeDaemon, twoProjects, type ChatReply } from './daemon';
+import { ideReady } from './ide';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 /** Three agents: two at the Ledge table, one at Website, so a new one has a free seat. */
 const fleet = eight.filter(s => ['otto', 'nova', 'luna'].includes(s.id));
@@ -16,7 +22,7 @@ const pageNoSideScroll = (page: Page) => page.evaluate(() => document.documentEl
 const scrollNoSideScroll = (page: Page) => scroll(page).evaluate(e => e.scrollWidth <= e.clientWidth + 1);
 
 async function boot(page: Page) {
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await expect(ledgeTable(page)).toBeVisible();
 }
 /** Ctrl+/ opens the chat docked over the atelier (`/` alone goes to Ledge's home view); Enter with text sends the question. */

@@ -1,7 +1,13 @@
 import type { SlashCommand } from '@ledge/protocol';
-import { test, expect } from './fixtures';
-import { fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, twoProjects } from './daemon';
+import { ideReady } from './ide';
 import { fleet } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 const COMMANDS: SlashCommand[] = [
   { name: 'code-review', aliases: ['review'], source: 'builtin', argumentHint: '[low|medium|high|xhigh|max] [--fix] [<pr#>]', description: 'Review the current diff, or a PR number/branch/path target, for correctness bugs' },
@@ -13,7 +19,7 @@ const COMMANDS: SlashCommand[] = [
 
 test('« / » in the reply lists the agent\'s commands, filters them, completes one and sends it', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, commands: COMMANDS });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await page.getByRole('tree').getByRole('button', { name: /^Nova/ }).click();
   const field = page.getByRole('textbox', { name: 'Reply to the agent' });
   await field.click(); await field.pressSequentially('/rev');

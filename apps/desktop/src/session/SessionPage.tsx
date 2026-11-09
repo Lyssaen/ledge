@@ -314,14 +314,18 @@ const openConversation = useCallback((peer: string) => openTab({ kind: 'conv', p
     const x = clampSplit(v);
     if (x !== null && x !== splitNow.current) { splitNow.current = x; p.onSplit(x); }
   };
-  // Narrow, the pane lies over the thread and stops above the reply (session.css: --reply-h).
+  // Narrow, the pane lies over the thread and stops above the reply (session.css: --reply-h): what lies from the reply's top to
+  // the split's bottom, the IDE tab's bar under the reply included.
   const main = useRef<HTMLDivElement>(null);
   const [replyH, setReplyH] = useState(0);
   useLayoutEffect(() => {
     const el = main.current?.querySelector<HTMLElement>('.session-reply');
     if (!el) return;
-    const ro = new ResizeObserver(() => setReplyH(el.offsetHeight));
+    const split = el.closest<HTMLElement>('.session-split');
+    const measure = () => setReplyH(split ? Math.max(0, Math.round(split.getBoundingClientRect().bottom - el.getBoundingClientRect().top)) : el.offsetHeight);
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
+    if (split) ro.observe(split);
     return () => ro.disconnect();
   }, []);
   useLayoutEffect(() => {

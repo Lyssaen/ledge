@@ -1,7 +1,12 @@
 // review-qa's reproduction of two read-only regressions (review of 77f9dbd3), kept as their guard.
-import { test, expect } from './fixtures';
+import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon } from './daemon';
 import { fleet } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 test('mouse protocol survives a read-only visit', async ({ page }) => {
   await fakeDaemon(page, fleet, { launcher: ['ledge'] });

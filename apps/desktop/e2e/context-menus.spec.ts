@@ -1,5 +1,11 @@
-import { test, expect } from './fixtures';
-import { fakeDaemon, session, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, session, twoProjects } from './daemon';
+import { ideReady } from './ide';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 /** Archive, restore, resume and delete are allowed (as in manage.spec). */
 const CAN = { version: '0.7.0', install: 'npm' as const, systemd: true, archive: true };
@@ -11,7 +17,7 @@ const ned = session('ned', { name: 'Ned', cwd: '/w/website', state: 'exited', ar
 
 test('right click a project › Add a folder…: the editor of that project opens on the folder browser', async ({ page }) => {
   await fakeDaemon(page, [otto], { projects: twoProjects, daemon: CAN, folders: { '/home/me': { parent: '/home', entries: ['Workspace'] } }, home: '/home/me' });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   const tree = page.getByRole('tree', { name: 'Projects, branches and sessions' });
   await tree.getByRole('button', { name: /^Ledge/ }).click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Actions for Ledge' });
@@ -23,7 +29,7 @@ test('right click a project › Add a folder…: the editor of that project open
 
 test('right click Archives › Delete all (2)… › confirm: two session.delete are sent and, once removed, the Archives are empty', async ({ page }) => {
   const daemon = await fakeDaemon(page, [otto, nia, ned], { projects: twoProjects, daemon: CAN });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   const archives = page.getByRole('region', { name: 'Archives' });
   const header = archives.getByRole('button', { name: /Archives/ });
   await expect(header).toContainText('2');

@@ -1,7 +1,13 @@
 import type { Page } from '@playwright/test';
-import { test } from './fixtures';
-import { fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, seedAtelier } from './fixtures';
+import { fakeDaemon, twoProjects } from './daemon';
+import { ideReady } from './ide';
 import { fleet, ottoThread, tool } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 // Visual review of Fil | Terminal (docs/mockups/ledge-session-fil-terminal.html, v3), not an assertion suite: the screens the
 // mockup draws, in both themes, and zooms on the heading. Compare with the mockup's ledge-session-fil-terminal-*.png.
@@ -22,7 +28,7 @@ const omp = fleet.map(s => (s.id === 'pim' ? { ...s, tool: 'omp' as const, backe
 async function boot(page: Page, theme: 'dark' | 'light', lang: 'fr' | 'en') {
   await page.addInitScript(([t, l]) => { try { localStorage.setItem('desktop.lang', l!); localStorage.setItem('desktop.theme', t!); } catch { /* ignore */ } }, [theme, lang]);
   await fakeDaemon(page, omp, { launcher: ['ledge'], projects: twoProjects, threads });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
 }
 const open = async (page: Page, name: string) => {
   await page.getByRole('tree').getByRole('button', { name: new RegExp(`^${name}`) }).click();

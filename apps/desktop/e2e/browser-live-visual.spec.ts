@@ -1,7 +1,13 @@
 import type { Browser, Page } from '@playwright/test';
 import type { BrowserLive, Session, ThreadItem } from '@ledge/protocol';
-import { test, expect } from './fixtures';
-import { fakeDaemon, session, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, session, twoProjects } from './daemon';
+import { ideReady } from './ide';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 // Visual review of docs/mockups/ledge-browser-live.html (design/html-viewer 44811d1e), not an assertion suite: a Claude
 // session's browser through steps a to e (none, the button appears, live, closed, back), an OMP seat's (live beside its
@@ -71,7 +77,7 @@ async function boot(page: Page, theme: 'dark' | 'light', width: number, frames: 
   await page.addInitScript(([t, g]) => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t!); localStorage.setItem('desktop.grouping', g!); } catch { /* ignore */ } }, [theme, grouping]);
   const d = await fakeDaemon(page, [OTTO, MIA, TOM], { launcher: ['ledge'], projects: twoProjects, threads: { otto: thread() }, daemon: { version: '0.41.0', install: 'npm', systemd: true, browserLive: true },
     images: { [SHOT_ID]: { mime: 'image/jpeg', data: frames[1]! } }, browsers });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   return d;
 }
 const open = async (page: Page, name: string) => {

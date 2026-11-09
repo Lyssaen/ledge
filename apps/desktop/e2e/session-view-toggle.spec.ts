@@ -1,7 +1,13 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './fixtures';
-import { fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, twoProjects } from './daemon';
+import { ideReady } from './ide';
 import { fleet, ottoThread, tool } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 // Fil | Terminal (docs/mockups/ledge-session-fil-terminal.html, v3): on the left the thread or the agent's own screen, on the
 // right the panel (« ± Modifications », then the shells). The e2e build's fake pty echoes what is typed.
@@ -29,7 +35,7 @@ const writes = (page: Page) => page.evaluate(() => (window as unknown as { __led
 
 test('Fil | Terminal: the agent screen full frame, the keyboard follows Ctrl+², the view is remembered', async ({ page }) => {
   await fakeDaemon(page, fleet, { launcher: ['ledge'], projects: twoProjects, threads });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page, 'Otto');
   await expect(tab(page, /^Thread/)).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('textbox', { name: 'Reply to the agent' })).toBeVisible();
@@ -69,7 +75,7 @@ test('Fil | Terminal: the agent screen full frame, the keyboard follows Ctrl+²,
   await tab(page, /^Terminal/).click();
   await open(page, 'Nova');
   await expect(tab(page, /^Terminal/)).toHaveAttribute('aria-selected', 'true');
-  await page.reload(); await openAtelier(page);
+  await page.reload(); await ideReady(page);
   await open(page, 'Otto');
   await expect(tab(page, /^Terminal/)).toHaveAttribute('aria-selected', 'true');
   await expect(agentView(page)).toBeVisible();
@@ -77,7 +83,7 @@ test('Fil | Terminal: the agent screen full frame, the keyboard follows Ctrl+²,
 
 test('the right panel: Modifications first, then the shells; O reopens it on the last tab; Ctrl+² from a shell gives the keyboard back to the left view', async ({ page }) => {
   await fakeDaemon(page, fleet, { launcher: ['ledge'], projects: twoProjects, threads });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page, 'Otto');
   // The keyboard on the page (from the sidebar tree, J / K walk the sessions).
   await page.locator('.session-thread').focus();
@@ -138,7 +144,7 @@ test('the right panel: Modifications first, then the shells; O reopens it on the
 test('an OMP session has no agent screen: its own text, and « Open a shell » opens one in the panel', async ({ page }) => {
   const omp = fleet.map(s => (s.id === 'nova' ? { ...s, tool: 'omp' as const, backend: 'omp-rpc' as const } : s));
   await fakeDaemon(page, omp, { launcher: ['ledge'], projects: twoProjects, threads });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page, 'Nova');
   await page.keyboard.press('Control+Backquote');
   await expect(agentView(page).getByText('Ledge drives Nova itself: it has no agent screen.')).toBeVisible();
