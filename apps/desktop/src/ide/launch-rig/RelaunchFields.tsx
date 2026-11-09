@@ -36,7 +36,7 @@ export function RelaunchFields({ client, machine, machineLabel, rig, off, policy
   const seats = graph.graph?.seats.map(s => s.logicalId) ?? [];
   const current = perms.status === 'ready' && !perms.error ? permLevelOf(perms.seats) : null;
   const last = snaps.snapshots[0];
-  const read = graph.status === 'ready' && perms.status === 'ready' && snaps.status === 'ready';
+  const read = graph.status === 'ready' && !graph.error && perms.status === 'ready' && snaps.status === 'ready';
   // Without a snapshot there is nothing to resume: `rig up --existing` starts every seat fresh by itself.
   // Without `openrigFresh` the box stays ticked: the fleet would refuse `fresh` (`outdated`).
   const actions = relaunchActions(rig.name, level, current, seats, last && freshAvailable ? resume : true);
@@ -59,7 +59,8 @@ export function RelaunchFields({ client, machine, machineLabel, rig, off, policy
     <Row label={L.name}><span className="ide-rl-fixed mono"><b>{rig.name}</b>{rig.specPath && <span className="ide-rl-mut">· {tilde(rig.specPath)}</span>}</span></Row>
     <Row label={L.machine}><span className="ide-rl-fixed">{machineLabel}</span></Row>
     <Row label={<>{L.seats} <span className="mono">{seats.length || rig.seats}</span></>}>
-      <div className="ide-rl-chips">{roles.map(([role, ids]) => <span key={role} className="ide-rl-chip"><span className="mono">{role}</span>{ids.length > 1 && <b>{ids.length}</b>}</span>)}</div>
+      {graph.error ? <span className="ide-rl-alert" role="alert">{rigErrorText(t, graph.error)}</span>
+        : <div className="ide-rl-chips">{roles.map(([role, ids]) => <span key={role} className="ide-rl-chip"><span className="mono">{role}</span>{ids.length > 1 && <b>{ids.length}</b>}</span>)}</div>}
     </Row>
     <Row label={L.permissions}>
       <div className="ide-rl-perm">

@@ -33,7 +33,7 @@ const projects: Projects = { projects: [{ id: 'p1', name: 'ledge', color: 'blue'
 
 interface Data {
   states: Record<string, OpenRigState>; specs: Record<string, RigSpec[]>;
-  launch: { ok: boolean; error?: string }; goal: { ok: boolean; error?: string };
+  launch: { ok: boolean; error?: string }; graphError?: string; goal: { ok: boolean; error?: string };
 }
 function fake(over: Partial<Data> = {}) {
   const data: Data = { states: { local: up(), srv: up({ rigs: [kernel()] }) }, specs: { local: [starter, factory, spec('ledge-survey', [['dev', 'builder']], 'user')], srv: [reviewTeam] }, launch: { ok: true }, goal: { ok: true }, ...over };
@@ -49,7 +49,7 @@ function fake(over: Partial<Data> = {}) {
     switch (m.type) {
       case 'openrig.status': return { type: 'openrig.state', ...base, state: st };
       case 'openrig.specs': return { type: 'openrig.specList', ...base, specs: st.daemon.state === 'running' ? data.specs[machineId] ?? [] : [], ...(st.daemon.state === 'running' ? {} : { error: 'daemon_stopped' }) } as ServerMessage;
-      case 'openrig.graph': return { type: 'openrig.graphState', ...base, rig: m.rig, graph: surveyGraph };
+      case 'openrig.graph': return { type: 'openrig.graphState', ...base, rig: m.rig, ...(data.graphError ? { error: data.graphError } : { graph: surveyGraph }) } as ServerMessage;
       case 'openrig.permissions': return { type: 'openrig.permissionList', ...base, rig: m.rig, seats: surveyPerms } as ServerMessage;
       case 'openrig.snapshots': return { type: 'openrig.snapshotList', ...base, rig: m.rig, snapshots: surveySnaps };
       case 'openrig.launch': return { type: 'openrig.launched', ...base, ok: data.launch.ok, plan: m.launch.plan === true, commands: ['rig up starter --cwd /w --plan'], seats: 2, ...(m.launch.plan ? { yaml: 'name: starter\n' } : {}), ...(data.launch.error ? { error: data.launch.error } : {}) } as ServerMessage;
@@ -346,5 +346,17 @@ describe('the « Lancer un rig » modal', () => {
     await userEvent.click(screen.getByRole('button', { name: /^Demander à l’operator/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Le kernel n’a pas d’operator pour recevoir la demande.');
     expect(m.onOperator).not.toHaveBeenCalled();
+  });
+
+  it('a relaunch whose graph cannot be read says why where the seats would be, and launches nothing', async () => {
+    mount({ graphError: 'offline' });
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Cette machine est hors ligne.');
+    expect(launchButton()).toBeDisabled();
+  });
+  it('a machine that is not one of the machines says so instead of reading forever', () => {
+    mount({}, { machines: [machine('srv', 'srv-build')] });
+    expect(screen.getByRole('status')).toHaveTextContent('Machine inconnue : elle ne fait plus partie de tes machines.');
+    expect(screen.queryByText(/Lecture d/)).toBeNull();
   });
 });

@@ -75,6 +75,7 @@ export function RigLaunchModal({ client, machines, machine: first, projects, ses
 
   const note = (text: ReactNode, role: 'status' | 'alert' = 'status') => <><span /><div className="ide-rl-state" role={role}>{text}</div></>;
   const body = (): ReactNode => {
+    if (!shown) return <>{machineRow}{note(t.ide.openrigPage.unknownMachine)}</>;
     if (error) return <>{machineRow}{note(rigErrorText(t, error))}</>;
     if (!state) return <>{machineRow}{note(o.loading)}</>;
     if (!state.installed) return <>{machineRow}{note(<><b>{o.notInstalledTitle}</b> {o.notInstalled}</>)}</>;
