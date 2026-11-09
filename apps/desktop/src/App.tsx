@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { canBroadcast, daemonStore, projectOf, splitId, useDaemon, type BroadcastTo, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { canBroadcast, daemonStore, prOfSession, prsFailing, projectOf, splitId, useDaemon, type BroadcastTo, type FleetPullRequest, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -85,7 +85,7 @@ import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, openrigTab, rigTab, useWorkspace } from './workspace/store';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
 import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, MAIN, moveActive, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, type Tab } from './workspace/model';
-import { hasTerminal, projectLabel, tabAlert, tabView } from './workspace/sessionTab';
+import { hasTerminal, projectLabel, providerOf, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
 import { createTabExtras, TabExtrasContext, useTabExtras } from './ide/tabExtras';
@@ -93,7 +93,8 @@ import { openSessionTerminal } from './session/terminal';
 import { IdeWelcome, recentSessions, type EmptyPick } from './ide/IdeWelcome';
 import { routeNav, tabNav } from './workspace/route';
 import { tabTitle, type TabBody } from './ide/tabs';
-import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
+import { IdeAtelierBar, IdeBottom, IdeDock, IdeOutput, IdePlace, IdeOpenRig, IdePr, IdePrs, IdePrsStatus, IdePrTabLabel, IdeRigLaunch, IdeRigs, IdeRigView } from './ide/lazy';
+import { useForge } from './forge/useForge';
 import { tileToDock } from './ide/termDrag';
 import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
@@ -734,7 +735,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     hasTerminal: s => hasTerminal({ kind: s.rig != null ? 'seat' : 'session', ref: s.id }, s),
     message: s => dispatch({ type: 'open', id: s.id, focus: 'reply' })
   };
-  const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title });
+  // Lot 8b: every machine's pull and merge requests.
+  const forge = useForge(fleet);
+  const prOf = (id: string) => forge.prs.find(p => p.id === id);
+  /** A request's agent: the session or seat on its branch (the most recently active). */
+  const prAgentOf = (p: FleetPullRequest) => p.sessions.map(id => known.find(s => s.id === id)).find((s): s is Session => !!s);
+  const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title, pr: id => prOf(id)?.ref });
   // The IDE shell (switch on): the same pieces, in tabs and panels. Its chunk is fetched only then.
   const ideShell = (() => {
     if (!ide) return null;
@@ -743,7 +749,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const label = (tab: Tab): ReactNode => (tab.kind === 'session' || tab.kind === 'seat'
       ? <SessionTabLabel session={known.find(s => s.id === tab.ref)} tab={tab} title={title(tab)} client={fleetClient}
         helper={nav.place.kind === 'session' && nav.place.id === tab.ref && nav.place.helper ? { id: nav.place.helper } : null} />
-      : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} /> : title(tab));
+      : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} />
+      : tab.kind === 'pr' ? <IdePrTabLabel pr={prOf(tab.ref)} title={title(tab)} /> : title(tab));
     const alert = (tab: Tab) => (tab.kind === 'session' || tab.kind === 'seat' ? tabAlert(known.find(s => s.id === tab.ref)) : null);
     const body: TabBody = tab => {
       const tnav = tabNav(nav, tab, lastSettings.current);
@@ -754,6 +761,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         return <SessionPlace client={fleetClient} session={s} nav={tnav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
           prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide
           project={projectLabel(s, projectName)} besideLink={changesBeside(ws, keyOf(tab))}
+          pr={prOfSession(forge.prs, s.id) ?? null} onPr={() => { const p = prOfSession(forge.prs, s.id); if (p) onTab({ kind: 'pr', ref: p.id }); }}
           onChanges={() => wsStore.update(w => { const hit = findTab(w, keyOf(tab)); return hit ? beside(w, hit.group.id, 'changes', s.id) : w; })} />;
       }
       // « +N −N »'s tab: an action clicked there brings the session's tab forward (R10).
@@ -790,6 +798,15 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         );
       }
       if (tab.kind === 'settings') return tnav.place.kind === 'settings' ? <SettingsPlace section={tnav.place.section} ctx={settings} noBack /> : null;
+      if (tab.kind === 'pr') {
+        const p = prOf(tab.ref);
+        if (!p) return null;
+        const a = prAgentOf(p);
+        return <IdePr pr={p} fleet={fleet} notify={notify} onOpenUrl={openUrl}
+          agent={a ? { name: a.name, provider: providerOf(a.tool) } : null}
+          onAskAgent={text => (a ? decisions.reply(a, text) : false)}
+          onOpenAgent={() => { if (a) dispatch({ type: 'open', id: a.id, where: 'right' }); }} />;
+      }
       if (tab.kind === 'openrig') {
         const o = place.kind === 'openrig' && (place.machine ?? 'local') === tab.ref ? place : null;
         return <IdeOpenRig client={fleetClient} machines={machines} machine={tab.ref} section={o?.section ?? 'overview'} role={o?.role} seat={o?.seat} sessions={sessions} asks={asks.asks} output={rigEntries} dispatch={dispatch} onTab={onTab} onLaunch={m => dispatch({ type: 'modal', modal: { kind: 'rigLaunch', machine: m } })} />;
@@ -828,7 +845,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         onTab={onTab} activeTab={front ?? null} badge={badge}
         waiting={waiting} onNextWaiting={() => { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id }); }}
         notice={tokenMissing && <DaemonOutdated />}
-        explorer={layout.sideView === 'rigs'
+        prsFailing={prsFailing(forge.prs)} prsStatus={<IdePrsStatus prs={forge.prs} onShow={() => { if (!(layout.sideOpen && layout.sideView === 'prs')) onLayout({ type: 'view', view: 'prs' }); }} />}
+        explorer={layout.sideView === 'prs'
+          ? <IdePrs prs={forge.prs} agentOf={p => prAgentOf(p)?.name ?? null} current={front?.kind === 'pr' ? front.ref : null}
+              onOpen={(p, right) => onTab({ kind: 'pr', ref: p.id }, right ? 'right' : undefined)} />
+          : layout.sideView === 'rigs'
           ? <IdeRigs client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} activeTab={front ?? null} dispatch={dispatch} onTab={onTab}
               onMenu={(id, at, opener) => sessionMenu.open(id, at, opener)} />
           : <Sidebar section={layout.sideView} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}

@@ -9,6 +9,8 @@ import type { RigViewProps } from './rig/RigView';
 import type { OpenRigViewProps } from './openrig/OpenRigView';
 import type { RigLaunchModalProps } from './launch-rig/RigLaunchModal';
 import type { RigOutputEntry } from '../openrig/rigOutput';
+import type { PrsViewProps } from '../forge/PrsView';
+import type { PrPageProps } from '../forge/PrPage';
 
 type IdeModule = typeof import('./IdeFrame');
 let loaded: IdeModule | undefined;
@@ -19,7 +21,7 @@ export function loadIde(): Promise<IdeModule> {
 }
 
 // A chunk already loaded is handed over synchronously: React.lazy then resolves within the same render, without suspending.
-function fromChunk<K extends 'IdeFrame' | 'DockHost' | 'BottomPanel' | 'OutputView' | 'AtelierBar' | 'RigsView' | 'RigView' | 'RigLaunchModal' | 'OpenRigView'>(key: K) {
+function fromChunk<K extends 'IdeFrame' | 'DockHost' | 'BottomPanel' | 'OutputView' | 'AtelierBar' | 'RigsView' | 'RigView' | 'RigLaunchModal' | 'OpenRigView' | 'PrsView' | 'PrPage' | 'PrsStatus' | 'PrTabLabel'>(key: K) {
   type Loaded = { default: IdeModule[K] };
   return lazy(() => (loaded
     ? { then: (ok: (m: Loaded) => void) => ok({ default: loaded![key] }) } as PromiseLike<Loaded> as Promise<Loaded>
@@ -34,6 +36,10 @@ const Rigs = fromChunk('RigsView');
 const RigTab = fromChunk('RigView');
 const RigLaunch = fromChunk('RigLaunchModal');
 const OpenRig = fromChunk('OpenRigView');
+const Prs = fromChunk('PrsView');
+const Pr = fromChunk('PrPage');
+const PrsCount = fromChunk('PrsStatus');
+const PrLabel = fromChunk('PrTabLabel');
 
 /** The IDE shell, behind a sober wait (an empty window) the first time its chunk is fetched; a chunk that fails to load leaves a note (ChunkBoundary). */
 export function IdePlace(props: IdeFrameProps): JSX.Element {
@@ -80,3 +86,10 @@ export function IdeOpenRig(props: OpenRigViewProps): JSX.Element {
 export function IdeRigLaunch(props: RigLaunchModalProps): JSX.Element {
   return <ChunkBoundary><Suspense fallback={null}><RigLaunch {...props} /></Suspense></ChunkBoundary>;
 }
+
+/** Lot 8b: the « MR et PR » sidebar view, a request's tab, the status bar's count and a request tab's label. They render inside
+ *  the frame, so its chunk (and forge.css) is already there. */
+export function IdePrs(props: PrsViewProps): JSX.Element { return <Prs {...props} />; }
+export function IdePr(props: PrPageProps): JSX.Element { return <Pr {...props} />; }
+export function IdePrsStatus(props: { prs: PrsViewProps['prs']; onShow(): void }): JSX.Element { return <PrsCount {...props} />; }
+export function IdePrTabLabel(props: { pr: PrPageProps['pr'] | undefined; title: string }): JSX.Element { return <PrLabel {...props} />; }

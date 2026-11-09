@@ -14,6 +14,9 @@ import { Icon } from '@ledge/ui/ui/icons';
 import { SHELL_ICONS } from '../shell/icons';
 import type { PillLook } from './browserLive';
 import { reliefDone, reliefText } from './relief';
+import type { FleetPullRequest } from '@ledge/fleet';
+import { PipeDot } from '../forge/PipeGraph';
+import '../styles/forge.css';
 
 export interface SessionBarProps {
   client: DaemonClient; session: Session;
@@ -32,6 +35,8 @@ export interface SessionBarProps {
   kids?: number; onShowKids?(): void;
   /** The agent's browser (the heading's Navigateur pill): its look and the captures' count, null when there is none; opening it. */
   browser?: { pill: PillLook; captures: number } | null; onBrowser?(): void;
+  /** Its request (lot 8b, mockup agentView `.chip`): the pipeline's dot and its ref, after the project; a click opens it. */
+  pr?: FleetPullRequest | null; onPr?(): void;
 }
 
 /** The mockup's `ic.diff` at 13 px: a plus, a minus and the slash between them. */
@@ -51,7 +56,7 @@ const k = (n: number) => `${Math.round(n / 1000)}k`;
  * (what the session page's heading said: an IDE tab has none), « Interrompre » while the agent works, and « +N −N », which
  * opens the Changes beside. Never a usage limit: the status bar says those. It narrows with its group (ide.css @container).
  */
-export function SessionBar({ client, session, project, files, besideLink, notify, onChanges, terminal = null, kids = 0, onShowKids, browser = null, onBrowser }: SessionBarProps): JSX.Element {
+export function SessionBar({ client, session, project, files, besideLink, notify, onChanges, terminal = null, kids = 0, onShowKids, browser = null, onBrowser, pr = null, onPr }: SessionBarProps): JSX.Element {
   const { t } = useI18n();
   const tb = t.session.browser;
   const relief = session.handover && !reliefDone(session.handover) ? session.handover : null;
@@ -87,6 +92,11 @@ export function SessionBar({ client, session, project, files, besideLink, notify
       {session.branch && <span className="ide-bar-chip br mono" title={ti.branch(session.branch)}>{session.branch}</span>}
       {terminal && <span className="ide-bar-chip tm mono">{terminal}</span>}
       <span className="ide-bar-chip pj">{project}</span>
+      {pr && (
+        <button type="button" className="ide-bar-chip fg-chip mono" title={`${t.forge.host[pr.forge]} · pipeline ${t.forge.pipe[pr.pipeline]}`} onClick={onPr}>
+          <PipeDot status={pr.pipeline} />{pr.ref}
+        </button>
+      )}
       {/* Before the right side, out of it: the one chip there that gives way (ellipsis) when the group narrows. */}
       {relief && <span className={cls('ide-bar-relief', relief.state === 'failed' && 'amber')} role="status" title={reliefText(relief, t.handover)}>{reliefText(relief, t.handover)}</span>}
       <span className="ide-bar-side">

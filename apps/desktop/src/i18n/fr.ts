@@ -1555,5 +1555,43 @@ export const fr = {
     resumeHint: 'Les sessions qui avaient un onglet ouvert à la fermeture de Ledge reprennent dans leur onglet. Une session que tu as terminée ne repart pas.',
     resumeOff: 'Reprise des sessions au démarrage désactivée',
     resumed: (n: number) => plural(n, `${n} session reprise`, `${n} sessions reprises`)
+  },
+  // MR et PR (lot 8b, docs/mockups/ledge-ide-interactive.html : explorer `prs`, prPage, pipeGraph, statusbar).
+  forge: {
+    view: 'MR et PR', hosts: 'GitHub · GitLab', merged: 'Fusionnées',
+    foot: 'Suivies : les branches des sessions et des sièges, via gh et glab. Clic : la MR ou PR dans un onglet.',
+    rowTip: 'Clic : ouvrir · Ctrl+clic : à droite',
+    host: { github: 'GitHub', gitlab: 'GitLab' } as Record<'github' | 'gitlab', string>,
+    kind: { github: 'GitHub · PR', gitlab: 'GitLab · MR' } as Record<'github' | 'gitlab', string>,
+    state: { draft: 'brouillon', open: 'ouverte', review: 'en revue', merged: 'fusionnée', closed: 'fermée' } as Record<'draft' | 'open' | 'review' | 'merged' | 'closed', string>,
+    pipe: { ok: 'réussi', run: 'en cours', fail: 'échoué', wait: 'en attente', skip: 'ignoré', none: 'aucun' } as Record<'ok' | 'run' | 'fail' | 'wait' | 'skip' | 'none', string>,
+    rowMeta: (host: string, repo: string, state: string, agent: string | null, pipe: string, comments: number) =>
+      [host, repo, state, ...(agent ? [agent] : []), `pipeline ${pipe}`, `${comments} comm.`].join(' · '),
+    openOn: (host: string) => `Ouvrir sur ${host}`,
+    tabs: { pipe: "Vue d'ensemble", disc: (n: number) => `Discussion · ${n}`, diff: (n: number) => `Modifications · ${n}`, commits: (n: number) => `Commits · ${n}` },
+    description: 'Description', details: 'Détails', author: 'Auteur', reviewers: 'Relecteurs', labels: 'Étiquettes', issue: 'Ticket', approvals: 'Approbations',
+    reviewer: { approved: 'approuvé', changes: 'changements demandés', pending: 'attendu' } as Record<'approved' | 'changes' | 'pending', string>,
+    pipeline: 'Pipeline', rerun: 'Relancer',
+    askFix: (name: string) => `Demander à ${name} de corriger`, openAgent: (name: string) => `Ouvrir ${name}`,
+    review: 'Revue',
+    reviewSub: (appr: string, open: number) => `${appr} approbation · ${plural(open, `${open} discussion ouverte`, `${open} discussions ouvertes`)}`,
+    seeDiscussion: 'Voir la discussion', merge: 'Fusionner', nothing: 'Rien à traiter.',
+    discussion: 'Discussion',
+    discSub: (open: number, resolved: number) => `${plural(open, `${open} ouvert`, `${open} ouverts`)} · ${plural(resolved, `${resolved} résolu`, `${resolved} résolus`)}`,
+    sendAll: (name: string) => `Tout envoyer à ${name}`, noComment: 'Aucun commentaire.',
+    addComment: 'Ajouter un commentaire…  (Entrée)', replyPh: 'Répondre…  (Entrée)', resolve: 'Résoudre', resolved: '✓ Résolu',
+    line: (n: number) => `ligne ${n}`, fileLine: (file: string, n: number) => `${file} · ligne ${n}`,
+    sendThreadTip: "Envoyer ce commentaire à l'agent de la branche",
+    files: 'Fichiers', fileCount: (n: number) => plural(n, `${n} fichier`, `${n} fichiers`), noChange: 'Aucune modification.',
+    step: (n: number) => `étape ${n}`,
+    // What goes to the agent (mockup prfix, prnotes, prask).
+    fixText: (ref: string, job: string) => `Le pipeline de ${ref} échoue sur « ${job} ». Lis le job, corrige et pousse.`,
+    notesText: (ref: string, notes: readonly string[]) => `Commentaires sur ${ref} : ${notes.join(' / ')}`,
+    note: (who: string, where: string | null, text: string) => `${who}${where ? ` (${where})` : ''} : ${text}`,
+    threadText: (ref: string, who: string, where: string | null, text: string) => `${ref} · ${who}${where ? ` sur ${where}` : ''} : ${text}`,
+    sentTo: (name: string) => `Commentaire envoyé à ${name}`,
+    status: (n: number) => `${n} MR/PR`, statusFail: (n: number) => plural(n, `${n} pipeline échoué`, `${n} pipelines échoués`), statusRun: (n: number) => `${n} en cours`,
+    statusTip: 'MR et PR suivies',
+    loading: 'Chargement…'
   }
 };
