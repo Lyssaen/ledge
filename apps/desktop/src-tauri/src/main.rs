@@ -107,6 +107,8 @@ fn tray_shows_window(id: &str) -> bool {
 }
 
 fn show_main(app: &AppHandle) {
+    // The popouts hidden with it first, so the main window ends in front with the focus.
+    popout::show_with_main(app);
     if let Some(w) = app.get_webview_window(MAIN) {
         let _ = w.show();
         let _ = w.unminimize();
@@ -173,6 +175,7 @@ fn main() {
             if let Some(target) = ledge_native::desktop::open_target(args) { deliver_open(app, target); }
         }))
         .manage(PendingOpen::default())
+        .manage(popout::HiddenWithMain::default())
         // Visibility is the launch's choice (setup below); decorations come from tauri.conf.json.
         // Restoring old native decorations would bring back Windows' title bar over our own.
         // The notch places itself on the chosen monitor's work area: no saved state for it.
@@ -223,7 +226,7 @@ fn main() {
         })
         .on_window_event(|w, e| match e {
             tauri::WindowEvent::CloseRequested { api, .. } => match on_close(w.label()) {
-                CloseAction::Hide => { api.prevent_close(); let _ = w.hide(); }
+                CloseAction::Hide => { api.prevent_close(); let _ = w.hide(); popout::hide_with_main(w.app_handle()); }
                 CloseAction::Ignore => api.prevent_close(),
                 CloseAction::Close => {}
             },
