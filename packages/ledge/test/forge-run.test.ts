@@ -1,22 +1,23 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classify, execForge, forgeOf, logTail, redact } from '../src/daemon/forge/run.js';
 
-/** A `gh` that is a Node script: it echoes its standard input, and its arguments on stderr. */
+/** A `gh` that is a Node script: it echoes its standard input, and writes its arguments to a file (never stderr, where Node
+ *  itself may warn, as it does for every process when NODE_USE_ENV_PROXY is set). */
 let dir: string, empty: string;
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), 'ledge-forge-run-'));
   empty = join(dir, 'empty'); mkdirSync(empty);
   const bin = join(dir, 'bin'); mkdirSync(bin);
-  writeFileSync(join(bin, 'gh'), '#!/usr/bin/env node\nlet s = "";\nprocess.stdin.on("data", d => (s += d)).on("end", () => { process.stdout.write(s); process.stderr.write(JSON.stringify(process.argv.slice(2))); process.exit(s ? 0 : 3); });\n');
+  writeFileSync(join(bin, 'gh'), '#!/usr/bin/env node\nlet s = "";\nprocess.stdin.on("data", d => (s += d)).on("end", () => { process.stdout.write(s); require("fs").writeFileSync(process.env.LEDGE_TEST_ARGS, JSON.stringify(process.argv.slice(2))); process.exit(s ? 0 : 3); });\n');
   chmodSync(join(bin, 'gh'), 0o755);
   writeFileSync(join(bin, 'glab'), '#!/usr/bin/env node\nprocess.stdout.write("x".repeat(4096));\n');
   chmodSync(join(bin, 'glab'), 0o755);
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
-const withBin = async () => ({ ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}` });
+const withBin = async () => ({ ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, LEDGE_TEST_ARGS: join(dir, 'args.json') });
 
 describe('the forge runner', () => {
   it('sends input on standard input, never as an argument', async () => {
@@ -24,7 +25,7 @@ describe('the forge runner', () => {
     const r = await execForge(withBin)('gh', ['pr', 'comment', '1', '--body-file', '-'], { input: body });
     expect(r.code).toBe(0);
     expect(r.stdout).toBe(body);
-    expect(JSON.parse(r.stderr)).toEqual(['pr', 'comment', '1', '--body-file', '-']);
+    expect(JSON.parse(readFileSync(join(dir, 'args.json'), 'utf8'))).toEqual(['pr', 'comment', '1', '--body-file', '-']);
   });
 
   it('closes standard input when there is no input', async () => {
