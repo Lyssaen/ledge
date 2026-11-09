@@ -1,6 +1,6 @@
 import { prIdOf, type ForgeAction, type PipeStatus, type PrFile, type PrJob, type PrReviewer, type PrState, type PrThread } from '@ledge/protocol';
 import { logTail, type ForgeRepo, type ForgeRun } from './run.js';
-import { blockersOf, mergeBlockersOf, pickFor, ForgeError, ForgeRefusal, iso, JOB_ID, lastLine, ok, okJson, PATCH_BUDGET, seconds, SHA, shellJoin, THREAD_ID, type ForgeReader, type PrCore, type ReadDetail, type ReadPr } from './types.js';
+import { blockersOf, mergeBlockersOf, pickFor, ForgeError, ForgeRefusal, iso, JOB_ID, lastLine, notFound, ok, okJson, PATCH_BUDGET, seconds, SHA, shellJoin, THREAD_ID, type ForgeReader, type PrCore, type ReadDetail, type ReadPr } from './types.js';
 
 /**
  * GitHub pull requests through `gh` (R3): `pr list/view --json`, `run list/view`, and `gh api graphql` for the review threads
@@ -170,6 +170,14 @@ export function githubReader(run: ForgeRun): ForgeReader {
 
   return {
     async defaultBranch(repo) { return (await info(repo)).defaultBranch; },
+
+    async hasCi(repo) {
+      const branch = (await info(repo)).defaultBranch;
+      const r = await api(repo, [`repos/${repo.path}/contents/.github/workflows${branch ? `?ref=${encodeURIComponent(branch)}` : ''}`]);
+      if (notFound(r)) return false;
+      const list = okJson<unknown>(r, 'gh');
+      return Array.isArray(list) && list.some((f: { type?: string; name?: string }) => f?.type === 'file' && /\.ya?ml$/i.test(f.name ?? ''));
+    },
 
     async list(repo, targets) {
       const names = [...new Set(targets.map(t => t.branch))];

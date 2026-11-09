@@ -1,4 +1,4 @@
-import { isArchived, type ForgeAction, type ForgeKind, type ForgeStateMessage, type ForgeStatus, type PrDetail, type PullRequest, type Session } from '@ledge/protocol';
+import { isArchived, type ForgeAction, type ForgeKind, type ForgeStateMessage, type ForgeStatus, type PipeStatus, type PrDetail, type PullRequest, type Session } from '@ledge/protocol';
 import type { Store } from '../store.js';
 import { log } from '../../log.js';
 import { githubReader } from './github.js';
@@ -38,6 +38,8 @@ interface Followed { repo: ForgeRepo; targets: Map<string, { target: BranchTarge
 /** Where a session's branch is pushed, read in its folder's git configuration (R1, review of d266f114). */
 interface Head { key: string; at: number; head: string; branch: string }
 const HEAD_TTL_MS = 5 * 60_000;
+/** Whether a repository has CI, read again after this (a workflow added or removed). */
+export const CI_TTL_MS = 10 * 60_000;
 
 /**
  * The repository and branch name a local branch is pushed to: its push remote (`branch.<b>.pushRemote`, `remote.pushDefault`),
@@ -87,6 +89,14 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
   const backoff = new Map<string, { failures: number; until: number }>();
   const defaults = new Map<string, string | null>();
   const details = new Map<string, { at: number; detail: PrDetail }>();
+  /** Per repository, whether it has CI on its default branch; null: the forge could not tell. */
+  const ci = new Map<string, { at: number; has: boolean | null }>();
+  /**
+   * R5 as decided by the user (2026-11-09): « no pipeline » lets a merge through only for a repository without any CI. With CI, or
+   * when that is unknown, a head without a pipeline is one whose pipeline has not started yet (a push seconds ago): it waits.
+   */
+  const withCi = <P extends { pipeline: PipeStatus }>(pr: P, repo: ForgeRepo): P =>
+    (pr.pipeline === 'none' && ci.get(repo.repo)?.has !== false ? { ...pr, pipeline: 'wait' as const } : pr);
   const listeners = new Set<() => void>();
   let last = '';
   let timer: NodeJS.Timeout | null = null;
@@ -157,8 +167,10 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
     if (b && now() < b.until) return;
     try {
       if (!defaults.has(f.repo.repo)) defaults.set(f.repo.repo, await reader.defaultBranch(f.repo).catch(() => null));
+      const known = ci.get(f.repo.repo);
+      if (!known || now() - known.at >= CI_TTL_MS) ci.set(f.repo.repo, { at: now(), has: await reader.hasCi(f.repo).catch(() => null) });
       const targets = [...f.targets.values()].map(t => t.target).filter(t => t.branch !== defaults.get(f.repo.repo));
-      byRepo.set(f.repo.repo, await reader.list(f.repo, targets));
+      byRepo.set(f.repo.repo, (await reader.list(f.repo, targets)).map(p => withCi(p, f.repo)));
       backoff.delete(k);
       setStatus(f.repo, 'ok');
     } catch (e) {
@@ -235,7 +247,7 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
     if (!e) throw new ForgeRefusal('unavailable', 'this request is not followed on this machine');
     const read = (await readers[e.repo.cli].list(e.repo, [{ branch: e.pr.branch, head: e.pr.head }])).find(p => p.id === prId);
     if (!read) throw new ForgeRefusal('unavailable', 'the request is no longer there');
-    return { pr: read, repo: e.repo };
+    return { pr: withCi(read, e.repo), repo: e.repo };
   }
 
   return {
@@ -267,7 +279,9 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
       const hit = details.get(key);
       if (hit && now() - hit.at < DETAIL_TTL_MS) return hit.detail;
       const d = await readers[e.repo.cli].detail(e.repo, e.pr.number, opts);
-      const detail: PrDetail = { ...d, pr: strip(d.pr, sessionsOf(e.pr)) };
+      const pr = withCi(d.pr, e.repo);
+      const mergeBlockers = pr !== d.pr && !d.mergeBlockers.includes('pipeline') ? [...d.mergeBlockers, 'pipeline' as const] : d.mergeBlockers;
+      const detail: PrDetail = { ...d, mergeBlockers, pr: strip(pr, sessionsOf(e.pr)) };
       details.set(key, { at: now(), detail });
       return detail;
     },

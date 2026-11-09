@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ForgeAction, Session } from '@ledge/protocol';
 import { Store } from '../src/daemon/store.js';
-import { createForgeService, FAST_MS, SLOW_MS } from '../src/daemon/forge/service.js';
+import { CI_TTL_MS, createForgeService, FAST_MS, SLOW_MS } from '../src/daemon/forge/service.js';
 import { ForgeError, type BranchTarget, type ForgeReader, type PrCore, type ReadPr } from '../src/daemon/forge/types.js';
 import { headOf } from '../src/daemon/forge/service.js';
 import { forgeOf, type ForgeRun } from '../src/daemon/forge/run.js';
@@ -29,10 +29,12 @@ const pr = (n: number, branch: string, extra: Partial<ReadPr> = {}): ReadPr => (
   state: 'open', branch, target: 'main', headSha: 'a'.repeat(40), pipeline: 'ok', approvals: { given: 1 }, mergeable: true, openThreads: 0, updatedAt: at(0), blockers: [], head: 'Lyssaen/ledge', ...extra
 });
 
-type Fake = ForgeReader & { lists: Array<{ repo: string; branches: readonly string[] }>; targets: BranchTarget[][]; acts: Array<{ number: number; action: ForgeAction }>; prs: ReadPr[]; fail?: ForgeError };
+type Fake = ForgeReader & { lists: Array<{ repo: string; branches: readonly string[] }>; targets: BranchTarget[][]; acts: Array<{ number: number; action: ForgeAction }>; prs: ReadPr[]; fail?: ForgeError;
+  /** Whether the repository has CI (true by default); an error: the forge cannot tell. */
+  ci?: boolean | Error; ciReads: number };
 function fakeReader(prs: ReadPr[] = []): Fake {
   const r: Fake = {
-    prs, lists: [], acts: [], targets: [],
+    prs, lists: [], acts: [], targets: [], ciReads: 0,
     async list(repo: ForgeRepo, targets: readonly BranchTarget[]) {
       r.lists.push({ repo: repo.repo, branches: targets.map(t => t.branch) });
       r.targets.push([...targets]);
@@ -44,7 +46,8 @@ function fakeReader(prs: ReadPr[] = []): Fake {
       return { pr: p, description: '', author: 'a', reviewers: [], labels: [], issues: [], jobs: [], threads: [], files: [], commits: [], mergeCommand: 'gh pr merge', mergeBlockers: [] };
     },
     async act(_repo, p: PrCore, action) { r.acts.push({ number: p.number, action }); return { command: `gh ${action.kind}` }; },
-    async defaultBranch() { return 'main'; }
+    async defaultBranch() { return 'main'; },
+    async hasCi() { r.ciReads++; if (r.ci instanceof Error) throw r.ci; return r.ci ?? true; }
   };
   return r;
 }
@@ -250,9 +253,10 @@ describe('actions (R5, R6)', () => {
     expect(gh.acts).toEqual([]);
   });
 
-  it('merges a request without CI (pipeline none), refuses one that runs or waits (R5)', async () => {
+  it('merges a request without CI (pipeline none, a repository without any CI), refuses one that runs or waits (R5)', async () => {
     store.upsert(mk('a'));
     const gh = fakeReader([pr(226, 'feat/x', { pipeline: 'none' })]);
+    gh.ci = false;
     const s = service(gh);
     await s.refresh();
     await s.act('github.com/Lyssaen/ledge#226', { kind: 'merge', headSha: 'a'.repeat(40) });
@@ -262,6 +266,46 @@ describe('actions (R5, R6)', () => {
       await expect(s.act('github.com/Lyssaen/ledge#226', { kind: 'merge', headSha: 'a'.repeat(40) })).rejects.toMatchObject({ code: 'not_offered', message: 'the pipeline is not green' });
     }
     expect(gh.acts).toHaveLength(1);
+  });
+
+  // Review of #230, finding 1, decided by the user on 2026-11-09: « without CI » only for a repository with no CI at all.
+  it('in a repository with CI, a head without a pipeline waits: never mergeable, not « ready » for À toi', async () => {
+    store.upsert(mk('a'));
+    const gh = fakeReader([pr(226, 'feat/x', { pipeline: 'none' })]);
+    const s = service(gh);
+    await s.refresh();
+    expect(s.state().prs[0]).toMatchObject({ pipeline: 'wait', mergeable: true });
+    await expect(s.act('github.com/Lyssaen/ledge#226', { kind: 'merge', headSha: 'a'.repeat(40) })).rejects.toMatchObject({ code: 'not_offered', message: 'the pipeline is not green' });
+    const d = await s.detail('github.com/Lyssaen/ledge#226', {});
+    expect(d.pr.pipeline).toBe('wait');
+    expect(d.mergeBlockers).toContain('pipeline');
+    expect(gh.acts).toEqual([]);
+  });
+
+  it('when the forge cannot tell whether the repository has CI, a head without a pipeline waits too', async () => {
+    store.upsert(mk('a'));
+    const gh = fakeReader([pr(226, 'feat/x', { pipeline: 'none' })]);
+    gh.ci = new ForgeError('error', 'HTTP 500');
+    const s = service(gh);
+    await s.refresh();
+    expect(s.state().prs[0]?.pipeline).toBe('wait');
+    await expect(s.act('github.com/Lyssaen/ledge#226', { kind: 'merge', headSha: 'a'.repeat(40) })).rejects.toMatchObject({ code: 'not_offered' });
+  });
+
+  it('reads whether a repository has CI once per 10 minutes: a workflow added makes a pipeline-less head wait', async () => {
+    store.upsert(mk('a'));
+    const gh = fakeReader([pr(226, 'feat/x', { pipeline: 'none' })]);
+    gh.ci = false;
+    const s = service(gh);
+    await s.refresh();
+    expect(s.state().prs[0]?.pipeline).toBe('none');
+    gh.ci = true;
+    clock += 60_000; await s.refresh();
+    expect(gh.ciReads).toBe(1);
+    expect(s.state().prs[0]?.pipeline).toBe('none');
+    clock += CI_TTL_MS; await s.refresh();
+    expect(gh.ciReads).toBe(2);
+    expect(s.state().prs[0]?.pipeline).toBe('wait');
   });
 
   it('refuses a merge with stale when the head moved, and runs no merge', async () => {

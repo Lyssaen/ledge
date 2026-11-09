@@ -242,3 +242,23 @@ describe('GitLab actions', () => {
     await expect(gitlabReader(run).list(repo, [{ branch: 'x', head: 'gitlab-org/cli' }])).rejects.toMatchObject({ status: 'error', message: expect.stringContaining('404') });
   });
 });
+
+// Review of #230, finding 1: « without CI » only for a project with no CI file on its default branch.
+describe('GitLab: whether the project has CI', () => {
+  const NF = { code: 0, stdout: '{"message":"404 File Not Found"}', stderr: 'glab: 404 File Not Found (HTTP 404)' };
+  it('true with a .gitlab-ci.yml on the default branch, false without', async () => {
+    const yes = fakeGlab(p => (p === P ? '{"default_branch":"main","ci_config_path":""}' : p === `${P}/repository/files/.gitlab-ci.yml?ref=main` ? '{"file_name":".gitlab-ci.yml"}' : undefined));
+    expect(await gitlabReader(yes.run).hasCi(repo)).toBe(true);
+    const no = fakeGlab(p => (p === P ? '{"default_branch":"main","ci_config_path":null}' : p.includes('/repository/files/') ? NF : undefined));
+    expect(await gitlabReader(no.run).hasCi(repo)).toBe(false);
+  });
+  it('true with a CI config path of its own, without reading any file', async () => {
+    const f = fakeGlab(p => (p === P ? '{"default_branch":"main","ci_config_path":"ci/pipeline.yml"}' : undefined));
+    expect(await gitlabReader(f.run).hasCi(repo)).toBe(true);
+    expect(f.calls).toHaveLength(1);
+  });
+  it('an error other than 404 throws: the caller assumes CI', async () => {
+    const f = fakeGlab(p => (p === P ? '{"default_branch":"main"}' : p.includes('/repository/files/') ? { code: 0, stdout: '', stderr: 'glab: 500 Internal Server Error (HTTP 500)' } : undefined));
+    await expect(gitlabReader(f.run).hasCi(repo)).rejects.toThrow();
+  });
+});

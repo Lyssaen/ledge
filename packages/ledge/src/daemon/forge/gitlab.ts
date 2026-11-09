@@ -1,6 +1,6 @@
 import { prIdOf, type PipeStatus, type PrFile, type PrJob, type PrReviewer, type PrState, type PrThread } from '@ledge/protocol';
 import { logTail, type ForgeRepo, type ForgeRun } from './run.js';
-import { blockersOf, mergeBlockersOf, ForgeError, pickFor, ForgeRefusal, iso, JOB_ID, ok, okJson, PATCH_BUDGET, SHA, shellJoin, THREAD_ID, type ForgeReader, type ReadDetail, type ReadPr } from './types.js';
+import { blockersOf, mergeBlockersOf, ForgeError, pickFor, ForgeRefusal, iso, JOB_ID, notFound, ok, okJson, PATCH_BUDGET, SHA, shellJoin, THREAD_ID, type ForgeReader, type ReadDetail, type ReadPr } from './types.js';
 
 /**
  * GitLab merge requests through `glab api` (REST v4, R3): `glab mr list` of glab 1.36 has no JSON output. `glab api` exits 0 on
@@ -135,6 +135,16 @@ export function gitlabReader(run: ForgeRun): ForgeReader {
         defaults.set(repo.repo, p);
       }
       return p;
+    },
+
+    async hasCi(repo) {
+      const p = await getJson<{ default_branch?: string | null; ci_config_path?: string | null }>(repo, project(repo));
+      if (p.ci_config_path) return true;
+      if (!p.default_branch) return false;
+      const r = await get(repo, `${project(repo)}/repository/files/.gitlab-ci.yml?ref=${encodeURIComponent(p.default_branch)}`);
+      if (notFound(r)) return false;
+      ok(r, 'glab');
+      return true;
     },
 
     async list(repo, targets) {

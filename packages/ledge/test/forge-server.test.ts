@@ -30,7 +30,8 @@ function reader(prs: ReadPr[]): ForgeReader {
     async list(_r, targets) { return prs.filter(p => targets.some(t => t.branch === p.branch && t.head === p.head)); },
     async detail(_r, n) { const p = prs.find(x => x.number === n)!; return { pr: p, description: 'd', author: 'pim', reviewers: [], labels: [], issues: [], jobs: [], threads: [], files: [], commits: [], mergeCommand: 'gh pr merge', mergeBlockers: ['pipeline'] }; },
     async act() { return { command: 'gh pr comment 226 -R Lyssaen/ledge --body-file -' }; },
-    async defaultBranch() { return 'main'; }
+    async defaultBranch() { return 'main'; },
+    async hasCi() { return true; }
   };
 }
 

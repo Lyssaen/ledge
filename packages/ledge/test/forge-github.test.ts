@@ -268,3 +268,20 @@ describe('GitHub actions', () => {
     expect(calls.some(c => c.args[1] === 'rerun')).toBe(false);
   });
 });
+
+// Review of #230, finding 1: « without CI » only for a repository with no workflow on its default branch.
+describe('GitHub: whether the repository has CI', () => {
+  const contents = (answer: { code?: number; stdout?: string; stderr?: string }) => fakeGh(c => (c.args[0] === 'api' && c.args[1]?.startsWith('repos/cli/cli/contents/.github/workflows') ? answer : undefined));
+  it('reads .github/workflows on the default branch: a YAML file is CI', async () => {
+    const f = contents({ stdout: JSON.stringify([{ type: 'file', name: 'go.yml' }, { type: 'file', name: 'README.md' }]) });
+    expect(await githubReader(f.run).hasCi(repo)).toBe(true);
+    expect(f.calls.find(c => c.args[0] === 'api')!.args[1]).toBe('repos/cli/cli/contents/.github/workflows?ref=trunk');
+  });
+  it('no workflows folder (404), or nothing but other files in it: no CI', async () => {
+    expect(await githubReader(contents({ code: 1, stderr: 'gh: Not Found (HTTP 404)' }).run).hasCi(repo)).toBe(false);
+    expect(await githubReader(contents({ stdout: JSON.stringify([{ type: 'file', name: 'README.md' }, { type: 'dir', name: 'x.yml' }]) }).run).hasCi(repo)).toBe(false);
+  });
+  it('another error throws: the caller assumes CI', async () => {
+    await expect(githubReader(contents({ code: 1, stderr: 'gh: Server Error (HTTP 502)' }).run).hasCi(repo)).rejects.toThrow();
+  });
+});

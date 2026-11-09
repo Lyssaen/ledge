@@ -32,7 +32,8 @@ const BLOCKER_TEXT: Record<MergeBlocker, string> = {
   not_open: 'the request is not open', draft: 'the request is a draft', pipeline: 'the pipeline is not green',
   approvals: 'an approval is missing', changes_requested: 'changes are requested'
 };
-/** R5 as decided on 2026-11-08: a pipeline that failed, runs or waits blocks a merge; none at all (a repository without CI) does not. */
+/** R5: a pipeline that failed, runs or waits blocks a merge; 'none' does not. 'none' reaches here only for a repository without
+ *  any CI (decision of the user, 2026-11-09): with CI, a head whose pipeline has not started yet reads 'wait' (forge/service.ts). */
 export const pipelineBlocks = (p: PipeStatus): boolean => p !== 'ok' && p !== 'none';
 /** Every reason a merge is refused now: the request's own, then its pipeline. */
 export const mergeBlockersOf = (pr: Pick<ReadPr, 'blockers' | 'pipeline'>): MergeBlocker[] => [...pr.blockers, ...(pipelineBlocks(pr.pipeline) ? ['pipeline' as const] : [])];
@@ -60,6 +61,11 @@ export interface ForgeReader {
   act(repo: ForgeRepo, pr: PrCore, action: ForgeAction): Promise<{ command: string }>;
   /** The repository's default branch, read once (R1). */
   defaultBranch(repo: ForgeRepo): Promise<string | null>;
+  /**
+   * Whether the repository has CI on its default branch: a GitHub workflow (`.github/workflows/*.yml`), or a GitLab CI file
+   * (`.gitlab-ci.yml`, or the project's own CI config path). Throws when the forge cannot tell (the caller then assumes CI).
+   */
+  hasCi(repo: ForgeRepo): Promise<boolean>;
 }
 
 /** A refusal before anything ran on the forge. */
@@ -77,6 +83,8 @@ export function ok(r: ForgeRunResult, cli: string): string {
   if (s !== 'ok') throw new ForgeError(s, errorText(r, cli));
   return r.stdout;
 }
+/** The forge answered 404: `gh api` exits 1 with « (HTTP 404) », `glab api` exits 0 with it on stderr. */
+export const notFound = (r: ForgeRunResult): boolean => /\(HTTP 404\)/.test(r.stderr);
 /** The run's stdout as JSON, or a ForgeError. */
 export function okJson<T>(r: ForgeRunResult, cli: string): T {
   const out = ok(r, cli);
