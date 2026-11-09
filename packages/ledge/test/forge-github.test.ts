@@ -204,18 +204,46 @@ describe('GitHub actions', () => {
     expect(r.command).toContain('--match-head-commit');
   });
 
+  /** A gh whose thread lookup answers `owner` (null: no such thread), and every mutation or comment succeeds. */
+  const threadGh = (owner: { number: number; repo: string } | null) => fakeGh(c => {
+    if (c.args[0] === 'pr') return { code: 0 };
+    if (!c.args.includes('graphql')) return undefined;
+    if (JSON.parse(c.input!).query.includes('node(id:')) {
+      return { stdout: JSON.stringify({ data: { node: owner && { pullRequest: { number: owner.number, repository: { nameWithOwner: owner.repo } } } } }) };
+    }
+    return { stdout: '{"data":{}}' };
+  });
+
   it('sends a body on standard input, never in the arguments', async () => {
     const body = 'see $(rm -rf ~)\n--admin';
-    const { run, calls } = fakeGh(c => (c.args[0] === 'pr' || c.args.includes('graphql') ? { code: 0, stdout: '{"data":{}}' } : undefined));
+    const { run, calls } = threadGh({ number: 13506, repo: 'cli/cli' });
     const reader = githubReader(run);
     await reader.act(repo, pr, { kind: 'comment', body });
     await reader.act(repo, pr, { kind: 'reply', threadId: 'PRRT_kwDODKw3uc6EXf8h', body });
     await reader.act(repo, pr, { kind: 'resolve', threadId: 'PRRT_kwDODKw3uc6EXf8h' });
     expect(calls[0]!.args).toEqual(['pr', 'comment', '13506', '-R', 'cli/cli', '--body-file', '-']);
     expect(calls[0]!.input).toBe(body);
-    expect(JSON.parse(calls[1]!.input!).variables).toEqual({ t: 'PRRT_kwDODKw3uc6EXf8h', b: body });
-    expect(JSON.parse(calls[2]!.input!).query).toMatch(/resolveReviewThread/);
+    // Each thread action first checks the thread is this pull request's.
+    expect(JSON.parse(calls[1]!.input!).variables).toEqual({ t: 'PRRT_kwDODKw3uc6EXf8h' });
+    expect(JSON.parse(calls[2]!.input!).variables).toEqual({ t: 'PRRT_kwDODKw3uc6EXf8h', b: body });
+    expect(JSON.parse(calls[4]!.input!).query).toMatch(/resolveReviewThread/);
     for (const c of calls) for (const a of c.args) expect(a).not.toContain('rm -rf');
+  });
+
+  it('refuses to reply to or resolve a thread of another pull request or repository, before any mutation', async () => {
+    for (const owner of [{ number: 13507, repo: 'cli/cli' }, { number: 13506, repo: 'someone/else' }, null]) {
+      const { run, calls } = threadGh(owner);
+      for (const action of [{ kind: 'reply' as const, threadId: 'PRRT_kwDODKw3uc6EXf8h', body: 'x' }, { kind: 'resolve' as const, threadId: 'PRRT_kwDODKw3uc6EXf8h' }]) {
+        await expect(githubReader(run).act(repo, pr, action)).rejects.toMatchObject({ code: 'invalid' });
+      }
+      expect(calls.some(c => /mutation/.test(c.input ?? ''))).toBe(false);
+    }
+  });
+
+  it('takes the repository name whatever its case, as GitHub does', async () => {
+    const { run, calls } = threadGh({ number: 13506, repo: 'CLI/Cli' });
+    await githubReader(run).act(repo, pr, { kind: 'resolve', threadId: 'PRRT_kwDODKw3uc6EXf8h' });
+    expect(calls.some(c => /resolveReviewThread/.test(c.input ?? ''))).toBe(true);
   });
 
   it('refuses a thread id that is not one, before running anything', async () => {

@@ -262,13 +262,26 @@ export function githubReader(run: ForgeRun): ForgeReader {
         if (j.errors?.length) throw new ForgeError('error', j.errors.map(e => e.message ?? '').join('; ').slice(0, 400));
         return { command: `${shellJoin('gh', args)}  # ${label}` };
       };
+      // A review thread id is a global node id: the mutation would act on any thread the machine's account can reach.
+      // Only one of this pull request's threads, in this repository, is acted on (the GitLab path binds it already).
+      const ownThread = async (threadId: string): Promise<void> => {
+        if (!THREAD_ID.test(threadId)) throw new ForgeRefusal('invalid', 'not a thread id');
+        const args = repo.host === 'github.com' ? ['api', 'graphql', '--input', '-'] : ['api', '--hostname', repo.host, 'graphql', '--input', '-'];
+        const query = 'query($t: ID!) { node(id: $t) { ... on PullRequestReviewThread { pullRequest { number repository { nameWithOwner } } } } }';
+        const j = okJson<{ data?: { node?: { pullRequest?: { number?: number; repository?: { nameWithOwner?: string } } } | null } }>(
+          await run('gh', args, { input: JSON.stringify({ query, variables: { t: threadId } }) }), 'gh');
+        const of = j.data?.node?.pullRequest;
+        if (!of || of.number !== pr.number || of.repository?.nameWithOwner?.toLowerCase() !== repo.path.toLowerCase()) {
+          throw new ForgeRefusal('invalid', 'not a thread of this pull request');
+        }
+      };
       switch (action.kind) {
         case 'comment': return runGh(['pr', 'comment', n, '-R', repo.repo, '--body-file', '-'], action.body);
         case 'reply':
-          if (!THREAD_ID.test(action.threadId)) throw new ForgeRefusal('invalid', 'not a thread id');
+          await ownThread(action.threadId);
           return graphql('mutation($t: ID!, $b: String!) { addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $t, body: $b }) { comment { id } } }', { t: action.threadId, b: action.body }, 'addPullRequestReviewThreadReply');
         case 'resolve':
-          if (!THREAD_ID.test(action.threadId)) throw new ForgeRefusal('invalid', 'not a thread id');
+          await ownThread(action.threadId);
           return graphql('mutation($t: ID!) { resolveReviewThread(input: { threadId: $t }) { thread { id } } }', { t: action.threadId }, 'resolveReviewThread');
         case 'rerun': {
           const { runs } = await jobs(repo, pr.headSha);
