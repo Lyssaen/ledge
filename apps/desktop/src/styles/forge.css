@@ -30,10 +30,10 @@
 .fg-mut { color: var(--muted-foreground); }
 .fg-pill { font-size: 11px; line-height: 16px; border-radius: 10px; padding: 1px 8px; border: 1px solid var(--border); color: var(--muted-foreground); white-space: nowrap; }
 .fg-pill.run { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
-.fg-btn { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid var(--input); border-radius: 6px; background: transparent; font: inherit; font-size: 12px; color: var(--foreground); cursor: pointer; white-space: nowrap; }
-.fg-btn:hover:not(:disabled) { background: var(--muted); }
-.fg-btn.pri { border-color: transparent; background: var(--primary); color: var(--primary-foreground); }
-.fg-btn:disabled { opacity: .5; cursor: default; }
+.fg-page .fg-btn, .fg-btn { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid var(--input); border-radius: 6px; background: transparent; font: inherit; font-size: 12px; color: var(--foreground); cursor: pointer; white-space: nowrap; }
+.fg-page .fg-btn:hover:not(:disabled) { background: var(--muted); }
+.fg-page .fg-btn.pri { border-color: transparent; background: var(--primary); color: var(--primary-foreground); }
+.fg-page .fg-btn:disabled { opacity: .5; cursor: default; }
 .fg-seg { display: inline-flex; flex-wrap: wrap; align-self: flex-start; border: 1px solid var(--input); border-radius: 7px; overflow: hidden; }
 .fg-seg button { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 12px; color: var(--muted-foreground); border-right: 1px solid var(--input); }
 .fg-seg button:last-child { border-right: 0; }
@@ -45,7 +45,7 @@
 .fg-blk-h b { font-weight: 600; }
 .fg-blk-b { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; min-width: 0; }
 .fg-desc p { margin: 0 0 6px; line-height: 19px; }
-.fg-desc ul { margin: 0 0 6px; padding-left: 18px; line-height: 19px; }
+.fg-desc ul { margin: 0 0 6px; padding-left: 18px; line-height: 19px; list-style: disc; }
 .fg-kv { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; font-size: 12px; align-items: center; }
 .fg-kv > span:nth-child(odd) { color: var(--muted-foreground); }
 .fg-cell { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; }
