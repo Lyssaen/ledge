@@ -5,7 +5,7 @@ const root = resolve(__dirname, '..');
 const conf = JSON.parse(readFileSync(resolve(root, 'src-tauri/tauri.conf.json'), 'utf8'));
 const caps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/default.json'), 'utf8'));
 const notchCaps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/notch.json'), 'utf8'));
-const atelierCaps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/atelier.json'), 'utf8'));
+const popoutCaps = JSON.parse(readFileSync(resolve(root, 'src-tauri/capabilities/popout.json'), 'utf8'));
 const version = (pkg: string) => JSON.parse(readFileSync(resolve(root, pkg, 'package.json'), 'utf8')).version;
 const main = readFileSync(resolve(root, 'src-tauri/src/main.rs'), 'utf8');
 /** The commands in `generate_handler![…]`, whatever its line breaks (`notch::set_frame` reads `set_frame`). */
@@ -73,27 +73,17 @@ describe('Desktop Tauri config', () => {
   it('registers the notch\'s commands beside its own', () => {
     for (const c of ['set_frame', 'set_hot_zone', 'set_outside_watch', 'focus_overlay', 'release_focus', 'list_monitors', 'set_monitor', 'open_in_ledge']) expect(commands).toContain(c);
   });
-  it('declares the detached Atelier (#21): made on demand, undecorated as the main window (#30), hidden until its saved place is restored, with the same WebView2 flags', () => {
-    const w = conf.app.windows.find((x: { label: string }) => x.label === 'atelier');
-    expect(w).toMatchObject({ create: false, decorations: false, resizable: true, visible: false, dragDropEnabled: false });
-    expect(w.additionalBrowserArgs).toBe(conf.app.windows[0].additionalBrowserArgs);
-    expect(w.url).toBeUndefined();
-    expect(w.alwaysOnTop).not.toBe(true); expect(w.skipTaskbar).not.toBe(true);
-    // made from its declaration, in an async command (a window made in a sync command deadlocks on Windows)
-    expect(commands).toContain('open_atelier');
-    expect(main).toMatch(/async fn open_atelier\(app: AppHandle\)/);
-    expect(main).toContain('WebviewWindowBuilder::from_config(&app, &config)');
-    // remembered by the window-state plugin: only the notch is denied
+  it('no longer declares a detached Atelier window (lot 9: the atelier detaches as an IDE window, open_atelier is gone)', () => {
+    expect(conf.app.windows.find((x: { label: string }) => x.label === 'atelier')).toBeUndefined();
+    expect(commands).not.toContain('open_atelier');
+    // remembered by the window-state plugin: only the notch is denied (the IDE's windows `ide-<id>` are kept by label)
     expect(main).toContain('.with_denylist(&[notch::NOTCH])');
   });
-  it('gives the detached Atelier its own capability: events, focus, close and zoom; no updater, no notch', () => {
-    expect(atelierCaps.windows).toEqual(['atelier']);
-    for (const p of ['core:default', 'core:event:allow-listen', 'core:event:allow-unlisten', 'core:event:allow-emit-to', 'core:window:allow-close', 'core:window:allow-destroy', 'core:window:allow-set-focus', 'core:webview:allow-set-webview-zoom']) expect(atelierCaps.permissions).toContain(p);
-    for (const p of ['updater:default', 'process:allow-restart', 'global-shortcut:allow-register']) expect(atelierCaps.permissions).not.toContain(p);
-    // its own window bar (#30): minimise, maximise and restore, drag, and the maximised state for the restore icon
-    for (const p of ['minimize', 'toggle-maximize', 'maximize', 'unmaximize', 'start-dragging', 'is-maximized']) expect(atelierCaps.permissions).toContain(`core:window:allow-${p}`);
-    // the main window comes forward when the Atelier opens a session there
-    expect(caps.permissions).toContain('core:window:allow-unminimize');
+  it('gives the IDE\'s detached windows (`ide-*`, lot 9) their own capability: their bar, focus, close and zoom; no updater, no notch', () => {
+    expect(popoutCaps.windows).toEqual(['ide-*']);
+    for (const p of ['core:default', 'core:window:allow-close', 'core:window:allow-set-focus', 'core:webview:allow-set-webview-zoom']) expect(popoutCaps.permissions).toContain(p);
+    for (const p of ['updater:default', 'process:allow-restart', 'global-shortcut:allow-register']) expect(popoutCaps.permissions).not.toContain(p);
+    for (const p of ['minimize', 'toggle-maximize', 'maximize', 'unmaximize', 'start-dragging', 'is-maximized', 'set-fullscreen', 'is-fullscreen']) expect(popoutCaps.permissions).toContain(`core:window:allow-${p}`);
   });
   it('lets HTML5 drag and drop reach the page (native file drop off, or WebView2 swallows dragover/drop)', () => {
     expect(conf.app.windows[0].dragDropEnabled).toBe(false);
@@ -101,11 +91,6 @@ describe('Desktop Tauri config', () => {
   it('may switch the window to full screen and ask whether it is', () => {
     expect(caps.permissions).toContain('core:window:allow-set-fullscreen');
     expect(caps.permissions).toContain('core:window:allow-is-fullscreen');
-  });
-  it('lets the detached Atelier go full screen on its own (#41); a new one never opens full screen', () => {
-    for (const p of ['set-fullscreen', 'is-fullscreen']) expect(atelierCaps.permissions).toContain(`core:window:allow-${p}`);
-    // the window-state plugin would bring back a full screen left by Alt+F4, with the Atelier's bar showing over it
-    expect(main).toMatch(/fn open_atelier[\s\S]*?set_fullscreen\(false\)[\s\S]*?window\.show\(\)/);
   });
   it('may unmaximise the window before full screen and maximise it back after (#18)', () => {
     for (const p of ['unmaximize', 'maximize']) expect(caps.permissions).toContain(`core:window:allow-${p}`);
