@@ -46,6 +46,7 @@ import { closedLedgeTasks, useTasksApi } from './tasks/useTasksApi';
 import { Atelier } from './atelier/Atelier';
 import { OpenRigPage } from './openrig/OpenRigPage';
 import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
+import { readOpenRigOnce, rigGone } from '@ledge/fleet/openrig';
 import { createRigOutput, useRigOutput } from './openrig/rigOutput';
 import { useSidebarOpenRig } from './openrig/sidebarState';
 import { offersRigs, setGrouping, useGrouping } from './openrig/grouping';
@@ -108,6 +109,9 @@ const NO_SHELLS: ShellsAvailable = { wsl: null, powershell: false, cmd: false, g
 const rootTermTheme = () => termTheme(getComputedStyle(document.documentElement));
 
 /** One log of the `rig` commands this Desktop ran per client, made once and disposed on unmount (the bottom panel's Output reads it). */
+/** How long applying a disposition waits for a machine's OpenRig to say which rigs it still has. */
+const RIG_READ_MS = 3_000;
+
 function useRigOutputLog(client: DaemonClient) {
   const [log] = useState(() => createRigOutput(client));
   useEffect(() => () => log.dispose(), [log]);
@@ -452,20 +456,27 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     // A shell needs the terminals' chunk (openShell waits for it the same way).
     if (!loadedWorkspace()) { try { await loadWorkspace(); } catch { /* No shell then: ChunkBoundary says so where it is drawn. */ } }
     const machineIds = machinesNow.current.map(m => m.id);
+    // A rig deleted on a machine still there is gone too (the board): each machine with a rig tab is read once, a few seconds at
+    // most; one that does not answer, or whose OpenRig is stopped, keeps its tabs (nobody knows).
+    const rigMachines = [...new Set(d.ws.groups.flatMap(g => g.tabs).filter(t => t.kind === 'rig').map(t => parseRigRef(t.ref)?.machine).filter((m): m is string => m !== undefined && machineIds.includes(m)))];
+    const rigsSeen = new Map(await Promise.all(rigMachines.map(async m => [m, await readOpenRigOnce(fleetClient, m, RIG_READ_MS)] as const)));
     const keep = (tab: Tab) => {
       if (!keepTabNow.current(tab)) return false;
       // A rig or OpenRig tab of a machine removed (the machines known, it is not among them): gone.
-      const machine = tab.kind === 'rig' ? parseRigRef(tab.ref)?.machine : tab.kind === 'openrig' ? tab.ref : undefined;
-      return machine === undefined || machineIds.length === 0 || machineIds.includes(machine);
+      const rig = tab.kind === 'rig' ? parseRigRef(tab.ref) : null;
+      const machine = rig ? rig.machine : tab.kind === 'openrig' ? tab.ref : undefined;
+      if (machine !== undefined && machineIds.length > 0 && !machineIds.includes(machine)) return false;
+      const seen = rig && rigsSeen.get(rig.machine);
+      return !(rig && seen && rigGone(seen, rig.rig));
     };
-    const r = plan(d, { keep, live: ref => termStore.free(ref) !== undefined, spawn: spec => termStore.openFree(spec.kind, spec.dir), open: termStore.freeIds() });
+    const r = plan(d, { keep, live: ref => { const f = termStore.free(ref); return f && { kind: f.kind, dir: f.dir }; }, spawn: spec => termStore.openFree(spec.kind, spec.dir), open: termStore.freeIds() });
     wsStore.update(() => r.ws);
     panelStore.update(p => ({ tab: p.tab, terms: r.panel }));
     const panels = { bottom: d.bottom, right: d.right };
     setLayout(l => ({ ...l, ...panels }));
     saveCurrent({ name: d.name, sig: signature(r.ws, panels) });
     return r.dropped;
-  }, [wsStore, panelStore, termStore, setLayout]);
+  }, [wsStore, panelStore, termStore, setLayout, fleetClient]);
   const applyAndTell = useCallback((name: string) => {
     void applyDisposition(name).then(n => { if (n !== null) notify(n > 0 ? t.ide.dispositions.gone(name, n) : t.ide.dispositions.applied(name)); });
   }, [applyDisposition, notify, t]);

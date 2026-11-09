@@ -29,7 +29,9 @@ export function DispositionsMenu({ list, current, onApply, onSave, onManage, sav
   // The name the field warned about (« existe déjà »): a second Enter on it replaces.
   const [taken, setTaken] = useState<string | null>(null);
   const change = (o: boolean) => { setOpen(o); if (!o) { setSaving(false); setTaken(null); } };
-  useEffect(() => { if (saveAsk > 0) { setOpen(true); setSaving(true); } }, [saveAsk]);
+  // Opened by a new ask only (the palette's « Enregistrer la disposition… »), not by the count it finds when the bar mounts again.
+  const asked = useRef(saveAsk);
+  useEffect(() => { if (saveAsk !== asked.current) { asked.current = saveAsk; setOpen(true); setSaving(true); } }, [saveAsk]);
   // After the menu's own effect (it focuses its first item on opening): the field keeps the focus.
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => { if (open && saving) field.current?.focus(); }, [open, saving]);

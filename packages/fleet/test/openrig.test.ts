@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { ClientMessage, OpenRigState, ServerMessage } from '@ledge/protocol';
 import type { DaemonClient } from '../src/client';
-import { useOpenRig } from '../src/openrig';
+import { readOpenRigOnce, rigGone, useOpenRig } from '../src/openrig';
 
 function fake() {
   const listeners = new Set<(m: ServerMessage) => void>(), sent: ClientMessage[] = [];
@@ -272,5 +272,35 @@ describe('useRigRow', () => {
     const { client, sent } = fake();
     expect(renderHook(() => useRigRow(client, 'local', null, true)).result.current).toEqual({ row: null });
     expect(sent).toEqual([]);
+  });
+});
+
+describe('readOpenRigOnce and rigGone (applying a disposition, lot 10)', () => {
+  const rig = (name: string) => ({ id: name, name, status: 'stopped', lifecycleState: 'stopped', seats: 0, running: 0, attention: 0, uptime: null, snapshot: null, nodes: [] });
+  it('asks once, resolves with the answer and leaves no loop; nothing heard by the timeout: what is known', async () => {
+    vi.useFakeTimers();
+    try {
+      const { client, sent, emit, listeners } = fake();
+      const p = readOpenRigOnce(client, 'srv', 3000);
+      expect(sent).toEqual([{ type: 'openrig.status', requestId: rid(sent[0]), machineId: 'srv' }]);
+      emit({ type: 'openrig.state', requestId: rid(sent[0]), machineId: 'srv', state: { ...state('running'), rigs: [rig('kept')] } });
+      expect((await p).state?.rigs.map(r => r.name)).toEqual(['kept']);
+      expect(listeners.size).toBe(0);
+      act(() => { vi.advanceTimersByTime(120_000); });
+      expect(sent).toHaveLength(1);
+      const q = readOpenRigOnce(client, 'mute', 3000);
+      act(() => { vi.advanceTimersByTime(3000); });
+      expect(await q).toEqual({ state: null });
+      expect(listeners.size).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
+  it('rigGone only when OpenRig runs there and does not list the rig (a stopped rig is listed)', () => {
+    const on = { state: { ...state('running'), rigs: [rig('kept')] } };
+    expect(rigGone(on, 'deleted')).toBe(true);
+    expect(rigGone(on, 'kept')).toBe(false);
+    expect(rigGone({ state: state('stopped') }, 'deleted')).toBe(false);
+    expect(rigGone({ state: null }, 'deleted')).toBe(false);
+    expect(rigGone({ state: null, error: 'offline' }, 'deleted')).toBe(false);
+    expect(rigGone({ state: { ...state('running'), installed: false } }, 'deleted')).toBe(false);
   });
 });

@@ -11,7 +11,8 @@ import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { loadComposer } from '../../src/launch/lazy';
 import { saveIdeEnabled } from '../../src/workspace/prefs';
-import { BOOT_KEY, loadCurrent, loadDispositions } from '../../src/workspace/dispositions';
+import { BOOT_KEY, capture, loadCurrent, loadDispositions, saveDispositions } from '../../src/workspace/dispositions';
+import { empty, open as openTab } from '../../src/workspace/model';
 import { WORKSPACE_KEY } from '../../src/workspace/store';
 import { PROJECTS } from '../helpers';
 
@@ -138,6 +139,21 @@ describe('the status bar’s « Dispositions »', () => {
     await user.click(layMenu().getByRole('menuitem', { name: /^Deux/ }));
     expect(await toast('« Deux » : 1 onglet n’est pas rouvert, sa session ou son rig n’existe plus.')).toBeVisible();
     expect(tabs()).toEqual(['Otto']);
+  });
+
+  it('applied with a rig deleted on a machine still there: that rig\'s tab stays out (the board, review E1); a stopped rig stays', async () => {
+    const { d, user } = await mount();
+    // OpenRig runs on the machine and lists « kept » (stopped), not « gone ».
+    const rig = (name: string) => ({ id: name, name, status: 'stopped', lifecycleState: 'stopped', seats: 0, running: 0, attention: 0, uptime: null, snapshot: null, nodes: [] });
+    d.onMessage(m => {
+      if (m.type === 'openrig.status') d.reply({ type: 'openrig.state', requestId: m.requestId, machineId: m.machineId ?? 'local', state: { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, rigs: [rig('kept')], at: '2026-11-09T12:00:00.000Z' } } as never);
+    });
+    const ws = openTab(openTab(empty(), { kind: 'rig', ref: 'local:kept' }, 'active'), { kind: 'rig', ref: 'local:gone' }, 'active');
+    saveDispositions([capture('Rigs', ws, { bottom: false, right: true })]);
+    await user.click(layButton());
+    await user.click(layMenu().getByRole('menuitem', { name: /^Rigs/ }));
+    expect(await toast('« Rigs » : 1 onglet n’est pas rouvert, sa session ou son rig n’existe plus.')).toBeVisible();
+    expect(JSON.parse(JSON.parse(localStorage.getItem(WORKSPACE_KEY)!)).groups.flatMap((g: { tabs: { ref: string }[] }) => g.tabs.map(t => t.ref))).toEqual(['local:kept']);
   });
 
   it('« Gérer les dispositions » opens Settings › Espace de travail', async () => {

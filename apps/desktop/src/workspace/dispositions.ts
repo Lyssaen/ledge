@@ -69,8 +69,9 @@ function mapRefs(ws: Workspace, to: (ref: string) => string): Workspace {
 export interface ApplyDeps {
   /** Whether a tab's subject still exists (a session the daemon no longer lists, a machine removed: no). */
   keep(t: Tab): boolean;
-  /** Whether a shell is still running under this ref. */
-  live(ref: string): boolean;
+  /** The shell running under this ref now, its type and folder (none: undefined). Refs are numbered from 1 at each launch: the
+   *  same ref can name another shell than the one saved. */
+  live(ref: string): ShellSpec | undefined;
   /** Opens a new shell, and gives its ref. */
   spawn(spec: ShellSpec): string;
   /** The shells open now, in their order: those the disposition does not hold go to the bottom panel (none is killed). */
@@ -81,18 +82,27 @@ export interface ApplyDeps {
  *  counts them), a group emptied gone, a detached window emptied not opened; the panel's terminals, then the open shells it does
  *  not hold. */
 export function plan(d: Disposition, deps: ApplyDeps): { ws: Workspace; panel: string[]; dropped: number } {
-  const renamed = new Map<string, string>();
-  const ref = (r: string): string | null => {
-    if (!isShell(r)) return r;
-    if (deps.live(r)) return r;
-    const known = renamed.get(r);
-    if (known) return known;
+  // Each saved shell gets its shell now, all of them before any tab is placed: first the one still under its ref if it is of its
+  // type and folder, then an open one of that type and folder that no other saved shell took (applied again, the disposition
+  // finds the shells it opened the time before), else a new one. A shell taken or opened here serves one saved ref only.
+  const same = (a: ShellSpec | undefined, b: ShellSpec) => a !== undefined && a.kind === b.kind && a.dir === b.dir;
+  const saved = [...new Set([...shellRefsOf(d.ws), ...d.panel.filter(isShell)])];
+  const resolved = new Map<string, string | null>();
+  const taken = new Set<string>();
+  for (const r of saved) {
     const spec = d.shells[r];
-    if (!spec) return null;
-    const fresh = deps.spawn(spec);
-    renamed.set(r, fresh);
-    return fresh;
-  };
+    const now = deps.live(r);
+    if (now && (!spec || same(now, spec))) { resolved.set(r, r); taken.add(r); }
+  }
+  for (const r of saved) {
+    if (resolved.has(r)) continue;
+    const spec = d.shells[r];
+    if (!spec) { resolved.set(r, null); continue; }
+    const to = deps.open.find(o => !taken.has(o) && same(deps.live(o), spec)) ?? deps.spawn(spec);
+    resolved.set(r, to);
+    taken.add(to);
+  }
+  const ref = (r: string): string | null => (isShell(r) ? resolved.get(r) ?? null : r);
   let dropped = 0;
   let ws = d.ws;
   // A shell without its spec (it cannot open again) goes like a tab whose subject is gone.

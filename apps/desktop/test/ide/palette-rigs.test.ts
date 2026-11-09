@@ -14,7 +14,7 @@ const TEXT: RigPaletteText = {
   sections: { overview: 'Vue d’ensemble', rigs: 'Rigs', roles: 'Rôles', machines: 'Machines', daemon: 'Daemon', output: 'Sortie' }, current: 'actuelle', stopped: 'arrêté'
 };
 const noop = { launch() {}, rigView() {}, section() {}, showMachine() {} };
-const rows = (machines: MachineState[], seen: Map<string, OpenRigSeen>, shown = 'local') => rigCommands(machines, seen, shown, TEXT, noop).map(c => [c.label, c.hint ?? '']);
+const rows = (machines: MachineState[], seen: Map<string, OpenRigSeen>, shown = 'local') => rigCommands(machines, seen, shown, TEXT, noop).map((c): [string, string] => [c.label, c.hint ?? '']);
 
 describe('the palette’s OpenRig commands', () => {
   it('launch, a Rig view per rig and the kernel with its machine (« arrêté » when stopped), the six OpenRig sections', () => {
