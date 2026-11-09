@@ -188,19 +188,40 @@ export function moveTo(w: Workspace, key: string, to: { group: string; index?: n
 }
 
 /** `tab` put at a place of the dock: `moveTo` when it is already open; else added in group `to.group` (at `index`, clamped,
- *  else at the end) or in a new group right of `to.rightOf`. It becomes active, its group focused. A missing group: no change.
+ *  else at the end), in a new group right of `to.rightOf`, or in a new window (a bottom-panel terminal torn out of the
+ *  window). It becomes active, its group focused. A missing group: no change.
  *  (A terminal brought from the bottom panel: no other group is touched, an empty focused one stays.) */
-export function place(w: Workspace, tab: Tab, to: { group: string; index?: number } | { rightOf: string }): Workspace {
-  if (find(w, keyOf(tab))) return moveTo(w, keyOf(tab), to);
+export function place(w: Workspace, tab: Tab, to: { group: string; index?: number } | { rightOf: string } | { window: 'new' }): Workspace {
+  if (find(w, keyOf(tab))) return 'window' in to ? move(w, keyOf(tab), to) : moveTo(w, keyOf(tab), to);
   let out = w;
   let target: Group | undefined;
   if ('group' in to) target = groupById(w, to.group);
+  else if ('window' in to) { const r = addGroup(w, { window: 'new' }); out = r.w; target = r.group; }
   else { const ref = groupById(w, to.rightOf); if (ref) { const r = addGroup(w, { after: ref }); out = r.w; target = r.group; } }
   if (!target) return w;
   const g = groupById(out, target.id)!;
   const at = 'group' in to && to.index !== undefined ? Math.max(0, Math.min(to.index, g.tabs.length)) : g.tabs.length;
   const tabs = [...g.tabs.slice(0, at), tab, ...g.tabs.slice(at)];
   return activate(replaceGroup(out, { ...g, tabs }), g.id, at);
+}
+
+/** The window a tab is in (MAIN or a secondary window's id), null when it is not open. */
+export function windowOf(w: Workspace, key: string): string | null { return find(w, key)?.group.window ?? null; }
+
+/** A secondary window closed by the user (its ×, Alt+F4): its tabs come back to the main window in one group right of
+ *  its last, keeping the window's link colour, the front tab kept; the group focused. Nothing else is closed. The main
+ *  window is never closed this way. PROVISIONAL (lot 9, v27): design-ux's proposal, awaiting jde. */
+export function closeWindow(w: Workspace, win: string): Workspace {
+  if (win === MAIN || !w.windows.includes(win)) return w;
+  const leaving = w.groups.filter(g => g.window === win);
+  const tabs = leaving.flatMap(g => g.tabs);
+  const rest: Workspace = { ...w, windows: w.windows.filter(x => x !== win), groups: w.groups.filter(g => g.window !== win) };
+  const last = rest.groups.filter(g => g.window === MAIN).at(-1)!;
+  if (!tabs.length) return { ...rest, focus: rest.groups.some(g => g.id === w.focus) ? w.focus : last.id };
+  const { w: out, group } = addGroup(rest, { after: last });
+  const from = leaving[0]!;
+  const front = from.tabs[from.active] ?? tabs[0]!;
+  return { ...replaceGroup(out, { ...group, tabs, active: tabs.indexOf(front), link: from.link }), focus: group.id };
 }
 
 /** What an empty group offers:the Terminal of the session it was split from (the UI checks that session still exists).

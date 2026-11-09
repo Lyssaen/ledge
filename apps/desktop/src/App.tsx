@@ -594,7 +594,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   }, [termStore, panelStore, onLayout, t]);
   // A tile dragged into the dock: its terminal tab where it was dropped, the same shell or agent screen (its view moves the
   // xterm, nothing is relaunched). The panel emptied so hides, without « Dernier terminal fermé » (nothing was closed).
-  const panelToDock = useCallback((ref: string, to: { group: string; index?: number } | { rightOf: string }) => {
+  const panelToDock = useCallback((ref: string, to: { group: string; index?: number } | { rightOf: string } | { window: 'new' }) => {
     const r = tileToDock({ ws: wsStore, panel: panelStore, terms: termStore }, ref, to);
     if (r.moved && r.empty) onLayout({ type: 'show', panel: 'bottom', on: false });
   }, [termStore, panelStore, wsStore, onLayout]);
