@@ -3,7 +3,11 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, exist
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, runSetup, CLAUDE_EVENTS, CODEX_EVENTS, CURSOR_EVENTS, systemdUnit, installService, SERVICE, writeBin } from '../src/cli/setup.js';
+
+/** What setup writes: Claude Code's and Codex's commands answer nothing when ledge cannot run, Cursor's answer {}. */
+const G = (bare: string): string => `${bare} 2>/dev/null || true`;
+const GC = (bare: string): string => `${bare} 2>/dev/null || echo '{}'`;
+import { guardedHook, mergeClaudeHooks, mergeCodexHooks, mergeCursorHooks, runSetup, CLAUDE_EVENTS, CODEX_EVENTS, CURSOR_EVENTS, systemdUnit, installService, SERVICE, writeBin } from '../src/cli/setup.js';
 
 describe('mergeClaudeHooks', () => {
   it('appends a ledge entry to every event, keeping foreign hooks', () => {
@@ -13,8 +17,8 @@ describe('mergeClaudeHooks', () => {
     const o = out as { model: string; hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>> };
     expect(o.model).toBe('opus');
     expect(o.hooks.PreToolUse![0]!.hooks[0]!.command).toBe('/other/tool PreToolUse');
-    expect(o.hooks.PreToolUse![1]!.hooks[0]!.command).toBe('ledge hook PreToolUse');
-    for (const ev of CLAUDE_EVENTS) expect(o.hooks[ev]!.some(e => e.hooks.some(h => h.command === `ledge hook ${ev}`))).toBe(true);
+    expect(o.hooks.PreToolUse![1]!.hooks[0]!.command).toBe(G('ledge hook PreToolUse'));
+    for (const ev of CLAUDE_EVENTS) expect(o.hooks[ev]!.some(e => e.hooks.some(h => h.command === G(`ledge hook ${ev}`)))).toBe(true);
   });
   it('is idempotent', () => {
     const once = mergeClaudeHooks({}).settings;
@@ -26,7 +30,7 @@ describe('mergeClaudeHooks', () => {
     expect([...CLAUDE_EVENTS]).toEqual(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd',
       'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop']);
   });
-  it('on a file wired with the 7 earlier events, adds only the 5 new ones and keeps everything else', () => {
+  it('on a file wired with the 7 earlier events, guards them where they are, adds the 5 new ones and keeps everything else', () => {
     const old = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd'];
     const hooks: Record<string, unknown[]> = {};
     for (const ev of old) hooks[ev] = [{ hooks: [{ type: 'command', command: `ledge hook ${ev}`, timeout: 5 }] }];
@@ -36,12 +40,48 @@ describe('mergeClaudeHooks', () => {
     expect(changed).toBe(true);
     const o = out as { model: string; hooks: Record<string, unknown[]> };
     expect(o.model).toBe('opus');
-    for (const ev of old) expect(o.hooks[ev]).toEqual(before.hooks[ev]);
-    expect(o.hooks.PostToolUse).toEqual([...before.hooks.PostToolUse!, { hooks: [{ type: 'command', command: 'ledge hook PostToolUse', timeout: 5 }] }]);
+    // The 7 earlier entries are now guarded, in place.
+    for (const ev of old) expect(o.hooks[ev]).toEqual([{ hooks: [{ type: 'command', command: G(`ledge hook ${ev}`), timeout: 5 }] }]);
+    expect(o.hooks.PostToolUse).toEqual([...before.hooks.PostToolUse!, { hooks: [{ type: 'command', command: G('ledge hook PostToolUse'), timeout: 5 }] }]);
     for (const ev of ['PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop']) {
-      expect(o.hooks[ev]).toEqual([{ hooks: [{ type: 'command', command: `ledge hook ${ev}`, timeout: 5 }] }]);
+      expect(o.hooks[ev]).toEqual([{ hooks: [{ type: 'command', command: G(`ledge hook ${ev}`), timeout: 5 }] }]);
     }
     expect(mergeClaudeHooks(out).changed).toBe(false);
+  });
+  it('turns the bare command an earlier setup wrote into the guarded one, in place, with its group and timeout', () => {
+    const before = { hooks: { Stop: [
+      { hooks: [{ type: 'command', command: '/first Stop' }] },
+      { matcher: '*', hooks: [{ type: 'command', command: '/other Stop' }, { type: 'command', command: 'ledge hook Stop', timeout: 7 }] },
+      { hooks: [{ type: 'command', command: '/last Stop' }] }
+    ] } };
+    const { settings, changed } = mergeClaudeHooks(JSON.parse(JSON.stringify(before)));
+    expect(changed).toBe(true);
+    expect((settings as typeof before).hooks.Stop).toEqual([
+      { hooks: [{ type: 'command', command: '/first Stop' }] },
+      { matcher: '*', hooks: [{ type: 'command', command: '/other Stop' }, { type: 'command', command: G('ledge hook Stop'), timeout: 7 }] },
+      { hooks: [{ type: 'command', command: '/last Stop' }] }
+    ]);
+    expect(mergeClaudeHooks(settings).changed).toBe(false);
+  });
+  it('drops a bare command left beside the guarded one, and a group it leaves empty', () => {
+    const both = { hooks: { Stop: [
+      { hooks: [{ type: 'command', command: G('ledge hook Stop'), timeout: 5 }] },
+      { hooks: [{ type: 'command', command: 'ledge hook Stop', timeout: 5 }] },
+      { hooks: [{ type: 'command', command: '/other Stop' }, { type: 'command', command: 'ledge hook Stop' }] }
+    ] } };
+    const { settings, changed } = mergeClaudeHooks(both);
+    expect(changed).toBe(true);
+    expect((settings as typeof both).hooks.Stop).toEqual([
+      { hooks: [{ type: 'command', command: G('ledge hook Stop'), timeout: 5 }] },
+      { hooks: [{ type: 'command', command: '/other Stop' }] }
+    ]);
+  });
+  it('keeps one guarded entry when two bare ones were there', () => {
+    const twice = { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'ledge hook Stop' }] }, { hooks: [{ type: 'command', command: 'ledge hook Stop' }] }] } };
+    expect((mergeClaudeHooks(twice).settings as typeof twice).hooks.Stop).toEqual([{ hooks: [{ type: 'command', command: G('ledge hook Stop') }] }]);
+  });
+  it('guards with stderr dropped and a fallback answer', () => {
+    expect(guardedHook('ledge hook Stop', 'true')).toBe('ledge hook Stop 2>/dev/null || true');
   });
   it('sets a 5 second timeout on its own entries only', () => {
     const o = mergeClaudeHooks({}).settings as { hooks: Record<string, Array<{ hooks: Array<{ timeout: number }> }>> };
@@ -57,9 +97,14 @@ describe('mergeCodexHooks', () => {
     expect(changed).toBe(true);
     const o = settings as { hooks: Record<string, Array<{ hooks: Array<{ command: string; timeout: number }> }>> };
     expect(o.hooks.Stop![0]!.hooks[0]!.command).toBe('/other/hook --agent codex Stop');
-    expect(o.hooks.Stop![1]!.hooks[0]).toEqual({ type: 'command', command: 'ledge hook codex Stop', timeout: 5 });
-    for (const ev of CODEX_EVENTS) expect(o.hooks[ev]!.some(e => e.hooks.some(h => h.command === `ledge hook codex ${ev}`))).toBe(true);
+    expect(o.hooks.Stop![1]!.hooks[0]).toEqual({ type: 'command', command: G('ledge hook codex Stop'), timeout: 5 });
+    for (const ev of CODEX_EVENTS) expect(o.hooks[ev]!.some(e => e.hooks.some(h => h.command === G(`ledge hook codex ${ev}`)))).toBe(true);
     expect(mergeCodexHooks(settings).changed).toBe(false);
+  });
+  it('guards the bare Codex command where it stands, after the foreign one', () => {
+    const old = { hooks: { Stop: [{ hooks: [{ type: 'command', command: '/other/hook --agent codex Stop', timeout: 10 }] }, { hooks: [{ type: 'command', command: 'ledge hook codex Stop', timeout: 5 }] }] } };
+    const o = mergeCodexHooks(old).settings as typeof old;
+    expect(o.hooks.Stop.map(e => e.hooks[0]!.command)).toEqual(['/other/hook --agent codex Stop', G('ledge hook codex Stop')]);
   });
   it('wires the events Codex 0.162 fires, Interrupt included', () => {
     expect([...CODEX_EVENTS]).toEqual(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'PostToolUse', 'Stop',
@@ -75,12 +120,19 @@ describe('mergeCursorHooks', () => {
     const c = config as { version: number; hooks: Record<string, Array<{ command: string; timeout?: number }>> };
     expect(changed).toBe(true);
     expect(c.version).toBe(1);
-    expect(c.hooks.stop).toEqual([{ command: 'other-tool stop', timeout: 10 }, { command: 'ledge hook cursor stop', timeout: 5 }]);
-    for (const ev of CURSOR_EVENTS) expect(c.hooks[ev]!.some(h => h.command === `ledge hook cursor ${ev}`)).toBe(true);
+    expect(c.hooks.stop).toEqual([{ command: 'other-tool stop', timeout: 10 }, { command: GC('ledge hook cursor stop'), timeout: 5 }]);
+    for (const ev of CURSOR_EVENTS) expect(c.hooks[ev]!.some(h => h.command === GC(`ledge hook cursor ${ev}`))).toBe(true);
   });
   it('is idempotent', () => {
     const once = mergeCursorHooks(foreign).settings;
     expect(mergeCursorHooks(once)).toEqual({ settings: once, changed: false });
+  });
+  it('turns a bare Cursor command into one that answers {} when ledge cannot run, in place', () => {
+    const old = { version: 1, hooks: { stop: [{ command: 'ledge hook cursor stop', timeout: 5 }, { command: 'other-tool stop' }] } };
+    const { settings, changed } = mergeCursorHooks(old);
+    expect(changed).toBe(true);
+    expect((settings as typeof old).hooks.stop).toEqual([{ command: GC('ledge hook cursor stop'), timeout: 5 }, { command: 'other-tool stop' }]);
+    expect(mergeCursorHooks(settings).changed).toBe(false);
   });
   it('starts a missing file with version 1', () => {
     expect(mergeCursorHooks(undefined).settings).toMatchObject({ version: 1 });
@@ -133,7 +185,7 @@ describe('runSetup', () => {
     expect(out).toContain('Codex hooks added');
     expect(out).toContain('trust');
     const hooks = JSON.parse(readFileSync(join(codexDir, 'hooks.json'), 'utf8')).hooks;
-    expect(hooks.Stop.map((e: { hooks: Array<{ command: string }> }) => e.hooks[0]!.command)).toEqual(['/other Stop', 'ledge hook codex Stop']);
+    expect(hooks.Stop.map((e: { hooks: Array<{ command: string }> }) => e.hooks[0]!.command)).toEqual(['/other Stop', G('ledge hook codex Stop')]);
     const text = readFileSync(join(codexDir, 'hooks.json'), 'utf8');
     expect((await runSetup({ settingsPath: join(d, 'settings.json'), codexDir, service: false , cursorDir: join(d, 'cursor') })).join('\n')).toContain('Codex hooks already present');
     expect(readFileSync(join(codexDir, 'hooks.json'), 'utf8')).toBe(text);
@@ -151,7 +203,7 @@ describe('runSetup', () => {
     writeFileSync(join(cursorDir, 'hooks.json'), JSON.stringify({ version: 1, hooks: { stop: [{ command: 'other-tool stop' }] } }));
     expect((await runSetup({ settingsPath: p, service: false, cursorDir , codexDir: join(d, 'codex') })).join('\n')).toContain('Cursor Agent hooks added');
     const text = readFileSync(join(cursorDir, 'hooks.json'), 'utf8');
-    expect(JSON.parse(text).hooks.stop.map((h: { command: string }) => h.command)).toEqual(['other-tool stop', 'ledge hook cursor stop']);
+    expect(JSON.parse(text).hooks.stop.map((h: { command: string }) => h.command)).toEqual(['other-tool stop', GC('ledge hook cursor stop')]);
     expect((await runSetup({ settingsPath: p, service: false, cursorDir , codexDir: join(d, 'codex') })).join('\n')).toContain('Cursor Agent hooks already present');
     expect(readFileSync(join(cursorDir, 'hooks.json'), 'utf8')).toBe(text);
   });
