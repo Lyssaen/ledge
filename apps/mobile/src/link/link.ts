@@ -48,6 +48,8 @@ export interface PhoneLink {
    * ends it at once (`offline`, screen 2 d), and it starts again by itself once the PC is back. A pairing is dropped.
    */
   startRecovery(): void;
+  /** « Annuler » on a recovery screen, under way or stopped (the PC offline): back to the choice; the PC's return starts nothing. */
+  cancelRecovery(): void;
   /** Forgets the keys (the pinned PC, the identity, the cache) and pairs again: the way out of `key_changed` and `denied`. */
   relink(): Promise<void>;
   /** Closes the socket, `POST /auth/logout`, forgets the keys: `signed_out`, for good. */
@@ -288,21 +290,20 @@ export function createPhoneLink(opts: {
     const st: RecoveryState = { step: 'failed', why: 'offline', pcName: null };
     return { receive: async () => {}, again: () => false, cancel: () => {}, state: () => st };
   };
+  /** « Annuler », on any recovery screen: back to the choice, and a PC coming back starts nothing. */
+  const cancelRecovery = () => {
+    if (!recovery) return;
+    dropRecovery();
+    check(true);
+  };
   /** Says « Connexion à … » while the device key is read or made, before `recover_start` can leave. */
   const startingRecovery = (): Recovery => {
     let st: RecoveryState = { step: 'reaching' };
     return { receive: async () => {}, again: () => false, cancel: () => { st = { step: 'cancelled' }; check(true); }, state: () => st };
   };
 
-  const onRecovered = async (r: Recovery, pc: PinnedPc) => {
-    const gen = keysGen;
-    try {
-      await keys.pin(pc);
-    } catch {
-      // Not pinned, so not back: the outcome stays on screen, and the PC has the device under the new key; a pairing by code
-      // gets out of it.
-      return;
-    }
+  // The PC's key is already kept (the recovery's `pin`): `done` comes after it, a failure to keep it is screen « unsaved ».
+  const onRecovered = (r: Recovery, pc: PinnedPc, gen: number) => {
     if (recovery !== r || finished || gen !== keysGen) return;
     pinned = pc;
     recoveryWanted = false;
@@ -339,6 +340,7 @@ export function createPhoneLink(opts: {
       const id = await ensureIdentity(keys);
       if (gen !== recoveryGen || finished) return;
       identity = id;
+      const keysAt = keysGen;
       const r: Recovery = startRecovery({
         identity: id,
         model: deviceLabel(globalThis.navigator?.userAgent ?? '', globalThis.navigator?.maxTouchPoints ?? 0),
@@ -347,9 +349,10 @@ export function createPhoneLink(opts: {
         changed: () => {
           if (recovery !== r) return;
           const st = r.state();
-          if (st.step === 'done') void onRecovered(r, st.pc);
+          if (st.step === 'done') onRecovered(r, st.pc, keysAt);
           check(true);
-        }
+        },
+        pin: (pc) => keys.pin(pc)
       });
       recovery = r;
       check(true);
@@ -616,6 +619,7 @@ export function createPhoneLink(opts: {
     startPairing: beginPairing,
     recovery: () => recovery,
     startRecovery: beginRecovery,
+    cancelRecovery,
     async relink() {
       if (finished) return;
       await forgetKeys(true);

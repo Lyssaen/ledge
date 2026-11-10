@@ -96,6 +96,24 @@ describe('each way a recovery stops (2 a–i)', () => {
     });
   }
 
+  it('« Annuler » on the PC-offline screen goes back to the choice', () => {
+    const t = app('unpaired');
+    act(() => t.setRecovery({ step: 'failed', why: 'offline', pcName: null }));
+    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+    expect(t.calls).toEqual(['cancelRecovery']);
+    expect(screen.getByRole('heading', { name: 'Relier cet iPhone' })).toBeInTheDocument();
+  });
+
+  it('the PC took the device back but its key could not be kept: said, with « Réessayer » and the code', () => {
+    const t = app('unpaired');
+    act(() => t.setRecovery(failed('unsaved')));
+    expect(within(screen.getByRole('alert')).getByRole('heading', { name: 'Reconnexion non enregistrée' })).toBeInTheDocument();
+    expect(screen.getByText(/WSL a accepté la passkey, mais cet appareil n’a pas pu enregistrer sa clé/)).toBeInTheDocument();
+    expect(buttons()).toEqual(['Réessayer', 'Appairer avec un code']);
+    fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+    expect(t.calls.at(-1)).toBe('startRecovery');
+  });
+
   it('« Réessayer » after Face ID was cancelled opens the sheet again on the same offer', () => {
     const t = app('unpaired');
     act(() => t.setRecovery(failed('none')));
@@ -182,5 +200,26 @@ describe('a paired device with an old passkey (4)', () => {
     act(() => t.deliver(withDevice({ confirm: true, recover: true })));
     expect(await screen.findByText('Prête')).toBeInTheDocument();
     expect(screen.queryByText('Ta passkey doit être mise à jour une fois')).not.toBeInTheDocument();
+  });
+
+  it('Connection: after a challenge that never came, or a passkey the PC refused, « Mettre à jour » asks for a new challenge', async () => {
+    vi.mocked(createCredential).mockResolvedValue(credential);
+    const t = app('ready', { hash: '#/connection' });
+    act(() => t.setPinned(real));
+    act(() => t.deliver(withDevice({ confirm: true })));
+    const update = () => screen.getByRole('button', { name: 'Mettre à jour' });
+    await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    act(() => t.deliver({ type: 'error', code: 'invalid' }));
+    await waitFor(() => expect(update()).toBeEnabled());
+    fireEvent.click(update());
+    await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(2));
+    act(() => t.deliver(challenge));
+    await waitFor(() => expect(update()).toBeEnabled());
+    fireEvent.click(update());
+    await waitFor(() => expect(t.of('credential.register')).toHaveLength(1));
+    act(() => t.deliver({ type: 'operation.result', op: t.of('credential.register')[0]!.op, status: 'rejected', reason: 'invalid' } as never));
+    await waitFor(() => expect(update()).toBeEnabled());
+    fireEvent.click(update());
+    await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(3));
   });
 });

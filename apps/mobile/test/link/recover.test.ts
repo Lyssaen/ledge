@@ -10,12 +10,13 @@ afterEach(() => { vi.useRealTimers(); });
 const ASSERTION = { id: 'cid', clientDataJSON: 'cdj', authenticatorData: 'ad', signature: 'sig' };
 
 /** A recovery from a fresh device key, the frames it sends, the challenges it asked the device to sign. */
-async function setup(opts: { answer?: (challenge: string) => Promise<Discoverable | 'cancelled'>; sendOk?: boolean } = {}) {
+async function setup(opts: { answer?: (challenge: string) => Promise<Discoverable | 'cancelled'>; sendOk?: boolean; pin?: () => Promise<void> } = {}) {
   const device = await generateIdentity();
   const pc = await generateIdentity();
   const sent: SealedFrame[] = [];
   const challenges: string[] = [];
   let changes = 0;
+  const pinned: string[] = [];
   const handle = b64u(await recoveryUserId(pc.publicKey));
   let t = Date.parse('2026-11-10T20:00:00.000Z');
   const r: Recovery = startRecovery({
@@ -24,10 +25,11 @@ async function setup(opts: { answer?: (challenge: string) => Promise<Discoverabl
     send: (f) => { sent.push(f); return opts.sendOk ?? true; },
     assert: async (c) => { challenges.push(c); return opts.answer ? opts.answer(c) : { assertion: ASSERTION, userHandle: handle }; },
     changed: () => { changes++; },
+    pin: async (p) => { pinned.push(p.publicKey); if (opts.pin) await opts.pin(); },
     now: () => t
   });
   const offer = { k: 'recover_offer' as const, pc: pc.publicKey, n: randomNonce(), name: 'WSL' };
-  return { r, device, pc, sent, challenges, handle, offer, changes: () => changes, advance: (ms: number) => { t += ms; } };
+  return { r, device, pc, sent, challenges, handle, offer, pinned, changes: () => changes, advance: (ms: number) => { t += ms; } };
 }
 
 describe('startRecovery', () => {
@@ -54,6 +56,17 @@ describe('startRecovery', () => {
       step: 'done', name: 'iPad de G',
       pc: { publicKey: s.pc.publicKey, fingerprint: await fingerprint(s.pc.publicKey), name: 'WSL', pinnedAt: '2026-11-10T20:00:00.000Z' }
     });
+  });
+
+  it('keeps the PC key before it says done; a key it cannot keep is « unsaved », not done', async () => {
+    const s = await setup();
+    await s.r.receive(s.offer);
+    await s.r.receive({ k: 'recover_ok' });
+    expect(s.pinned).toEqual([s.pc.publicKey]);
+    const away = await setup({ pin: async () => { throw new Error('quota'); } });
+    await away.r.receive(away.offer);
+    await away.r.receive({ k: 'recover_ok', name: 'iPad' });
+    expect(away.r.state()).toEqual({ step: 'failed', why: 'unsaved', pcName: 'WSL' });
   });
 
   it('sends nothing for an old passkey (no « L1 »), and says so', async () => {

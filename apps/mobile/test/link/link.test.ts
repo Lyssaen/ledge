@@ -3,12 +3,16 @@
 import { createServer } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage, RelayServerMessage } from '@ledge/protocol';
-import { fingerprint, generateIdentity } from '@ledge/seal';
+import { b64u, fingerprint, generateIdentity, recoveryUserId } from '@ledge/seal';
+import { getDiscoverable } from '../../src/link/webauthn';
 import { createPhoneLink, HELLO_RETRY_MAX_MS, HELLO_WITHIN_MS, type LinkState, type PhoneLink } from '../../src/link/link';
 import { memoryKeys, type KeyStore } from '../../src/link/keys';
 import { PAIRING_TTL_MS } from '../../src/link/pairing';
 import { startFakePc, type FakePc } from '../fakePc';
 import { MemoryStorage, snapshot } from '../state/helpers';
+
+// The passkey sheet of a recovery: what the device's authenticator answers is set by each test.
+vi.mock('../../src/link/webauthn', () => ({ getDiscoverable: vi.fn(async () => 'cancelled') }));
 
 /** Polls on real time (performance.now), so a test that fakes Date still times out. */
 async function until(cond: () => boolean, what = 'condition', ms = 3000): Promise<void> {
@@ -632,5 +636,70 @@ describe('PhoneLink', () => {
     link.retry();
     await until(() => link.state() === 'ready', 'ready again');
     expect(hellos()).toBeGreaterThan(before);
+  });
+
+  describe('the passkey recovery', () => {
+    const ASSERTION = { id: 'cid', clientDataJSON: 'cdj', authenticatorData: 'ad', signature: 'sig' };
+    const starts = (pc: FakePc) => pc.frames.filter((f) => f.k === 'recover_start').length;
+
+    it('the PC offline: « Annuler » goes back to the choice, and the PC coming back starts nothing', async () => {
+      const pc = await startFakePc();
+      cleanups.push(() => pc.close());
+      await pc.disconnect();
+      const { link } = open(pc, memoryKeys(null));
+      await until(() => link.reach() === 'pc_offline', 'pc_offline');
+      link.startRecovery();
+      expect(link.recovery()?.state()).toMatchObject({ step: 'failed', why: 'offline' });
+      link.cancelRecovery();
+      expect(link.recovery()).toBeNull();
+      expect(link.state()).toBe('unpaired');
+      await pc.reconnect();
+      await until(() => link.reach() === 'pc_online', 'pc_online');
+      await settle();
+      expect(starts(pc)).toBe(0);
+      expect(link.recovery()).toBeNull();
+    });
+
+    it('the PC lost while the recovery runs: « Annuler » goes back to the choice, its return starts no other', async () => {
+      const pc = await startFakePc();
+      cleanups.push(() => pc.close());
+      const { link } = open(pc, memoryKeys(null));
+      await until(() => link.reach() === 'pc_online', 'pc_online');
+      const start = pc.waitFor('recover_start');
+      link.startRecovery();
+      await start;
+      await pc.disconnect();
+      await until(() => link.reach() === 'pc_offline', 'pc_offline');
+      link.cancelRecovery();
+      expect(link.recovery()).toBeNull();
+      expect(link.state()).toBe('unpaired');
+      await pc.reconnect();
+      await until(() => link.reach() === 'pc_online', 'pc_online');
+      await settle();
+      expect(starts(pc)).toBe(1);
+    });
+
+    it('a PC key the store refuses after recover_ok → « unsaved », nothing pinned, not ready', async () => {
+      const pc = await startFakePc();
+      cleanups.push(() => pc.close());
+      const handle = b64u(await recoveryUserId(pc.identity.publicKey));
+      vi.mocked(getDiscoverable).mockResolvedValue({ assertion: ASSERTION, userHandle: handle });
+      const keys: KeyStore = { ...memoryKeys(null), pin: async () => { throw new Error('quota'); } };
+      const { link } = open(pc, keys);
+      await until(() => link.reach() === 'pc_online', 'pc_online');
+      const start = pc.waitFor('recover_start');
+      link.startRecovery();
+      await start;
+      const proof = pc.waitFor('recover_proof');
+      pc.recoverOffer('WSL');
+      await proof;
+      pc.recoverOk('iPad');
+      await until(() => link.recovery()?.state().step === 'failed', 'failed');
+      expect(link.recovery()?.state()).toMatchObject({ why: 'unsaved', pcName: 'WSL' });
+      expect(link.pinned()).toBeNull();
+      await settle();
+      expect(link.state()).toBe('unpaired');
+      expect(pc.frames.filter((f) => f.k === 'hello')).toHaveLength(0);
+    });
   });
 });

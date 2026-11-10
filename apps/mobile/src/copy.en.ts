@@ -795,6 +795,10 @@ export const en: Copy = {
       timeout: {
         title: (pc) => `${capEn(pc)} didn't answer`,
         body: "The check didn't finish in time. Nothing was saved on this device."
+      },
+      unsaved: {
+        title: 'Reconnection not saved',
+        body: (pc) => `${capEn(pc)} accepted the passkey, but this device couldn't save its key. Nothing is linked: try again, or pair with a code.`
       }
     }
   },

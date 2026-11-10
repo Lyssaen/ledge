@@ -213,5 +213,7 @@ export function Recover({ state, login, reach, onRetry, onCode, onCancel, onSign
       );
     case 'timeout':
       return <Failed icon="clock" tone="warn" centred title={N.timeout.title(pc)} body={N.timeout.body} actions={[retry(true), code(false)]} />;
+    case 'unsaved':
+      return <Failed icon="lock" tone="bad" centred title={N.unsaved.title} body={N.unsaved.body(pc)} actions={[retry(true), code(false)]} />;
   }
 }

@@ -204,6 +204,9 @@ export function UpdateCard({ store, storage = globalThis.localStorage }: { store
   );
 }
 
+/** A failure that needs a new challenge: the button asks for one rather than waiting for it. */
+const renewable = (e: Enroll) => e.problem === 'failed' || e.problem === 'prepareFailed';
+
 /** The row of Connection: « Reconnexion sans code », « Prête » or the way to update the passkey (4 g, 4 h). Nothing before the accepts are protected. */
 export function UpdateRow({ store }: { store: MobileStore }) {
   const e = useEnroll(store, 'update');
@@ -223,7 +226,7 @@ export function UpdateRow({ store }: { store: MobileStore }) {
       <div className="flex items-center justify-between gap-4">
         <dt className="flex min-w-0 flex-col"><span>{U.row}</span><span className="text-small text-muted">{U.rowHint}</span></dt>
         <dd className="flex-none">
-          <button type="button" disabled={!e.challenge || e.asking} onClick={e.problem === 'failed' || e.problem === 'prepareFailed' ? e.retry : e.go}
+          <button type="button" disabled={e.asking || (!renewable(e) && !e.challenge)} onClick={renewable(e) ? e.retry : e.go}
             className="inline-flex min-h-10 items-center justify-center rounded-control border border-line px-3 text-body font-medium disabled:opacity-45">{e.asking ? U.updating : U.update}</button>
         </dd>
       </div>

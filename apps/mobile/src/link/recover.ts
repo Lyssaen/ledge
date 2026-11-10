@@ -6,8 +6,9 @@ import { digestTag, fingerprint, keyDigest, randomNonce, recoverChallenge, userH
 import type { PinnedPc } from './keys';
 import type { Discoverable } from './webauthn';
 
-/** Why a recovery ended without the device back: the PC's `failed` is shown as `timeout` (screen 2 i), as the contract says. */
-export type RecoverEnd = Exclude<RecoverWhy, 'failed'>;
+/** Why a recovery ended without the device back: the PC's `failed` is shown as `timeout` (screen 2 i), as the contract says;
+ *  `unsaved` the PC took the device back but this one could not keep the PC's key, so nothing is linked. */
+export type RecoverEnd = Exclude<RecoverWhy, 'failed'> | 'unsaved';
 
 export type RecoveryState =
   /** `recover_start` sent, the PC's offer awaited (« Connexion à WSL… »). */
@@ -51,6 +52,8 @@ export function startRecovery(opts: {
   send(f: SealedFrame): boolean;
   assert(challenge: string): Promise<Discoverable | 'cancelled'>;
   changed(): void;
+  /** Keeps the PC's key once it took the device back; `done` only once it is kept. */
+  pin(pc: PinnedPc): Promise<void>;
   now?(): number;
   ttlMs?: number;
 }): Recovery {
@@ -141,7 +144,11 @@ export function startRecovery(opts: {
         const o = offer;
         const fp = await fingerprint(o.pc);
         if (s.step !== 'checking') return;
-        set({ step: 'done', pc: { publicKey: o.pc, fingerprint: fp, name: o.name, pinnedAt: new Date(now()).toISOString() }, name: f.name ?? null });
+        const pc: PinnedPc = { publicKey: o.pc, fingerprint: fp, name: o.name, pinnedAt: new Date(now()).toISOString() };
+        clearTimeout(timer);
+        try { await opts.pin(pc); } catch { if (s.step === 'checking') fail('unsaved'); return; }
+        if (s.step !== 'checking') return;
+        set({ step: 'done', pc, name: f.name ?? null });
       }
     },
     again() {

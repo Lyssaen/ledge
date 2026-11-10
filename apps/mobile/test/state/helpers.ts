@@ -73,6 +73,7 @@ export function fakeLink(initial: LinkState = 'ready') {
     startPairing() { calls.push('startPairing'); },
     recovery: () => recoveryState ? recovery : null,
     startRecovery() { calls.push('startRecovery'); },
+    cancelRecovery() { calls.push('cancelRecovery'); recoveryState = null; notify(); },
     async relink() { calls.push('relink'); },
     async signOut() { calls.push('signOut'); },
     retry() { calls.push('retry'); },

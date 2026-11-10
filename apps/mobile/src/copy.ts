@@ -801,6 +801,11 @@ const fr = {
       timeout: {
         title: (pc: string) => `${capFr(pc)} n’a pas répondu`,
         body: 'La vérification n’a pas abouti à temps. Rien n’a été enregistré sur cet appareil.'
+      },
+      /** Provisional, asked of design-ux: the PC took the device back, but this one could not keep the PC's key. */
+      unsaved: {
+        title: 'Reconnexion non enregistrée',
+        body: (pc: string) => `${capFr(pc)} a accepté la passkey, mais cet appareil n’a pas pu enregistrer sa clé. Rien n’est relié : réessaie, ou appaire avec un code.`
       }
     }
   },

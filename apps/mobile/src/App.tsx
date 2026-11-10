@@ -218,7 +218,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           <Recover
             state={recovery!} login={login} reach={link.reach()}
             onRetry={() => { if (!link.recovery()?.again()) link.startRecovery(); }}
-            onCode={pairByCode} onCancel={() => link.recovery()?.cancel()} onSignOut={signOut} onDone={() => setDoneSeen(true)}
+            onCode={pairByCode} onCancel={() => link.cancelRecovery()} onSignOut={signOut} onDone={() => setDoneSeen(true)}
             actions={recoverNotify
               ? <NotifyStep store={store} fetchImpl={fetchImpl} body={copy.recover.done.notify} onDone={() => setDoneSeen(true)} />
               : undefined}
