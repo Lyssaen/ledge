@@ -1,12 +1,12 @@
 // A reinstalled app back with its passkey (docs/mockups/ledge-mobile-passkey/passkey-reinstall.html): Chromium's virtual
 // authenticator keeps the passkey as iOS's keychain would, the app's keys are wiped as a reinstall wipes them, and the fake
 // PC answers the recovery frames as the daemon would (it does not verify the proof: packages/ledge tests do).
-// SHOTS=<dir> saves a capture of each screen there.
+// SHOTS=<dir> saves a capture of each screen there; SHOTS_LANG=en runs the same screens in English.
 import { generateKeyPairSync } from 'node:crypto';
 import { devices, expect, test, type CDPSession, type Page } from '@playwright/test';
 import type { SealedFrame } from '@ledge/protocol';
 import { userHandleMatches } from '@ledge/seal';
-import { copy } from '../src/copy';
+import { copy, setLang } from '../src/copy';
 import { createDeviceCheck } from '../test/fakePc';
 import { PC_NAME, startHarness, type Harness } from './harness';
 
@@ -14,14 +14,21 @@ const { defaultBrowserType: _phone, ...iPhone13 } = devices['iPhone 13'];
 test.use(iPhone13);
 
 let h: Harness;
-test.beforeEach(async () => { h = await startHarness(); h.daemon.device = createDeviceCheck(h.url); });
+const LANG = process.env.SHOTS_LANG === 'en' ? 'en' : 'fr';
+setLang(LANG);
+test.beforeEach(async ({ page }) => {
+  h = await startHarness();
+  h.daemon.device = createDeviceCheck(h.url);
+  // A reinstall wipes the stored language too: it is set again before each load.
+  if (LANG === 'en') await page.addInitScript(() => { localStorage.setItem('mobile.lang', 'en'); });
+});
 test.afterEach(async () => { await h.close(); });
 
 async function shot(page: Page, name: string) {
   if (!process.env.SHOTS) return;
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${process.env.SHOTS}/recover-${name}.png` });
+  await page.screenshot({ path: `${process.env.SHOTS}/recover-${name}${LANG === 'en' ? '-en' : ''}.png` });
 }
 
 /** Deleting the app on iOS: its key store and its storage are gone, the relay's cookie and the passkey are not. */
