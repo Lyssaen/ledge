@@ -72,6 +72,9 @@ export interface ChatViewProps {
    *  header to the front; `onFieldKey` sees the field's keys first (a mention list), true when it took the key. */
   pinned?: ReactNode; above?: ReactNode; footnote?: ReactNode; multiline?: boolean; subtitle?: string; hideHeader?: boolean;
   onFieldKey?: (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => boolean;
+  /** The IDE's right panel (lot 12): `belowHeader` sits under the header (its tabs); `body`, when given, shows in place of the
+   *  conversation and its field, which stay mounted (hidden) so their scroll and draft are there on the way back. */
+  belowHeader?: ReactNode; body?: ReactNode;
   /** The field's text, when the front holds it (the suggestions and mentions write into it). */
   draft?: string; onDraft?: (text: string) => void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number; contentRef?: Ref<HTMLDivElement>;
@@ -168,11 +171,13 @@ export function ChatView(p: ChatViewProps) {
         {p.headerExtra}
         {p.onClose && <Button variant="ghost" size="icon" aria-label={t.chat.close} title={t.chat.close} onClick={p.onClose}><Icon {...ICONS.close} /></Button>}
       </div>}
+      {p.belowHeader}
+      {p.body !== undefined && <div data-chat-body style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>{p.body}</div>}
       <div ref={thread} data-scroll className="ledge-scroll"
         onMouseOver={hover ? e => hover(agentOf(e.target)) : undefined}
         onMouseLeave={hover ? () => hover(null) : undefined}
         onFocus={hover ? e => { const id = agentOf(e.target); if (id) hover(id); } : undefined}
-        onBlur={hover ? e => { if (!agentOf(e.relatedTarget)) hover(null); } : undefined} style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        onBlur={hover ? e => { if (!agentOf(e.relatedTarget)) hover(null); } : undefined} style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', ...(p.body !== undefined ? { display: 'none' } : {}) }}>
         {p.pinned && <div data-chat-pinned style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--sidebar)', borderBottom: '1px solid var(--sidebar-border)' }}>{p.pinned}</div>}
         <div ref={p.contentRef} data-chat-content style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '14px 16px 10px' }}>
           {turns.length === 0 && (
@@ -196,7 +201,7 @@ export function ChatView(p: ChatViewProps) {
           {turns.map(turn => (
             <div key={turn.qid} data-turn style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {p.turnImages?.(turn)}
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', background: 'var(--secondary)', fontSize: 13, lineHeight: '19px', overflowWrap: 'anywhere' }}>{turn.question}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span data-question style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', background: 'var(--secondary)', fontSize: 13, lineHeight: '19px', overflowWrap: 'anywhere' }}>{turn.question}</span></div>
               {turn.error === 'cancelled' ? <span data-chat-stopped style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.chat.stopped}</span>
                 : turn.error !== undefined && <span data-chat-error role="alert" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--destructive)' }}>{t.chat.error(turn.error)}</span>}
               {turn.error === undefined && (turn.answeredAt !== undefined || turn.steps.length > 0 || live?.qid === turn.qid || running?.qid === turn.qid) && (
@@ -265,7 +270,7 @@ export function ChatView(p: ChatViewProps) {
           ))}
         </div>
       </div>
-      <div data-chat-composer style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderTop: '1px solid var(--sidebar-border)' }}
+      <div data-chat-composer style={{ display: p.body !== undefined ? 'none' : 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderTop: '1px solid var(--sidebar-border)' }}
         onDragOver={p.attach ? e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); } : undefined}
         onDrop={p.attach ? e => { if (e.dataTransfer.files.length === 0) return; e.preventDefault(); p.attach!.onFiles([...e.dataTransfer.files]); } : undefined}>
         {p.above}

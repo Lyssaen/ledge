@@ -47,8 +47,12 @@ describe('routeNav', () => {
     const n = applied({ type: 'home' });
     expect(n.r.nav).toBeUndefined(); expect(n.tab).toEqual(ATELIER_TAB);
   });
-  it('ledge: chat open, right panel shown', () => {
-    expect(routeNav({ type: 'ledge' }, ctx())).toEqual({ nav: { type: 'chat', open: true }, layout: { type: 'show', panel: 'right', on: true } });
+  it('ledge: chat open, right panel shown, on Conversation', () => {
+    expect(routeNav({ type: 'ledge' }, ctx())).toEqual({ nav: { type: 'chat', open: true }, layout: { type: 'show', panel: 'right', on: true }, chat: { tab: 'conversation' } });
+  });
+  it('ledge on a task (« Voir »): the right panel shown on « Tâches » at its detail, the field not asked for', () => {
+    expect(routeNav({ type: 'ledge', tab: 'tasks', task: 't-12' }, ctx())).toEqual({ layout: { type: 'show', panel: 'right', on: true }, chat: { tab: 'tasks', task: 't-12' } });
+    expect(routeNav({ type: 'ledge', tab: 'history' }, ctx())).toEqual({ layout: { type: 'show', panel: 'right', on: true }, chat: { tab: 'history' } });
   });
   it('chat closed hides the right panel, otherwise shows it', () => {
     expect(routeNav({ type: 'chat', open: false }, ctx())).toEqual({ nav: { type: 'chat', open: false }, layout: { type: 'show', panel: 'right', on: false } });

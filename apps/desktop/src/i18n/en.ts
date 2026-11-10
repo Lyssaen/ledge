@@ -709,7 +709,10 @@ export const en: Messages = {
     mentions: 'Mention', mentionSession: (name: string) => `session ${name}`,
     tasks: {
       filters: 'Filters', all: 'All', open: 'Open', closed: 'Closed', giver: 'Giver', anyGiver: 'Anyone', ledge: 'Ledge', sessions: 'The sessions', decisions: 'Decisions',
-      none: 'No task.', result: 'Result', reason: 'Reason', log: 'History', from: (giver: string, owner: string) => `from ${giver} to ${owner}`, close: 'Close'
+      none: 'No task.', result: 'Result', reason: 'Reason', log: 'History', from: (giver: string, owner: string) => `from ${giver} to ${owner}`, close: 'Close',
+      // The IDE's right panel (lot 12, docs/mockups/ledge-ide-tasks-history.html): the detail's way back, the filtered and the waiting lists.
+      back: 'Tasks', noneFiltered: 'No task matches these filters.', clearFilters: 'Clear filters',
+      connecting: 'Connecting to the local daemon…', offline: 'Local daemon offline: this is the last list received.'
     },
     history: { none: 'No conversation today.', open: 'See in the conversation' }
   },
@@ -1535,7 +1538,8 @@ export const en: Messages = {
     allowCommand: 'Allow a command', allow: 'Allow', deny: 'Deny', noRequest: 'Nothing waits for you.',
     prsSub: 'failed pipelines, ready to merge', prFailed: 'pipeline failed', prReady: 'pipeline passed, approved', prReadyNoCi: 'no CI, approved', noPr: 'No MR or PR waits for you.',
     finished: 'Finished since your last visit', noFinished: 'No session has finished.',
-    pageButton: 'Page', pageTip: 'The For you page'
+    pageButton: 'Page', pageTip: 'The For you page',
+    decisionsSub: 'what sessions ask you through Ledge', rigs: 'OpenRig rigs', rigsSub: 'what the rigs ask you', near: 'Context nearly full', fold: 'Fold'
   },
   // Merge and pull requests (lot 8b).
   forge: {

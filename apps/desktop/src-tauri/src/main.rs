@@ -246,6 +246,19 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{checked_target, launched_minimized, on_close, tray_shows_window, tray_title, CloseAction};
+
+    /// The popouts' window bar runs from the main page (lot 9, inert popout of 2026-11-09): Tauri's drag script only ever ran in a
+    /// popout's first document (about:blank), not in popout.html, so the main page moves and maximises a popout itself, by label.
+    /// Its capability must let it.
+    #[test]
+    fn the_main_page_may_move_and_maximise_a_popout() {
+        let cap: serde_json::Value = serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        let has = |key: &str, v: &str| cap[key].as_array().unwrap().iter().any(|p| p == v);
+        assert!(has("windows", "main"));
+        for p in ["core:window:allow-start-dragging", "core:window:allow-toggle-maximize", "core:window:allow-minimize", "core:window:allow-close"] {
+            assert!(has("permissions", p), "{p}");
+        }
+    }
     #[test]
     fn the_tray_tells_a_dev_build_from_an_installed_one() {
         assert_eq!(tray_title("0.5.2", false), "Ledge Desktop 0.5.2");

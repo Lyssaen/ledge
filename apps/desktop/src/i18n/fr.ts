@@ -743,7 +743,10 @@ export const fr = {
     mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`,
     tasks: {
       filters: 'Filtres', all: 'Toutes', open: 'Ouvertes', closed: 'Closes', giver: 'Donneur', anyGiver: 'Tous', ledge: 'Ledge', sessions: 'Les sessions', decisions: 'Décisions',
-      none: 'Aucune tâche.', result: 'Résultat', reason: 'Raison', log: 'Historique', from: (giver: string, owner: string) => `de ${giver} à ${owner}`, close: 'Fermer'
+      none: 'Aucune tâche.', result: 'Résultat', reason: 'Raison', log: 'Historique', from: (giver: string, owner: string) => `de ${giver} à ${owner}`, close: 'Fermer',
+      // Le panneau de droite de l'IDE (lot 12, docs/mockups/ledge-ide-tasks-history.html) : le retour du détail, les listes filtrée et en attente.
+      back: 'Tâches', noneFiltered: 'Aucune tâche avec ces filtres.', clearFilters: 'Effacer les filtres',
+      connecting: 'Connexion au daemon local…', offline: 'Daemon local hors ligne : la liste est celle du dernier relevé.'
     },
     history: { none: 'Aucune conversation aujourd’hui.', open: 'Voir dans la conversation' }
   },
@@ -1614,7 +1617,8 @@ export const fr = {
     allowCommand: 'Autoriser une commande', allow: 'Autoriser', deny: 'Refuser', noRequest: 'Rien ne t’attend.',
     prsSub: 'pipelines échoués, prêtes à fusionner', prFailed: 'pipeline échoué', prReady: 'pipeline réussi, approuvée', prReadyNoCi: 'sans CI, approuvée', noPr: 'Aucune MR ni PR ne t’attend.',
     finished: 'Terminé depuis ton passage', noFinished: 'Aucune session n’a fini.',
-    pageButton: 'Page', pageTip: 'La page À toi'
+    pageButton: 'Page', pageTip: 'La page À toi',
+    decisionsSub: 'ce que les sessions te demandent par Ledge', rigs: 'Rigs OpenRig', rigsSub: 'ce que les rigs te demandent', near: 'Contexte presque plein', fold: 'Replier'
   },
   // MR et PR (lot 8b, docs/mockups/ledge-ide-interactive.html : explorer `prs`, prPage, pipeGraph, statusbar).
   forge: {

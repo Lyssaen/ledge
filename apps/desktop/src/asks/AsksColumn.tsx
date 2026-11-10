@@ -37,34 +37,20 @@ export function AsksColumn({ view, sessions, machineLabel, focus, sourceOf, onOp
     }, DONE_MS));
   };
 
-  const channel = view.channel;
-  const banner = channel && channel.state !== 'ready' ? (() => {
-    const c = a.channel;
-    // The command or the reason OpenRig gives, as is, on its own line (unreachable, no_default).
-    const [title, body, tone, mono] = channel.state === 'no_person' ? [c.no_person.title, c.no_person.body, 'err', '']
-      : channel.state === 'no_default' ? [c.no_default.title, c.no_default.body, 'err', channel.message ?? '']
-      : channel.state === 'openrig_stopped' ? [c.openrig_stopped.title, c.openrig_stopped.body, 'warn', '']
-      : channel.state === 'unreachable' ? [c.unreachable.title, '', 'warn', channel.message ?? '']
-      : [c.not_installed.title(machineLabel), c.not_installed.body, '', ''];
-    return (
-      <div className={cls('ask-banner', tone && `ask-banner-${tone}`)} role="status" data-channel={channel.state}>
-        <Icon d={ALERT} size={16} />
-        <div className="ask-banner-text"><b>{title}</b>{body && <p>{body}</p>}{mono && <p className="ask-mono">{mono}</p>}</div>
-      </div>
-    );
-  })() : null;
+  const banner = <AskBanner channel={view.channel} machineLabel={machineLabel} />;
+  const hasBanner = !!view.channel && view.channel.state !== 'ready';
 
   // The pushed list, plus the cards still showing their end after the push dropped them, in their section.
   const groups = bySection(view.asks);
   const gone = [...done.values()].filter(d => !view.asks.some(x => x.id === d.ask.id));
   for (const d of gone) groups[sectionOf(d.ask)].push(d.ask);
   const shown = ASK_SECTIONS.filter(s => groups[s].length > 0);
-  if (!banner && shown.length === 0 && !view.partial) return null;
+  if (!hasBanner && shown.length === 0 && !view.partial) return null;
   const count = (s: AskSection) => groups[s].filter(x => !done.has(x.id)).length;
   return (
     <div className="ask-col" aria-label={t.side.yours}>
-      {banner}
-      {!banner && view.partial && <p className="ask-partial" role="status"><Icon d={ALERT} size={12} />{a.partial}</p>}
+      {hasBanner && banner}
+      {!hasBanner && view.partial && <p className="ask-partial" role="status"><Icon d={ALERT} size={12} />{a.partial}</p>}
       {shown.map(s => (
         <section key={s} className="ask-sec" aria-label={a.sections[s]}>
           <h4 className="ask-sec-title">{a.sections[s]}{count(s) > 0 && <b className={cls('ask-n', s === 'updates' && 'neutral')}>{count(s)}</b>}</h4>
@@ -81,6 +67,25 @@ export function AsksColumn({ view, sessions, machineLabel, focus, sourceOf, onOp
           })}
         </section>
       ))}
+    </div>
+  );
+}
+
+/** The channel's banner when the rigs cannot reach the person (OpenRig stopped, unreachable, not installed…); nothing while it is ready. */
+export function AskBanner({ channel, machineLabel }: { channel: OpenRigAsksView['channel']; machineLabel: string }): JSX.Element | null {
+  const { t } = useI18n();
+  if (!channel || channel.state === 'ready') return null;
+  const c = t.asks.channel;
+  // The command or the reason OpenRig gives, as is, on its own line (unreachable, no_default).
+  const [title, body, tone, mono] = channel.state === 'no_person' ? [c.no_person.title, c.no_person.body, 'err', '']
+    : channel.state === 'no_default' ? [c.no_default.title, c.no_default.body, 'err', channel.message ?? '']
+    : channel.state === 'openrig_stopped' ? [c.openrig_stopped.title, c.openrig_stopped.body, 'warn', '']
+    : channel.state === 'unreachable' ? [c.unreachable.title, '', 'warn', channel.message ?? '']
+    : [c.not_installed.title(machineLabel), c.not_installed.body, '', ''];
+  return (
+    <div className={cls('ask-banner', tone && `ask-banner-${tone}`)} role="status" data-channel={channel.state}>
+      <Icon d={ALERT} size={16} />
+      <div className="ask-banner-text"><b>{title}</b>{body && <p>{body}</p>}{mono && <p className="ask-mono">{mono}</p>}</div>
     </div>
   );
 }

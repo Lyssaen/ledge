@@ -171,6 +171,36 @@ for (const theme of ['dark', 'light'] as const) {
   });
 }
 
+test('a detached window moves by its bar and maximises on a double press, asked from the main page for that window (jde, Windows)', async ({ page }) => {
+  // A detached window knows its Tauri label (popoutLabel); the main page stays outside Tauri, where the bridge records the calls.
+  await page.context().addInitScript(() => {
+    if (window.opener) (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = { metadata: { currentWindow: { label: 'ide-e2e' } } };
+  });
+  await boot(page);
+  await page.evaluate(() => {
+    const w = window as unknown as { __ledgeWindowCall: (op: string, label?: string) => void; __calls: string[] };
+    w.__calls = [];
+    w.__ledgeWindowCall = (op, label) => { w.__calls.push(`${op} ${label}`); };
+  });
+  await open(page, 'Otto');
+  await open(page, 'Nova');
+  const popped = page.context().waitForEvent('page');
+  await tearOut(page, tabOf(page, 'Nova'));
+  const pop = await popped;
+  const bar = pop.locator('.ide-popout-bar');
+  await expect(bar.locator('.ide-wtitle')).toHaveText(/^Nova · /);
+  const calls = () => page.evaluate(() => (window as unknown as { __calls: string[] }).__calls);
+  await bar.locator('.ide-wtitle').click();
+  await expect.poll(calls).toEqual(['drag ide-e2e']);
+  const label = 'ide-e2e';
+  await bar.locator('.ide-brand').dblclick();
+  await expect.poll(calls).toEqual([`drag ${label}`, `drag ${label}`, `maximize ${label}`]);
+  // Its window buttons keep their own job: none moves the window.
+  await bar.getByRole('button', { name: 'Minimize' }).click();
+  expect((await calls()).filter(c => c.startsWith('drag'))).toHaveLength(2);
+  expect(await bar.evaluate(el => el.querySelectorAll('[data-tauri-drag-region]').length + (el.hasAttribute('data-tauri-drag-region') ? 1 : 0))).toBe(0);
+});
+
 test('while a tab is dragged, a banner at the bottom of its window; let go outside, a new window', async ({ page }) => {
   await boot(page);
   await open(page, 'Otto');
