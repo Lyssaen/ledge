@@ -235,7 +235,8 @@ export function createPhoneLink(opts: {
     if (!pc || pc.name === name) return;
     pinned = { ...pc, name };
     // Not kept: the next snapshot names it again.
-    keys.pin(pinned).catch(() => {});
+    const named = pinned;
+    keyWrite(() => keys.pin(named)).catch(() => {});
     check(true);
   };
 
@@ -261,7 +262,7 @@ export function createPhoneLink(opts: {
   const onLinked = async (p: Pairing, pc: PinnedPc) => {
     const gen = keysGen;
     try {
-      await keys.pin(pc);
+      await keyWrite(() => keys.pin(pc));
     } catch {
       // Not pinned, so not paired: back to unpaired, from where a new pairing can start.
       if (pairing !== p || finished || gen !== keysGen) return;
@@ -276,6 +277,17 @@ export function createPhoneLink(opts: {
     channel = null;
     helloIfDue();
     check();
+  };
+
+  /**
+   * The key store's writes, one after the other, in the order they were asked: a recovery's pin that is still writing when
+   * a pairing or a forget comes is done (or undone) before theirs, never after.
+   */
+  let keyWrites: Promise<unknown> = Promise.resolve();
+  const keyWrite = <T>(write: () => Promise<T>): Promise<T> => {
+    const done = keyWrites.then(write);
+    keyWrites = done.catch(() => {});
+    return done;
   };
 
   // ---- the passkey recovery ----
@@ -352,7 +364,13 @@ export function createPhoneLink(opts: {
           if (st.step === 'done') onRecovered(r, st.pc, keysAt);
           check(true);
         },
-        pin: (pc) => keys.pin(pc)
+        // Written only for the recovery still under way; one cancelled while it was written is undone before any later write.
+        pin: (pc) => keyWrite(async () => {
+          const stale = () => recovery !== r || gen !== recoveryGen || keysAt !== keysGen || finished;
+          if (stale()) throw new Error('cancelled');
+          await keys.pin(pc);
+          if (stale()) { await keys.unpin(); throw new Error('cancelled'); }
+        })
       });
       recovery = r;
       check(true);
@@ -479,7 +497,7 @@ export function createPhoneLink(opts: {
     dropRecovery();
     check();
     try {
-      await keys.forget();
+      await keyWrite(() => keys.forget());
     } catch {
       // Forgotten in memory all the same: nothing is sealed with them for as long as this page lives.
     }

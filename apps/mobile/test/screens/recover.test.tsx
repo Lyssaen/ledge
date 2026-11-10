@@ -104,11 +104,12 @@ describe('each way a recovery stops (2 a–i)', () => {
     expect(screen.getByRole('heading', { name: 'Relier cet iPhone' })).toBeInTheDocument();
   });
 
-  it('the PC took the device back but its key could not be kept: said, with « Réessayer » and the code', () => {
+  it('the PC took the device back but its key could not be kept (2 j): said under the account, with « Réessayer » and the code', async () => {
     const t = app('unpaired');
     act(() => t.setRecovery(failed('unsaved')));
     expect(within(screen.getByRole('alert')).getByRole('heading', { name: 'Reconnexion non enregistrée' })).toBeInTheDocument();
-    expect(screen.getByText(/WSL a accepté la passkey, mais cet appareil n’a pas pu enregistrer sa clé/)).toBeInTheDocument();
+    expect(screen.getByText('WSL a accepté ta passkey, mais cet iPhone n’a pas pu enregistrer la clé de WSL : son stockage est peut-être plein. Rien n’est encore relié.')).toBeInTheDocument();
+    expect(await screen.findByText('@paradow')).toBeInTheDocument();
     expect(buttons()).toEqual(['Réessayer', 'Appairer avec un code']);
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     expect(t.calls.at(-1)).toBe('startRecovery');

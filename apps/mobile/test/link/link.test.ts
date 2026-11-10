@@ -679,6 +679,52 @@ describe('PhoneLink', () => {
       expect(starts(pc)).toBe(1);
     });
 
+    /** Recovers up to recover_ok with a store whose pin waits for `release`. */
+    async function recoverUntilPin() {
+      const pc = await startFakePc();
+      cleanups.push(() => pc.close());
+      vi.mocked(getDiscoverable).mockResolvedValue({ assertion: ASSERTION, userHandle: b64u(await recoveryUserId(pc.identity.publicKey)) });
+      const base = memoryKeys(null);
+      let release!: () => void;
+      const held = new Promise<void>((r) => { release = r; });
+      let pins = 0;
+      const keys: KeyStore = { ...base, pin: async (p) => { if (pins++ === 0) await held; await base.pin(p); } };
+      const { link } = open(pc, keys);
+      await until(() => link.reach() === 'pc_online', 'pc_online');
+      const start = pc.waitFor('recover_start');
+      link.startRecovery();
+      await start;
+      const proof = pc.waitFor('recover_proof');
+      pc.recoverOffer('WSL');
+      await proof;
+      pc.recoverOk('iPad');
+      await until(() => pins === 1, 'the pin under way');
+      return { pc, base, link, release };
+    }
+
+    it('« Annuler » while the PC key is written: the write is undone, nothing is pinned after a reload', async () => {
+      const { base, link, release } = await recoverUntilPin();
+      link.cancelRecovery();
+      release();
+      await settle();
+      expect(link.recovery()).toBeNull();
+      expect(link.pinned()).toBeNull();
+      expect(link.state()).toBe('unpaired');
+      expect(await base.pinned()).toBeNull();
+    });
+
+    it('a pairing by code started while the recovery\'s key is written: the pairing\'s PC is the one kept', async () => {
+      const { pc, base, link, release } = await recoverUntilPin();
+      link.startPairing();
+      release();
+      await until(() => link.pairing()?.state().step === 'compare', 'compare');
+      pc.ok();
+      link.pairing()!.confirmOnPhone();
+      await until(() => link.state() === 'ready', 'ready');
+      expect((await base.pinned())?.publicKey).toBe(pc.identity.publicKey);
+      expect(link.recovery()).toBeNull();
+    });
+
     it('a PC key the store refuses after recover_ok → « unsaved », nothing pinned, not ready', async () => {
       const pc = await startFakePc();
       cleanups.push(() => pc.close());

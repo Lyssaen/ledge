@@ -54,11 +54,12 @@ function Glyph({ icon, tone }: { icon: IconName; tone: keyof typeof TONES }) {
 }
 
 /** A failure's board: its glyph, title and sentence, what to know, and its actions at the bottom. Announced (role alert). */
-function Failed({ icon, tone, title, body, centred = false, children, actions }: {
-  icon: IconName; tone: keyof typeof TONES; title: string; body: string; centred?: boolean; children?: ReactNode; actions: ReactNode;
+function Failed({ login, icon, tone, title, body, centred = false, children, actions }: {
+  login: string | null; icon: IconName; tone: keyof typeof TONES; title: string; body: string; centred?: boolean; children?: ReactNode; actions: ReactNode;
 }) {
   return (
     <Board>
+      <Account login={login} />
       <div role="alert" className={`flex flex-col gap-3 ${centred ? 'items-center text-center' : 'items-start'}`}>
         <Glyph icon={icon} tone={tone} />
         <h1 className={H1}>{title}</h1>
@@ -154,31 +155,31 @@ export function Recover({ state, login, reach, onRetry, onCode, onCancel, onSign
   switch (state.why) {
     case 'none':
       return (
-        <Failed icon="key" tone="warn" title={N.none.title} body={N.none.body(pc)} actions={[retry(true), code(false)]}>
+        <Failed login={login} icon="key" tone="warn" title={N.none.title} body={N.none.body(pc)} actions={[retry(true), code(false)]}>
           <Why lead={N.none.hintTitle}>{N.none.hint}</Why>
         </Failed>
       );
     case 'revoked':
       return (
-        <Failed icon="unlink" tone="bad" title={N.revoked.title(model)} body={N.revoked.body(pc, dayOf(state.revokedAt))} actions={[code()]}>
+        <Failed login={login} icon="unlink" tone="bad" title={N.revoked.title(model)} body={N.revoked.body(pc, dayOf(state.revokedAt))} actions={[code()]}>
           <p>{N.revoked.hint}</p>
         </Failed>
       );
     case 'old':
       return (
-        <Failed icon="key" tone="warn" title={N.old.title} body={N.old.body} actions={[code()]}>
+        <Failed login={login} icon="key" tone="warn" title={N.old.title} body={N.old.body} actions={[code()]}>
           <Why lead={N.old.hintTitle}>{N.old.hint(model)}</Why>
         </Failed>
       );
     case 'offline': {
       // A relay out of reach is Compare's words too (`relayTitle`).
       const [title, body] = reach === 'relay_unreachable' ? [copy.compare.relayTitle, copy.compare.relayBody] : [N.offline.title(pc), N.offline.body(pc)];
-      return <Failed icon="wifioff" tone="warn" centred title={title} body={body} actions={[retry(true), <button key="cancel" type="button" onClick={onCancel} className={OUTLINE}>{R.cancel}</button>]} />;
+      return <Failed login={login} icon="wifioff" tone="warn" centred title={title} body={body} actions={[retry(true), <button key="cancel" type="button" onClick={onCancel} className={OUTLINE}>{R.cancel}</button>]} />;
     }
     case 'otherPc': {
       const [mine, theirs] = state.tags ?? ['', ''];
       return (
-        <Failed icon="shield" tone="bad" title={N.otherPc.title(pc)} body={N.otherPc.body}
+        <Failed login={login} icon="shield" tone="bad" title={N.otherPc.title(pc)} body={N.otherPc.body}
           actions={[code(), <button key="out" type="button" onClick={onSignOut} className={OUTLINE}>{N.otherPc.signOut}</button>]}>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 rounded-control border border-line bg-surface p-4 text-body text-fg">
             <dt className="text-muted">{N.otherPc.inPasskey}</dt>
@@ -193,7 +194,7 @@ export function Recover({ state, login, reach, onRetry, onCode, onCancel, onSign
     }
     case 'connected':
       return (
-        <Failed icon={state.device === 'iPhone' ? 'phone' : 'tablet'} tone="warn" title={N.connected.title(state.device)} body={N.connected.body(pc)} actions={[code(), retry()]}>
+        <Failed login={login} icon={state.device === 'iPhone' ? 'phone' : 'tablet'} tone="warn" title={N.connected.title(state.device)} body={N.connected.body(pc)} actions={[code(), retry()]}>
           <Why lead={N.connected.otherTitle(state.device)}>{N.connected.other}</Why>
           <Why lead={N.connected.reinstalledTitle(state.device)}>{N.connected.reinstalled(state.device)}</Why>
         </Failed>
@@ -201,19 +202,19 @@ export function Recover({ state, login, reach, onRetry, onCode, onCancel, onSign
     case 'rate': {
       const min = state.retryInMs !== undefined ? Math.max(1, Math.ceil(state.retryInMs / 60_000)) : null;
       return (
-        <Failed icon="clock" tone="warn" title={N.rate.title} body={N.rate.body(pc, min)}
+        <Failed login={login} icon="clock" tone="warn" title={N.rate.title} body={N.rate.body(pc, min)}
           actions={[code(), ...(min !== null ? [<button key="wait" type="button" disabled className={OUTLINE}>{N.rate.retryIn(min)}</button>] : [])]} />
       );
     }
     case 'blocked':
       return (
-        <Failed icon="lock" tone="bad" title={N.blocked.title(pc)} body={N.blocked.body(pc)} actions={[code()]}>
+        <Failed login={login} icon="lock" tone="bad" title={N.blocked.title(pc)} body={N.blocked.body(pc)} actions={[code()]}>
           <p>{N.blocked.hintBefore(pc)}<strong className="font-semibold text-fg">{N.blocked.unblock}</strong>{N.blocked.hintAfter}</p>
         </Failed>
       );
     case 'timeout':
-      return <Failed icon="clock" tone="warn" centred title={N.timeout.title(pc)} body={N.timeout.body} actions={[retry(true), code(false)]} />;
+      return <Failed login={login} icon="clock" tone="warn" centred title={N.timeout.title(pc)} body={N.timeout.body} actions={[retry(true), code(false)]} />;
     case 'unsaved':
-      return <Failed icon="lock" tone="bad" centred title={N.unsaved.title} body={N.unsaved.body(pc)} actions={[retry(true), code(false)]} />;
+      return <Failed login={login} icon={model === 'iPad' ? 'tablet' : 'phone'} tone="warn" centred title={N.unsaved.title} body={N.unsaved.body(pc, model)} actions={[retry(true), code(false)]} />;
   }
 }

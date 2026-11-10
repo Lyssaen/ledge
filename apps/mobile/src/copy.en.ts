@@ -798,7 +798,7 @@ export const en: Copy = {
       },
       unsaved: {
         title: 'Reconnection not saved',
-        body: (pc) => `${capEn(pc)} accepted the passkey, but this device couldn't save its key. Nothing is linked: try again, or pair with a code.`
+        body: (pc, m) => `${capEn(pc)} accepted your passkey, but ${thisEn(m)} couldn't save ${pc}'s key: its storage may be full. Nothing is linked yet.`
       }
     }
   },

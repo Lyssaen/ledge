@@ -802,10 +802,10 @@ const fr = {
         title: (pc: string) => `${capFr(pc)} n’a pas répondu`,
         body: 'La vérification n’a pas abouti à temps. Rien n’a été enregistré sur cet appareil.'
       },
-      /** Provisional, asked of design-ux: the PC took the device back, but this one could not keep the PC's key. */
+      /** Screen 2 j (P19, awaiting the owner's word): the PC took the device back, but this one could not keep the PC's key. */
       unsaved: {
         title: 'Reconnexion non enregistrée',
-        body: (pc: string) => `${capFr(pc)} a accepté la passkey, mais cet appareil n’a pas pu enregistrer sa clé. Rien n’est relié : réessaie, ou appaire avec un code.`
+        body: (pc: string, m: Model) => `${capFr(pc)} a accepté ta passkey, mais ${thisFr(m)} n’a pas pu enregistrer la clé de ${pc} : son stockage est peut-être plein. Rien n’est encore relié.`
       }
     }
   },
