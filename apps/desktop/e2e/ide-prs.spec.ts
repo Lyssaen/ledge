@@ -43,7 +43,7 @@ const DAEMON = { version: '0.54.1', install: 'npm' as const, systemd: true, forg
 
 type ForgeExtras = NonNullable<Parameters<typeof fakeDaemon>[2]>['forge'];
 async function boot(page: Page, theme: 'dark' | 'light' = 'dark', forge?: ForgeExtras) {
-  await page.addInitScript(t => { try { localStorage.setItem('ledge.ide.enabled', 'true'); localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ } }, theme);
+  await page.addInitScript(t => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ } }, theme);
   await seedAtelier(page);
   const daemon = await fakeDaemon(page, sessions, { projects: twoProjects, daemon: DAEMON as never,
     forge: forge ?? { prs: PRS, details: { [PRS[0]!.id]: DETAIL_41 }, logs: { j2: 'FAIL worker/retry.test.ts › relance après 3 délais\n  attendu : 3 tentatives\n  reçu :    2 tentatives' }, commands: { rerun: 'glab ci retry -b fix/s3-timeout' } } });

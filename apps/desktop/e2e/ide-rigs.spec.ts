@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import type { OpenRigState } from '@ledge/protocol';
 import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon, session, twoProjects } from './daemon';
+import { ideReady } from './ide';
 
 // The IDE's Rigs view (lot 7b, docs/mockups/ledge-ide-rigs.html): the activity bar's Rigs button (no « ! » since 2026-11-09), the actions and their confirmation.
 test.use({ viewport: { width: 1920, height: 1080 }, reducedMotion: 'reduce' });
@@ -16,16 +17,17 @@ const sessions = [session('otto'), session('pim', { name: 'Pim', rig: { seat: 'd
 const rigsButton = (page: Page) => page.getByRole('navigation', { name: 'Activity bar' }).getByRole('button', { name: 'OpenRig rigs' });
 const view = (page: Page) => page.getByRole('complementary', { name: 'Rigs' });
 
-async function boot(page: Page, openrig: OpenRigState, opts: { ide?: boolean; width?: number } = {}) {
+async function boot(page: Page, openrig: OpenRigState, opts: { width?: number } = {}) {
   await seedAtelier(page);
-  await page.addInitScript(({ ide, width }) => {
+  await page.addInitScript(({ width }) => {
     try {
-      if (ide) localStorage.setItem('ledge.ide.enabled', 'true');
       if (width) localStorage.setItem('ledge.ide.layout', JSON.stringify({ sideOpen: true, sideWidth: width, sideView: 'rigs', bottom: false, bottomHeight: 240, right: false }));
     } catch { /* ignore */ }
-  }, { ide: opts.ide !== false, width: opts.width ?? 0 });
+  }, { width: opts.width ?? 0 });
   const daemon = await fakeDaemon(page, sessions, { projects: twoProjects, openrig, rigCommands: ['rig down starter --snapshot'] });
   await page.goto('/');
+  // A Vite cold start (the run's first page) keeps the IDE's chunk loading past the default 5 s.
+  await ideReady(page);
   return daemon;
 }
 
@@ -64,11 +66,4 @@ test('at 160 px a long rig name keeps the actions column visible', async ({ page
   const side = await page.locator('.ide-explorer').boundingBox();
   expect(stop && side && stop.x + stop.width <= side.x + side.width).toBe(true);
   expect(stop!.width).toBeGreaterThan(8);
-});
-
-test('with the switch off the old sidebar still shows its rigs', async ({ page }) => {
-  await boot(page, state('running'), { ide: false });
-  await expect(page.locator('.ide')).toHaveCount(0);
-  await page.getByRole('radio', { name: 'Rigs' }).click();
-  await expect(page.getByRole('region', { name: 'Rigs' })).toContainText('starter');
 });

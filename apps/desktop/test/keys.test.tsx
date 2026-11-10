@@ -329,7 +329,7 @@ describe('IDE shortcuts (the ide option)', () => {
 
 describe('the shortcuts help names the tab keys (lot 3 follow-up)', () => {
   const FR = [['Ctrl W', 'Fermer l’onglet, ou le groupe vide'], ['Ctrl ⇧ T', 'Rouvrir le dernier onglet fermé'], ['Ctrl Tab / Ctrl ⇧ Tab', 'Onglet suivant / précédent du groupe'],
-    ['Ctrl Pg↓ / Pg↑', 'Onglet suivant / précédent du groupe'], ['Ctrl 1…9', 'Aller au groupe N, depuis un terminal aussi'], ['Ctrl ⇧ `', 'Sortir du terminal vers son onglet (← / → parcourent les onglets), ou y revenir'], ['Ctrl Alt ← / →', 'Déplacer l’onglet vers le groupe de gauche / de droite'], ['Ctrl \\', 'Diviser à droite']];
+    ['Ctrl Pg↓ / Pg↑', 'Onglet suivant / précédent du groupe'], ['Ctrl 1…9', 'Aller au groupe N, depuis un terminal aussi'], ['Ctrl ⇧ `', 'Sortir du terminal vers son onglet (← / → parcourent les onglets), ou y revenir'], ['Ctrl Alt ← / →', 'Déplacer l’onglet vers le groupe de gauche / de droite'], ['Ctrl \\', 'Diviser à droite'], ['Ctrl B', 'Afficher / masquer la barre latérale'], ['Ctrl J', 'Afficher / masquer le panneau du bas (terminaux)'], ['Ctrl /', 'Afficher / masquer le chat de Ledge']];
   it('? : an « Onglets et groupes » block after the others', () => {
     render(<LangProvider lang="fr"><ShortcutsHelp onClose={() => {}} /></LangProvider>);
     const head = screen.getByRole('heading', { name: 'Onglets et groupes' });
@@ -342,7 +342,7 @@ describe('the shortcuts help names the tab keys (lot 3 follow-up)', () => {
     render(<LangProvider lang="en"><Shortcuts ctx={ctx} /></LangProvider>);
     const rows = [...screen.getByRole('region', { name: 'Tabs and groups' }).querySelectorAll('.set-row')].map(r => [r.querySelector('kbd')!.textContent, r.querySelector('.set-label')!.textContent]);
     expect(rows).toEqual([['Ctrl W', 'Close the tab, or the empty group'], ['Ctrl ⇧ T', 'Reopen the last closed tab'], ['Ctrl Tab / Ctrl ⇧ Tab', 'Next / previous tab of the group'],
-      ['Ctrl PgDn / PgUp', 'Next / previous tab of the group'], ['Ctrl 1…9', 'Go to group N, from a terminal too'], ['Ctrl ⇧ `', 'Leave the terminal for its tab (← / → walk the tabs), or go back into it'], ['Ctrl Alt ← / →', 'Move the tab to the group on the left / right'], ['Ctrl \\', 'Split right']]);
+      ['Ctrl PgDn / PgUp', 'Next / previous tab of the group'], ['Ctrl 1…9', 'Go to group N, from a terminal too'], ['Ctrl ⇧ `', 'Leave the terminal for its tab (← / → walk the tabs), or go back into it'], ['Ctrl Alt ← / →', 'Move the tab to the group on the left / right'], ['Ctrl \\', 'Split right'], ['Ctrl B', 'Show / hide the sidebar'], ['Ctrl J', 'Show / hide the bottom panel (terminals)'], ['Ctrl /', 'Show / hide Ledge’s chat']]);
   });
 });
 

@@ -15,6 +15,7 @@ import { TermStore } from '../../src/term/store';
 import { PROJECTS } from '../helpers';
 import { LangProvider } from '../../src/i18n/lang';
 import { BottomPanel } from '../../src/ide/BottomPanel';
+import { termDrag } from '../../src/ide/termDrag';
 import type { ShellRow, ShellsAvailable } from '../../src/term/shells';
 import type { Panel } from '../../src/workspace/panel';
 
@@ -64,6 +65,20 @@ describe('the bottom panel', () => {
     expect(tab.querySelector('.ide-tab-x')).not.toBeNull();
     expect(within(tiles[1] as HTMLElement).getByText('écran shell:2')).toBeVisible();
     expect(within(tiles[1] as HTMLElement).getByText('shell')).toHaveClass('chip-k');
+  });
+
+  it('a dock terminal dropped on a column\'s body joins it at the end; on one of its tabs, in front of that tab', () => {
+    const { p } = mount({ terms: ['shell:1'], stacks: [{ id: 'shell:1', refs: ['shell:1'], active: 0 }], tab: 'term' });
+    const column = document.querySelector('.ide-bterms > .ide-btile') as HTMLElement;
+    // A real column is wide: the drop lands on its body, left of its right edge (where it would open a column beside).
+    vi.spyOn(column, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 600, bottom: 200, width: 600, height: 200, toJSON: () => ({}) });
+    act(() => termDrag.set({ from: 'dock', key: 'terminal:shell:2' }));
+    fireEvent.drop(column.querySelector('.ide-btile-body')!, { clientX: 300, clientY: 100 });
+    expect(p.onDockDrop).toHaveBeenLastCalledWith('terminal:shell:2', 'shell:1', 'end');
+    act(() => termDrag.set({ from: 'dock', key: 'terminal:shell:3' }));
+    fireEvent.drop(column.querySelector('.ide-btile-tab')!, { clientX: 20, clientY: 10 });
+    expect(p.onDockDrop).toHaveBeenLastCalledWith('terminal:shell:3', 'shell:1');
+    act(() => termDrag.set(null));
   });
 
   it('« + ▾ » opens the menu: its title, its sections, the default row; a row picked calls onNewShell', async () => {

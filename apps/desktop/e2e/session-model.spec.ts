@@ -4,7 +4,6 @@ import { ideReady } from './ide';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 const CAN = { version: '0.13.0', install: 'npm' as const, systemd: true, archive: true, models: true, modelSwitch: true };

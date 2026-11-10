@@ -5,7 +5,6 @@ import { eight, fakeDaemon, twoProjects } from './daemon';
 // The assembled IDE shell at the mockup's size (docs/mockups/ledge-ide-interactive.html, v26).
 test.use({ viewport: { width: 1920, height: 1080 } });
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   await seedAtelier(page);
 });
 

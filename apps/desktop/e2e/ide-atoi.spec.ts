@@ -28,7 +28,7 @@ const detail = (cmd: string, jobs: PrDetail['jobs'] = []): Omit<PrDetail, 'pr'> 
 const said = (page: Page) => page.evaluate(() => [...((window as unknown as { __ledgeToasts?: string[] }).__ledgeToasts ?? [])]);
 
 async function boot(page: Page, theme: 'dark' | 'light') {
-  await page.addInitScript(([t, seen]) => { try { localStorage.setItem('ledge.ide.enabled', 'true'); localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t!); localStorage.setItem('ledge.ide.atoi.seen', seen!); } catch { /* ignore */ } }, [theme, String(NOW - 3_600_000)]);
+  await page.addInitScript(([t, seen]) => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t!); localStorage.setItem('ledge.ide.atoi.seen', seen!); } catch { /* ignore */ } }, [theme, String(NOW - 3_600_000)]);
   await seedAtelier(page);
   const daemon = await fakeDaemon(page, sessions, { projects: twoProjects, daemon: { version: '0.54.1', install: 'npm', systemd: true, forge: true } as never,
     forge: { prs: PRS, details: { [PRS[0]!.id]: detail('gh pr merge 225 --squash --match-head-commit 3f9c2ab'), [PRS[1]!.id]: detail('glab mr merge 41', [{ id: 'j', name: 'test', column: 0, columnName: 'test', status: 'fail' }]) } } });

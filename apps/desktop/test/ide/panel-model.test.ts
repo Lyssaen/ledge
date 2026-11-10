@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activateTerm, addTerm, besideTerm, createPanelStore, EMPTY_PANEL, isTerminalRef, openTerm, removeTerm, stackTerm } from '../../src/workspace/panel';
+import { activateTerm, addTerm, besideTerm, createPanelStore, EMPTY_PANEL, isTerminalRef, joinTerm, openTerm, removeTerm, stackTerm } from '../../src/workspace/panel';
 
 describe('the bottom panel model', () => {
   it('addTerm puts a terminal at the end and on Terminaux, once', () => {
@@ -42,6 +42,22 @@ describe('the bottom panel model', () => {
     expect(stackTerm(stacked, 'shell:1', 'agent:a')).toBe(stacked);
     // A dock tab that was not in the panel joins the column.
     expect(stackTerm(side, 'shell:9', 'shell:2').stacks).toEqual([{ refs: ['shell:1'], active: 0 }, { refs: ['shell:9', 'shell:2'], active: 0 }, { refs: ['agent:a'], active: 0 }]);
+  });
+
+  it('a terminal dropped on a column\'s body joins it at the end and is shown, as an editor group takes a tab', () => {
+    // WSL alone in its group; PowerShell, back from the dock, dropped on that group's body: after WSL, not in front of it.
+    const one = openTerm(EMPTY_PANEL, 'shell:1');
+    const back = joinTerm(one, 'shell:2', 'shell:1');
+    expect(back.stacks).toEqual([{ id: 'shell:1', refs: ['shell:1', 'shell:2'], active: 1 }]);
+    expect(back.terms).toEqual(['shell:1', 'shell:2']);
+    expect(joinTerm(back, 'shell:2', 'shell:1')).toBe(back);
+    // A tab of that column dropped on its body moves to its end; a column that is not there leaves the panel as it was.
+    expect(joinTerm(back, 'shell:1', 'shell:2').stacks).toEqual([{ id: 'shell:1', refs: ['shell:2', 'shell:1'], active: 1 }]);
+    expect(joinTerm(back, 'shell:9', 'shell:7')).toBe(back);
+    // The shown tab dropped on its own column's body (joinTerm(p, A, A)): to the end, shown, no throw.
+    const wslFront = joinTerm(activateTerm(back, 'shell:1'), 'shell:1', 'shell:1');
+    expect(wslFront.stacks).toEqual([{ id: 'shell:1', refs: ['shell:2', 'shell:1'], active: 1 }]);
+    expect(joinTerm(back, 'shell:2', 'shell:2')).toBe(back);
   });
 
   it('the right edge opens a column; choosing a stacked tab shows it; closing one leaves the other', () => {

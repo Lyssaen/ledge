@@ -15,7 +15,6 @@ const sessions: Session[] = [
 ];
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   await seedAtelier(page);
 });
 

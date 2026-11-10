@@ -5,7 +5,6 @@ import { at, fleet, ottoThread, tool } from './thread';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 test('a pasted image rides the reply, shows as a thumbnail, opens and saves', async ({ page }) => {

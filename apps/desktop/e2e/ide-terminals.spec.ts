@@ -3,6 +3,7 @@ import { test, expect, seedAtelier } from './fixtures';
 import type { OpenRigState } from '@ledge/protocol';
 import { fakeDaemon, session, twoProjects } from './daemon';
 import { fleet } from './thread';
+import { ideReady } from './ide';
 
 // The IDE's bottom panel (lot 5, docs/mockups/ledge-ide-interactive.html `bottomPanel()`): its shells as tiles side by side,
 // the « + ▾ » menu, a terminal dragged to a group and back, the last one closed, the Output; then its zoomed shots, light and dark.
@@ -27,7 +28,6 @@ const tileText = (names: string[]) => names.map(n => new RegExp(`^>_\\s*${n}$`))
 const groups = (page: Page) => page.locator('.ide-dockview .dv-groupview');
 const dockTab = (page: Page, title: string) => page.locator('.ide-dockview .dv-tab').filter({ hasText: title });
 const writes = (page: Page) => page.evaluate(() => (window as unknown as { __ledgePtyWrites: string[] }).__ledgePtyWrites.join(''));
-const termText = (page: Page, nth: number) => tiles(page).nth(nth).locator('[data-terminal]').evaluate(el => (el as unknown as { __ledgeTermText?: string }).__ledgeTermText ?? '');
 const shownText = (page: Page) => tiles(page).locator('.ide-btile-screen:not([hidden]) [data-terminal]').evaluate(el => (el as unknown as { __ledgeTermText?: string }).__ledgeTermText ?? '');
 const ptyOpens = (page: Page) => page.evaluate(() => (window as unknown as { __ledgePtyOpens: unknown[] }).__ledgePtyOpens.length);
 const emit = (page: Page, text: string) => page.evaluate(t => (window as unknown as { __ledgePtyEmit: (s: string) => void }).__ledgePtyEmit(t), text);
@@ -36,12 +36,12 @@ const box = async (l: Locator) => (await l.boundingBox())!;
 async function boot(page: Page, theme: 'light' | 'dark' = 'light') {
   await seedAtelier(page);
   await page.addInitScript(t => {
-    try { localStorage.setItem('ledge.ide.enabled', 'true'); localStorage.setItem('desktop.lang', 'en'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ }
+    try { localStorage.setItem('desktop.lang', 'en'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ }
     (window as unknown as { __ledgeShells: unknown }).__ledgeShells = { wsl: 'Ubuntu', powershell: true, cmd: false, gitBash: false };
   }, theme);
   const daemon = await fakeDaemon(page, sessions, { projects: twoProjects, openrig: STATE, rigCommands: ['rig down starter --snapshot'] });
   await page.goto('/');
-  await expect(page.locator('.ide')).toBeVisible();
+  await ideReady(page);
   return daemon;
 }
 const openMenu = async (page: Page) => { await panel(page).getByRole('button', { name: 'New terminal' }).click(); await expect(page.getByRole('menu')).toBeVisible(); };
@@ -106,11 +106,12 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await expect(page.getByRole('tabpanel', { name: /^>_ PowerShell 2/ }).locator('.chip-k')).toHaveText('shell');
   await expect(panel(page).getByRole('tab', { name: 'Terminals' }).locator('.ide-bp-count')).toHaveText('1');
 
-  // And back: the tab dragged onto the panel: two tiles again, the typed text still shown.
+  // And back: the tab dragged onto the panel's group joins it at the end, in front, the typed text still shown.
   await drag(page, dockTab(page, '>_ PowerShell 2'), async () => { const r = await box(panel(page).locator('.ide-bp-body')); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
   await expect(tilesTitles(page)).toHaveText(tileText(['WSL · Ubuntu 1', 'PowerShell 2']));
   await expect(dockTab(page, '>_ PowerShell 2')).toHaveCount(0);
-  await expect.poll(() => termText(page, 1), { message: 'the tile shows what was typed, as before' }).toContain('$ echo hi');
+  await expect(tilesTitles(page).nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(() => shownText(page), { message: 'the tile shows what was typed, as before' }).toContain('$ echo hi');
   expect(await ptyOpens(page)).toBe(2);
 
   // The Output: an OpenRig action's end, an entry with « ✓ ».
@@ -122,8 +123,9 @@ test('the bottom panel: shells side by side, a terminal to a group and back, the
   await panel(page).getByRole('tab', { name: 'Terminals' }).click();
 
   // Both closed: the panel hides and says so; Ctrl+J opens it again with the default shell, PowerShell.
-  await tiles(page).nth(1).getByRole('button', { name: 'Close' }).click();
-  await tiles(page).nth(0).getByRole('button', { name: 'Close' }).click();
+  // One group, two tabs (shells stack since d036a563): each tab's « × ».
+  await tilesTitles(page).nth(1).getByRole('button', { name: 'Close' }).click();
+  await tilesTitles(page).nth(0).getByRole('button', { name: 'Close' }).click();
   await expect(panel(page)).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { __ledgeToasts: string[] }).__ledgeToasts)).toContain('Last terminal closed: the bottom panel hides. Ctrl+J opens it again with a shell.');
   await page.keyboard.press('Control+j');

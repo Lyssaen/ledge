@@ -236,6 +236,22 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 }
 @media(max-width:600px){.event-grid thead th:not(:first-child){font-size:10px}.theme-picks{grid-template-columns:1fr 1fr}.accent-swatches{flex-wrap:wrap}.preview-desk{flex-direction:column;align-items:center}}
 
+/* In the IDE, Settings is a tab, often narrower than the window: the same narrow layouts follow the tab's width (its .ide-pane),
+   not the window's. Lot 12c drops the window-width rules above with the old interface. */
+@container (max-width:1250px){.ide-pane .settings-back kbd{display:none!important}.ide-pane .settings-nav{width:196px}.ide-pane .settings-content{padding:24px 24px 48px}}
+@container (max-width:900px){
+ .ide-pane .settings-page{flex-direction:column}
+ .ide-pane .settings-nav{width:auto;flex-direction:row;align-items:center;border-right:0;border-bottom:1px solid var(--border);padding:8px 12px;overflow-x:auto}
+ .ide-pane .settings-back{margin:0 6px 0 0;flex-shrink:0}.ide-pane .settings-back kbd{display:none!important}
+ .ide-pane .settings-content{padding:20px 16px 40px}
+ .ide-pane .form-grid{grid-template-columns:1fr}
+ .ide-pane .rule-entry{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}.ide-pane .rule-arrow{display:none}
+ .ide-pane .set-row:not(.stack){flex-wrap:wrap}.ide-pane .set-control{max-width:100%}
+}
+/* A segmented choice short of room tightens its options first, then wraps them onto a second line (design-ux, 2026-11-10). */
+@container (max-width:600px){.ide-pane .set-seg{flex-wrap:wrap}.ide-pane .set-seg label{padding:0 4px}}
+@container (max-width:600px){.ide-pane .event-grid thead th:not(:first-child){font-size:10px}.ide-pane .theme-picks{grid-template-columns:1fr 1fr}.ide-pane .accent-swatches{flex-wrap:wrap}.ide-pane .preview-desk{flex-direction:column;align-items:center}}
+
 /* Settings › Projects: Ledge's proposals (lot 11) */
 .ledge-suggest{padding:14px 18px}
 .ledge-suggest-head{display:flex;align-items:center;gap:14px}
