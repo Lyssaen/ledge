@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledge — fil de session (maquette)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* The session thread of the IDE: one pane, as it sits beside the editor. Tokens are Ledge's own
+   (packages/ui/src/styles/tokens.css), in both themes. The bar and the note above the window are mockup chrome. */
+:root{
+  --font:'Geist','Segoe UI',system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Consolas,monospace;
+  --w:660px;
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--border:#ffffff1a;--input:#ffffff26;
+  --accent-line:oklch(0.637 0.237 25.331);--primary:oklch(0.444 0.177 26.899);--primary-fg:oklch(0.971 0.013 17.38);
+  --ok:#34d399;--ko:#f87171;--warn:#fbbf24;--info:#60a5fa;--sub:#2dd4bf;
+  --warn-soft:#2a2008;--ko-soft:#2a1212;--diff-add:#0f2e1c;--diff-del:#3a1414;
+  --term-bg:#0c0c0d;--term-fg:#e5e5e5;--shell:#0d0d0d;--page:#000;--mkbar:#0a0a0a;
+  --shadow:0 20px 40px -12px rgba(0,0,0,.7);
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --background:oklch(1 0 0);--foreground:oklch(0.145 0 0);--card:oklch(1 0 0);--muted:oklch(0.97 0 0);
+  --muted-foreground:oklch(0.48 0 0);--border:oklch(0.922 0 0);--input:oklch(0.87 0 0);
+  --accent-line:oklch(0.577 0.245 27.325);--primary:oklch(0.505 0.213 27.518);--primary-fg:oklch(0.971 0.013 17.38);
+  --ok:#059669;--ko:#b91c1c;--warn:#b45309;--info:#2563eb;--sub:#0f766e;
+  --warn-soft:#fffbeb;--ko-soft:#fef2f2;--diff-add:#dcfce7;--diff-del:#fee2e2;
+  --term-bg:oklch(0.975 0 0);--term-fg:oklch(0.22 0 0);--shell:oklch(0.985 0 0);--page:#e7e7e7;--mkbar:#f4f4f4;
+  --shadow:0 20px 40px -12px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font);background:var(--page);color:var(--foreground);font-size:13px;line-height:18px}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:2px solid var(--info);outline-offset:1px}
+.mono{font-family:var(--mono)}.mut{color:var(--muted-foreground)}.sp{flex:1}
+kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--input);border-radius:4px;padding:0 4px;color:var(--muted-foreground);white-space:nowrap}
+
+/* Mockup chrome (not part of the product) */
+.mk-bar{position:sticky;top:0;z-index:30;display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:10px 16px;background:var(--mkbar);border-bottom:1px solid var(--border)}
+.mk-bar strong{margin-right:10px;font-weight:600;font-size:14px}
+.mk-bar button{border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--muted-foreground)}
+.mk-bar button:hover{color:var(--foreground)}
+.mk-bar button[aria-pressed=true]{background:var(--muted);color:var(--foreground);border-color:var(--input)}
+.mk-note{max-width:1100px;margin:12px auto 0;padding:0 16px;color:var(--muted-foreground);line-height:20px}
+.mk-note p{margin:0 0 4px}.mk-note b{color:var(--foreground);font-weight:500}
+.mk-keys{display:none;max-width:1100px;margin:10px auto 0;padding:10px 16px;border:1px solid var(--border);border-radius:10px;background:var(--background);columns:3 240px;column-gap:24px}
+.mk-keys.on{display:block}
+.mk-keys div{display:flex;gap:8px;justify-content:space-between;padding:2px 0;break-inside:avoid}
+.stage{display:flex;justify-content:center;padding:14px 16px 32px;overflow-x:auto}
+
+/* The pane */
+.win{width:var(--w);flex:none;height:calc(100vh - 150px);min-height:640px;border:1px solid var(--border);border-radius:10px;overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:var(--background)}
+.head{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 12px;border-bottom:1px solid var(--border);background:var(--shell);white-space:nowrap;min-width:0}
+.head .dot{width:8px;height:8px;border-radius:50%;background:var(--info);flex:none}
+.head .dot[data-st=idle]{background:var(--ok)}.head .dot[data-st=perm]{background:var(--ko)}
+.head b{font-weight:600}
+.head .where{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.chip{font-size:11px;border:1px solid var(--border);border-radius:5px;padding:0 6px;color:var(--muted-foreground);flex:none}
+.head .cost{font-family:var(--mono);font-size:11px;color:var(--muted-foreground);flex:none}
+.mid{position:relative;display:grid;grid-template-columns:minmax(0,1fr);min-height:0}
+.thread{position:relative;overflow-y:auto;padding:0 14px 18px 16px;font-size:13.5px;line-height:20px;scroll-behavior:auto}
+.thread:focus-visible{outline:none}
+
+/* A conversation. The user's messages and decisions sit on the right, the agent speaks on the left, and what the
+   agent did between two of its messages folds into one line of activity. */
+.turn{padding-top:14px}
+.prompt{background:var(--muted);border-radius:12px 12px 3px 12px;padding:7px 12px;white-space:pre-wrap;width:fit-content;max-width:86%;margin-left:auto}
+.prompt .who{display:block;font-size:11px;color:var(--muted-foreground);margin-bottom:1px}
+.ptime{text-align:right;font-size:10.5px;color:var(--muted-foreground);margin:2px 4px 0 0}
+.ag{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted-foreground);margin:6px 0 2px}
+.ag i{width:7px;height:7px;border-radius:50%;background:var(--muted-foreground);display:block}
+.ag b{color:var(--foreground);font-weight:600}
+.burst{margin:5px 0}
+.bh{display:flex;gap:7px;align-items:center;width:fit-content;max-width:100%;font-size:12px;line-height:18px;color:var(--muted-foreground);padding:2px 8px 2px 5px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.bh:hover,.bh:focus-visible{background:var(--muted);outline:none}
+.bh .ch{font-size:9px;transition:transform .12s;width:10px;text-align:center}
+.burst[aria-expanded=true] > .bh .ch{transform:rotate(90deg)}
+.bh .sum{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.bh b{color:var(--foreground);font-weight:500}
+.bh .spin{width:9px;height:9px;border:1.5px solid var(--info);border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;flex:none}
+.bb{display:none;margin:2px 0 4px}
+.burst[aria-expanded=true] > .bb,.burst.one > .bb{display:block}
+.burst.one > .bh{display:none}
+.at{font-family:var(--mono);font-size:12px;color:var(--info)}
+.say{margin:8px 0;max-width:78ch}
+.say p{margin:0 0 6px}.say p:last-child{margin:0}
+.say code,.prompt code{font-family:var(--mono);font-size:12px;background:var(--muted);border-radius:4px;padding:0 4px}
+.prompt code{background:var(--background)}
+.say.in{animation:fadein .28s ease-out}
+@keyframes fadein{from{opacity:0;transform:translateY(3px)}}
+.typing{display:flex;align-items:center;gap:4px;margin:8px 0 2px;font-size:12px;color:var(--muted-foreground)}
+.typing[hidden]{display:none}
+.typing i{width:5px;height:5px;border-radius:50%;background:var(--muted-foreground);animation:dots 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+.typing span{margin-left:5px}
+@keyframes dots{0%,60%,100%{opacity:.25}30%{opacity:1}}
+.faded{opacity:.62}
+
+.row{font-family:var(--mono);font-size:11.5px;line-height:18px;color:var(--muted-foreground);border-left:1px solid var(--border);margin-left:3px}
+.row .rh{display:grid;grid-template-columns:16px auto minmax(0,1fr) auto auto 12px;gap:7px;align-items:baseline;padding:2px 4px 2px 8px;border-radius:0 5px 5px 0;cursor:default}
+.row[aria-expanded] > .rh{cursor:pointer}
+.row > .rh:hover,.row:focus-visible > .rh{background:var(--muted)}
+.row:focus-visible{outline:none}.row:focus-visible > .rh{box-shadow:inset 2px 0 0 var(--info)}
+.row .si{text-align:center}
+.row[data-st=ok] > .rh .si::before{content:"✓";color:var(--ok)}
+.row[data-st=ko] > .rh .si::before{content:"✗";color:var(--ko)}
+.row[data-st=warn] > .rh .si::before{content:"!";color:var(--warn);font-weight:600}
+.row[data-st=think] > .rh .si::before{content:"◦"}
+.row[data-st=stop] > .rh .si::before{content:"■";font-size:8px}
+.row[data-st=run] > .rh .si::before{content:"";display:inline-block;width:9px;height:9px;border:1.5px solid var(--info);border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.row .vb{color:var(--foreground);font-weight:500;white-space:nowrap}
+.row .tg{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .me,.row .du{white-space:nowrap}
+.row .ch{font-size:9px;transition:transform .12s}
+.row[aria-expanded] > .rh .ch::before{content:"▸"}
+.row[aria-expanded=true] > .rh .ch{transform:rotate(90deg)}
+.row > .detail{display:none;padding:4px 0 8px 10px}
+.row[aria-expanded=true] > .detail{display:block}
+.row .detail .row{margin-left:6px}
+.add{color:var(--ok)}.del{color:var(--ko)}
+.thk{font-family:var(--font);font-size:12.5px;line-height:19px;margin:0;max-width:76ch;font-style:italic}
+.lnk{color:var(--info);cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-decoration-color:transparent}
+.lnk:hover{text-decoration-color:currentColor}
+
+.trace{font-size:11.5px;color:var(--muted-foreground);margin:5px 0 5px 3px;padding-left:9px;border-left:1px solid var(--border)}
+.trace b{color:var(--foreground);font-weight:500}
+.marker{display:flex;align-items:center;gap:10px;margin:12px 0 4px;font-size:11.5px;color:var(--muted-foreground)}
+.marker::before,.marker::after{content:"";flex:1;height:1px;background:var(--border)}
+.marker.warn{color:var(--warn)}
+.stopline{font-size:11.5px;color:var(--muted-foreground);margin:6px 0 0 auto;width:fit-content;max-width:86%;border:1px solid var(--border);border-radius:10px 10px 3px 10px;padding:2px 10px}
+.t-foot{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin-top:4px;font-family:var(--mono);font-size:11px;color:var(--muted-foreground)}
+.t-foot button{border:1px solid var(--border);border-radius:5px;padding:0 6px;height:19px}
+.t-foot button:hover{color:var(--foreground);background:var(--muted)}
+
+/* Diff, shell, results */
+.diff,.term,.res{font-family:var(--mono);font-size:11.5px;line-height:18px;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:var(--term-bg);color:var(--term-fg)}
+.dbar{display:flex;align-items:center;gap:6px;padding:3px 6px 3px 9px;border-bottom:1px solid var(--border);background:var(--shell);color:var(--muted-foreground);min-width:0}
+.dbar > span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.dbar button{font-family:var(--font);font-size:11px;border:1px solid var(--border);border-radius:5px;padding:0 6px;height:19px;white-space:nowrap}
+.dbar button:hover{color:var(--foreground);background:var(--muted)}
+.dl{display:flex;white-space:pre;padding-right:8px}
+.dl .dg{width:18px;text-align:center;flex:none;color:var(--muted-foreground);user-select:none}
+.dl.a{background:var(--diff-add)}.dl.d{background:var(--diff-del)}
+.dl.h{color:var(--muted-foreground);background:var(--shell)}
+.uni,.spl{overflow-x:auto;padding:2px 0}
+.spl{display:none}
+.diff[data-layout=spl] .uni{display:none}
+.diff[data-layout=spl] .spl{display:grid;grid-template-columns:1fr 1fr}
+.spl .dl{min-width:0;overflow:hidden}.spl .dl.r{border-left:1px solid var(--border)}
+.spl .dl.h{grid-column:1/-1}
+.spl .dl.e{background:var(--shell)}
+.term pre{margin:0;padding:6px 9px;font-family:var(--mono);font-size:11.5px;line-height:17px;white-space:pre;overflow-x:auto}
+.term .cut{display:flex;gap:10px;padding:3px 9px;border-top:1px dashed var(--border);border-bottom:1px dashed var(--border);color:var(--muted-foreground)}
+.term .r{color:var(--ko)}.term .g{color:var(--ok)}.term .y{color:var(--warn)}.term .dim{color:var(--muted-foreground)}
+.res{padding:4px 0}
+.res .f{padding:2px 9px;color:var(--info);cursor:pointer}
+.res .m{padding:0 9px 0 24px;white-space:pre;overflow:hidden;text-overflow:ellipsis;color:var(--muted-foreground)}
+.res .m b{color:var(--term-fg);font-weight:500}
+
+/* Permission */
+.perm{border:1px solid color-mix(in oklab,var(--warn) 55%,transparent);background:var(--warn-soft);border-radius:9px;padding:9px 11px;margin:8px 0;display:flex;flex-direction:column;gap:7px;font-size:13px;line-height:18px}
+.perm:focus-visible{outline:2px solid var(--warn);outline-offset:1px}
+.perm .ph{display:flex;align-items:center;gap:7px;font-weight:500}
+.perm .ph .w{color:var(--warn)}
+.perm .ph .src{color:var(--sub);font-weight:400}
+.perm .ph .pn{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted-foreground);font-weight:400}
+.perm .cmd{font-family:var(--mono);font-size:12px;background:var(--term-bg);color:var(--term-fg);border:1px solid var(--border);border-radius:6px;padding:6px 9px;white-space:pre-wrap;word-break:break-all}
+.perm .ctx{font-size:12px;color:var(--muted-foreground)}
+.perm .ctx b{color:var(--warn);font-weight:500}
+.perm .acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{height:26px;padding:0 10px;border-radius:6px;border:1px solid var(--input);font-size:12px;display:inline-flex;align-items:center;gap:6px;background:var(--background);white-space:nowrap}
+.btn:hover{background:var(--muted)}
+.btn.pri{background:var(--foreground);color:var(--background);border-color:transparent}
+.btn.pri:hover{opacity:.88}
+.btn.pri kbd{color:inherit;border-color:currentColor;opacity:.7}
+.perm .scopes,.perm .note{display:none;flex-direction:column;gap:5px}
+.perm.s-open .scopes,.perm.n-open .note{display:flex}
+.perm .scopes button{text-align:left;padding:4px 8px;border-radius:5px;font-size:12px;border:1px solid var(--border);background:var(--background)}
+.perm .scopes button:hover{background:var(--muted)}
+.perm .note input{height:28px;border:1px solid var(--input);border-radius:6px;background:var(--background);color:inherit;font:inherit;padding:0 9px}
+.decided{font-size:11.5px;margin:5px 0 5px auto;width:fit-content;max-width:86%;border:1px solid var(--border);border-radius:10px 10px 3px 10px;padding:2px 10px;color:var(--muted-foreground)}
+.decided .y{color:var(--ok)}.decided .n{color:var(--ko)}
+
+/* Sub-agent */
+.helper{border:1px solid var(--border);border-left:2px solid var(--sub);border-radius:8px;padding:7px 10px;margin:8px 0;background:var(--card);display:flex;flex-direction:column;gap:3px;font-size:12.5px;line-height:18px}
+.helper .hh{display:flex;align-items:center;gap:7px}
+.helper .hh .k{color:var(--sub);font-weight:500}
+.helper .hh .t{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted-foreground)}
+.helper .task{color:var(--foreground)}
+.helper .row{margin-left:0;border-left:0}.helper .row .rh{padding-left:0}
+.helper .hf{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--muted-foreground)}
+.helper .hf .btn{margin-left:auto;height:22px;font-family:var(--font)}
+.h-res{font-family:var(--font);font-size:12.5px;line-height:19px;color:var(--foreground);margin:0 0 4px}
+.side{position:absolute;inset:0 0 0 auto;width:min(430px,100%);background:var(--background);border-left:1px solid var(--border);box-shadow:var(--shadow);z-index:6;display:none;flex-direction:column}
+.side.on{display:flex}
+.side header{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px 0 12px;border-bottom:1px solid var(--border);background:var(--shell)}
+.side header .k{color:var(--sub);font-weight:500}
+.side .sb{overflow:auto;padding:10px 12px;font-size:13px}
+.x{width:22px;height:22px;border-radius:5px;display:grid;place-items:center;color:var(--muted-foreground)}
+.x:hover{background:var(--muted);color:var(--foreground)}
+
+/* Back to live */
+.live{position:absolute;right:14px;bottom:10px;z-index:5;display:none;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;background:var(--foreground);color:var(--background);font-size:12px;box-shadow:var(--shadow)}
+.live.on{display:inline-flex}
+
+/* Dock and composer */
+.dock{border-top:1px solid var(--border);background:var(--shell);font-size:12px}
+.dock > div{display:flex;align-items:center;gap:8px;padding:4px 12px;min-height:26px;border-bottom:1px solid var(--border);min-width:0}
+.dock [hidden]{display:none}
+.todo-h{cursor:pointer;white-space:nowrap}
+.todo-h .cur{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.todo-h .ch{font-size:9px;transition:transform .12s}
+.todo-h[aria-expanded=true] .ch{transform:rotate(90deg)}
+.dock .todo-l{display:none;flex-direction:column;align-items:stretch;gap:1px;padding:5px 12px 7px 26px}
+.dock .todo-l.on{display:flex}
+.todo-l span{display:flex;gap:7px}
+.todo-l .done{color:var(--muted-foreground);text-decoration:line-through}
+.todo-l .act{font-weight:500}
+.todo-l i{font-style:normal;width:12px;flex:none;text-align:center}
+.st .spin{width:9px;height:9px;border:1.5px solid var(--info);border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;flex:none}
+.st.wait .spin{border-color:var(--warn);animation:none;border-radius:2px}
+.st .what{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.st .n{font-family:var(--mono);font-size:11px;color:var(--muted-foreground);white-space:nowrap}
+.pd{background:var(--warn-soft)}
+.pd .w{color:var(--warn);font-weight:500;white-space:nowrap}
+.pd .keys{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0;color:var(--muted-foreground)}
+.q{flex-wrap:wrap}
+.q .qi{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);border-radius:6px;padding:0 4px 0 8px;max-width:100%;background:var(--background)}
+.q .qi span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dock > .comp{display:block;position:relative;padding:8px 12px 6px;border-bottom:0}
+.ic{width:11px;height:11px;vertical-align:-1px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round}
+:root[data-wide] .mid:has(.side.on) .thread{margin-right:430px}
+.comp textarea{display:block;width:100%;min-height:40px;max-height:180px;resize:none;border:1px solid var(--input);border-radius:8px;background:var(--background);color:inherit;font:inherit;font-size:13.5px;line-height:20px;padding:8px 10px}
+.comp textarea:focus{outline:none;border-color:var(--muted-foreground)}
+.pop{position:absolute;left:12px;bottom:calc(100% - 4px);min-width:300px;max-width:calc(100% - 24px);background:var(--card);border:1px solid var(--input);border-radius:8px;box-shadow:var(--shadow);padding:4px;display:none;z-index:8}
+.pop.on{display:block}
+.pop div{display:flex;gap:10px;padding:3px 8px;border-radius:5px;font-family:var(--mono);font-size:12px;white-space:nowrap;cursor:pointer}
+.pop div.sel{background:var(--muted)}
+.pop div span{color:var(--muted-foreground);font-family:var(--font);margin-left:auto}
+.cf{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--muted-foreground);min-width:0}
+.cf .pick{height:24px;padding:0 8px;border-radius:6px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.cf .pick:hover{background:var(--muted);color:var(--foreground)}
+.cf .pick b{color:var(--foreground);font-weight:500}
+.gauge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;white-space:nowrap}
+.gauge i{width:44px;height:5px;border-radius:3px;background:var(--muted);overflow:hidden;display:block}
+.gauge i::before{content:"";display:block;height:100%;width:var(--p);background:var(--muted-foreground)}
+.send{height:26px;padding:0 11px;border-radius:6px;background:var(--foreground);color:var(--background);font-size:12px;font-weight:500;white-space:nowrap}
+.send.stop{background:var(--ko);color:#fff}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--foreground);color:var(--background);padding:6px 12px;border-radius:8px;font-size:12px;opacity:0;pointer-events:none;transition:opacity .15s;z-index:40;max-width:90vw}
+.toast.on{opacity:1}
+.menu{position:absolute;z-index:9;background:var(--card);border:1px solid var(--input);border-radius:8px;box-shadow:var(--shadow);padding:4px;display:none;width:300px;font-family:var(--font);font-size:12px;line-height:17px}
+.menu.on{display:block}
+.menu button{display:block;width:100%;text-align:left;padding:5px 8px;border-radius:5px}
+.menu button:hover{background:var(--muted)}
+.menu p{margin:4px 8px 5px;color:var(--muted-foreground)}
+@media (prefers-reduced-motion:reduce){.say.in,.typing i,.row[data-st=run] > .rh .si::before,.st .spin{animation:none}}
+</style>
+</head>
+<body>
+
+<div class="mk-bar">
+  <strong>Fil de session</strong>
+  <button id="mk-replay">Rejouer le tour en direct</button>
+  <button id="mk-w" aria-pressed="false">Large</button>
+  <button id="mk-theme" aria-pressed="false">Thème clair</button>
+  <button id="mk-keys" aria-pressed="false">Raccourcis</button>
+</div>
+<div class="mk-note">
+  <p><b>Maquette interactive du fil qui remplace la session en terminal.</b> C'est une conversation : tes messages et tes décisions à droite, l'agent à gauche, et ce qu'il a fait entre deux de ses messages replié en une ligne d'activité. Le texte de l'agent arrive bloc par bloc, dès qu'un bloc est terminé (ce que Claude Code, Codex et Cursor permettent) ; le direct est porté par la ligne d'activité : « Réfléchit », « Rédige », l'outil en cours. Le dernier échange se joue tout seul, puis attend ta réponse à des demandes de permission. Tout est cliquable : lignes d'activité, outils, diffs, tâches, sous-agent, point de contrôle.</p>
+  <p>À essayer : remonter dans le fil pendant que l'agent travaille (le défilement se suspend, « Direct » apparaît) ; écrire pendant le travail (file d'attente) ; taper <span class="mono">@</span> ou <span class="mono">/</span> dans la saisie ; <kbd>Échap</kbd> pour interrompre. Non couvert ici : recherche, sommaire, branches, états limites (boucle, coupure réseau).</p>
+</div>
+<div class="mk-keys" id="keys">
+  <div><span>Interrompre (ferme d'abord un menu)</span><kbd>Échap</kbd></div>
+  <div><span>Envoyer / nouvelle ligne</span><kbd>⏎</kbd> <kbd>⇧⏎</kbd></div>
+  <div><span>Changer de mode</span><kbd>⇧Tab</kbd></div>
+  <div><span>Prompt précédent (saisie vide)</span><kbd>↑</kbd></div>
+  <div><span>Élément suivant / précédent</span><kbd>J</kbd> <kbd>K</kbd></div>
+  <div><span>Déplier / replier</span><kbd>⏎</kbd> <kbd>Espace</kbd></div>
+  <div><span>Ton message précédent / suivant</span><kbd>[</kbd> <kbd>]</kbd></div>
+  <div><span>Revenir au direct</span><kbd>G</kbd> <kbd>Fin</kbd></div>
+  <div><span>Aller à la saisie</span><kbd>/</kbd> <kbd>I</kbd></div>
+  <div><span>Permission : une fois</span><kbd>Y</kbd></div>
+  <div><span>Permission : toujours…</span><kbd>A</kbd></div>
+  <div><span>Permission : refuser</span><kbd>N</kbd></div>
+  <div><span>Permission : refuser avec un mot</span><kbd>C</kbd></div>
+  <div><span>Tâches</span><kbd>Ctrl T</kbd> <span class="mut">(ici : <kbd>T</kbd>)</span></div>
+  <div><span>Déplier toute l'activité de l'échange</span><kbd>Ctrl O</kbd></div>
+</div>
+
+<div class="stage">
+<div class="win" id="win">
+  <div class="head">
+    <span class="dot" id="dot"></span><b>Cal</b>
+    <span class="where mut">ledge · fix/hook-during-reinstall</span>
+    <span class="chip" title="Harnais d'origine">Claude Code</span>
+    <span class="sp"></span>
+    <span class="cost" title="Session : entrée 198 k · sortie 14 k · cache 1,2 M">212 k tok · 1,84 $</span>
+  </div>
+
+  <div class="mid">
+    <div class="thread" id="thread" tabindex="0" role="log" aria-label="Fil de la session"></div>
+    <button class="live" id="live">↓ Direct <span id="unseen"></span></button>
+    <aside class="side" id="side" aria-label="Fil du sous-agent">
+      <header><span class="k"><svg class="ic" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5v9M3 7c0-3 6-1.5 6-5"/></svg> Explore</span><span class="mut">sous-agent</span><span class="sp"></span><button class="x" id="side-x" aria-label="Fermer">✕</button></header>
+      <div class="sb" id="side-b"></div>
+    </aside>
+    <div class="menu" id="menu"></div>
+  </div>
+
+  <div class="dock">
+    <div class="todo-h" id="todo-h" role="button" tabindex="0" aria-expanded="false">
+      <span class="ch">▸</span><b style="font-weight:500">Tâches <span id="todo-n"></span></b><span class="mut cur" id="todo-c"></span><span class="sp"></span><kbd>Ctrl T</kbd>
+    </div>
+    <div class="todo-l" id="todo-l"></div>
+    <div class="st" id="st" hidden><span class="spin"></span><span class="what" id="st-w"></span><span class="sp"></span><span class="n" id="st-n"></span><kbd>Échap</kbd></div>
+    <div class="pd" id="pd" hidden><span class="w" id="pd-w"></span><span class="keys"><kbd>Y</kbd> une fois · <kbd>A</kbd> toujours · <kbd>N</kbd> refuser</span><span class="sp"></span><button class="btn" id="pd-go" style="height:22px">Voir</button></div>
+    <div class="q" id="q" hidden></div>
+    <div class="comp">
+      <div class="pop" id="pop"></div>
+      <textarea id="ta" rows="1" placeholder="Écrire à Cal…   @ fichier · / commande" aria-label="Message"></textarea>
+      <div class="cf">
+        <button class="pick" id="model" title="Modèle">Fable 5.2 ▾</button>
+        <button class="pick" id="mode" title="Mode (⇧Tab)">Mode : <b id="mode-v">normal</b></button>
+        <span class="sp"></span>
+        <span class="gauge" title="Contexte : 124 k sur 200 k"><i style="--p:62%"></i>62 %</span>
+        <button class="send" id="send">Envoyer ⏎</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const el = html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const thread = $('#thread'), ta = $('#ta');
+let toastT; const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200); };
+
+/* ---------- Builders ---------- */
+function row({ st = 'ok', verb, target = '', meta = '', dur = '', detail = '', open = false }) {
+  return el(`<div class="row nav" tabindex="0" data-st="${st}" ${detail ? `aria-expanded="${open}"` : ''}>
+    <div class="rh"><span class="si"></span><span class="vb">${verb}</span><span class="tg">${target}</span><span class="me">${meta}</span><span class="du">${dur}</span><span class="ch"></span></div>
+    ${detail ? `<div class="detail">${detail}</div>` : ''}</div>`);
+}
+const upd = (r, o) => { if (o.st) r.dataset.st = o.st; for (const [k, c] of [['verb', '.vb'], ['target', '.tg'], ['meta', '.me'], ['dur', '.du']]) if (k in o) $(c, r).innerHTML = o[k]; refresh(); };
+const file = p => `<span class="lnk" data-open="${p}">${p}</span>`;
+
+function diff(path, lines) {
+  const cls = c => c === '+' ? 'a' : c === '-' ? 'd' : c === '@' ? 'h' : '';
+  const line = (l, extra = '') => `<div class="dl ${cls(l[0])} ${extra}"><span class="dg">${l[0] === '@' || l[0] === ' ' ? '' : l[0]}</span>${esc(l.slice(1))}</div>`;
+  const uni = lines.map(l => line(l)).join('');
+  let spl = '', dels = [], adds = [];
+  const flush = () => { for (let i = 0; i < Math.max(dels.length, adds.length); i++) spl += (dels[i] ? line(dels[i]) : '<div class="dl e"></div>') + (adds[i] ? line(adds[i], 'r') : '<div class="dl e r"></div>'); dels = []; adds = []; };
+  for (const l of lines) {
+    if (l[0] === '-') dels.push(l); else if (l[0] === '+') adds.push(l);
+    else { flush(); spl += l[0] === '@' ? line(l) : line(l) + line(l, 'r'); }
+  }
+  flush();
+  const a = lines.filter(l => l[0] === '+').length, d = lines.filter(l => l[0] === '-').length;
+  return { a, d, meta: `<span class="add">+${a}</span>${d ? ` <span class="del">−${d}</span>` : ''}`,
+    html: `<div class="diff" data-layout="uni"><div class="dbar"><span>${path}</span><span class="sp"></span><button data-act="layout">Côte à côte</button><button data-open="${path}">Ouvrir</button></div><div class="uni">${uni}</div><div class="spl">${spl}</div></div>` };
+}
+function editRow(verb, path, lines, o = {}) { const d = diff(path, lines); return row({ verb, target: path, meta: d.meta, detail: d.html, ...o }); }
+function shell(cmd, cwd, out, cut) {
+  return `<div class="term"><div class="dbar"><span>$ ${esc(cmd)}</span><span class="sp"></span><button data-toast="Ouvre un onglet terminal dans ${cwd}">Ouvrir dans le terminal</button></div><pre>${out}</pre>${cut ? `<div class="cut"><span>… ${cut} lignes masquées</span><span class="lnk" data-toast="Affiche la sortie entière, chargée à la demande">tout voir</span></div>` : ''}</div>`;
+}
+
+const HOOK_1 = ['@@@ -38,9 +38,20 @@ export async function runHook(event: HookEvent) {', '   const root = packageRoot();',
+  "-  const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));", '-  const version = pkg.version;',
+  '+  const version = await readVersion(root);', '   return send(event, { version });', ' }', '+',
+  '+/** npm rewrites package.json in place: a read can land on a half-written file. */',
+  '+async function readVersion(root: string, attempts = 5): Promise<string | undefined> {',
+  '+  for (let i = 0; i < attempts; i++) {', '+    try {',
+  "+      return JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;",
+  '+    } catch {', '+      await delay(40 * (i + 1));', '+    }', '+  }', '+  return undefined;', '+}'];
+const HOOK_2 = ['@@@ -47,3 +47,4 @@ async function readVersion(root: string, attempts = 5)', '     try {',
+  "-      return JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version;",
+  "+      const text = await readFile(join(root, 'package.json'), 'utf8');", "+      if (text.trim()) return JSON.parse(text).version;", '     } catch {'];
+const TEST_1 = ['@@@ -0,0 +1,9 @@', "+import { describe, expect, it } from 'vitest';", "+import { runHook } from '../src/hook.js';", '+',
+  "+describe('hook', () => {", "+  it('survives a package.json rewrite', async () => {", '+    const done = rewriteDuring(() => runHook(sample));',
+  "+    await expect(done).resolves.toMatchObject({ version: '0.54.2' });", '+  });', '+});'];
+const CHANGELOG = ['@@@ -3,6 +3,10 @@', ' ## Unreleased', ' ', '+### Fixed', '+',
+  '+- A hook no longer fails while npm rewrites the package: reading the version retries', '+  instead of throwing on a half-written `package.json`.', ' ', ' ## 0.54.2'];
+
+/* ---------- Turns ---------- */
+let cur, turnNo = 4;
+function newTurn(text, time, mentions = []) {
+  turnNo++;
+  const body = esc(text) + mentions.map(m => `\n<span class="at">@${m}</span>`).join('');
+  const t = el(`<section class="turn" data-n="${turnNo}">
+    <div class="prompt nav" tabindex="0">${body}</div><div class="ptime">${time}</div>
+    <div class="ag"><i></i><b>Cal</b></div></section>`);
+  thread.append(t); cur = t; burst = null; return t;
+}
+/* Tool rows that follow one another share one burst; anything else (text, a request, a sub-agent) ends it. */
+let burst = null;
+function place(node) {
+  if (node.classList.contains('row')) {
+    if (!burst) { burst = el('<div class="burst" aria-expanded="false"><div class="bh nav" tabindex="0"></div><div class="bb"></div></div>'); cur.append(burst); }
+    $('.bb', burst).append(node);
+  } else { burst = null; cur.append(node); }
+  const ty = $('.typing', cur); if (ty) cur.append(ty);
+  return node;
+}
+const put = (...nodes) => nodes.forEach(place);
+function add(node) { place(node); bump(); return node; }
+const KIND = { Raisonnement: 'think', Lecture: 'read', Recherche: 'search', Édition: 'edit', Écriture: 'edit', Shell: 'shell' };
+const many = (n, one, more) => `${n} ${n > 1 ? more : one}`;
+function refresh() {
+  for (const b of $$('.burst', thread)) {
+    const rows = $$(':scope > .bb > .row', b), by = {}, live = rows.filter(r => r.dataset.st === 'run').pop();
+    for (const r of rows) (by[KIND[$('.vb', r).textContent] || 'other'] ||= []).push(r);
+    b.classList.toggle('one', rows.length === 1);
+    if (live) { $('.bh', b).innerHTML = `<span class="spin"></span><b>${$('.vb', live).textContent}</b><span class="sum">${$('.tg', live).textContent}</span><span>· ${rows.length}</span>`; continue; }
+    const p = [], ko = rows.filter(r => r.dataset.st === 'ko').length;
+    if (by.read) p.push(many(by.read.length, 'fichier lu', 'fichiers lus'));
+    if (by.search) p.push(many(by.search.length, 'recherche', 'recherches'));
+    for (const r of by.other || []) p.push($('.vb', r).textContent);
+    if (by.edit) { const n = new Set(by.edit.map(r => $('.tg', r).textContent)).size; p.push(many(n, 'fichier modifié', 'fichiers modifiés')); }
+    if (by.shell) p.push(many(by.shell.length, 'commande', 'commandes'));
+    if (!p.length) p.push('Raisonnement');
+    $('.bh', b).innerHTML = `<span class="ch">▸</span><span class="sum">${p.join(' · ')}</span>${ko ? `<span class="del">· ${many(ko, 'échec', 'échecs')}</span>` : ''}`;
+  }
+  typingUI();
+}
+const say = (html, final) => el(`<div class="say ${final ? 'final' : ''}">${html}</div>`);
+const foot = html => el(`<div class="t-foot">${html}<span class="sp"></span><button data-act="rewind" title="Revenir à ce point">⟲ point de contrôle</button></div>`);
+
+function seed() {
+  thread.innerHTML = ''; turnNo = 4;
+  // T5: an old turn, before the compaction, reduced to one line of activity.
+  const t5 = newTurn('Regarde pourquoi hook.test échoue sous charge.', '13:41'); t5.classList.add('faded');
+  put(
+    row({ verb: '9 actions', target: 'aucun fichier modifié', dur: '48 s', detail: [
+      row({ verb: '6 fichiers lus · 2 recherches', dur: '1,2 s' }).outerHTML,
+      row({ verb: 'Shell', target: 'pnpm --filter @paradow/ledge test hook', meta: '7 ✓', dur: '31 s' }).outerHTML].join('') }),
+    say("<p>Le test n'échoue que si une installation npm tourne en même temps : le hook lit <code>package.json</code> pendant que npm le réécrit, et tombe sur un fichier vide.</p>", true),
+    el('<div class="t-foot">48 s · 11,2 k tok · 0,09 $</div>'));
+  thread.append(el('<div class="marker warn nav" tabindex="0" title="Les tours au-dessus ne sont plus vus en détail par l\'agent">⇣ Contexte compacté · 148 k → 31 k · 13:58</div>'));
+
+  // T6: a finished turn, tools folded, the failure unfolded on its own.
+  newTurn('Corrige le hook qui échoue pendant un npm install.', '14:02', ['packages/ledge/src/hook.ts']);
+  put(
+    row({ st: 'think', verb: 'Raisonnement', dur: '6 s' }),
+    row({ verb: '12 fichiers lus · 3 recherches', dur: '1,8 s', detail:
+      ['packages/ledge/src/hook.ts', 'packages/ledge/src/install.ts', 'packages/ledge/test/hook.test.ts', 'packages/ledge/package.json'].map(p => row({ verb: 'Lecture', target: file(p) }).outerHTML).join('')
+      + row({ verb: 'Lecture', target: '8 autres fichiers' }).outerHTML
+      + row({ verb: 'Recherche', target: '"readFile(" dans packages/ledge/src', meta: '23 résultats', detail:
+        `<div class="res"><div class="f" data-open="packages/ledge/src/hook.ts">packages/ledge/src/hook.ts <span class="mut">2</span></div><div class="m">41  const pkg = JSON.parse(await <b>readFile(</b>join(root, 'package.json'), 'utf8'));</div><div class="m">77  const raw = await <b>readFile(</b>statePath, 'utf8');</div><div class="f" data-open="packages/ledge/src/install.ts">packages/ledge/src/install.ts <span class="mut">1</span></div><div class="m">88  const manifest = await <b>readFile(</b>manifestPath, 'utf8');</div><div class="m mut">… 20 autres dans 9 fichiers</div></div>` }).outerHTML
+      + row({ verb: 'Recherche', target: 'packages/ledge/test/**/hook*', meta: '2 fichiers' }).outerHTML
+      + row({ verb: 'Recherche', target: '"packageRoot" dans packages/', meta: '6 résultats' }).outerHTML }),
+    say('<p>Le hook lit <code>package.json</code> une seule fois, sans filet. Je rends cette lecture tolérante à une réécriture en cours et j\'ajoute le test qui l\'aurait attrapé.</p>'),
+    editRow('Édition', 'packages/ledge/src/hook.ts', HOOK_1),
+    editRow('Écriture', 'packages/ledge/test/hook.rewrite.test.ts', TEST_1),
+    row({ st: 'ko', verb: 'Shell', target: 'pnpm --filter @paradow/ledge test hook', meta: '<span class="del">exit 1</span>', dur: '4 s', open: true, detail: shell('pnpm --filter @paradow/ledge test hook', '~/Workspace/ledge-worktrees/hook',
+      ` <span class="dim">RUN</span>  v3.2.4 packages/ledge\n <span class="r">❯</span> test/hook.rewrite.test.ts <span class="dim">(1 test | </span><span class="r">1 failed</span><span class="dim">)</span> 61ms\n   <span class="r">× hook &gt; survives a package.json rewrite</span>\n     <span class="r">→ Unexpected end of JSON input</span>\n <span class="dim">Test Files</span>  <span class="r">1 failed</span> | <span class="g">2 passed</span> (3)\n <span class="dim">     Tests</span>  <span class="r">1 failed</span> | <span class="g">7 passed</span> (8)`, 31) }),
+    say("<p>Un fichier vide ne lève pas la même erreur qu'un fichier tronqué : je traite le texte vide comme une lecture à refaire.</p>"),
+    editRow('Édition', 'packages/ledge/src/hook.ts', HOOK_2),
+    row({ verb: 'Shell', target: 'pnpm --filter @paradow/ledge test hook', meta: '<span class="add">8 ✓</span>', dur: '5 s', detail: shell('pnpm --filter @paradow/ledge test hook', '~/Workspace/ledge-worktrees/hook',
+      ` <span class="dim">RUN</span>  v3.2.4 packages/ledge\n <span class="g">✓</span> test/hook.rewrite.test.ts <span class="dim">(1 test)</span> 212ms\n <span class="g">✓</span> test/hook.test.ts <span class="dim">(7 tests)</span> 398ms\n <span class="dim">Test Files</span>  <span class="g">3 passed</span> (3)\n <span class="dim">     Tests</span>  <span class="g">8 passed</span> (8)`) }),
+    el('<div class="trace nav" tabindex="0">☑ <b>Corriger la lecture de package.json</b> · ☑ <b>Écrire le test de réécriture</b></div>'),
+    say("<p>Corrigé : le hook réessaie la lecture (5 fois, délai croissant) au lieu d'échouer, et n'envoie pas de version s'il n'y arrive pas. Le nouveau test passe, les 7 anciens aussi.</p>", true),
+    foot(`${file('hook.ts')} ${file('hook.rewrite.test.ts')} · <span class="add">+25</span> <span class="del">−3</span> · 1 min 12 · 18,4 k tok · 0,21 $`));
+  bump(true);
+}
+
+/* ---------- Todos ---------- */
+const TODOS = ['Reproduire l\'échec sous charge', 'Corriger la lecture de package.json', 'Écrire le test de réécriture', 'Mettre à jour le CHANGELOG', 'Pousser la branche', 'Ouvrir la PR'];
+let todoAt = 3;
+function todos() {
+  $('#todo-n').textContent = `${todoAt}/${TODOS.length}`;
+  $('#todo-c').textContent = todoAt < TODOS.length ? `· en cours : « ${TODOS[todoAt]} »` : '· terminé';
+  $('#todo-l').innerHTML = TODOS.map((t, i) => `<span class="${i < todoAt ? 'done' : i === todoAt ? 'act' : ''}"><i>${i < todoAt ? '☑' : i === todoAt ? '▶' : '☐'}</i>${t}</span>`).join('');
+}
+function toggleTodos() { const h = $('#todo-h'), on = h.getAttribute('aria-expanded') !== 'true'; h.setAttribute('aria-expanded', on); $('#todo-l').classList.toggle('on', on); }
+
+/* ---------- Follow the live edge ---------- */
+let follow = true, unseen = 0;
+const atBottom = () => thread.scrollHeight - thread.scrollTop - thread.clientHeight < 36;
+function bump(force) {
+  if (follow || force) { thread.scrollTop = thread.scrollHeight; unseen = 0; } else unseen++;
+  liveBtn(); refresh();
+}
+function liveBtn() { $('#live').classList.toggle('on', !follow && (working || unseen > 0)); $('#unseen').textContent = unseen ? `· ${unseen} nouveau${unseen > 1 ? 'x' : ''}` : ''; }
+function goLive() { follow = true; unseen = 0; thread.scrollTop = thread.scrollHeight; liveBtn(); }
+thread.addEventListener('scroll', () => { follow = atBottom(); if (follow) unseen = 0; liveBtn(); });
+function curTurn() { const ts = $$('.turn', thread); return ts.filter(t => t.offsetTop <= thread.scrollTop + 8).pop() || ts[0]; }
+
+/* ---------- Work state, status line ---------- */
+let working = false, activity = '', t0 = 0, run = 0, tick, tok = 0;
+const fmt = s => s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')}` : `${s} s`;
+function status() {
+  const st = $('#st'); st.hidden = !working;
+  st.classList.toggle('wait', pend.length > 0);
+  $('#st-w').textContent = pend.length ? 'Attend ta décision' : activity;
+  $('#st-n').textContent = `${fmt(Math.round((Date.now() - t0) / 1000))} · ${(tok / 1000).toFixed(1).replace('.', ',')} k tok`;
+  $('#dot').dataset.st = pend.length ? 'perm' : working ? 'work' : 'idle';
+  const s = $('#send'); s.classList.toggle('stop', working); s.textContent = working ? 'Arrêter ⎋' : 'Envoyer ⏎';
+  const pd = $('#pd'); pd.hidden = !pend.length;
+  $('#pd-w').textContent = pend.length > 1 ? `${pend.length} décisions en attente` : 'Décision en attente';
+  liveBtn(); typingUI();
+}
+const act = a => { activity = a; status(); };
+function begin() { working = true; t0 = Date.now(); tok = 0; cur.append(el('<div class="typing"><i></i><i></i><i></i><span></span></div>')); clearInterval(tick); tick = setInterval(() => { tok += 130; status(); }, 1000); status(); }
+function end() {
+  working = false; clearInterval(tick); $$('.typing', thread).forEach(t => t.remove()); status(); refresh(); queueUI();
+  if (queue.length) { const m = queue.splice(0).join('\n'); queueUI(); setTimeout(() => freeTurn(m), 350); }
+}
+class Cancel extends Error {}
+const sleep = (ms, my) => new Promise((ok, no) => setTimeout(() => my === run ? ok() : no(new Cancel()), ms));
+/* A block of the agent's text arrives whole, once the harness has finished writing it: the live line says it is
+   being written meanwhile. (Claude Code, Codex and Cursor expose finished blocks only.) */
+async function stream(node, html, my) {
+  node.hidden = true;
+  await sleep(Math.min(2400, 600 + html.length * 6), my);
+  node.innerHTML = html; node.hidden = false; node.classList.add('in'); bump();
+}
+function typingUI() {
+  const ty = $('.typing', thread); if (!ty) return;
+  ty.hidden = pend.length > 0 || !!$('.burst .row[data-st=run]', cur);
+  $('span', ty).textContent = activity;
+}
+
+/* ---------- Permissions ---------- */
+let pend = [], mode = 0; const MODES = ['normal', 'auto-accept', 'plan'];
+function ask(p) {
+  return new Promise(res => {
+    if (mode === 1 && p.kind === 'edit') { add(el(`<div class="decided"><span class="y">✓</span> ${p.title} · accepté automatiquement (mode auto-accept)</div>`)); return res({ d: 'accept' }); }
+    p.res = res;
+    p.card = el(`<div class="perm nav" tabindex="0" role="group" aria-label="Demande de permission : ${p.title}">
+      <div class="ph"><span class="w">Permission</span><span>· ${p.title}</span>${p.src ? `<span class="src">· <svg class="ic" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5v9M3 7c0-3 6-1.5 6-5"/></svg> ${p.src}</span>` : ''}<span class="pn"></span></div>
+      ${p.body}<div class="ctx">${p.ctx}</div>
+      <div class="acts"><button class="btn pri" data-d="accept"><kbd>Y</kbd> Une fois</button><button class="btn" data-d="scopes"><kbd>A</kbd> Toujours cette session ▾</button><button class="btn" data-d="deny"><kbd>N</kbd> Refuser</button><button class="btn" data-d="note"><kbd>C</kbd> Refuser avec un mot…</button></div>
+      <div class="scopes">${p.scopes.map(s => `<button data-scope="${esc(s)}">Ne plus demander pour : <b>${esc(s)}</b></button>`).join('')}</div>
+      <div class="note"><input placeholder="Dis à l'agent pourquoi, ou quoi faire à la place — ⏎ pour refuser" aria-label="Motif du refus"></div></div>`);
+    p.card.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.scope) return decide(p, 'always', b.dataset.scope);
+      permKey(p, { accept: 'y', scopes: 'a', deny: 'n', note: 'c' }[b.dataset.d]);
+    });
+    $('.note input', p.card).addEventListener('keydown', e => { if (e.key === 'Enter') decide(p, 'deny', e.target.value.trim()); e.stopPropagation(); if (e.key === 'Escape') { p.card.classList.remove('n-open'); p.card.focus(); } });
+    pend.push(p); add(p.card); renum(); status();
+    if (document.activeElement !== ta && pend[0] === p) p.card.focus({ preventScroll: !follow });
+  });
+}
+function permKey(p, k) {
+  if (k === 'y') decide(p, 'accept');
+  else if (k === 'n') decide(p, 'deny');
+  else if (k === 'a') { p.card.classList.toggle('s-open'); p.card.classList.remove('n-open'); bump(); }
+  else if (k === 'c') { p.card.classList.add('n-open'); p.card.classList.remove('s-open'); $('.note input', p.card).focus(); bump(); }
+}
+function decide(p, d, extra) {
+  const i = pend.indexOf(p); if (i < 0) return; pend.splice(i, 1);
+  const who = 'PC · 14:07';
+  const txt = d === 'accept' ? `<span class="y">✓</span> ${p.title} · autorisé une fois · ${who}`
+    : d === 'always' ? `<span class="y">✓</span> ${p.title} · toujours autorisé cette session (${esc(extra)}) · ${who}`
+    : `<span class="n">✗</span> ${p.title} · refusé · ${who}${extra ? ` — « ${esc(extra)} »` : ''}`;
+  p.card.replaceWith(el(`<div class="decided nav" tabindex="0">${txt}</div>`));
+  renum(); status(); refresh(); queueUI();
+  if (pend[0] && document.activeElement !== ta) pend[0].card.focus();
+  p.res({ d, note: d === 'deny' ? extra : '' });
+}
+function renum() { pend.forEach((p, i) => $('.pn', p.card).textContent = pend.length > 1 ? `${i + 1}/${pend.length}` : ''); }
+
+/* ---------- The live turn ---------- */
+const SUB = [['Recherche', '"package.json" dans packages/ledge/src'], ['Lecture', 'packages/ledge/src/install.ts'], ['Lecture', 'packages/ledge/src/update.ts'], ['Recherche', '"readVersion" dans packages/'], ['Lecture', 'packages/ledge/src/doctor.ts']];
+async function liveTurn() {
+  const my = ++run; pend = []; todoAt = 3; todos();
+  newTurn('Mets le CHANGELOG à jour et pousse la branche.', '14:06'); follow = true; bump(true); begin();
+  try {
+    act('Réfléchit');
+    const th = add(row({ st: 'run', verb: 'Raisonnement', target: '' }));
+    await sleep(2700, my); upd(th, { st: 'think', dur: '3 s' });
+
+    act('Lecture de CHANGELOG.md');
+    const g = add(row({ st: 'run', verb: 'Lecture', target: 'CHANGELOG.md' }));
+    await sleep(600, my); upd(g, { target: 'packages/ledge/package.json <span class="mut">(2)</span>' });
+    await sleep(600, my); upd(g, { verb: 'Shell', target: 'git status --short <span class="mut">(3)</span>' }); act('git status --short');
+    await sleep(700, my);
+    g.replaceWith(row({ verb: '2 fichiers lus · 1 commande', dur: '1,9 s', detail:
+      row({ verb: 'Lecture', target: file('CHANGELOG.md') }).outerHTML + row({ verb: 'Lecture', target: file('packages/ledge/package.json') }).outerHTML
+      + row({ verb: 'Shell', target: 'git status --short', meta: 'exit 0', detail: shell('git status --short', '~/Workspace/ledge-worktrees/hook', ' M packages/ledge/src/hook.ts\n<span class="g">??</span> packages/ledge/test/hook.rewrite.test.ts') }).outerHTML })); bump();
+
+    act('Rédige');
+    await stream(add(say('')), "<p>La branche a deux fichiers modifiés et les tests passent. Je lance un sous-agent pour vérifier qu'aucune autre lecture de <code>package.json</code> n'a le même défaut, et j'écris l'entrée du CHANGELOG pendant ce temps.</p>", my);
+    todoAt = 3; add(el('<div class="trace nav" tabindex="0">▶ <b>Mettre à jour le CHANGELOG</b> · tâche 4 sur 6</div>'));
+
+    // The sub-agent works while the main agent goes on.
+    const h = add(el(`<div class="helper nav" tabindex="0"><div class="hh"><span class="k"><svg class="ic" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5v9M3 7c0-3 6-1.5 6-5"/></svg> Sous-agent · Explore</span><span class="t" data-t>en cours</span></div>
+      <div class="task">Chercher les autres lectures de package.json faites sans nouvel essai.</div><div data-live></div>
+      <div class="hf"><span data-c>0 action</span><button class="btn" data-act="helper">Ouvrir le fil ⏎</button></div></div>`));
+    const live = $('[data-live]', h); let n = 0; const subLog = [];
+    const subStep = async i => { const [v, t] = SUB[i]; n++; subLog.push(row({ verb: v, target: t })); live.replaceChildren(row({ st: 'run', verb: v, target: t })); $('[data-c]', h).textContent = `${n} actions · ${(n * 1.4).toFixed(1).replace('.', ',')} k tok`; sideFill(subLog, true); await sleep(750, my); };
+    act('Sous-agent Explore : recherche'); await subStep(0); await subStep(1);
+
+    // Two requests wait together: one from the main agent, one bubbling up from the sub-agent.
+    const d1 = diff('CHANGELOG.md', CHANGELOG);
+    const p1 = ask({ kind: 'edit', title: 'Édition de CHANGELOG.md', body: d1.html, ctx: `1 fichier · ${d1.meta} · dans ~/Workspace/ledge-worktrees/hook`, scopes: ['ce fichier', 'toutes les éditions de la session'] });
+    const p2 = ask({ kind: 'shell', title: 'Shell', src: 'Explore', body: '<div class="cmd">$ pnpm --filter @paradow/ledge test install update doctor</div>', ctx: 'dans ~/Workspace/ledge-worktrees/hook · lecture seule sur le dépôt', scopes: ['cette commande exacte', 'pnpm --filter * test*', 'tout Shell pour ce sous-agent'] });
+    const r1 = p1.then(async r => {
+      if (r.d === 'deny') return r;
+      add(editRow('Édition', 'CHANGELOG.md', CHANGELOG)); todoAt = 4; todos(); return r;
+    });
+    const r2 = p2.then(async r => {
+      if (run !== my) throw new Cancel();
+      if (r.d !== 'deny') { n++; subLog.push(row({ verb: 'Shell', target: 'pnpm --filter @paradow/ledge test install update doctor', meta: '<span class="add">31 ✓</span>', dur: '9 s' })); live.replaceChildren(row({ st: 'run', verb: 'Shell', target: 'pnpm --filter @paradow/ledge test install update doctor' })); sideFill(subLog, true); await sleep(1500, my); }
+      await subStep(3); await subStep(4);
+      const res = r.d === 'deny' ? "Deux autres lectures sans nouvel essai : <code>install.ts:88</code> et <code>update.ts:52</code>. Tests non relancés (commande refusée)." : "Deux autres lectures sans nouvel essai : <code>install.ts:88</code> et <code>update.ts:52</code>. Aucune ne tourne pendant une installation ; leurs tests passent (31).";
+      const done = row({ verb: '<svg class="ic" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5v9M3 7c0-3 6-1.5 6-5"/></svg> Explore', target: `${n} actions`, dur: '14 s', meta: `${(n * 1.4).toFixed(1).replace('.', ',')} k tok`, open: true, detail: `<p class="h-res">${res}</p><button class="btn" data-act="helper" style="height:22px;font-family:var(--font)">Ouvrir le fil</button>` });
+      done.dataset.helper = '1'; h.replaceWith(done); sideFill(subLog, false, res); bump(); return r;
+    });
+    const [a1] = await Promise.all([r1, r2]);
+    if (run !== my) throw new Cancel();
+
+    act('Rédige');
+    if (a1.d === 'deny') await stream(add(say('')), `<p>D'accord, je ne touche pas au CHANGELOG${a1.note ? ' : j\'ai noté ta remarque' : ''}. Il reste à pousser la branche.</p>`, my);
+    else await stream(add(say('')), "<p>CHANGELOG à jour. Le sous-agent a trouvé deux autres lectures sans filet, mais hors du chemin d'installation : je les laisse pour une autre tâche. Je pousse.</p>", my);
+    add(el('<div class="trace nav" tabindex="0">' + (a1.d === 'deny' ? '' : '☑ <b>Mettre à jour le CHANGELOG</b> · ') + '▶ <b>Pousser la branche</b></div>')); todoAt = 4; todos();
+
+    const a3 = await ask({ kind: 'shell', title: 'Shell', body: '<div class="cmd">$ git push origin fix/hook-during-reinstall</div>', ctx: 'dans ~/Workspace/ledge-worktrees/hook · <b>effet hors de la machine</b> (origin : github.com)', scopes: ['cette commande exacte', 'git push origin fix/*'] });
+    if (run !== my) throw new Cancel();
+    if (a3.d === 'deny') {
+      act('Rédige');
+      await stream(add(say('', true)), `<p>Je ne pousse pas${a3.note ? ` (« ${esc(a3.note)} »)` : ''}. La branche reste locale, avec ses commits.</p>`, my);
+    } else {
+      act('git push origin fix/hook-during-reinstall');
+      const sh = add(row({ st: 'run', verb: 'Shell', target: 'git push origin fix/hook-during-reinstall' }));
+      await sleep(1800, my);
+      sh.replaceWith(row({ verb: 'Shell', target: 'git push origin fix/hook-during-reinstall', meta: 'exit 0', dur: '2 s', detail: shell('git push origin fix/hook-during-reinstall', '~/Workspace/ledge-worktrees/hook', 'To github.com:Lyssaen/ledge.git\n   35d52e1d..8c41f0aa  fix/hook-during-reinstall -&gt; fix/hook-during-reinstall') })); bump();
+      todoAt = 5; todos(); act('Rédige');
+      await stream(add(say('', true)), "<p>C'est poussé : <code>fix/hook-during-reinstall</code> est à jour sur origin. Je n'ai pas ouvert de PR ; dis-moi si tu la veux.</p>", my);
+    }
+    add(foot(`${a1.d === 'deny' ? 'aucun fichier' : file('CHANGELOG.md') + ' · <span class="add">+4</span>'} · ${fmt(Math.round((Date.now() - t0) / 1000))} · ${(tok / 1000).toFixed(1).replace('.', ',')} k tok · 0,11 $`));
+    end();
+  } catch (e) { if (!(e instanceof Cancel)) throw e; }
+}
+async function freeTurn(text) {
+  const my = ++run; newTurn(text, '14:09'); follow = true; bump(true); begin();
+  try {
+    act('Réfléchit'); const th = add(row({ st: 'run', verb: 'Raisonnement' })); await sleep(1100, my); upd(th, { st: 'think', dur: '1 s' });
+    act('Lecture'); const r = add(row({ st: 'run', verb: 'Lecture', target: 'packages/ledge/src/hook.ts' })); await sleep(800, my); upd(r, { st: 'ok', target: file('packages/ledge/src/hook.ts') });
+    act('Rédige'); await stream(add(say('', true)), '<p>Compris. <span class="mut">(Maquette : la réponse à un message libre s\'arrête à cet accusé de réception.)</span></p>', my);
+    add(foot(`aucun fichier · ${fmt(Math.round((Date.now() - t0) / 1000))} · ${(tok / 1000).toFixed(1).replace('.', ',')} k tok`)); end();
+  } catch (e) { if (!(e instanceof Cancel)) throw e; }
+}
+function interrupt() {
+  if (!working) return;
+  run++;
+  for (const p of pend) p.card.replaceWith(el(`<div class="decided">■ ${p.title} · demande annulée par l'interruption</div>`)); pend = [];
+  for (const r of $$('.row[data-st=run]', thread)) r.dataset.st = 'stop';
+  $$('.caret', thread).forEach(c => c.remove());
+  const h = $('.helper', cur); if (h) $('[data-t]', h).textContent = 'arrêté';
+  add(el(`<div class="stopline">■ Interrompu par toi après ${fmt(Math.round((Date.now() - t0) / 1000))} · ce qui était fait reste fait</div>`));
+  end();
+}
+
+/* ---------- Sub-agent panel ---------- */
+function sideFill(log, running, res) {
+  const b = $('#side-b');
+  b.innerHTML = '<div class="prompt" style="margin:0 0 8px;max-width:100%"><span class="who">Agent principal</span>Chercher les autres lectures de package.json faites sans nouvel essai.</div>';
+  log.forEach(r => b.append(r.cloneNode(true)));
+  if (running) b.append(row({ st: 'run', verb: '…' })); else if (res) b.append(say(`<p>${res}</p>`, true));
+}
+
+/* ---------- Composer ---------- */
+const FILES = ['packages/ledge/src/hook.ts', 'packages/ledge/src/install.ts', 'packages/ledge/test/hook.rewrite.test.ts', 'packages/ledge/package.json', 'packages/protocol/src/thread.ts', 'packages/ui/src/chat/ChatView.tsx', 'CHANGELOG.md', 'AGENTS.md'];
+const CMDS = [['/compact', 'Compacter le contexte'], ['/clear', 'Nouvelle conversation'], ['/model', 'Changer de modèle'], ['/review', 'Relire le diff courant'], ['/resume', 'Reprendre une session'], ['/cost', 'Coût de la session']];
+let queue = [], hist = ['Corrige le hook qui échoue pendant un npm install.', 'Regarde pourquoi hook.test échoue sous charge.'], hi = -1, popItems = [], popSel = 0, popTok = null;
+function grow() { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight + 2, 180) + 'px'; }
+function popup() {
+  const before = ta.value.slice(0, ta.selectionStart), m = before.match(/(^|\s)@([\w./-]*)$/), c = before.match(/^\/(\w*)$/);
+  const pop = $('#pop');
+  if (m) { popTok = { start: before.length - m[2].length - 1, kind: '@' }; popItems = FILES.filter(f => f.toLowerCase().includes(m[2].toLowerCase())).slice(0, 7).map(f => [f, '']); }
+  else if (c) { popTok = { start: 0, kind: '/' }; popItems = CMDS.filter(x => x[0].startsWith('/' + c[1])); }
+  else popItems = [];
+  popSel = Math.min(popSel, Math.max(popItems.length - 1, 0));
+  pop.classList.toggle('on', popItems.length > 0);
+  pop.innerHTML = popItems.map((x, i) => `<div class="${i === popSel ? 'sel' : ''}" data-i="${i}">${popTok.kind === '@' ? '@' : ''}${x[0]}<span>${x[1]}</span></div>`).join('');
+}
+function pick(i) {
+  const x = popItems[i]; if (!x) return;
+  const end = ta.selectionStart, ins = (popTok.kind === '@' ? '@' : '') + x[0] + ' ';
+  ta.value = ta.value.slice(0, popTok.start) + ins + ta.value.slice(end);
+  ta.selectionStart = ta.selectionEnd = popTok.start + ins.length; popItems = []; $('#pop').classList.remove('on'); grow();
+}
+function send() {
+  const v = ta.value.trim(); if (!v) return;
+  hist.unshift(v); hi = -1; ta.value = ''; grow(); popup();
+  if (working) { queue.push(v); queueUI(); } else freeTurn(v);
+}
+function queueUI() {
+  const q = $('#q'); q.hidden = !queue.length;
+  q.innerHTML = `<span class="mut">En file (${queue.length})${pend.length ? ' · envoyé après ta décision' : ' · envoyé à la fin du tour'}</span>` + queue.map((m, i) => `<span class="qi"><span>${esc(m)}</span><button class="x" data-qe="${i}" title="Modifier">✎</button><button class="x" data-qx="${i}" title="Retirer">✕</button></span>`).join('');
+}
+function setMode(m) { mode = (m + 3) % 3; $('#mode-v').textContent = MODES[mode]; }
+ta.addEventListener('input', () => { grow(); popSel = 0; popup(); });
+ta.addEventListener('keydown', e => {
+  const open = popItems.length > 0;
+  if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { popSel = (popSel + (e.key === 'ArrowDown' ? 1 : -1) + popItems.length) % popItems.length; popup(); return e.preventDefault(); }
+  if (open && (e.key === 'Enter' || e.key === 'Tab')) { pick(popSel); return e.preventDefault(); }
+  if (e.key === 'Tab' && e.shiftKey) { setMode(mode + 1); return e.preventDefault(); }
+  if (e.key === 'Enter' && !e.shiftKey) { send(); return e.preventDefault(); }
+  if (e.key === 'ArrowUp' && !ta.value && hist.length) { hi = Math.min(hi + 1, hist.length - 1); ta.value = hist[hi]; grow(); return e.preventDefault(); }
+});
+$('#pop').addEventListener('mousedown', e => { const d = e.target.closest('[data-i]'); if (d) { pick(+d.dataset.i); e.preventDefault(); } });
+$('#q').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.qe) { ta.value = queue.splice(+b.dataset.qe, 1)[0]; grow(); ta.focus(); } else queue.splice(+b.dataset.qx, 1);
+  queueUI();
+});
+$('#send').onclick = () => working ? interrupt() : send();
+$('#mode').onclick = () => setMode(mode + 1);
+$('#model').onclick = () => toast('Sélecteur de modèle : ceux du harnais de la session (ici Claude Code)');
+
+/* ---------- Clicks in the thread ---------- */
+const menu = $('#menu');
+function closeMenu() { menu.classList.remove('on'); }
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (!t.closest('#menu') && !t.closest('[data-act=rewind]')) closeMenu();
+  const o = t.closest('[data-open]'); if (o) { toast(`Ouvre ${o.dataset.open} dans l'éditeur`); return e.stopPropagation(); }
+  const ts = t.closest('[data-toast]'); if (ts) return toast(ts.dataset.toast);
+  const a = t.closest('[data-act]');
+  if (a?.dataset.act === 'layout') { const d = a.closest('.diff'), s = d.dataset.layout === 'uni'; d.dataset.layout = s ? 'spl' : 'uni'; a.textContent = s ? 'Unifié' : 'Côte à côte'; return; }
+  if (a?.dataset.act === 'helper') { $('#side').classList.add('on'); return; }
+  if (a?.dataset.act === 'rewind') {
+    const m = $('.mid').getBoundingClientRect(), b = a.getBoundingClientRect();
+    menu.innerHTML = `<p>Revenir à ce point de la discussion</p><button>Conversation et fichiers</button><button>Conversation seule</button><button>Fichiers seuls</button><p>Aperçu des fichiers avant de confirmer. Les commandes déjà lancées (push, shell) ne sont pas annulées.</p>`;
+    menu.classList.add('on'); menu.style.right = '14px'; menu.style.left = 'auto';
+    menu.style.top = Math.max(8, Math.min(b.top - m.top - menu.offsetHeight - 6, m.height - menu.offsetHeight - 8)) + 'px'; return;
+  }
+  if (t.closest('#menu button')) { closeMenu(); return toast('Maquette : la restauration n\'est pas simulée'); }
+  const bh = t.closest('.bh'); if (bh) return toggle(bh.parentElement);
+  const rh = t.closest('.rh'); if (rh && thread.contains(rh) || rh && $('#side').contains(rh)) toggle(rh.parentElement);
+});
+function toggle(r) { if (!r.hasAttribute('aria-expanded')) return; r.setAttribute('aria-expanded', r.getAttribute('aria-expanded') !== 'true'); refresh(); }
+$('#live').onclick = goLive;
+$('#side-x').onclick = () => $('#side').classList.remove('on');
+$('#todo-h').onclick = toggleTodos;
+$('#pd-go').onclick = () => { if (pend[0]) { pend[0].card.scrollIntoView({ block: 'center' }); pend[0].card.focus(); } };
+
+/* ---------- Keyboard ---------- */
+const navs = () => $$('.nav', thread).filter(n => n.offsetParent !== null);
+document.addEventListener('keydown', e => {
+  const inField = e.target.matches('textarea,input');
+  if (e.key === 'Escape') {
+    if (popItems.length) { popItems = []; $('#pop').classList.remove('on'); return; }
+    if (menu.classList.contains('on')) return closeMenu();
+    if ($('#side').classList.contains('on')) return $('#side').classList.remove('on');
+    if (working) return interrupt();
+    if (inField) thread.focus();
+    return;
+  }
+  if (e.ctrlKey && e.key.toLowerCase() === 'o') { e.preventDefault(); const rs = $$('.burst', curTurn()); const all = rs.every(r => r.getAttribute('aria-expanded') === 'true'); rs.forEach(r => r.setAttribute('aria-expanded', !all)); return refresh(); }
+  if (inField || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase(), f = document.activeElement;
+  if (pend.length && 'yanc'.includes(k) && k.length === 1) { e.preventDefault(); return permKey(pend.find(p => p.card === f) || pend[0], k); }
+  if (k === 'j' || k === 'k') {
+    const l = navs(), i = l.indexOf(f.closest?.('.nav')), n = l[i < 0 ? (k === 'j' ? 0 : l.length - 1) : Math.max(0, Math.min(l.length - 1, i + (k === 'j' ? 1 : -1)))];
+    n?.focus(); n?.scrollIntoView({ block: 'nearest' }); return e.preventDefault();
+  }
+  if ((k === 'enter' || k === ' ') && f.classList?.contains('row')) { toggle(f); return e.preventDefault(); }
+  if ((k === 'enter' || k === ' ') && f.classList?.contains('bh')) { toggle(f.parentElement); return e.preventDefault(); }
+  if (k === 'enter' && f.classList?.contains('helper')) return $('#side').classList.add('on');
+  if (k === '[' || k === ']') { const ts = $$('.turn', thread), i = ts.indexOf(curTurn()), n = ts[Math.max(0, Math.min(ts.length - 1, i + (k === ']' ? 1 : (ts[i].offsetTop < thread.scrollTop - 8 ? 0 : -1))))]; thread.scrollTop = n.offsetTop; return; }
+  if (k === 'g' || k === 'end') return goLive();
+  if (k === 't') return toggleTodos();
+  if (k === '/' || k === 'i') { ta.focus(); return e.preventDefault(); }
+  if (k === 'o' && f.classList?.contains('row')) { const p = $('[data-open]', f); if (p) toast(`Ouvre ${p.dataset.open} dans l'éditeur`); }
+  if (k === 'e' && f.classList?.contains('prompt')) toast('Édite ce message et relance : crée une branche à partir de ce tour');
+});
+
+/* ---------- Mockup chrome ---------- */
+$('#mk-replay').onclick = start;
+$('#mk-w').onclick = e => { const on = e.target.getAttribute('aria-pressed') !== 'true'; e.target.setAttribute('aria-pressed', on); document.documentElement.style.setProperty('--w', on ? '1040px' : '660px'); document.documentElement.toggleAttribute('data-wide', on); refresh(); };
+$('#mk-theme').onclick = e => { const on = e.target.getAttribute('aria-pressed') !== 'true'; e.target.setAttribute('aria-pressed', on); document.documentElement.dataset.theme = on ? 'light' : 'dark'; };
+$('#mk-keys').onclick = e => { const on = e.target.getAttribute('aria-pressed') !== 'true'; e.target.setAttribute('aria-pressed', on); $('#keys').classList.toggle('on', on); };
+
+function start() { run++; clearInterval(tick); working = false; pend = []; queue = []; queueUI(); $('#side').classList.remove('on'); seed(); todos(); status(); setTimeout(liveTurn, new URLSearchParams(location.search).has('static') ? 1e9 : 700); }
+start();
+</script>
+</body>
+</html>
