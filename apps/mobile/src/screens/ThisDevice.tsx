@@ -36,8 +36,8 @@ export function ThisDevice({ store, pinned }: { store: MobileStore; pinned: Pinn
   };
   return (
     <section aria-labelledby="device-title" className="flex flex-col gap-2.5">
-      <h2 id="device-title" className="text-body text-muted">{D.title}</h2>
-      <div className="flex items-center gap-3 rounded-control border border-line bg-surface px-4 py-3">
+      <h2 id="device-title" className="text-small font-medium text-muted">{D.title}</h2>
+      <div className="flex items-center gap-3 rounded-[10px] border border-line bg-surface px-4 py-3">
         <span className="grid size-9 flex-none place-items-center rounded-[10px] bg-raised" aria-hidden="true"><Icon name={device.kind === 'tablet' ? 'tablet' : 'phone'} /></span>
         <div className="min-w-0 flex-1">
           <p className="text-body font-semibold [overflow-wrap:anywhere]">{name}</p>

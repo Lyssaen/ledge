@@ -4,7 +4,7 @@ import type { ActionErrorCode } from '@ledge/protocol';
 export type ActionVars = Readonly<Record<string, string>>;
 
 /** The generic card's sentences (#94) a front builds from a row's `vars`, in its own language: the Desktop and the island
- *  share them (docs/mockups/ledge-action-card-codes.md; they say « tu »). The phone will have its own, which say « vous ». */
+ *  share them (docs/mockups/ledge-action-card-codes.md; they say « tu »). The phone adds a few of its own (apps/mobile/src/copy.ts), in « tu » as well. */
 export interface ActionWords {
   /** A row's line by its registry id, names in **bold**; `undefined` when a word it needs is missing: the daemon's summary then. */
   line: Record<string, (v: ActionVars) => string | undefined>;

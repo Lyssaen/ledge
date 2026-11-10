@@ -97,12 +97,12 @@ describe('threadItems', () => {
 describe('composerState', () => {
   const c = (session: PhoneSession, link: Parameters<typeof composerState>[1] = 'ready', sending = false) => composerState(session, link, sending);
   it('is open only for an idle agent on a ready link', () => {
-    expect(c(s())).toEqual({ enabled: true, placeholder: 'Écrire à Bix…', status: { tone: 'ok', label: 'Disponible pour votre consigne' } });
+    expect(c(s())).toEqual({ enabled: true, placeholder: 'Écrire à Bix…', status: { tone: 'ok', label: 'Disponible pour ta consigne' } });
   });
   it('is disabled while working, awaiting a decision, connecting or offline', () => {
-    expect(c(s({ state: 'working' }))).toMatchObject({ enabled: false, placeholder: 'L’agent travaille…', status: { label: 'Au travail · consultez le terminal' } });
-    expect(c(s({ state: 'waiting_input' }))).toMatchObject({ enabled: false, placeholder: 'Traitez la demande ci-dessus', status: { tone: 'attention', label: 'En attente d’une décision' } });
-    expect(c(s(), 'pc_offline')).toMatchObject({ enabled: false, placeholder: 'Reconnectez-vous pour écrire', status: { tone: 'muted', label: 'Connexion perdue · dernier état connu' } });
+    expect(c(s({ state: 'working' }))).toMatchObject({ enabled: false, placeholder: 'L’agent travaille…', status: { label: 'Au travail · consulte le terminal' } });
+    expect(c(s({ state: 'waiting_input' }))).toMatchObject({ enabled: false, placeholder: 'Traite la demande ci-dessus', status: { tone: 'attention', label: 'En attente d’une décision' } });
+    expect(c(s(), 'pc_offline')).toMatchObject({ enabled: false, placeholder: 'Reconnecte-toi pour écrire', status: { tone: 'muted', label: 'Connexion perdue · dernier état connu' } });
     expect(c(s(), 'key_changed').enabled).toBe(false);
     expect(c(s(), 'handshaking')).toMatchObject({ enabled: false, placeholder: 'Connexion en cours…' });
     expect(c(s(), 'ready', true)).toMatchObject({ enabled: false, status: { label: 'Envoi au PC…' } });

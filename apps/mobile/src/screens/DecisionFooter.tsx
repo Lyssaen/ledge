@@ -143,7 +143,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
       if (r === 'stale') {
         return wrap(<>
           <Notice title={D.changed} tone="warning" role="alert" />
-          <a href={href({ name: 'inbox' })} className={full()}>{copy.result.back}</a>
+          <a href={href({ name: 'atoi' })} className={full()}>{copy.result.back}</a>
         </>, undefined, false);
       }
       const notice = <Notice title={reasonText(item, r)} tone="warning" role="alert" />;

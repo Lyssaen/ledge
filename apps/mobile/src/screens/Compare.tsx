@@ -75,7 +75,7 @@ export function Compare({ step, login, pcName, lost, stalled = false, reach = 'p
           <p className="max-w-[300px] text-muted">{C.doneBody}</p>
         </div>
         <Fill />
-        {actions ?? <a href={href({ name: 'inbox' })} onClick={onDone} className={PRIMARY}>{C.seePending}</a>}
+        {actions ?? <a href={href({ name: 'atoi' })} onClick={onDone} className={PRIMARY}>{C.seePending}</a>}
       </Board>
     );
   }

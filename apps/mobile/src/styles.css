@@ -41,7 +41,17 @@
   --color-task: var(--task);
   --color-term-bg: var(--term-bg);
   --color-term-fg: var(--term-fg);
+  /* The redesign's surfaces, as Desktop's (docs/mockups/ledge-mobile-refonte/m0-socle.html, §6): the runtime tag, the high
+     impact pill, the focus ring, the tab bar and the rail. */
+  --color-secondary: var(--secondary);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
 }
+/* The dark theme is the root's `data-theme` (src/theme.ts), not the system's preference. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+/* A working dot, a skeleton while the PC's first state comes. */
+@keyframes ledge-pulse { 50% { opacity: .35; } }
 /* A phone on its side (landscape, short), as the block at the end of this file: the screens that compact their header there. */
 @custom-variant phone-side (@media (orientation: landscape) and (max-height: 500px));
 /* A wide screen, an iPad either way up or a desktop window: two panes (ui/layout.tsx, WIDE_QUERY). */
@@ -71,6 +81,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* The app column: 480 px at most, one dynamic viewport tall, clear of the notch and the home indicator. */
 .app {
+  /* How far a `.bleed` band (the header, the tab bar) reaches past the padding, to the screen's edges. */
+  --bleed-l: max(18px, env(safe-area-inset-left));
+  --bleed-r: max(18px, env(safe-area-inset-right));
   max-width: 480px;
   height: 100vh;
   height: 100dvh;
@@ -78,6 +91,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(18px, env(safe-area-inset-left));
   box-sizing: border-box;
 }
+.bleed { margin-left: calc(-1 * var(--bleed-l)); margin-right: calc(-1 * var(--bleed-r)); }
+
+/* The phone's five tabs (m0-socle.html, §1): 58 px, then the home indicator's inset, on the sidebar's colour to the bottom edge. */
+.app:has(> .tabbar) { padding-bottom: 0; }
+.tabbar { height: calc(58px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
+/* The keyboard's focus: the neutral ring around the tab's pad, never the brand's red or the info blue. */
+.tabbar .tab:focus-visible { outline: none; }
+.tabbar .tab:focus-visible .pad { box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--ring); }
+
+/* The banner of a PC or a relay that does not answer (§4), as Desktop's view banner. */
+.strip { background: var(--card); }
+:root[data-theme="dark"] .strip { background: oklch(0.18 0 0); }
 
 /* The installed app on iOS (`black-translucent`, index.html) draws the status bar over the page in white text, whatever the
    theme: in the light theme a dark band behind it keeps the clock and battery readable. The inset is 0 elsewhere. */
@@ -91,31 +116,49 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
    padding above. */
 @media (orientation: landscape) and (max-height: 500px), (min-width: 768px) and (min-height: 501px) {
   .app { max-width: none; }
-  /* The tabs become a rail on the left, so the short height goes to the thread and the composer. */
-  .app:has(.tabbar) { padding-left: calc(env(safe-area-inset-left) + 92px); }
-  .tabbar {
-    position: fixed; inset: 0 auto 0 0; z-index: 20; width: calc(env(safe-area-inset-left) + 76px);
-    display: flex; flex-direction: column; justify-content: center; gap: 6px;
-    padding: env(safe-area-inset-top) 6px env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + 6px);
-    border-top: 0; border-right: 1px solid var(--color-line);
-  }
-  .tabbar > a { position: relative; flex-direction: column; gap: 2px; min-height: 56px; font-size: var(--text-meta); line-height: var(--text-meta--line-height); }
-  /* The count, on the icon's corner instead of after the label. */
-  .tabbar > a > span { position: absolute; top: 4px; right: 6px; }
 }
 
-/* A wide screen: the list (360 px at most) and, beside it, what it opened, its content 720 px at most. A screen with no
-   list (the chat, the connection) keeps one column of that width, centred. */
+/* A phone on its side: the five tabs become a narrow rail on the left, the whole height, so the short height goes to the
+   content (design-ux, 2026-11-10: the phone's tabs and badges, labels under the icon, no logo, Atelier or Réglages). */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app:has(> .tabbar) { --bleed-l: 18px; padding-left: calc(env(safe-area-inset-left) + 76px + 18px); padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar {
+    position: fixed; inset: 0 auto 0 0; z-index: 20; margin: 0; width: calc(env(safe-area-inset-left) + 76px); height: auto;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) env(safe-area-inset-left);
+    border-top: 0; border-right: 1px solid var(--color-line);
+  }
+  .tabbar .tab { min-height: 54px; font-size: 10px; line-height: 12px; }
+}
+
+/* A wide screen (m0-socle.html, §2): the rail of 76 px on the left, then the list (380 px, 330 upright) and, beside it, what
+   it opened, its content 720 px at most. A screen with no list (the chat, Réglages) keeps one column of that width, centred. */
 @media (min-width: 768px) and (min-height: 501px) {
-  .split { display: grid; grid-template-columns: clamp(300px, 34vw, 360px) minmax(0, 1fr); flex: 1; min-height: 0; margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); }
-  .split-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding-right: 18px; border-right: 1px solid var(--color-line); }
+  .app:has(> .rail) { --bleed-l: 0px; --bleed-r: 0px; padding-left: calc(env(safe-area-inset-left) + 76px); }
+  .rail {
+    position: fixed; inset: 0 auto 0 0; z-index: 20; box-sizing: border-box; width: calc(env(safe-area-inset-left) + 76px);
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: calc(env(safe-area-inset-top) + 14px) 0 calc(env(safe-area-inset-bottom) + 18px) env(safe-area-inset-left);
+    background: var(--sidebar); border-right: 1px solid var(--color-line);
+  }
+  .rail .rb {
+    position: relative; width: 60px; height: 54px; flex: none; border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    font-size: 10.5px; line-height: 13px; color: var(--muted-foreground);
+  }
+  .rail .rb[aria-current="page"] { background: var(--muted); color: var(--foreground); font-weight: 500; }
+  .rail .rb:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--ring); }
+  .split { display: grid; grid-template-columns: 380px minmax(0, 1fr); flex: 1; min-height: 0; margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); }
+  .split-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--color-line); }
+  .split-list .tab-main { padding-inline: 12px; }
   .split-detail { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding: 0 max(28px, env(safe-area-inset-right)) 0 28px; }
   .split-detail > * { width: 100%; max-width: 720px; margin-inline: auto; }
-  /* The rail starts at the top, as an iPad's sidebar; a phone on its side keeps it centred. */
-  .tabbar { justify-content: flex-start; padding-top: calc(env(safe-area-inset-top) + 40px); }
   /* « Retour » to the list beside it says nothing on a wide screen; back to the thread from its terminal stays. */
-  .split-detail [data-back="inbox"], .split-detail [data-back="agents"] { display: none; }
-  .app:not(:has(.split)) > :not(.tabbar) { width: 100%; max-width: 720px; margin-inline: auto; }
+  .split-detail [data-back="atoi"], .split-detail [data-back="sessions"] { display: none; }
+  .app:not(:has(.split)) > :not(.rail) { width: 100%; max-width: 720px; margin-inline: auto; }
+}
+@media (min-width: 768px) and (min-height: 501px) and (orientation: portrait) {
+  .split { grid-template-columns: 330px minmax(0, 1fr); }
 }
 
 /* « Réduire les animations » in Réglages (src/motion.ts): unlayered and important, it wins over every layer's animation. */

@@ -8,24 +8,24 @@ describe('« Retour »', () => {
     // A notification opened the app on a thread: no screen of the app before it.
     globalThis.history.replaceState(null, '', '#/thread/s1');
     const { backTarget, goBack } = await import('../src/router');
-    expect(backTarget({ name: 'agents' })).toEqual({ route: { name: 'agents' }, known: false, inApp: false });
-    goBack({ name: 'agents' });
+    expect(backTarget({ name: 'sessions' })).toEqual({ route: { name: 'sessions' }, known: false, inApp: false });
+    goBack({ name: 'sessions' });
     await tick();
-    expect(globalThis.location.hash).toBe('#/agents');
-    // Replaced, not pushed: the agents are still the first screen.
-    expect(backTarget({ name: 'inbox' }).inApp).toBe(false);
+    expect(globalThis.location.hash).toBe('#/sessions');
+    // Replaced, not pushed: Sessions is still the first screen.
+    expect(backTarget({ name: 'atoi' }).inApp).toBe(false);
 
-    // Agents → inbox → a request: back leads to the inbox, then to the agents.
+    // Sessions → À toi → a request: back leads to À toi, then to Sessions.
     await go('#/');
     await go('#/request/s1/k1');
-    expect(backTarget({ name: 'inbox' })).toEqual({ route: { name: 'inbox' }, known: true, inApp: true });
-    goBack({ name: 'inbox' });
+    expect(backTarget({ name: 'atoi' })).toEqual({ route: { name: 'atoi' }, known: true, inApp: true });
+    goBack({ name: 'atoi' });
     await tick();
     expect(globalThis.location.hash).toBe('#/');
-    expect(backTarget({ name: 'inbox' })).toEqual({ route: { name: 'agents' }, known: true, inApp: true });
+    expect(backTarget({ name: 'atoi' })).toEqual({ route: { name: 'sessions' }, known: true, inApp: true });
 
-    // A new step after going back drops the one ahead: inbox → thread, back is the inbox again.
+    // A new step after going back drops the one ahead: À toi → thread, back is À toi again.
     await go('#/thread/s2');
-    expect(backTarget({ name: 'agents' }).route).toEqual({ name: 'inbox' });
+    expect(backTarget({ name: 'sessions' }).route).toEqual({ name: 'atoi' });
   });
 });

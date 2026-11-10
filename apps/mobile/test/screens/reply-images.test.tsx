@@ -93,7 +93,7 @@ describe('attaching to a reply', () => {
     await waitFor(() => expect(chips()[0]).toHaveAttribute('data-chip', 'ready'));
     act(() => t.deliver({ type: 'session.updated', session: session('a', { name: 'Kai', state: 'waiting_input', pending: pending({ kind: 'question', text: 'Quel nom ?' }) }) }));
     expect(send()).toBeDisabled();
-    expect(screen.getByText("Répondez d'abord à la question, l'image partira après")).toBeInTheDocument();
+    expect(screen.getByText("Réponds d'abord à la question, l'image partira après")).toBeInTheDocument();
   });
 });
 

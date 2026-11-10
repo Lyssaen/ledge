@@ -106,7 +106,7 @@ describe('the instruction card', () => {
 
   it('a pill says what the target is doing until it is sent, as on the PC', () => {
     open({ relay });
-    expect(within(screen.getByRole('region', { name: 'Consigne proposée' })).getByText('à vous')).toHaveAttribute('data-pill', 'yours');
+    expect(within(screen.getByRole('region', { name: 'Consigne proposée' })).getByText('à toi')).toHaveAttribute('data-pill', 'yours');
   });
 
   it('the pill says « arrêtée » for a session gone from the list', () => {
@@ -308,7 +308,7 @@ describe('the launch cards', () => {
 
   it('without a credential, points to Connexion and disables the button', () => {
     open({ proposals: [proposals[0]!] }, false);
-    expect(screen.getByText(/Protégez d'abord vos accords depuis Réglages\./)).toBeInTheDocument();
+    expect(screen.getByText(/Protège d'abord tes accords depuis Réglages\./)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Réglages' })).toHaveAttribute('href', '#/connection');
     expect(screen.getByRole('button', { name: copy.confirm.go })).toBeDisabled();
   });

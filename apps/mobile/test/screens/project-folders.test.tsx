@@ -127,7 +127,7 @@ describe('« Ajouter un dossier »: browsing this PC', () => {
     const t = opened({ confirm: false });
     const sheet = pick(t);
     act(() => t.deliver(listing(HOME, ['code'])));
-    expect(within(sheet).getByText(/Protégez d’abord vos accords/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/Protège d’abord tes accords/)).toBeInTheDocument();
     expect(within(sheet).getByRole('button', { name: `Ajouter ${HOME}` })).toBeDisabled();
   });
 });

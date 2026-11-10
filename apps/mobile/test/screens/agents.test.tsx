@@ -19,7 +19,7 @@ describe('the agents', () => {
     const ledge = screen.getByRole('region', { name: 'ledge' });
     expect(within(ledge).getAllByRole('link').map(a => a.getAttribute('href'))).toEqual(['#/thread/a', '#/thread/c']);
     expect(within(ledge).getByText('Au travail')).toBeInTheDocument();
-    expect(within(ledge).getByText('Votre accord')).toBeInTheDocument();
+    expect(within(ledge).getByText('Ton accord')).toBeInTheDocument();
     const relay = screen.getByRole('region', { name: 'relay' });
     expect(within(relay).getByText('● Non lu')).toBeInTheDocument();
     expect(within(relay).getByText('Disponible')).toBeInTheDocument();
@@ -50,8 +50,8 @@ describe('the agents', () => {
     t.deliver(snapshot([session('a')]));
     render(<Agents store={t.store} />);
     act(() => t.set('pc_offline'));
-    expect(screen.getByText('Dernier état connu · connexion perdue')).toBeInTheDocument();
-    expect(screen.getByText('PC hors ligne')).toBeInTheDocument();
+    // The banner is the shell's (shell/Shell.tsx, LinkStrip); the list says when its state was received.
+    expect(screen.getByText(/^Dernier état connu · \d\d:\d\d$/)).toBeInTheDocument();
   });
 
   describe('the progress of a checklist', () => {

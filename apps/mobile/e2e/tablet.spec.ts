@@ -41,7 +41,7 @@ test('on an iPad the list and the request sit side by side, either way up', asyn
   await expect(row).toBeVisible();
   await expect(row).toHaveAttribute('aria-current', 'page');
   expect.soft((await allow.boundingBox())!.x).toBeGreaterThan((await row.boundingBox())!.x + (await row.boundingBox())!.width);
-  await expect(page.getByRole('link', { name: copy.nav.backTo.inbox! })).toBeHidden();
+  await expect(page.getByRole('link', { name: copy.nav.backTo.atoi! })).toBeHidden();
   await shot(page, 'request', browserName);
 
   await page.setViewportSize({ width: 834, height: 1194 });
@@ -57,7 +57,7 @@ test('on an iPad the list and the request sit side by side, either way up', asyn
 
   // The agents: nothing chosen, then a thread beside them.
   await page.setViewportSize({ width: 1194, height: 834 });
-  await page.getByRole('navigation', { name: copy.nav.label }).getByRole('link', { name: copy.nav.agents }).click();
+  await page.getByRole('navigation', { name: copy.nav.label }).getByRole('link', { name: copy.nav.sessions }).click();
   await expect(page.getByRole('heading', { name: copy.split.agent.title })).toBeVisible();
   const agent = page.locator('.split-list main a[href^="#/thread/"]').first();
   await agent.click();

@@ -271,8 +271,8 @@ export function ProjectsSection({ store }: { store: MobileStore }) {
   };
   return (
     <section aria-labelledby="projects-title" className="flex flex-col gap-2.5">
-      <h2 id="projects-title" className="text-body text-muted">{P.title}</h2>
-      <ul className="flex flex-col rounded-control border border-line bg-surface text-body">
+      <h2 id="projects-title" className="text-small font-medium text-muted">{P.title}</h2>
+      <ul className="flex flex-col rounded-[10px] border border-line bg-surface text-body">
         {projects.length === 0 && <li className="px-4 py-3 text-muted">{P.none}</li>}
         {projects.map((p, i) => (
           <li key={p.id} className="flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">

@@ -7,16 +7,12 @@ import { roomTileWidth, rigColor, sceneOf, IPAD_RUG_SIDE, MAX_SEATS, type Atelie
 import { copy } from '../copy';
 import { navigate, replaceRoute } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
-import { requestsOf } from '../model/requests';
-import { closedTasks } from '../model/tasks';
 import { sessionStatus } from '../model/agents';
 import { GroupWrite } from '../screens/Agents';
 import { RequestDetail } from '../screens/RequestDetail';
 import { Thread } from '../screens/Thread';
-import { LinkStatus, linkView } from '../ui/Header';
+import { HostPill, LinkStrip } from '../shell/Shell';
 import { MobileBot } from '../ui/MobileBot';
-import { OfflineBanner } from '../ui/Notice';
-import { TabBar } from '../ui/TabBar';
 import { Tag } from '../ui/Tag';
 import { iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
@@ -140,9 +136,9 @@ export function AtelierScreen({ store, sessionId, requestKey, storage, onReconne
           <h1 className="text-title font-semibold tracking-[-.3px]">{copy.atelier.title}</h1>
           <span className="min-w-0 truncate text-meta text-muted">{subtitle}</span>
           <span className="flex-1" />
-          <LinkStatus link={linkView(state)} />
+          <HostPill />
         </header>
-        {offline && <div className="mb-3 flex-none"><OfflineBanner onReconnect={onReconnect} /></div>}
+        <div className="mb-3 flex-none empty:hidden"><LinkStrip /></div>
         <div className={`atelier-ipad${offline ? ' atelier-frozen' : ''}`}>
           <div className="zoom-controls" role="toolbar" aria-label={copy.atelier.zoom.bar}>
             <button type="button" className="ledge-btn" data-variant="ghost" aria-label={copy.atelier.zoom.out} onClick={() => view.step(-1)}>−</button>
@@ -180,7 +176,6 @@ export function AtelierScreen({ store, sessionId, requestKey, storage, onReconne
         </Panel>
       )}
       {!sessionId && room && sheet && <RoomSheet store={store} name={room.name} ids={room.ids} onOpen={open} onClose={() => setSheet(null)} />}
-      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="atelier" chat={!!state.device?.chat} atelier />
     </>
   );
 }

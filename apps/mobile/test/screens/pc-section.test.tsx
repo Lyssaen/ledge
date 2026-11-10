@@ -39,7 +39,7 @@ describe('« Le PC » on the Connexion screen', () => {
 
   it('asks an older PC that announces nothing to be updated on the PC', () => {
     open('0.9.0');
-    expect(screen.getByText('Mettez Ledge à jour sur le PC.')).toBeInTheDocument();
+    expect(screen.getByText('Mets Ledge à jour sur le PC.')).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
   });
 
@@ -57,7 +57,7 @@ describe('« Le PC » on the Connexion screen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mettre à jour le PC' }));
     expect(screen.getByRole('heading', { name: 'Mettre à jour le PC ?' })).toBeInTheDocument();
     expect(screen.getByText(/Atelier passe de 0.9.0 à 0.10.0/)).toBeInTheDocument();
-    expect(screen.getByText(/Protégez d’abord les accords/)).toBeInTheDocument();
+    expect(screen.getByText(/Protège d’abord les accords/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmer' })).toBeDisabled();
   });
 

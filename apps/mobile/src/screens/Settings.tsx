@@ -9,7 +9,7 @@ import { Switch } from '../ui/Switch';
 import { useNow } from '../useNow';
 
 const S = copy.settings;
-const CARD = 'flex flex-col rounded-control border border-line bg-surface text-body';
+const CARD = 'flex flex-col rounded-[10px] border border-line bg-surface text-body';
 const ROW = 'flex flex-col gap-1 border-b border-line px-4 py-3 last:border-b-0';
 /** « Contexte max »: 50 % to 95 %, by 5, as the desktop offers it. */
 export const NEARS = Array.from({ length: Math.round((CONTEXT_NEAR_MAX - CONTEXT_NEAR_MIN) * 20) + 1 }, (_, i) => Math.round((CONTEXT_NEAR_MIN + i * 0.05) * 100));
@@ -133,7 +133,7 @@ export function LedgePrefs({ store }: { store: MobileStore }) {
   const tool: ToolChoice = p.prefs.chatTool ?? 'pc';
   return (
     <section aria-labelledby="ledge-title" className="flex flex-col gap-2.5">
-      <h2 id="ledge-title" className="text-body text-muted">{S.ledge}</h2>
+      <h2 id="ledge-title" className="text-small font-medium text-muted">{S.ledge}</h2>
       <div className={CARD}>
         <Row label={S.context} hint={S.contextHint}>
           {d => (
@@ -177,7 +177,7 @@ export function ManagedOnPc({ store }: { store: MobileStore }) {
   const daemon = useMobile(store).daemon;
   return (
     <section aria-labelledby="managed-title" className="flex flex-col gap-2.5">
-      <h2 id="managed-title" className="text-body text-muted">{S.managed}</h2>
+      <h2 id="managed-title" className="text-small font-medium text-muted">{S.managed}</h2>
       {daemon?.terminal && (
         <dl className={CARD}>
           <div className="flex items-baseline justify-between gap-4 px-4 py-3">

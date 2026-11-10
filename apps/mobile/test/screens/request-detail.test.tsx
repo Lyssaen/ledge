@@ -66,7 +66,7 @@ describe('the request detail', () => {
     act(() => t.deliver({ type: 'operation.result', op, status: 'rejected', reason: 'stale' }));
     act(() => t.deliver({ type: 'session.pending', id: 'a', pending: pending({ key: 'p2', text: 'pnpm build' }) }));
     expect(screen.getByText('pnpm build', { selector: 'pre' })).toBeInTheDocument();
-    expect(screen.getByText('La demande a été mise à jour. Relisez-la avant de décider.')).toBeInTheDocument();
+    expect(screen.getByText('La demande a été mise à jour. Relis-la avant de décider.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Autoriser une fois' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'J’ai relu la demande' }));
     fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
@@ -94,7 +94,7 @@ describe('a question', () => {
     const t = opened(question());
     expect(screen.getByRole('radio', { name: 'Sombre' })).not.toBeChecked();
     fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
-    fireEvent.change(screen.getByLabelText('Votre réponse à Kai'), { target: { value: '  Bleu nuit ' } });
+    fireEvent.change(screen.getByLabelText('Ta réponse à Kai'), { target: { value: '  Bleu nuit ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Envoyer ma réponse' }));
     expect(t.of('session.reply')).toMatchObject([{ id: 'a', text: 'Bleu nuit', expect: { key: 'p1', kind: 'question' } }]);
   });
@@ -116,7 +116,7 @@ describe('a question', () => {
   it('takes a free answer as long as a message, and stops one longer before sending', () => {
     const t = opened(question());
     fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
-    const field = screen.getByLabelText('Votre réponse à Kai');
+    const field = screen.getByLabelText('Ta réponse à Kai');
     fireEvent.change(field, { target: { value: 'x'.repeat(MESSAGE_MAX + 1) } });
     expect(screen.getByText(`La réponse est trop longue (${MESSAGE_MAX} caractères au plus).`)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Envoyer ma réponse' })).toBeDisabled();
@@ -128,7 +128,7 @@ describe('a question', () => {
   it('flags a free answer the terminal cannot type', () => {
     const t = opened(question());
     fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
-    fireEvent.change(screen.getByLabelText('Votre réponse à Kai'), { target: { value: 'une\ndeux' } });
+    fireEvent.change(screen.getByLabelText('Ta réponse à Kai'), { target: { value: 'une\ndeux' } });
     expect(screen.getByRole('alert')).toHaveTextContent('La réponse doit tenir sur une ligne');
     expect(screen.getByRole('button', { name: 'Envoyer ma réponse' })).toBeDisabled();
     expect(t.of('session.reply')).toEqual([]);
@@ -152,7 +152,7 @@ describe('the decision footer', () => {
   it('a question it cannot answer from here sends to the PC, the thread link before the hint', () => {
     opened(question({ options: [] }), { tool: 'cursor' });
     expect(screen.queryByRole('button', { name: 'Envoyer ma réponse' })).not.toBeInTheDocument();
-    expect(footerOrder()).toEqual(['Voir le fil de Kai', 'Cet agent ne peut pas recevoir de réponse libre depuis un appareil lié. Répondez sur le PC.']);
+    expect(footerOrder()).toEqual(['Voir le fil de Kai', 'Cet agent ne peut pas recevoir de réponse libre depuis un appareil lié. Réponds sur le PC.']);
   });
 
   it('a decision whose delivery is unknown is checked by reconnecting', () => {
@@ -175,7 +175,7 @@ describe('the decision footer', () => {
   it('a dialog without a free-text row says to answer on the PC', () => {
     const t = opened(question());
     fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
-    fireEvent.change(screen.getByLabelText('Votre réponse à Kai'), { target: { value: 'Bleu nuit' } });
+    fireEvent.change(screen.getByLabelText('Ta réponse à Kai'), { target: { value: 'Bleu nuit' } });
     fireEvent.click(screen.getByRole('button', { name: 'Envoyer ma réponse' }));
     act(() => t.deliver({ type: 'operation.result', op: t.of('session.reply')[0]!.op, status: 'rejected', reason: 'free_text' }));
     expect(screen.getByRole('alert')).toHaveTextContent('ne peut pas recevoir de réponse libre');
@@ -184,7 +184,7 @@ describe('the decision footer', () => {
   it('a free answer the PC could not type says why', () => {
     const t = opened(question());
     fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
-    fireEvent.change(screen.getByLabelText('Votre réponse à Kai'), { target: { value: 'Bleu nuit' } });
+    fireEvent.change(screen.getByLabelText('Ta réponse à Kai'), { target: { value: 'Bleu nuit' } });
     fireEvent.click(screen.getByRole('button', { name: 'Envoyer ma réponse' }));
     act(() => t.deliver({ type: 'operation.result', op: t.of('session.reply')[0]!.op, status: 'rejected', reason: 'untypable' }));
     expect(screen.getByRole('alert')).toHaveTextContent('La réponse doit tenir sur une ligne');
@@ -195,7 +195,7 @@ describe('a free answer', () => {
   it('of a lone digit is stopped: the PC would take it for an option', () => {
     const t = opened(question());
     fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
-    fireEvent.change(screen.getByLabelText('Votre réponse à Kai'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Ta réponse à Kai'), { target: { value: '2' } });
     expect(screen.getByRole('alert')).toHaveTextContent('numéro d’une option');
     expect(screen.getByRole('button', { name: 'Envoyer ma réponse' })).toBeDisabled();
     expect(t.of('session.reply')).toEqual([]);
@@ -204,7 +204,7 @@ describe('a free answer', () => {
   it('takes Enter as send, never as a line break', () => {
     const t = opened(question());
     fireEvent.click(screen.getByRole('radio', { name: 'Autre réponse' }));
-    const field = screen.getByLabelText('Votre réponse à Kai');
+    const field = screen.getByLabelText('Ta réponse à Kai');
     expect(field).toHaveAttribute('enterkeyhint', 'send');
     fireEvent.change(field, { target: { value: 'Bleu nuit' } });
     expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(false);
@@ -355,7 +355,7 @@ describe('an OMP ask with several questions', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'B' }));
     fireEvent.click(screen.getByRole('button', { name: 'Envoyer les réponses' }));
     act(() => t.deliver({ type: 'operation.result', op: t.of('session.answer')[0]!.op, status: 'rejected', reason: 'stale' }));
-    expect(screen.getByText('La demande a été mise à jour. Relisez-la avant de décider.')).toBeInTheDocument();
+    expect(screen.getByText('La demande a été mise à jour. Relis-la avant de décider.')).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Clair' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'B' })).toBeChecked();
   });

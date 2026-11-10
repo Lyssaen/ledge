@@ -42,10 +42,10 @@ describe('a session closed from the phone, as its page shows it', () => {
   });
 
   it('gives a refusal its words: failed with a retry, read-only without, a lost link with a reconnect', () => {
-    expect(endingOf(nova(), op('failed'), NOW)).toMatchObject({ kind: 'open', error: { title: 'Nova n’a pas été fermée', body: 'Le PC n’a pas pu arrêter l’agent. Vérifiez sur le PC, ou réessayez.', retry: true } });
+    expect(endingOf(nova(), op('failed'), NOW)).toMatchObject({ kind: 'open', error: { title: 'Nova n’a pas été fermée', body: 'Le PC n’a pas pu arrêter l’agent. Vérifie sur le PC, ou réessaie.', retry: true } });
     expect(endingOf(nova(), op('rejected', { reason: 'assertion_expired' }), NOW)).toMatchObject({ error: { retry: true } });
     const ro = endingOf(nova(), op('rejected', { reason: 'read_only' }), NOW);
-    expect(ro).toMatchObject({ error: { body: 'Elle a été démarrée hors de Ledge : fermez-la dans son terminal sur le PC.' } });
+    expect(ro).toMatchObject({ error: { body: 'Elle a été démarrée hors de Ledge : ferme-la dans son terminal sur le PC.' } });
     expect(ro.kind === 'open' && ro.error).not.toHaveProperty('retry');
     expect(endingOf(nova(), op('uncertain'), NOW)).toMatchObject({ error: { title: 'Fermeture non confirmée', body: 'La connexion a été perdue. Nova est peut-être déjà fermée : son état se mettra à jour à la reconnexion.', reconnect: true } });
   });
@@ -56,7 +56,7 @@ describe('a session closed from the phone, as its page shows it', () => {
     expect(endingOf(ended, op('applied', { type: 'session.resume' }), NOW).kind).toBe('resuming');
     expect(endingOf(nova({ state: 'starting' }), op('applied', { type: 'session.resume' }), NOW)).toEqual({ kind: 'open', error: null });
     expect(endingOf(ended, op('rejected', { type: 'session.resume', reason: 'no_conversation' }), NOW)).toMatchObject({ kind: 'ended', error: { title: 'Nova n’a pas repris', body: 'Aucune conversation à reprendre pour cette session.' } });
-    expect(endingOf(ended, op('failed', { type: 'session.resume' }), NOW)).toMatchObject({ kind: 'ended', error: { body: 'Le PC n’a pas pu relancer l’agent. Vérifiez sur le PC, ou réessayez.', retry: true } });
+    expect(endingOf(ended, op('failed', { type: 'session.resume' }), NOW)).toMatchObject({ kind: 'ended', error: { body: 'Le PC n’a pas pu relancer l’agent. Vérifie sur le PC, ou réessaie.', retry: true } });
   });
 
   it('follows the latest of a close and a resume', () => {
@@ -98,7 +98,7 @@ describe('a session closed from the phone, as its page shows it', () => {
   });
 
   it('a refused device check is said as such, not as the PC failing to stop or start the agent, with a retry', () => {
-    for (const [reason, body] of [['assertion_expired', 'La vérification a expiré. Recommencez.'], ['assertion_invalid', 'La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessayez.'], ['confirm_required', 'La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessayez.']] as const) {
+    for (const [reason, body] of [['assertion_expired', 'La vérification a expiré. Recommence.'], ['assertion_invalid', 'La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessaie.'], ['confirm_required', 'La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessaie.']] as const) {
       expect(endingOf(nova(), op('rejected', { reason }), NOW)).toMatchObject({ kind: 'open', error: { title: 'Nova n’a pas été fermée', body, retry: true } });
       expect(endingOf(nova({ state: 'exited' }), op('rejected', { type: 'session.resume', reason }), NOW)).toMatchObject({ kind: 'ended', error: { title: 'Nova n’a pas repris', body, retry: true } });
     }
@@ -112,7 +112,7 @@ describe('a session closed from the phone, as its page shows it', () => {
     expect(endingOf(ended, ops, NOW, { fresh: false, boot: 'b1' })).toMatchObject(waiting);
     expect(resumeHeld(ended, ops, 'b1', NOW)).toBe(true);
     // The PC restarted: it will never be sent again. Failed, retried by hand.
-    expect(endingOf(ended, ops, NOW, { fresh: true, boot: 'b2' })).toMatchObject({ kind: 'ended', error: { title: 'Nova n’a pas repris', body: 'Le PC n’a pas pu relancer l’agent. Vérifiez sur le PC, ou réessayez.', retry: true } });
+    expect(endingOf(ended, ops, NOW, { fresh: true, boot: 'b2' })).toMatchObject({ kind: 'ended', error: { title: 'Nova n’a pas repris', body: 'Le PC n’a pas pu relancer l’agent. Vérifie sur le PC, ou réessaie.', retry: true } });
     expect(resumeHeld(ended, ops, 'b2', NOW)).toBe(false);
     // Too old to go again, too.
     expect(endingOf(ended, ops, Date.parse(AT) + 300_000, { fresh: true, boot: 'b1' })).toMatchObject({ error: { retry: true } });
@@ -121,7 +121,7 @@ describe('a session closed from the phone, as its page shows it', () => {
   it('a close of unknown outcome that will not go again, the link back, is a failure to retry, not a wait', () => {
     const ops = op('uncertain', { received: true, boot: 'b1' });
     expect(endingOf(nova(), ops, NOW, { fresh: false, boot: 'b1' })).toMatchObject({ error: { title: 'Fermeture non confirmée', reconnect: true } });
-    expect(endingOf(nova(), ops, NOW, { fresh: true, boot: 'b2' })).toMatchObject({ kind: 'open', error: { title: 'Nova n’a pas été fermée', body: 'Le PC n’a pas pu arrêter l’agent. Vérifiez sur le PC, ou réessayez.', retry: true } });
+    expect(endingOf(nova(), ops, NOW, { fresh: true, boot: 'b2' })).toMatchObject({ kind: 'open', error: { title: 'Nova n’a pas été fermée', body: 'Le PC n’a pas pu arrêter l’agent. Vérifie sur le PC, ou réessaie.', retry: true } });
   });
 
   it('closingHere is what the list says « Fermeture… » for', () => {

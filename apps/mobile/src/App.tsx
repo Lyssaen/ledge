@@ -1,6 +1,7 @@
 // The app: one screen at a time, chosen by the link's state first (signed out, another tab, a changed key, a PC that
 // no longer knows this phone, an unreadable key store, pairing), then by the address.
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
+import { UiCopyProvider } from '@ledge/ui/i18n/copy';
 import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
 import { openFromWorker, replaceRoute, useRoute } from './router';
@@ -15,7 +16,11 @@ import { Denied } from './screens/Denied';
 import { Inbox, clock } from './screens/Inbox';
 import { KeyChanged } from './screens/KeyChanged';
 import { Login, signinError } from './screens/Login';
-import { Offline, Replaced } from './screens/Offline';
+import { Replaced } from './screens/Offline';
+import { ChatUnavailable, EmptyPane, Prs, Rigs } from './screens/NotSent';
+import { Rail, ShellProvider, TabBar, TopBar, lookOf, type ShellLink } from './shell/Shell';
+import { atoiBadge, remember, tabOf, type Tab } from './shell/tabs';
+import { requestsOf } from './model/requests';
 import { RequestDetail } from './screens/RequestDetail';
 import { StorageUnavailable } from './screens/StorageUnavailable';
 import { Terminal } from './screens/Terminal';
@@ -137,26 +142,18 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     return () => sw.removeEventListener('message', onMessage);
   }, []);
 
-  // Opened at its root, the app lands on « Ledge » once the PC says it offers the chat (ledge home spec §2.4); an
-  // address that names a screen (a shared link, a notification) stays where it is, and so does a later tap on « À traiter ».
-  const landing = useRef(['', '#', '#/'].includes(globalThis.location.hash));
-  const toLedge = landing.current && kind === 'route' && route.name === 'inbox' && !!mobile.device?.chat;
-  useEffect(() => {
-    if (!toLedge) return;
-    landing.current = false;
-    replaceRoute({ name: 'chat' });
-  }, [toLedge]);
-  useEffect(() => { if (route.name !== 'inbox') landing.current = false; }, [route.name]);
-
-  // `#/chat` without the chat announced goes to the inbox; before the PC's first snapshot nothing is known, so the address stays.
-  const chatOff = route.name === 'chat' && mobile.fresh && !mobile.device?.chat;
-  useEffect(() => { if (chatOff) replaceRoute({ name: 'inbox' }); }, [chatOff]);
+  // The app opens on « À toi » (question Q7); a shared link or a notification opens the screen it names. Each tab remembers
+  // the screen it was left on, and Réglages lights the tab it was opened from.
+  const lastTab = useRef<Tab>('atoi');
+  const tab = tabOf(route);
+  if (tab) lastTab.current = tab;
+  useEffect(() => { remember(route); }, [route]);
 
   const wide = useWide();
   // `#/atelier` on a phone, or once the PC says it has no Atelier (an older daemon): the agents instead. Before the first
   // snapshot the last known PC decides, so an offline iPad keeps its Atelier.
   const atelierOff = route.name === 'atelier' && (!wide || ((mobile.fresh || mobile.daemon !== null) && !mobile.daemon?.atelier));
-  useEffect(() => { if (atelierOff) replaceRoute({ name: 'agents' }); }, [atelierOff]);
+  useEffect(() => { if (atelierOff) replaceRoute({ name: 'sessions' }); }, [atelierOff]);
   // A device the PC knows by id but that has no name yet names itself once, after its model and browser (docs/mockups/
   // mobile-multi-device.html, part 3): the PC then shows « iPad · Safari », and so do the other devices' threads.
   const named = useRef(false);
@@ -215,35 +212,57 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           />
         );
     }
-    const inbox = () => {
-      const notice = state === 'pc_offline' ? <Offline pcName={pcName} since={clock(mobile.syncedAt)} onRetry={retry} /> : undefined;
-      return <Inbox store={store} onReconnect={retry} notice={notice} />;
-    };
-    // A wide screen keeps the list on the left and opens what it lists on the right (docs/mockups/mobile-multi-device.html, part 5).
+    const shell: ShellLink = { pc: pcName, look: lookOf(mobile.fresh, !!mobile.syncedAt, link.reach()), reach: link.reach(), since: clock(mobile.syncedAt), retry };
+    const badges = { atoi: atoiBadge(requestsOf([...mobile.sessions.values()])) };
+    const inbox = <Inbox store={store} />;
+    const sessions = <Agents store={store} />;
+    // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
+    const chat = mobile.device?.chat || (!mobile.fresh && !mobile.device) ? <Chat store={store} onReconnect={retry} /> : <ChatUnavailable />;
+    const connection = <Connection store={store} fetchImpl={fetchImpl} login={login} relay={relay} pinned={pinned} linkState={state} build={build} onSignOut={signOut} section={route.name === 'connection' ? route.section : undefined} />;
+    // A wide screen keeps the list on the left and opens what it lists on the right (m0-socle.html, §2), the rail on its left.
     if (wide) {
-      switch (route.name) {
-        case 'inbox': return <Split list={inbox()} detail={<SplitEmpty {...copy.split.request} />} />;
-        case 'request': return <Split list={inbox()} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />} />;
-        case 'agents': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<SplitEmpty {...copy.split.agent} />} />;
-        case 'atelier': if (mobile.daemon?.atelier) return <AtelierScreen store={store} {...(route.sessionId ? { sessionId: route.sessionId } : {})} {...(route.requestKey ? { requestKey: route.requestKey } : {})} storage={storage} onReconnect={retry} />; break;
-        case 'thread': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
-        case 'terminal': return <Split list={<Agents store={store} onReconnect={retry} />} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
-        default: break;
-      }
+      const content = (() => {
+        switch (route.name) {
+          case 'atoi': return <Split list={inbox} detail={<SplitEmpty {...copy.split.request} />} />;
+          case 'request': return <Split list={inbox} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />} />;
+          case 'sessions': return <Split list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
+          case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
+          case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
+          case 'prs': return <Split list={<Prs />} detail={<EmptyPane icon="pr" {...copy.prs.pane} />} />;
+          case 'rigs': return <Split list={<Rigs />} detail={<EmptyPane icon="rigs" {...copy.rigs.pane} />} />;
+          case 'atelier': return mobile.daemon?.atelier
+            ? <AtelierScreen store={store} {...(route.sessionId ? { sessionId: route.sessionId } : {})} {...(route.requestKey ? { requestKey: route.requestKey } : {})} storage={storage} onReconnect={retry} />
+            : <Split list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
+          case 'chat': return chat;
+          case 'connection': return connection;
+        }
+      })();
+      return <ShellProvider value={shell}>{content}<Rail route={route} active={tab ?? 'settings'} badges={badges} atelier={!!mobile.daemon?.atelier} /></ShellProvider>;
     }
+    // A phone: the header and the five tabs around a tab's screen and Réglages; a thread, a terminal or a request fill the screen.
+    const framed = (body: ReactNode, top = true) => (
+      <ShellProvider value={shell}>
+        {top && <TopBar />}
+        {body}
+        <TabBar route={route} active={tab ?? lastTab.current} badges={badges} />
+      </ShellProvider>
+    );
     switch (route.name) {
-      case 'agents': case 'atelier': return <Agents store={store} onReconnect={retry} />;
-      case 'chat': return mobile.device?.chat ? <Chat store={store} onReconnect={retry} /> : <Inbox store={store} onReconnect={retry} />;
-      case 'thread': return <Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />;
-      case 'terminal': return <Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />;
+      case 'atoi': return framed(inbox);
+      case 'sessions': case 'atelier': return framed(sessions);
+      case 'prs': return framed(<Prs />);
+      case 'rigs': return framed(<Rigs />);
+      case 'chat': return framed(chat);
+      case 'connection': return framed(connection, false);
+      case 'thread': return <ShellProvider value={shell}><Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} /></ShellProvider>;
+      case 'terminal': return <ShellProvider value={shell}><Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} /></ShellProvider>;
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
-      case 'request': return <RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />;
-      case 'connection': return <Connection store={store} fetchImpl={fetchImpl} login={login} relay={relay} pinned={pinned} linkState={state} build={build} onSignOut={signOut} />;
-      default: return inbox();
+      case 'request': return <ShellProvider value={shell}><RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} /></ShellProvider>;
     }
   })();
 
   return (
+    <UiCopyProvider copy={copy.ui}>
     <div className="app flex flex-col" data-route={route.name}>
       {forgetNote && state !== 'ready' && <p role="status" className="mx-4 my-3 text-body text-muted">{copy.forget.pending}</p>}
       {screen}
@@ -251,5 +270,6 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
         <Update next={waiting} current={build} onLater={() => setLater(waiting.fingerprint)} onApply={() => updates.accept()} />
       )}
     </div>
+    </UiCopyProvider>
   );
 }

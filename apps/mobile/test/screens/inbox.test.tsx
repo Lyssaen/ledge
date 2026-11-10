@@ -20,7 +20,7 @@ describe('the inbox', () => {
     expect(rows.map(r => r.getAttribute('href'))).toEqual(['#/request/b/kb', '#/request/a/ka']);
     expect(within(rows[0]!).getByText('Quelle base ?')).toBeInTheDocument();
     expect(screen.queryByText(/Calme/)).not.toBeInTheDocument();
-    expect(screen.getByText('2 demandes. Choisissez par où commencer.')).toBeInTheDocument();
+    expect(screen.getByText('2 demandes. Choisis par où commencer.')).toBeInTheDocument();
   });
 
   it('filters by kind', () => {
@@ -40,20 +40,19 @@ describe('the inbox', () => {
     t.deliver(snapshot([session('c')]));
     render(<Inbox store={t.store} />);
     expect(screen.getByText('Tout est calme')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Vous êtes à jour' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Voir les agents/ })).toHaveAttribute('href', '#/agents');
+    expect(screen.getByRole('heading', { name: 'Tu es à jour' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Voir les sessions/ })).toHaveAttribute('href', '#/sessions');
   });
 
-  it('shows « PC hors ligne » once the state is no longer fresh, and the requests as last known', () => {
+  it('shows the requests as last known once the state is no longer fresh (the banner is the shell\'s)', () => {
     const t = setup();
     t.deliver(snapshot([session('a', { state: 'waiting_permission', pending: pending({ key: 'ka', text: 'pnpm build' }) })]));
     render(<Inbox store={t.store} />);
-    expect(screen.queryByText('PC hors ligne')).not.toBeInTheDocument();
+    expect(screen.queryByText('Dernier état connu')).not.toBeInTheDocument();
     act(() => t.set('pc_offline'));
-    expect(screen.getByText('PC hors ligne')).toBeInTheDocument();
     expect(screen.getByText('pnpm build')).toBeInTheDocument();
     expect(screen.getAllByText('Dernier état connu').length).toBeGreaterThan(0);
-    expect(screen.getByText('Vous pouvez consulter les demandes. Aucune décision ne sera envoyée hors connexion.')).toBeInTheDocument();
+    expect(screen.getByText('Tu peux consulter les demandes. Aucune décision ne sera envoyée hors connexion.')).toBeInTheDocument();
   });
 
   it('offline with no state ever received: « Dernier état connu », without a separator or an empty time', () => {
@@ -62,22 +61,5 @@ describe('the inbox', () => {
     expect(t.store.getState().syncedAt).toBeNull();
     expect(screen.queryByText(/Dernier état connu ·/)).not.toBeInTheDocument();
     expect(screen.getAllByText('Dernier état connu').length).toBeGreaterThan(0);
-  });
-
-  it('offers to reconnect only when told how', () => {
-    const t = setup('pc_offline');
-    let asked = 0;
-    render(<Inbox store={t.store} onReconnect={() => { asked++; }} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Reconnecter et actualiser' }));
-    expect(asked).toBe(1);
-  });
-
-  it('counts the waiting requests in the tab bar', () => {
-    const t = setup();
-    t.deliver(snapshot([session('a', { state: 'waiting_permission', pending: pending({ key: 'ka' }) })]));
-    render(<Inbox store={t.store} />);
-    const nav = screen.getByRole('navigation', { name: 'Navigation principale' });
-    expect(within(nav).getByRole('link', { name: /À traiter/ })).toHaveAttribute('aria-current', 'page');
-    expect(within(nav).getByText('1')).toBeInTheDocument();
   });
 });

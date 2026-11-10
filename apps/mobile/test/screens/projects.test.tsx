@@ -59,7 +59,7 @@ describe('Réglages › Projets: the list', () => {
     const t = opened();
     fireEvent.click(screen.getByRole('button', { name: 'Monter Site' }));
     result(t, 'project.order', 'rejected', 'stale');
-    expect(await screen.findByText('Les projets ont changé sur le PC. Réessayez.')).toBeInTheDocument();
+    expect(await screen.findByText('Les projets ont changé sur le PC. Réessaie.')).toBeInTheDocument();
   });
 
   it('moved: one place up or down, nothing past an end', () => {
@@ -138,7 +138,7 @@ describe('Réglages › Projets: delete', () => {
   it('without a passkey: said, and « Supprimer » cannot be pressed', () => {
     const t = opened({ confirm: false });
     const sheet = openDelete();
-    expect(within(sheet).getByText(/Protégez d’abord vos accords/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/Protège d’abord tes accords/)).toBeInTheDocument();
     expect(within(sheet).getByRole('button', { name: 'Supprimer' })).toBeDisabled();
     expect(t.of('confirm.prepare')).toEqual([]);
   });

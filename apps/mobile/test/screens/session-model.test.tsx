@@ -166,7 +166,7 @@ describe('the model chip', () => {
     const sheet = openSheet();
     fireEvent.click(sheet.getByRole('button', { name: /Sonnet/ }));
     await act(async () => { fireEvent.click(sheet.getByRole('button', { name: 'Appliquer' })); });
-    expect(screen.getByRole('alert')).toHaveTextContent('Changement de modèle envoyé ; vérifiez sur le PC');
+    expect(screen.getByRole('alert')).toHaveTextContent('Changement de modèle envoyé ; vérifie sur le PC');
     expect(screen.getByRole('alert')).not.toHaveTextContent('non appliqué');
   });
 

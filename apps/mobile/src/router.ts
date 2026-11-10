@@ -2,8 +2,13 @@ import { useSyncExternalStore } from 'react';
 
 /** Hash routes of the phone app. The sign-in, a changed key and a new version are not routes: the link's state shows them (App.tsx). `#/thread/<sid>` and `#/request/<sid>/<key>` are also the entry points of a shared link. */
 export type Route =
-  | { name: 'inbox' }
-  | { name: 'agents' }
+  /** « À toi », the app's first screen (`#/`). */
+  | { name: 'atoi' }
+  /** « Sessions » (`#/sessions`; `#/agents`, its old address, still leads there). */
+  | { name: 'sessions' }
+  /** « MR/PR » and « Rigs »: what the PC does not send to the phone yet (docs/mockups/ledge-mobile-refonte/m0-socle.html, §3). */
+  | { name: 'prs' }
+  | { name: 'rigs' }
   /** The Atelier (iPad, a PC with `daemon.atelier`); `#/atelier/<sid>` has a session's panel open over it, `#/atelier/<sid>/request/<key>`
    *  one of its requests, to decide there. */
   | { name: 'atelier'; sessionId?: string; requestKey?: string }
@@ -11,13 +16,14 @@ export type Route =
   | { name: 'thread'; sessionId: string }
   | { name: 'terminal'; sessionId: string }
   | { name: 'request'; sessionId: string; key: string }
-  | { name: 'connection' };
+  /** Réglages; `#/connection/link` opens it on its « Connexion » section (the host pill). */
+  | { name: 'connection'; section?: 'link' };
 
 /** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
-const ROUTE_NAME: Record<Route['name'], true> = { inbox: true, agents: true, atelier: true, chat: true, thread: true, terminal: true, request: true, connection: true };
+const ROUTE_NAME: Record<Route['name'], true> = { atoi: true, sessions: true, prs: true, rigs: true, atelier: true, chat: true, thread: true, terminal: true, request: true, connection: true };
 export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
 
-const SIMPLE = ['agents', 'chat', 'connection'] as const;
+const SIMPLE = ['sessions', 'prs', 'rigs', 'chat', 'connection'] as const;
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -26,10 +32,12 @@ export function parseRoute(hash: string): Route {
     if ((parts[0] === 'thread' || parts[0] === 'terminal') && parts.length === 2) return { name: parts[0], sessionId: decodeURIComponent(parts[1]!) };
     if (parts[0] === 'atelier' && parts.length === 4 && parts[2] === 'request') return { name: 'atelier', sessionId: decodeURIComponent(parts[1]!), requestKey: decodeURIComponent(parts[3]!) };
     if (parts[0] === 'atelier' && parts.length <= 2) return parts[1] ? { name: 'atelier', sessionId: decodeURIComponent(parts[1]) } : { name: 'atelier' };
-  } catch { /* malformed escape: fall through to the inbox */ }
+    if (parts[0] === 'connection' && parts.length === 2 && parts[1] === 'link') return { name: 'connection', section: 'link' };
+  } catch { /* malformed escape: fall through to À toi */ }
+  if (parts[0] === 'agents' && parts.length === 1) return { name: 'sessions' };
   const simple = SIMPLE.find((n) => n === parts[0]);
   if (simple && parts.length === 1) return { name: simple };
-  return { name: 'inbox' };
+  return { name: 'atoi' };
 }
 
 export function href(r: Route): string {
@@ -37,7 +45,8 @@ export function href(r: Route): string {
   if (r.name === 'thread' || r.name === 'terminal') return `#/${r.name}/${encodeURIComponent(r.sessionId)}`;
   if (r.name === 'atelier') return !r.sessionId ? '#/atelier'
     : r.requestKey ? `#/atelier/${encodeURIComponent(r.sessionId)}/request/${encodeURIComponent(r.requestKey)}` : `#/atelier/${encodeURIComponent(r.sessionId)}`;
-  return r.name === 'inbox' ? '#/' : `#/${r.name}`;
+  if (r.name === 'connection' && r.section) return `#/connection/${r.section}`;
+  return r.name === 'atoi' ? '#/' : `#/${r.name}`;
 }
 
 export const navigate = (r: Route): void => { globalThis.location.hash = href(r); };

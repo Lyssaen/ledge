@@ -19,21 +19,6 @@ export function LinkStatus({ link }: { link: LinkView }) {
   );
 }
 
-export function Header({ title, subtitle, link }: { title: string; subtitle: string; link: LinkView }) {
-  return (
-    <header className="flex-none pt-3 pb-[18px]">
-      <div className="flex items-center justify-between gap-2.5">
-        <LinkStatus link={link} />
-        <a href={href({ name: 'connection' })} aria-label={copy.link.openConnection} className={iconButtonClass({ variant: 'outline' })}>
-          <Icon name="gear" />
-        </a>
-      </div>
-      <h1 className="mt-3 text-display leading-[1.15] font-semibold tracking-[-1px]">{title}</h1>
-      <p className="mt-2 text-body text-muted">{subtitle}</p>
-    </header>
-  );
-}
-
 /**
  * « Retour »: to the screen the user came from in the app, named after it; opened from outside (a shared link, a
  * notification), to `fallback`, named by `label`.

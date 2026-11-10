@@ -98,7 +98,7 @@ describe('the link lost after the send (uncertain)', () => {
 
 describe('an ended session the phone cannot resume', () => {
   // Mockup 3b: « Session démarrée hors de Ledge (readOnly) : ni texte de reprise ni bouton, seulement le titre ».
-  it('D1 — a read-only ended session shows only the title, no « reprenez-la depuis le PC » text', () => {
+  it('D1 — a read-only ended session shows only the title, no « reprends-la depuis le PC » text', () => {
     opened(nova({ state: 'exited', exitedAt: EXITED, readOnly: true }));
     expect(screen.getByRole('heading', { name: 'Session terminée' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reprendre Nova' })).not.toBeInTheDocument();

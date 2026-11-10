@@ -38,7 +38,7 @@ describe('Connection: notifications', () => {
   it('stale → the message, and « Activer les notifications »', () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(withPush('stale')));
-    expect(screen.getByText('Le PC a changé de clés : réactivez les notifications pour que cet appareil les reçoive à nouveau.')).toBeInTheDocument();
+    expect(screen.getByText('Le PC a changé de clés : réactive les notifications pour que cet appareil les reçoive à nouveau.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Activer les notifications' })).toBeInTheDocument();
   });
 
@@ -61,7 +61,7 @@ describe('Connection: notifications', () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(withPush('off')));
     fireEvent.click(screen.getByRole('switch', { name: 'Notifications' }));
-    expect(await screen.findByText(/Sur iPhone, ouvrez Ledge depuis son icône/)).toBeInTheDocument();
+    expect(await screen.findByText(/Sur iPhone, ouvre Ledge depuis son icône/)).toBeInTheDocument();
   });
 
   it('an activation that does not come through → the failed text', async () => {

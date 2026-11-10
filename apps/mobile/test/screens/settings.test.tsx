@@ -77,7 +77,7 @@ describe('Réglages: notifications of this device', () => {
     act(() => t.deliver(snap()));
     fireEvent.click(screen.getByRole('switch', { name: 'Réponse de Ledge' }));
     act(() => t.deliver(result(t.of('device.prefs')[0]!.op, 'rejected', 'invalid')));
-    expect(await screen.findByText('Le PC n’a pas pris ce réglage. Réessayez.')).toBeInTheDocument();
+    expect(await screen.findByText('Le PC n’a pas pris ce réglage. Réessaie.')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Réponse de Ledge' })).toBeChecked();
   });
 

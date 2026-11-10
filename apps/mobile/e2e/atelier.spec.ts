@@ -73,7 +73,7 @@ for (const theme of ['dark', 'light'] as const) {
     await expect(panel(page).getByRole('heading', { name: 'Préparer la 0.42' })).toBeVisible();
     await expect(panel(page).getByText('Lance les tests avant de préparer la release.')).toBeVisible();
     await expect(panel(page).getByRole('link', { name: copy.thread.examine })).toBeVisible();
-    await expect(panel(page).getByRole('link', { name: copy.nav.backTo.agents! })).toHaveCount(0);
+    await expect(panel(page).getByRole('link', { name: copy.nav.backTo.sessions! })).toHaveCount(0);
     const box = (await panel(page).boundingBox())!;
     expect(box.x + box.width).toBeGreaterThan(LAND.width - 20);
     expect(box.width).toBeLessThan(460);
@@ -143,7 +143,7 @@ for (const theme of ['dark', 'light'] as const) {
   });
 }
 
-test('« Sans projet » alone starts under Ledge\'s desk, never on « Votre assistant », the panel open or not', async ({ page }) => {
+test('« Sans projet » alone starts under Ledge\'s desk, never on « Ton assistant », the panel open or not', async ({ page }) => {
   const loose = ['kit', 'ana', 'rox'].map((id, k) => ({ ...unfiled[0]!, id, name: id[0]!.toUpperCase() + id.slice(1), topic: `Essai ${k + 1}` }));
   Object.assign(h.daemon, { sessions: loose, projects: [] });
   const clear = () => page.evaluate(() => {
@@ -194,20 +194,21 @@ test('the cases: an OMP seat, « Sans projet », a double tap, the PC offline', 
   await seat(page, 'luna').click();
   await expect(panel(page).getByRole('heading', { name: 'Page d’accueil' })).toBeVisible();
   await h.stopRelay();
-  await expect(page.getByText(copy.offline.pcOffline)).toBeVisible({ timeout: 20_000 });
+  // The shell's banner (shell/Shell.tsx, LinkStrip), over the floor.
+  await expect(page.locator('[data-strip]')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('.atelier-frozen')).toHaveCount(1);
   await expect(page.getByText(new RegExp(`^${copy.agents.offline} · `))).toBeVisible();
   await expect(panel(page).getByRole('textbox')).toBeDisabled();
   await shot(page, 'case-offline-land', browserName);
 });
 
-test('no Atelier tab with an older PC, and `#/atelier` leads to the agents', async ({ page }) => {
+test('no Atelier tab with an older PC, and `#/atelier` leads to the sessions', async ({ page }) => {
   h.daemon.projects = null;
   await pair(page);
-  await expect(nav(page).getByRole('link', { name: copy.nav.agents })).toBeVisible();
+  await expect(nav(page).getByRole('link', { name: copy.nav.sessions })).toBeVisible();
   await expect(atelierTab(page)).toHaveCount(0);
   await page.evaluate(() => { location.hash = '#/atelier'; });
-  await expect(page).toHaveURL(/#\/agents$/);
+  await expect(page).toHaveURL(/#\/sessions$/);
 });
 
 test.describe('on a phone', () => {
@@ -215,9 +216,9 @@ test.describe('on a phone', () => {
   test.use(iPhone);
   test('no Atelier tab, even with a PC that offers it', async ({ page }) => {
     await pair(page);
-    await expect(nav(page).getByRole('link', { name: copy.nav.agents })).toBeVisible();
+    await expect(nav(page).getByRole('link', { name: copy.nav.sessions })).toBeVisible();
     await expect(atelierTab(page)).toHaveCount(0);
     await page.evaluate(() => { location.hash = '#/atelier'; });
-    await expect(page).toHaveURL(/#\/agents$/);
+    await expect(page).toHaveURL(/#\/sessions$/);
   });
 });

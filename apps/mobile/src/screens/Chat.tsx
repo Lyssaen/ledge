@@ -4,17 +4,14 @@ import { copy } from '../copy';
 import { useChat, useMobile, type MobileStore } from '../state/store';
 import { Composer } from '../ui/chat/Composer';
 import { TurnView } from '../ui/chat/TurnView';
-import { LinkStatus, linkView } from '../ui/Header';
-import { TabBar } from '../ui/TabBar';
-import { requestsOf } from '../model/requests';
-import { closedTasks } from '../model/tasks';
+import { HostPill, LinkStrip } from '../shell/Shell';
 import { useAttachments } from '../ui/useAttachments';
 import { LePoint } from '../ui/chat/LePoint';
 import type { PhoneTask } from '@ledge/protocol';
 import { chipClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 import { Mascot } from '../ui/MobileBot';
-import { useAtelierTab } from '../ui/layout';
+import { useWide } from '../ui/layout';
 
 /** The suggestions: the first needs nothing, the others a real session and a real repo of the snapshot. */
 function suggestionsOf(sessions: { name: string; repo?: string }[]): string[] {
@@ -29,7 +26,7 @@ function suggestionsOf(sessions: { name: string; repo?: string }[]): string[] {
 
 export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }) {
   const state = useMobile(store);
-  const atelierTab = useAtelierTab(state.daemon);
+  const wide = useWide();
   const chat = useChat(store);
   const sessions = [...state.sessions.values()];
   const repos = new Set(sessions.map(s => s.repo).filter(Boolean));
@@ -86,7 +83,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
       <header className="flex flex-none items-center gap-3 border-b border-line pt-3 pb-3">
         <div aria-hidden="true" className="flex-none"><Mascot size={36} frozen={offline} /></div>
         <div className="min-w-0 flex-1">
-          <LinkStatus link={linkView(state)} />
+          {wide && <HostPill />}
           <h1 className="text-heading leading-[26px] font-bold tracking-[-0.4px]">{copy.chat.title}<span className="text-primary">.</span></h1>
           <p className="text-small text-muted">{copy.chat.subtitle(sessions.length, repos.size)}</p>
         </div>
@@ -98,7 +95,8 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
           <Icon name="edit" stroke={1.5} />
         </button>
       </header>
-      <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain py-4">
+      <main data-tab-scroll="" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain py-4">
+        <LinkStrip />
         {/* The thread opens on « Le point » (ledge home spec §2.4). */}
         {chat.turns.length === 0 && (
           <div className="flex flex-1 flex-col justify-end gap-3">
@@ -117,7 +115,6 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
       </main>
       {note && <p role="status" className="flex-none pb-2 text-body text-attention">{note}</p>}
       <Composer value={text} onChange={setText} onSend={send} canSend={(text.trim() !== '' || images.items.length > 0) && images.ready && !running && !offline} images={images} attachDisabled={running || offline} fieldRef={field} />
-      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="chat" chat atelier={atelierTab} />
     </>
   );
 }

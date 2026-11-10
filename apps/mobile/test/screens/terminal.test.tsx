@@ -39,7 +39,7 @@ describe('the terminal', () => {
     fireEvent.click(screen.getByRole('button', { name: /Interrompre Kai/ }));
     const op = t.of('session.interrupt')[0]!.op;
     act(() => t.deliver({ type: 'operation.result', op, status: 'rejected', reason: 'read_only' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Session démarrée hors de Ledge : interrompez-la dans le terminal du PC.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Session démarrée hors de Ledge : interromps-la dans le terminal du PC.');
   });
 
   it('cannot interrupt an idle agent, and says why', () => {

@@ -8,7 +8,9 @@ import { IPAD_READ, ipadFit, phoneBotState } from '../../src/atelier/fit';
 import { resetIpadView } from '../../src/atelier/useIpadView';
 import { copy } from '../../src/copy';
 import { href, parseRoute } from '../../src/router';
-import { Agents } from '../../src/screens/Agents';
+import { App } from '../../src/App';
+import { ShellProvider } from '../../src/shell/Shell';
+import { meStub } from './app-setup';
 import { createStore } from '../../src/state/store';
 import { pending, session } from '../model/fixtures';
 import { fakeLink, MemoryStorage, snapshot } from '../state/helpers';
@@ -90,22 +92,23 @@ describe('the store and the PC’s projects', () => {
 });
 
 describe('the Atelier tab', () => {
-  it('follows Agents on a wide screen with a PC that offers it, never on a phone nor with an older PC', () => {
+  it('follows Rigs in the rail on a wide screen with a PC that offers it, never on a phone nor with an older PC', () => {
+    globalThis.history.replaceState(null, '', '/#/sessions');
     const t = setup();
     t.deliver(atelier(sessions));
     wide(true);
-    const { unmount } = render(<Agents store={t.store} />);
+    const { unmount } = render(<App link={t.link} store={t.store} storage={t.storage} fetchImpl={meStub() as unknown as typeof fetch} />);
     const nav = () => screen.getByRole('navigation', { name: copy.nav.label });
-    expect(within(nav()).getAllByRole('link').map(a => a.textContent)).toEqual(['À traiter1', 'Agents', 'Atelier']);
+    expect(within(nav()).getAllByRole('link').map(a => a.textContent?.replace(/\d+$/, ''))).toEqual([copy.nav.atoi, copy.nav.sessions, copy.nav.prs, copy.nav.rigs, copy.nav.atelier, copy.nav.chat, copy.nav.settings]);
     expect(within(nav()).getByRole('link', { name: copy.nav.atelier })).toHaveAttribute('href', '#/atelier');
     unmount();
     wide(false);
-    const phone = render(<Agents store={t.store} />);
+    const phone = render(<App link={t.link} store={t.store} storage={t.storage} fetchImpl={meStub() as unknown as typeof fetch} />);
     expect(within(nav()).queryByRole('link', { name: copy.nav.atelier })).toBeNull();
     phone.unmount();
     wide(true);
     act(() => t.deliver(snapshot(sessions)));
-    render(<Agents store={t.store} />);
+    render(<App link={t.link} store={t.store} storage={t.storage} fetchImpl={meStub() as unknown as typeof fetch} />);
     expect(within(nav()).queryByRole('link', { name: copy.nav.atelier })).toBeNull();
   });
 });
@@ -146,7 +149,7 @@ describe('the Atelier screen', () => {
     const panel = screen.getByRole('complementary', { name: copy.atelier.session('Otto') });
     expect(within(panel).getByRole('heading', { name: 'Préparer la 0.42' })).toBeInTheDocument();
     expect(within(panel).getByRole('link', { name: copy.atelier.fullScreen })).toHaveAttribute('href', '#/thread/otto');
-    expect(within(panel).queryByRole('link', { name: copy.nav.backTo.agents! })).toBeNull();
+    expect(within(panel).queryByRole('link', { name: copy.nav.backTo.sessions! })).toBeNull();
     fireEvent.click(within(panel).getByRole('button', { name: copy.atelier.closePanel }));
     expect(globalThis.location.hash).toBe('#/atelier');
     t.unmount();
@@ -210,9 +213,9 @@ describe('the Atelier screen', () => {
     t.deliver(atelier(sessions));
     act(() => t.set('pc_offline'));
     wide(true);
-    const { container } = render(<AtelierScreen store={t.store} />);
+    const { container } = render(<ShellProvider value={{ pc: 'WSL', look: 'offline', reach: 'pc_offline', since: '14:02', retry: () => {} }}><AtelierScreen store={t.store} /></ShellProvider>);
     expect(screen.getByText(new RegExp(`^${copy.agents.offline} · `))).toBeInTheDocument();
-    expect(screen.getByText(copy.offline.pcOffline)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(copy.offline.title('WSL'));
     expect(container.querySelector('.atelier-frozen .office-shell.office-paused')).not.toBeNull();
   });
 });
