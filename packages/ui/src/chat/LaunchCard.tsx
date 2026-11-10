@@ -40,10 +40,10 @@ export function LaunchCard(p: LaunchCardProps) {
           </dl>
           {state === 'failed' && <div role="alert" style={{ padding: '6px 12px', color: 'var(--destructive)', background: 'color-mix(in srgb, var(--destructive) 12%, transparent)' }}>{c.failed(pr.error!)}</div>}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderTop: '1px solid var(--sidebar-border)' }}>
-            <Button variant="primary" size="sm" disabled={p.busy || p.disabled} onClick={p.onLaunch} style={{ height: 28, padding: '0 10px', gap: 6, fontSize: 12 }}>
+            <Button variant="primary" size="sm" disabled={p.busy || p.disabled} onClick={p.onLaunch} style={{ height: 28, padding: '0 10px', gap: 6, fontSize: 12, whiteSpace: 'nowrap', flex: 'none' }}>
               {state === 'proposed' && <Icon size={12} {...ICONS.rocket} />}{p.busy ? c.launching : state === 'failed' ? c.retry : c.launch}
             </Button>
-            <span style={{ ...muted, fontSize: 12 }}>{state === 'failed' ? c.orFolder : c.orRephrase}</span>
+            <span style={{ ...muted, fontSize: 12, minWidth: 0 }}>{state === 'failed' ? c.orFolder : c.orRephrase}</span>
           </div>
         </>
       )}

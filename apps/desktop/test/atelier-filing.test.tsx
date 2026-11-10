@@ -156,13 +156,23 @@ describe('the filing styles', () => {
     expect(declarations('sidebar.css', '.is-dragging .st-project:not(.drop-over)')).toBe('outline:1pxdashedvar(--input);outline-offset:-1px');
     expect(declarations('shell.css', '.toast')).toContain('position:fixed');
   });
-  it('a long name in the drop hint is cut inside the label; a long task wraps on its sheet; a long menu scrolls', () => {
+  it('a long name in the drop hint is cut inside the label; a long task wraps on its sheet, hyphenated; a long menu scrolls', () => {
     const hint = declarations('atelier.css', '.drop-hint');
     for (const decl of ['min-width:0', 'overflow:hidden', 'text-overflow:ellipsis', 'white-space:nowrap']) expect(hint).toContain(decl);
     // its flex parent is capped by the rug, and the label's names shrink too
     expect(declarations('atelier.css', '.office-shell .rug-labels .room-heading')).toContain('max-width:calc(100%-28px)');
     expect(declarations('atelier.css', '.heading-names')).toContain('min-width:0');
-    expect(declarations('atelier.css', '.task-sheet p')).toContain('overflow-wrap:anywhere');
+    // A long word breaks with a hyphen where the dictionary knows; a path or an identifier then wraps without one rather than
+    // running out of the sheet (design-ux, 2026-11-10).
+    expect(declarations('atelier.css', '.task-sheet p')).toContain('hyphens:auto');
+    expect(declarations('atelier.css', '.task-sheet p')).toContain('overflow-wrap:break-word');
+    // The message bubble keeps its card: under its layer, app.css's `button:not(.ledge-btn)` reset (no border, no background) loses.
+    const bubble = declarations('atelier.css', '.exchange-layer .exchange-bubble');
+    for (const decl of ['background:var(--popover)', 'border:1pxsolidvar(--input)']) expect(bubble).toContain(decl);
+    expect(declarations('atelier.css', '.exchange-bubble')).toBe('');
+    // A thread's verb column is a minimum: « Commande » and its icon widen it rather than running into the command.
+    expect(declarations('session.css', '.vb')).toContain('min-width:86px');
+    expect(declarations('session.css', '.vb')).not.toMatch(/(^|;)width:86px/);
     const menu = declarations('atelier.css', '.assign-menu');
     expect(menu).toContain('max-height:min(60vh,320px)');
     expect(menu).toContain('overflow:auto');

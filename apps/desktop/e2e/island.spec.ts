@@ -171,10 +171,9 @@ test('a daemon too old for the notch: no footer state, the section says so and a
   expect(setsOf(daemon.received)).toHaveLength(0);
 });
 
-// Left for lot 12 (dev-front2, 12a): in the IDE the narrowest window (640 × 480, tauri.conf.json's minWidth) leaves the Settings tab
-// about 340 px between the sidebar and the chat, and the notch size's segmented control (Auto … 200%) does not wrap: the section
-// scrolls sideways by ~35 px. Fixing it changes the screen, out of 12a's scope; reported to the lead.
-test.fixme('the narrowest window (640 × 480): Settings › Notch fits without a side scroll, the two screens stacked', async ({ page }) => {
+// In the IDE the narrowest window (640 × 480, tauri.conf.json's minWidth) leaves the Settings tab about 344 px: its narrow layouts
+// follow the tab's width, and the notch sizes' segmented controls (Auto … 200%) tighten, then wrap.
+test('the narrowest window (640 × 480): Settings › Notch fits without a side scroll, the two screens stacked', async ({ page }) => {
   await page.setViewportSize({ width: 640, height: 480 });
   await fakeDaemon(page, eight, { projects: twoProjects });
   await page.goto('/'); await booted(page);

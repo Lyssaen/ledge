@@ -56,11 +56,11 @@ export function LaunchGroupCard(p: LaunchGroupCardProps) {
       })}
       {open.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderTop: '1px solid var(--sidebar-border)' }}>
-          <Button variant="primary" size="sm" disabled={p.busy || p.disabled || picked.length === 0} onClick={() => p.onLaunch(picked)} style={{ height: 28, padding: '0 10px', gap: 6, fontSize: 12 }}>
+          <Button variant="primary" size="sm" disabled={p.busy || p.disabled || picked.length === 0} onClick={() => p.onLaunch(picked)} style={{ height: 28, padding: '0 10px', gap: 6, fontSize: 12, whiteSpace: 'nowrap', flex: 'none' }}>
             <Icon size={12} {...ICONS.rocket} />{t.group.launchAll(picked.length)}
           </Button>
           {p.model}
-          <span style={{ ...muted, fontSize: 12 }}>{c.orRephrase}</span>
+          <span style={{ ...muted, fontSize: 12, minWidth: 0 }}>{c.orRephrase}</span>
         </div>
       )}
     </section>
