@@ -1,11 +1,10 @@
 // « Nouvelle session » from the phone (refonte mobile M2 §9, docs/mobile-launch-contract.md): the PC's own launch, with the folders
 // checked first so that a refusal reaches the phone as a code it can show.
-import { realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import type { OmpApproval, Session, Tool } from '@ledge/protocol';
 import { resolveFolder } from '../daemon/folders.js';
-import { tooWide } from '../chat/service.js';
+import { folderTooWide } from '../chat/service.js';
 import { PhoneLaunchRefused } from './gateway.js';
 
 export type PhoneLaunchReq = { tool: Tool; cwd: string; dirs?: string[]; prompt: string; model?: string; effort?: string; approval?: OmpApproval };
@@ -17,12 +16,11 @@ export type PhoneLaunchReq = { tool: Tool; cwd: string; dirs?: string[]; prompt:
 export function phoneLaunch(launch: (req: PhoneLaunchReq) => Promise<Session>, home?: string): (req: PhoneLaunchReq) => Promise<{ id: string }> {
   return async req => {
     const userHome = resolve(home ?? homedir());
-    const realHome = await realpath(userHome).catch(() => userHome);
     for (const f of [req.cwd, ...(req.dirs ?? [])]) {
-      let path: string, real: string;
-      try { path = await resolveFolder(f, home); real = await realpath(path); } catch (e) { throw new PhoneLaunchRefused('not_found', (e as Error).message); }
+      let path: string;
+      try { path = await resolveFolder(f, home); } catch (e) { throw new PhoneLaunchRefused('not_found', (e as Error).message); }
       // The folder as named and where it leads: a link to the home folder or the root is refused as the folder itself would be.
-      const wide = tooWide(resolve(path), userHome) ?? tooWide(real, realHome);
+      const wide = await folderTooWide(resolve(path), userHome);
       if (wide) throw new PhoneLaunchRefused('invalid', `the folder is ${wide}`);
     }
     try { return { id: (await launch(req)).id }; }
