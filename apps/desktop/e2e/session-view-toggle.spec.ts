@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect, seedAtelier } from './fixtures';
-import { fakeDaemon, twoProjects } from './daemon';
+import { fakeDaemon, fakeRemote, twoProjects } from './daemon';
 import { ideReady, openSession, pane, tabOf } from './ide';
 import { fleet, ottoThread, tool } from './thread';
 
@@ -26,6 +26,13 @@ const bottom = (page: Page) => page.getByRole('region', { name: 'Bottom panel' }
 const inAgent = (page: Page) => page.evaluate(() => !!document.activeElement?.closest('.agent-view [data-terminal]'));
 const inPanelShell = (page: Page) => page.evaluate(() => !!document.activeElement?.closest('.ide-bottom [data-terminal]'));
 const onThread = (page: Page) => page.evaluate(() => document.activeElement?.hasAttribute('data-thread-focus') ?? false);
+const opens = (page: Page) => page.evaluate(() => (window as unknown as { __ledgePtyOpens: { argv: string[]; native?: string }[] }).__ledgePtyOpens);
+const panelText = (page: Page) => bottom(page).locator('[data-terminal]').last().evaluate(el => (el as unknown as { __ledgeTermText?: string }).__ledgeTermText ?? '');
+// The menu's default is PowerShell: OMP's « Open a shell » must not take it, it opens the session's own shell.
+const lastShellPowerShell = (page: Page) => page.addInitScript(() => {
+  (window as unknown as { __ledgeShells: unknown }).__ledgeShells = { wsl: 'Ubuntu', powershell: true, cmd: false, gitBash: false };
+  try { localStorage.setItem('ledge.ide.lastShell', 'powershell'); } catch { /* ignore */ }
+});
 const writes = (page: Page) => page.evaluate(() => (window as unknown as { __ledgePtyWrites: string[] }).__ledgePtyWrites.join(''));
 
 test('Fil | Terminal: Ctrl+² puts the agent screen in the tab with the keyboard in it, and brings the thread back', async ({ page }) => {
@@ -83,6 +90,7 @@ test('a bottom-panel shell keeps its keys (J is typed); Ctrl+² from it gives th
 });
 
 test('an OMP session has no agent screen: its own text, and « Open a shell » opens one in the bottom panel', async ({ page }) => {
+  await lastShellPowerShell(page);
   const omp = fleet.map(s => (s.id === 'nova' ? { ...s, tool: 'omp' as const, backend: 'omp-rpc' as const } : s));
   await fakeDaemon(page, omp, { launcher: ['ledge'], projects: twoProjects, threads });
   await page.goto('/'); await ideReady(page);
@@ -96,4 +104,28 @@ test('an OMP session has no agent screen: its own text, and « Open a shell » o
   await view.getByRole('button', { name: 'Open a shell' }).click();
   await expect(bottom(page)).toBeVisible();
   await expect.poll(() => inPanelShell(page)).toBe(true);
+  // WSL in the session's folder (not the menu's PowerShell), its first line saying so.
+  const shell = (await opens(page)).at(-1)!;
+  expect(shell.native).toBeUndefined();
+  expect(shell.argv.at(-1)).toContain("cd '/w/ledge'");
+  await expect.poll(() => panelText(page)).toContain('Shell opened in Nova’s folder: /w/ledge');
+});
+
+test('an OMP session of a machine reached over SSH: « Open a shell » opens it on that machine, in its folder', async ({ page }) => {
+  await lastShellPowerShell(page);
+  const local = fleet.filter(s => s.id !== 'nova');
+  const nova = fleet.find(s => s.id === 'nova')!;
+  await fakeDaemon(page, local, { launcher: ['ledge'], projects: twoProjects, threads, machines: [{ id: 'local', label: 'Local' }, { id: 'devbox', label: 'Devbox', ssh: 'devbox' }] });
+  await fakeRemote(page, 'devbox', [{ ...nova, tool: 'omp' as const, backend: 'omp-rpc' as const, cwd: '/srv/ledge' }]);
+  await page.goto('/'); await ideReady(page);
+  await openSession(page, 'Nova');
+  await pane(page, 'Nova').locator('.session-thread').focus();
+  await page.keyboard.press('Control+Backquote');
+  await agentView(page, 'Nova').getByRole('button', { name: 'Open a shell' }).click();
+  await expect.poll(() => inPanelShell(page)).toBe(true);
+  const shell = (await opens(page)).at(-1)!;
+  expect(shell.native).toBeUndefined();
+  expect(shell.argv.slice(0, 4)).toEqual(['ssh', '-t', '--', 'devbox']);
+  expect(shell.argv.at(-1)).toContain("cd '/srv/ledge'");
+  await expect.poll(() => panelText(page)).toContain('Shell on Devbox, in Nova’s folder: /srv/ledge');
 });

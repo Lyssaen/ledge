@@ -32,7 +32,7 @@ export function openShell(store: TermStore, session: Session, intro: (tab: Tab) 
 }
 
 /** A shell's first line: where it runs, in whose folder. */
-export function useShellIntro(client: DaemonClient, session: Session): (tab: Tab) => string {
+export function useShellIntro(client: DaemonClient, session: Session): (at: { dir: string; remote: boolean }) => string {
   const { t } = useI18n();
   const tt = t.session.terminal;
   const home = useMachines(client).find(m => m.id === (session.machineId ?? 'local'))?.daemon?.home;

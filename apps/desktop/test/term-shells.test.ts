@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MachineState } from '@ledge/fleet';
 import { fr } from '../src/i18n/fr';
-import { defaultShell, loadLastShell, saveLastShell, shellLaunch, shellMenu, type ShellsAvailable } from '../src/term/shells';
+import { defaultShell, loadLastShell, menuDir, saveLastShell, sessionShell, shellLaunch, shellMenu, type ShellsAvailable } from '../src/term/shells';
 import { shellsAvailable } from '../src/tauri/bridge';
 
 const machine = (o: Partial<MachineState>) => ({ id: 'local', label: 'Local', status: 'open', ready: true, recents: [], sessions: [], launcher: ['node', '/ledge.js'], ...o }) as MachineState;
@@ -59,6 +59,10 @@ describe('shellLaunch', () => {
     expect(r.argv.slice(0, 2)).toEqual(['ssh', '-t']);
     expect(r.argv).toContain('srv');
   });
+  it('ssh starts in the folder it is given, else at home', () => {
+    expect((shellLaunch('ssh:srv', { dir: '/srv/w/api', machines: [local, srv] }) as { argv: string[] }).argv.at(-1)).toContain("cd '/srv/w/api'");
+    expect((shellLaunch('ssh:srv', { dir: '', machines: [local, srv] }) as { argv: string[] }).argv.at(-1)).toContain("cd '~'");
+  });
   it('ledge', () => expect((shellLaunch('ledge', { dir: '', machines: [local] }) as { argv: string[] }).argv[2]).toContain('ledge who'));
 });
 
@@ -74,5 +78,23 @@ describe('last shell and availability', () => {
     (window as unknown as { __ledgeShells?: ShellsAvailable }).__ledgeShells = all;
     expect(await shellsAvailable()).toEqual(all);
     delete (window as unknown as { __ledgeShells?: ShellsAvailable }).__ledgeShells;
+  });
+});
+
+describe('sessionShell (OMP « Ouvrir un shell »)', () => {
+  it('a local session: WSL in its worktree, else its folder', () => {
+    expect(sessionShell({ cwd: '/w/ledge' }, [local, srv])).toEqual({ kind: 'wsl', dir: '/w/ledge', remote: false });
+    expect(sessionShell({ cwd: '/w/ledge', workdir: '/w/ledge-wt', machineId: 'local' }, [local, srv])).toEqual({ kind: 'wsl', dir: '/w/ledge-wt', remote: false });
+  });
+  it('a session of a machine reached over SSH: that machine, in its folder', () => {
+    expect(sessionShell({ cwd: '/srv/w/api', machineId: 'srv' }, [local, srv])).toEqual({ kind: 'ssh:srv', dir: '/srv/w/api', remote: true });
+  });
+  it('a machine with no SSH alias, or unknown: WSL', () => {
+    expect(sessionShell({ cwd: '/w/x', machineId: 'gone' }, [local, srv]).kind).toBe('wsl');
+    expect(sessionShell({ cwd: '/w/x', machineId: 'nossh' }, [local, machine({ id: 'nossh', ssh: undefined })]).kind).toBe('wsl');
+  });
+  it('the menu: SSH shells start at the machine home, the others where asked', () => {
+    expect(menuDir('ssh:srv', '/w/ledge')).toBe('');
+    expect(menuDir('wsl', '/w/ledge')).toBe('/w/ledge');
   });
 });

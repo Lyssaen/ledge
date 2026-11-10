@@ -75,7 +75,7 @@ import { agentRoute, createAgentStream, createShellStream } from './term/stream'
 import { focusAgentView } from './session/agentFocus';
 import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
-import { defaultShell, loadLastShell, saveLastShell, shellLaunch, shellMenu, type ShellKind, type ShellsAvailable } from './term/shells';
+import { defaultShell, loadLastShell, menuDir, saveLastShell, sessionShell, shellLaunch, shellMenu, type ShellKind, type ShellsAvailable } from './term/shells';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { useIdeEnabled, useResumeOnStart, useRigsMachine, useShowUsage } from './workspace/prefs';
@@ -634,8 +634,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
     const s = sid === null ? undefined : knownNow.current.find(x => x.id === sid);
     return s ? s.workdir ?? s.cwd : '';
   }, [wsStore]);
-  const openShell = useCallback((kind: ShellKind, dir: string, then: (id: string) => void) => {
-    const run = () => { const id = termStore.openFree(kind, dir); focusShell.current = id; then(id); };
+  const openShell = useCallback((kind: ShellKind, dir: string, then: (id: string) => void, intro?: string) => {
+    const run = () => {
+      const id = termStore.openFree(kind, dir);
+      if (intro && termStore.free(id)?.status === 'running') termStore.surface(id)?.write(`${intro}\r\n`);
+      focusShell.current = id;
+      then(id);
+    };
     if (loadedWorkspace()) { run(); return; }
     opening.current += 1;
     // A chunk that fails to load: no shell (the places that need the chunk say so themselves, ChunkBoundary).
@@ -645,10 +650,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const pickDefault = useCallback((): ShellKind => (shellsNow.current.avail === null ? loadLastShell() : defaultShell(shellsNow.current.rows, loadLastShell())), []);
   /** A shell into the panel, on Terminaux, the panel shown. The default shell of a panel shown empty (`auto`) does not show it
    *  again if it was hidden while the shell opened. */
-  const panelShell = useCallback((kind: ShellKind, auto = false) => openShell(kind, shellDir(), id => {
+  const panelShell = useCallback((kind: ShellKind, auto = false, at?: { dir: string; intro: string }) => openShell(kind, at?.dir ?? menuDir(kind, shellDir()), id => {
     panelStore.update(p => openTerm(p, id));
     if (!auto || layoutNow.current.bottom) onLayout({ type: 'show', panel: 'bottom', on: true });
-  }), [openShell, shellDir, panelStore, onLayout]);
+  }, at?.intro), [openShell, shellDir, panelStore, onLayout]);
   // The panel shown with no terminal (Ctrl+J, its button, a restart with it shown) opens the default shell (R7): once per showing,
   // and only once the shells are known (before, the default could not be told).
   const bottomWas = useRef(false);
@@ -855,7 +860,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         if (!s) return null;
         const tp = prefsOfTab(tab, s);
         return <SessionPlace client={fleetClient} session={s} nav={tnav} dispatch={dispatch} decisions={decisions} waits={waits} memory={memory} notify={notify} actions={actions} tasksApi={tasksApi}
-          prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide onShell={() => panelShell(pickDefault())}
+          prefs={tp.prefs} setPrefs={tp.set} onRevealCurrent={() => setRevealCurrent(n => n + 1)} ide onShell={(s, intro) => { const at = sessionShell(s, machines); panelShell(at.kind, false, { dir: at.dir, intro: intro(at) }); }}
           project={projectLabel(s, projectName)} besideLink={changesBeside(ws, keyOf(tab))}
           pr={prOfSession(forge.prs, s.id) ?? null} onPr={() => { const p = prOfSession(forge.prs, s.id); if (p) onTab({ kind: 'pr', ref: p.id }); }}
           prUnknown={sessionForge(forge.prs, forge.forges, forge.followed, s.id) ?? null} prMachine={machineLabel(s.machineId ?? 'local')}
@@ -941,7 +946,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         if (p === 'ledge') { dispatch({ type: 'ledge' }); return; }
         if (p === 'next') { const first = waiting[0]; if (first) dispatch({ type: 'open', id: first.id, where: 'active' }); return; }
         // « Terminal »: the default shell (R7), in a tab of this group, in the folder of the session it was split from.
-        if (p === 'shell') { openShell(pickDefault(), shellDir(from), id => wsStore.update(w => openTab(focusGroup(w, gid), { kind: 'terminal', ref: id }, 'active'))); return; }
+        if (p === 'shell') { const k = pickDefault(); openShell(k, menuDir(k, shellDir(from)), id => wsStore.update(w => openTab(focusGroup(w, gid), { kind: 'terminal', ref: id }, 'active'))); return; }
         dispatch(tabAction(p === 'atelier' ? ATELIER_TAB : p === 'settings' ? SETTINGS_TAB : openrigTab())!);
       };
       const where = (x: Session) => (x.rig ? projectLabel(x, projectName) : [projectName(x), x.branch].filter(Boolean).join(' · '));
@@ -1073,7 +1078,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         const after: PaletteCommand[] = [
           cmd('atelier', p.atelier, () => dispatch(tabAction(ATELIER_TAB)!)),
           cmd('settings', p.settings, () => dispatch(tabAction(SETTINGS_TAB)!)),
-          cmd('terminal', p.terminal, () => openShell(pickDefault(), shellDir(), id => wsStore.update(w => openTab(w, { kind: 'terminal', ref: id }, 'active')))),
+          cmd('terminal', p.terminal, () => { const k = pickDefault(); openShell(k, menuDir(k, shellDir()), id => wsStore.update(w => openTab(w, { kind: 'terminal', ref: id }, 'active'))); }),
           cmd('split', p.split, () => wsStore.update(w => splitGroup(w, w.focus))),
           cmd('bottom', p.bottom, () => onLayout({ type: 'toggle', panel: 'bottom' })),
           ...dispositions.map(d => cmd(`disposition:${d.name}`, p.disposition(d.name), () => applyAndTell(d.name), d.name === currentDisposition?.name ? t.ide.palette.current : undefined)),
