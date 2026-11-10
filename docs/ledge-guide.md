@@ -185,6 +185,7 @@ Un onglet, ouvert par `Ctrl+,` ou par « Réglages » en bas de la barre d'activ
 - « Au démarrage, reprendre les sessions ouvertes ».
 - **Agent par défaut :** le harnais qui fait tourner le chat de Ledge et les sessions proposées.
 - **Contexte max :** le seuil de passation de relais.
+- **Alerte de limite d'usage :** au-delà de ce seuil, Ledge Desktop prévient une seule fois qu'une fenêtre d'usage d'un harnais (5 h, semaine, par modèle) approche de sa limite.
 - Vérification des mises à jour.
 
 ##### Espace de travail (`workspace`)
