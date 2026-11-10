@@ -1,12 +1,18 @@
-import { test, expect } from './fixtures';
-import { fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, twoProjects } from './daemon';
+import { ideReady, openSession, pane } from './ide';
 import { at, fleet, ottoThread, tool } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 test('a pasted image rides the reply, shows as a thumbnail, opens and saves', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, threads: { nova: ottoThread.map(i => ({ ...i })) } });
-  await page.goto('/'); await openAtelier(page);
-  await page.getByRole('tree').getByRole('button', { name: /^Nova/ }).click();
-  const field = page.getByRole('textbox', { name: 'Reply to the agent' });
+  await page.goto('/'); await ideReady(page);
+  await openSession(page, 'Nova');
+  const field = pane(page, 'Nova').getByRole('textbox', { name: 'Reply to the agent' });
   await field.click();
   // A synthetic paste: a PNG drawn on a canvas, carried by a DataTransfer like the clipboard's.
   await field.evaluate(async el => {
@@ -17,7 +23,8 @@ test('a pasted image rides the reply, shows as a thumbnail, opens and saves', as
     el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
   });
   await field.fill('Regarde cette capture');
-  await page.getByRole('button', { name: 'Send' }).click();
+  // The IDE's reply has no Send button: Enter sends.
+  await field.press('Enter');
 
   await expect.poll(() => daemon.received.filter(m => m.type === 'session.reply').length).toBe(1);
   const reply = daemon.received.find(m => m.type === 'session.reply')!;
@@ -50,7 +57,7 @@ test('a capture opens the Navigateur tab', async ({ page }) => {
     tool('shot-1', -5, 'mcp__playwright__browser_take_screenshot', 'viewport', { images: [{ id, mime: 'image/png', width: 1280, height: 800, bytes: 90, preview: false }] })
   ];
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { nova: thread }, images: { [id]: { mime: 'image/png', data: png } } });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await page.getByRole('tree').getByRole('button', { name: /^Nova/ }).click();
 
   const thumb = page.locator('[data-tool="shot-1"] [data-thumb="ready"]');

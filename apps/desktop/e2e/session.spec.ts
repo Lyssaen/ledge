@@ -1,8 +1,14 @@
 import type { Page } from '@playwright/test';
 import type { ThreadItem } from '@ledge/protocol';
-import { test, expect } from './fixtures';
-import { fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, twoProjects } from './daemon';
+import { ideReady, openSession, pane, tabOf } from './ide';
 import { at, fleet, ottoThread, tool } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 const longThread: ThreadItem[] = Array.from({ length: 120 }, (_, i): ThreadItem[] => {
   const turn = i + 1; const s = -3000 + i * 20;
@@ -19,7 +25,7 @@ const gap = (page: Page) => thread(page).evaluate(el => el.scrollHeight - el.scr
 
 test('the session reads as a rail; the past exchange stays open, one of the last three; Y allows the pinned request once', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: ottoThread } });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page, 'Otto');
   await expect(thread(page).locator('.turn.folded')).toHaveCount(0);
   await expect(thread(page).getByText('Câble la liste', { exact: true })).toBeVisible();
@@ -30,7 +36,7 @@ test('the session reads as a rail; the past exchange stays open, one of the last
 });
 test('reading older messages while new ones arrive: no jump, then « Go to the latest message »', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, threads: { nova: longThread } });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page, 'Nova');
   const scroller = thread(page);
   await expect(scroller.locator('.turn')).toHaveCount(120);
@@ -46,48 +52,44 @@ test('reading older messages while new ones arrive: no jump, then « Go to the l
 });
 test('at the end of the thread, a new item stays in view', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, threads: { nova: longThread } });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page, 'Nova');
   await expect(thread(page).locator('.turn')).toHaveCount(120);
   daemon.item('nova', { kind: 'reply', id: 'reply-live', at: new Date().toISOString(), turn: 120, text: 'Terminé.' });
   await expect(thread(page).getByText('Terminé.')).toBeInViewport();
 });
-test('Reply from the sidebar lands in the field; Enter sends the reply', async ({ page }) => {
+test('Reply from « For you » lands in the field; Enter sends the reply', async ({ page }) => {
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
-  await page.getByRole('complementary').getByRole('button', { name: 'Reply' }).click();
+  await page.goto('/'); await ideReady(page);
+  // The old sidebar's waiting block is the IDE's « For you » view.
+  await page.getByRole('navigation', { name: 'Activity bar' }).getByRole('button', { name: 'For you' }).click();
+  await page.getByRole('region', { name: 'Your turn' }).getByRole('button', { name: 'Reply' }).click();
   await expect(page.getByRole('textbox', { name: 'Reply to the agent' })).toBeFocused();
   await page.keyboard.type('Port 3000');
   await page.keyboard.press('Enter');
   await expect.poll(() => daemon.received.filter(m => m.type === 'session.reply')).toEqual([{ type: 'session.reply', id: 'luna', text: 'Port 3000' }]);
 });
-test('the Terminal view follows from agent to agent and survives a reload', async ({ page }) => {
-  const daemon = await fakeDaemon(page, fleet, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
-  await open(page, 'Otto');
-  await expect(page.locator('.session-page')).toBeVisible();
-  daemon.preview('otto', ['$ npm test']); daemon.preview('nova', ['$ git status']);
-  await page.getByRole('tab', { name: /^Terminal/ }).click();
-  await expect(page.getByRole('region', { name: 'Terminal' }).getByText('$ npm test')).toBeVisible();
-  await page.getByRole('tree', { name: 'Projects, branches and sessions' }).getByRole('button', { name: /^Nova/ }).click();
-  // Agents run in project order, oldest first then by id: bix, echo, nova, otto, pim.
-  const terminal = page.getByRole('region', { name: 'Terminal' });
-  await expect(terminal.getByText('$ git status')).toBeVisible();
-  await expect(terminal.getByText('$ npm test')).toHaveCount(0);
-  await page.keyboard.press('Alt+ArrowRight');
-  await expect(terminal.getByText('$ npm test')).toBeVisible();
-  await expect(terminal.getByText('$ git status')).toHaveCount(0);
-  await page.keyboard.press('Alt+ArrowLeft');
-  await expect(terminal.getByText('$ git status')).toBeVisible();
-  await expect(terminal.getByText('$ npm test')).toHaveCount(0);
-  await page.reload(); await openAtelier(page);
-  await open(page, 'Otto');
-  await expect(page.getByRole('region', { name: 'Terminal' })).toBeVisible();
+test('each tab keeps its own view: Otto on Terminal, Nova on its thread, and Otto\'s Terminal survives a reload', async ({ page }) => {
+  // The old interface's Terminal view followed from agent to agent (Alt+← / →); the IDE gives each tab its own (v26), Alt+← / → moves tabs.
+  await fakeDaemon(page, fleet, { projects: twoProjects });
+  await page.goto('/'); await ideReady(page);
+  await openSession(page, 'Otto');
+  await pane(page, 'Otto').locator('.session-thread').focus();
+  await page.keyboard.press('Control+Backquote');
+  await expect(pane(page, 'Otto').locator('.agent-view')).toBeVisible();
+  await openSession(page, 'Nova');
+  await expect(pane(page, 'Nova').locator('.session-thread')).toBeVisible();
+  await expect(pane(page, 'Nova').locator('.agent-view')).toHaveCount(0);
+  await tabOf(page, 'Otto').click();
+  await expect(pane(page, 'Otto').locator('.agent-view')).toBeVisible();
+  await page.reload(); await ideReady(page);
+  await tabOf(page, 'Otto').click();
+  await expect(pane(page, 'Otto').locator('.agent-view')).toBeVisible({ timeout: 20_000 });
 });
 test("under 1000 px the thread's rail stays centred at 820 px at most (the mockup's), beside no rail of agents", async ({ page }) => {
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: ottoThread } });
   await page.setViewportSize({ width: 960, height: 800 });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page, 'Otto');
   await expect(page.locator('.project-rail')).toHaveCount(0);
   const rail = (await thread(page).locator('.rail').boundingBox())!;
@@ -105,7 +107,7 @@ test('a session page under 600 px keeps a change\'s row readable: the path, then
     { kind: 'reply', id: 'r1', at: at(-100), turn: 1, text: 'Écrit.' }
   ];
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: changed } });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page, 'Otto');
   // Opened at the usual size (the tree folds away when narrow), then the window narrowed.
   await page.setViewportSize({ width: 600, height: 900 });

@@ -946,7 +946,7 @@ export const fr = {
       reopen: 'Rouvrir', shellUnavailable: 'Ce dossier ne peut pas être ouvert dans un shell.',
       noAgentScreen: 'Pas d’écran d’agent', openShell: 'Ouvrir un shell',
       nativeTitle: (n: string) => `Ledge pilote ${n} directement : il n’a pas d’écran d’agent.`,
-      nativeBody: 'Son travail se lit dans le fil. Vous pouvez ouvrir un shell dans son dossier, dans le panneau de droite.',
+      nativeBody: 'Son travail se lit dans le fil. Vous pouvez ouvrir un shell dans son dossier, dans le panneau du bas.',
       toTerminal: (k: string) => `Donner le clavier au terminal · Ctrl ${k}`, toThread: (k: string) => `Le clavier va au terminal · revenir au fil : Ctrl ${k}`
     },
     pending: {

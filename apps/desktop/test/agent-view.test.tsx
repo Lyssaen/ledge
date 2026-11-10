@@ -206,7 +206,7 @@ it('an OMP session has no agent screen: its own text, « Ouvrir un shell », not
   render(<View session={pim} on={{ onOpenShell }} />);
   await tick();
   expect(screen.getByText('Ledge pilote Pim directement : il n’a pas d’écran d’agent.')).toBeInTheDocument();
-  expect(screen.getByText('Son travail se lit dans le fil. Vous pouvez ouvrir un shell dans son dossier, dans le panneau de droite.')).toBeInTheDocument();
+  expect(screen.getByText('Son travail se lit dans le fil. Vous pouvez ouvrir un shell dans son dossier, dans le panneau du bas.')).toBeInTheDocument();
   expect(footer()).toHaveTextContent(/^●Pas d’écran d’agent$/);
   expect(backend.opens).toHaveLength(0);
   focusAgentView(store, 'pim');

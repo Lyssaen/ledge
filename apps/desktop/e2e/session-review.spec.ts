@@ -1,8 +1,14 @@
 import type { Page } from '@playwright/test';
 import type { ThreadItem } from '@ledge/protocol';
-import { test, expect } from './fixtures';
-import { fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, twoProjects } from './daemon';
+import { ideReady, openSession, pane } from './ide';
 import { at, fleet, ottoThread, tool } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 // A 400-character line (words, as code reads): the diff scrolls sideways, never the page.
 const wide = `export const wide = '${'lorem ipsum dolor sit amet '.repeat(14).slice(0, 377)}';`;
@@ -27,23 +33,24 @@ const open = async (page: Page) => { await page.getByRole('tree').getByRole('but
 test('Changes: J / K walk the files; a 400-character line scrolls in the diff only', async ({ page }) => {
   expect(wide).toHaveLength(400);
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: review }, documents });
-  await page.goto('/'); await openAtelier(page);
-  await open(page);
-  // Fil | Terminal v3: Modifications is the right panel's first tab (O, or the top bar's >_).
-  await page.getByRole('banner').getByRole('button', { name: 'Show the panel: shells and changes' }).click();
-  await page.getByRole('tab', { name: /^Changes/ }).click();
-  await expect(page.locator('.file-title code')).toHaveText('src/App.tsx');
+  await page.goto('/'); await ideReady(page);
+  await openSession(page, 'Otto');
+  // The IDE's Changes: « +N −N » at the right of the tab's bar opens them beside, in a group of their own (plan 4.1 point 1).
+  await pane(page, 'Otto').locator('.ide-bar .dchip').click();
+  const changes = pane(page, 'Changes · Otto');
+  await expect(changes.locator('.file-title code')).toHaveText('src/App.tsx');
+  await changes.locator('.file-title').click();
   await page.keyboard.press('j'); await page.keyboard.press('j');
   await expect(page.locator('.file-title code')).toHaveText('wide.ts');
   expect(await page.locator('.diff-scroll').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
-  expect(await page.locator('.session-page').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  expect(await changes.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   await page.keyboard.press('k');
   await expect(page.locator('.file-title code')).toHaveText('docs/guide.md');
 });
 test('the pane beside the thread: dragging the handle resizes it, the thread keeps 440 px, the width survives a reload', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: review }, documents });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page);
   await page.getByRole('link', { name: 'docs/guide.md' }).click();
   await expect(page.getByRole('complementary', { name: 'Reading pane' }).getByText('Bonjour.')).toBeVisible();
@@ -60,14 +67,12 @@ test('the pane beside the thread: dragging the handle resizes it, the thread kee
   await page.getByRole('link', { name: 'docs/guide.md' }).click();
   expect(await page.locator('.session-split').evaluate(el => getComputedStyle(el).getPropertyValue('--split').trim())).toBe('72%');
 });
-test('a narrow conversation (the right panel open): the pane covers the thread above the reply, with Close', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+test('a narrow conversation (a narrow group): the pane covers the thread above the reply, with Close', async ({ page }) => {
+  // The old interface narrowed the page with its right panel (O); in the IDE the tab's group is narrow beside the explorer.
+  await page.setViewportSize({ width: 1100, height: 900 });
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: review }, documents });
-  await page.goto('/'); await openAtelier(page);
-  await open(page);
-  await expect(page.locator('.session-page')).toBeVisible();
-  await page.keyboard.press('o');
-  await expect(page.getByRole('region', { name: 'Panel: shells and changes' })).toBeVisible();
+  await page.goto('/'); await ideReady(page);
+  await openSession(page, 'Otto');
   expect((await page.locator('.session-page').boundingBox())!.width).toBeLessThan(860);
   await page.getByRole('link', { name: 'docs/guide.md' }).click();
   const pane = page.getByRole('complementary', { name: 'Reading pane' });
@@ -80,7 +85,7 @@ test('a narrow conversation (the right panel open): the pane covers the thread a
 });
 test('the work plan bar stays on top while the thread scrolls', async ({ page }) => {
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: review }, documents });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await open(page);
   const bar = page.locator('.todo-bar');
   await expect(bar).toBeVisible();
@@ -105,8 +110,8 @@ const nova: ThreadItem[] = [
 test('the Conversation tab: both sides interleaved, Otto on the right, live; narrow, « in the thread » closes it and lights the message', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   const daemon = await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: withNova, nova }, documents });
-  await page.goto('/');
-  await open(page);
+  await page.goto('/'); await ideReady(page);
+  await openSession(page, 'Otto');
   await page.locator('.session-thread [data-message="s1"]').getByRole('button', { name: 'follow the conversation' }).click();
   const pane = page.getByRole('complementary', { name: 'Reading pane' });
   const head = pane.locator('.conv-head');
@@ -128,10 +133,8 @@ test('the Conversation tab: both sides interleaved, Otto on the right, live; nar
   // Live: Nova writes again.
   daemon.item('nova', { kind: 'sent', id: 'toolu_n3', at: at(0), turn: 1, to: 'otto', peer: 'otto', text: 'And the tests?', status: 'delivered' });
   await expect(head).toContainText('4 messages');
-  // Narrow (the right panel open): the pane lies over the thread; « in the thread » closes the tab, then lights Otto's message.
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.keyboard.press('o');
-  await expect(page.getByRole('region', { name: 'Panel: shells and changes' })).toBeVisible();
+  // Narrow (a narrow group): the pane lies over the thread; « in the thread » closes the tab, then lights Otto's message.
+  await page.setViewportSize({ width: 1100, height: 900 });
   expect(await pane.evaluate(el => getComputedStyle(el).position)).toBe('absolute');
   await pane.locator('[data-bubble="a:s1"]').getByRole('button', { name: 'in the thread' }).click();
   await expect(pane).toHaveCount(0);

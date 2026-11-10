@@ -904,7 +904,7 @@ export const en: Messages = {
       reopen: 'Reopen', shellUnavailable: 'This folder cannot be opened in a shell.',
       noAgentScreen: 'No agent screen', openShell: 'Open a shell',
       nativeTitle: (n) => `Ledge drives ${n} itself: it has no agent screen.`,
-      nativeBody: 'Its work reads in the thread. You can open a shell in its folder, in the right panel.',
+      nativeBody: 'Its work reads in the thread. You can open a shell in its folder, in the bottom panel.',
       toTerminal: (k) => `Give the keyboard to the terminal · Ctrl ${k}`, toThread: (k) => `The keyboard goes to the terminal · back to the thread: Ctrl ${k}`
     },
     pending: {

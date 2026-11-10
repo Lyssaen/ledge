@@ -1,7 +1,13 @@
 import type { Browser, Page } from '@playwright/test';
 import type { BrowserLive, Session, ThreadItem } from '@ledge/protocol';
-import { test, expect } from './fixtures';
-import { fakeDaemon, session, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, session, twoProjects } from './daemon';
+import { ideReady, pane } from './ide';
+
+test.beforeEach(async ({ page }) => {
+  await seedAtelier(page);
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+});
 
 // Visual review of docs/mockups/ledge-browser-live.html (design/html-viewer 44811d1e), not an assertion suite: a Claude
 // session's browser through steps a to e (none, the button appears, live, closed, back), an OMP seat's (live beside its
@@ -71,18 +77,23 @@ async function boot(page: Page, theme: 'dark' | 'light', width: number, frames: 
   await page.addInitScript(([t, g]) => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t!); localStorage.setItem('desktop.grouping', g!); } catch { /* ignore */ } }, [theme, grouping]);
   const d = await fakeDaemon(page, [OTTO, MIA, TOM], { launcher: ['ledge'], projects: twoProjects, threads: { otto: thread() }, daemon: { version: '0.41.0', install: 'npm', systemd: true, browserLive: true },
     images: { [SHOT_ID]: { mime: 'image/jpeg', data: frames[1]! } }, browsers });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   return d;
 }
+/** A session's tab, from the palette (Ctrl K): a rig's seat is not in the Projects tree, and the Rigs view needs OpenRig. */
 const open = async (page: Page, name: string) => {
-  await page.locator('aside.sidebar').getByRole('button', { name: new RegExp(`^${name}`) }).first().click();
-  await page.locator('.session-page').waitFor({ timeout: 30_000 });
+  await page.keyboard.press('Control+k');
+  await page.locator('.ide-palette input, [role=dialog] input').first().waitFor();
+  await page.keyboard.type(name);
+  await page.keyboard.press('Enter');
+  await pane(page, name).locator('.session-page').waitFor({ timeout: 30_000 });
 };
 const settle = async (page: Page) => {
   await page.evaluate(() => { const a = document.activeElement as HTMLElement | null; a?.blur(); });
   await page.waitForTimeout(400);
 };
-const pill = (page: Page) => page.locator('.pane-heading .browser-pill');
+// The IDE tab has no heading row (lot 3, option A): the browser's chip is in its bottom bar.
+const pill = (page: Page) => page.locator('.ide-pane:visible .ide-bar-browser');
 
 for (const theme of ['dark', 'light'] as const) for (const [width, w] of [[1440, 'wide'], [1100, 'narrow']] as const) {
   test(`Claude session, steps a to e, ${w}, ${theme}`, async ({ page, browser }, info) => {
@@ -94,9 +105,9 @@ for (const theme of ['dark', 'light'] as const) for (const [width, w] of [[1440,
     await shot('a-none');
     // b · the button appears, live.
     d.browser(live('otto'), frames[0]);
-    await expect(pill(page)).toHaveClass(/browser-pill-live/);
+    await expect(pill(page)).toHaveClass(/ide-bar-browser-live/);
     await shot('b-appears');
-    await page.locator('.session-page .pane-heading').screenshot({ path: info.outputPath(`browser-live-zoom-heading-live-${w}-${theme}.png`) });
+    await page.locator('.ide-pane:visible .ide-bar').screenshot({ path: info.outputPath(`browser-live-zoom-bar-live-${w}-${theme}.png`) });
     // c · Direct: the film, the last action.
     await pill(page).click();
     await expect(page.locator('.browser-screen.live img')).toBeVisible();
@@ -125,7 +136,7 @@ for (const theme of ['dark', 'light'] as const) for (const [width, w] of [[1440,
     d.preview('mia', ['● ST7-251 · bascule de lien : maquette', '  écrit designs/ST7-251-link-toggle/mockup.html', "● eval · browser.open({ name: 'maq', … })", '  Opened tab "maq2" on headless browser', '● eval · tab.run(({ page }) => page.click(…))', '> _']);
     await shot('none');
     d.browser(live('mia', { url: 'about:blank' }), frames[0]);
-    await expect(pill(page)).toHaveClass(/browser-pill-live/);
+    await expect(pill(page)).toHaveClass(/ide-bar-browser-live/);
     await pill(page).click();
     await expect(page.locator('.browser-screen.live img')).toBeVisible();
     await shot('live');

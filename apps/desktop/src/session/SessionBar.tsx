@@ -82,16 +82,19 @@ export function SessionBar({ client, session, project, files, besideLink, notify
   }), [client, session.id, session.name, notify, ti]);
   return (
     <div className="ide-bar">
-      <span className="ide-bar-model" {...(switchable && { title: ti.changeModel })}>
+      {/* No model known (right after a launch, a harness that gives none): no empty box, whose gap would push the rest right. */}
+      {(switchable || session.model) && <span className="ide-bar-model" {...(switchable && { title: ti.changeModel })}>
         {switchable ? <SessionModel client={client} session={session} notify={notify} variant="bar" />
           : session.model && <span className="ide-bar-mdl"><ProviderLogo provider={modelProvider(session.model) ?? providerOf(session.tool)} size={12} /><span className="model-chip-text" title={modelName(session.model)}>{modelName(session.model)}</span></span>}
-      </span>
+      </span>}
       {session.context && (
         <span className={cls('ide-bar-ctx', warn && 'amber')} title={ti.context(k(session.context.used), k(session.context.window))}>
           <span className={cls('ugauge', warn && 'amber')}><i style={{ width: `${pct}%` }} /></span><b>{pct}&nbsp;%</b>
         </span>
       )}
-      <span className="ide-bar-sep" aria-hidden="true" />
+      {/* A separator only between two things: the model or the context before it (both optional, none right after a launch); what
+          follows it is the CSS's (styles/ide.css: under 560 px the project goes). */}
+      {(switchable || session.model || session.context) && <span className="ide-bar-sep" aria-hidden="true" />}
       {session.branch && <span className="ide-bar-chip br mono" title={ti.branch(session.branch)}>{session.branch}</span>}
       {terminal && <span className="ide-bar-chip tm mono">{terminal}</span>}
       <span className="ide-bar-chip pj">{project}</span>
