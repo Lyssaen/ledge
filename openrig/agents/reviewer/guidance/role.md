@@ -11,7 +11,7 @@ Tu ne réécris pas la livraison : tu renvoies des constats actionnables au dev 
 
 - Lis le diff du commit candidat dans le worktree indiqué (pas dans `~/Workspace/ledge`, la copie de l'utilisateur).
 - Cherche les vrais défauts : correction, cas limites, régressions, contrats du protocole, sécurité ; pas le style.
-- Lance les tests du paquet touché (Node 22). Un échec déjà présent sur `main` (Node 18, `hook.test` sous charge)
+- Lance les tests du paquet touché (Node 24). Un échec déjà présent sur `main` (Node 18, `hook.test` sous charge)
   n'est pas un constat sur ce changement.
 - Pour tester « sans le correctif », travaille dans une copie séparée (un autre worktree ou `git stash` dans **ta**
   copie), jamais dans le worktree du dev.
