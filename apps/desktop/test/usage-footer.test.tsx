@@ -119,6 +119,16 @@ describe('Cursor Agent in the footer', () => {
   });
 });
 
+describe('the IDE\'s status bar', () => {
+  // The IDE colours nothing amber (threshold Infinity) but its alerts still go at the setting: the detail names the setting.
+  it('the detail names the alert setting, not the colours\' threshold', () => {
+    render(<LangProvider lang="fr"><UsageFooter groups={[claude()]} threshold={Infinity} alertAt={0.8} label={m => m} onSettings={() => {}} now={NOW} /></LangProvider>);
+    fireEvent.click(screen.getByRole('button', { name: /Claude Code/ }));
+    expect(screen.getByRole('dialog', { name: /Claude Code/ })).toHaveTextContent('Alerte à 80 %');
+    expect(screen.getByRole('dialog', { name: /Claude Code/ })).not.toHaveTextContent('Infinity');
+  });
+});
+
 describe('the providers\' logos', () => {
   it('Claude: its orange spark; Cursor and Codex: the text colour', () => {
     const c = render(<HarnessLogo harness="claude" />).container;

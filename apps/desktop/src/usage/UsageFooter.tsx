@@ -38,6 +38,9 @@ function Mini({ label, w, threshold, reset, now }: { label: string; w: UsageWind
 export interface UsageFooterProps {
   groups: UsageGroup[];
   threshold: number;
+  /** The alert setting the detail names (« Alerte à 80 % »), when the colours follow another threshold (the IDE's status bar has
+   *  no amber, its alerts are toasts): `threshold` by default. */
+  alertAt?: number;
   /** A machine's label by its id. */
   label(machine: string): string;
   onSettings(): void;
@@ -110,7 +113,7 @@ export function UsageFooter(p: UsageFooterProps): JSX.Element | null {
   return (
     <div className="usage-foot" ref={box}>
       {p.groups.map((g, i) => <span key={g.key} className="ugroup-wrap">{i > 0 && <span className="usep" aria-hidden="true" />}{group(g)}</span>)}
-      {shown && <UsageDetail g={shown} threshold={p.threshold} where={where(shown)} now={p.now} onSettings={() => { setOpen(null); p.onSettings(); }} />}
+      {shown && <UsageDetail g={shown} threshold={p.threshold} alertAt={p.alertAt ?? p.threshold} where={where(shown)} now={p.now} onSettings={() => { setOpen(null); p.onSettings(); }} />}
     </div>
   );
 }
@@ -119,7 +122,7 @@ export function UsageFooter(p: UsageFooterProps): JSX.Element | null {
 const HOSTS: Partial<Record<UsageHarness, string>> = { claude: 'api.anthropic.com', cursor: 'api2.cursor.sh' };
 
 /** The detail of one account's limits: the 5 hours, the week, then each model (no credits, no plan: M4). */
-function UsageDetail({ g, threshold, where, now, onSettings }: { g: UsageGroup; threshold: number; where: string; now: number; onSettings(): void }) {
+function UsageDetail({ g, threshold, alertAt, where, now, onSettings }: { g: UsageGroup; threshold: number; alertAt: number; where: string; now: number; onSettings(): void }) {
   const { t, lang } = useI18n();
   const u = t.usage;
   const s = shownWindows(g, threshold);
@@ -167,7 +170,7 @@ function UsageDetail({ g, threshold, where, now, onSettings }: { g: UsageGroup; 
       {s.pools.length > 0 && <div className="usep-row">{u.perPool}</div>}
       {s.pools.map(w => row((w.pool && u.pool[w.pool]) || '', poolWhen(w), w))}
       <div className="ufoot">
-        <span>{unread ? '' : u.alertAt(Math.round(threshold * 100))}</span>
+        <span>{unread ? '' : u.alertAt(Math.round(alertAt * 100))}</span>
         <span className="ulinks">
           {unread && <button type="button" className="ulink" onClick={() => openUrl('https://cursor.com/dashboard?tab=usage')}>{u.dashboard}</button>}
           <button type="button" className="ulink" onClick={onSettings}>{u.settings}</button>

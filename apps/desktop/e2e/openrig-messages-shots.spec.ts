@@ -1,7 +1,21 @@
+import type { Page } from '@playwright/test';
 import type { ThreadItem } from '@ledge/protocol';
-import { test, expect } from './fixtures';
-import { fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { fakeDaemon, twoProjects } from './daemon';
 import { at, fleet } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
+
+// The first tests of a run pay Vite's first compile of the IDE chunk: on a loaded machine that is past 20 s.
+test.setTimeout(60_000);
+/** The IDE is up on its Atelier tab, the agents seated. */
+async function booted(page: Page) {
+  await expect(page.locator('.ide')).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator('.ide-atelier button[data-agent]').first()).toBeVisible({ timeout: 15_000 });
+}
 
 /* Captures of OpenRig's messages in a seat's thread, to hold against docs/mockups/ledge-openrig-messages-session-*.png.
    Not a check: it runs only with RIG_SHOTS=<folder>. */
@@ -38,8 +52,11 @@ for (const theme of ['dark', 'light'] as const) {
     const bixId = withBix.find(s => s.name === 'Bix')!.id;
     const thread = items.map(i => ('peer' in i && i.peer === 'bix' ? { ...i, peer: bixId } : i)) as ThreadItem[];
     const d = await fakeDaemon(page, withBix, { projects: twoProjects, threads: { otto: thread }, daemon: { version: '0.38.0', install: 'npm', systemd: true, openrigRows: true } });
-    await page.goto('/'); await openAtelier(page);
-    await page.getByRole('tree').getByRole('button', { name: /^Lu/ }).click();
+    await page.goto('/'); await booted(page);
+    // A rig seat is not in the explorer's projects: the palette (Ctrl+K) opens it.
+    await page.keyboard.press('Control+k');
+    await page.getByRole('combobox', { name: 'Palette' }).fill('Lu');
+    await page.getByRole('dialog', { name: 'Palette' }).getByRole('option', { name: /^Lu\b/ }).first().click();
     await expect(page.locator('[data-rig="handoff"]').first()).toBeVisible();
     // The rows' state, as the daemon would answer.
     await expect.poll(() => d.received.filter(m => m.type === 'openrig.row').length).toBeGreaterThanOrEqual(2);

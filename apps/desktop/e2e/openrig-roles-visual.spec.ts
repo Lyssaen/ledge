@@ -1,8 +1,14 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect, seedAtelier } from './fixtures';
 import type { OpenRigState, RoleDetail, RoleSummary } from '@ledge/protocol';
 import { fakeDaemon, session, type FakeRoles } from './daemon';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
 
 // Visual review of OpenRig › Rôles (docs/mockups/ledge-openrig-roles.html), not an assertion suite: the screens in both
 // themes, and zooms on the provenance, against the daemon's real answers on a machine (a dump of openrig.roles /

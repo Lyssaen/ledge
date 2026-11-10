@@ -1,8 +1,13 @@
 import type { Page } from '@playwright/test';
 import type { ClientMessage, Projects } from '@ledge/protocol';
-import { test, expect } from './fixtures';
-import { eight, fakeDaemon, fakeRemote, session, twoProjects, openAtelier } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { eight, fakeDaemon, fakeRemote, session, twoProjects } from './daemon';
 import { fleet, ottoThread } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Settings sections' });
 /** A section's tab: its name, then its alert when it has one. */
@@ -31,16 +36,34 @@ const pastRightEdge = (page: Page, entry: string) => page.locator(entry).evaluat
   return Math.max(...edges) - right;
 });
 
+/** The IDE is up on its Atelier tab, the agents seated (its chunk loads on the first visit: it can take more than 5 s). */
+async function booted(page: Page) {
+  await expect(page.locator('.ide')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.ide-atelier button[data-agent]').first()).toBeVisible();
+}
+/** The Atelier tab again, from the activity bar. */
+const toAtelier = (page: Page) => page.getByRole('navigation', { name: 'Activity bar' }).getByRole('button', { name: 'Atelier (tab)' }).click();
+
+/** The machines the Rigs view's menu lists (the IDE's sidebar has no machine list of its own): opened, checked by `check`, closed. */
+async function rigsMachines(page: Page, check: (menu: ReturnType<Page['getByRole']>) => Promise<void>) {
+  // A click on the shown view's icon would fold the sidebar: only when the Rigs view is not shown yet.
+  if (!(await page.getByRole('complementary', { name: 'Rigs' }).isVisible())) await page.getByRole('navigation', { name: 'Activity bar' }).getByRole('button', { name: 'OpenRig rigs' }).click();
+  await page.getByRole('button', { name: /^Shown machine: / }).click();
+  const menu = page.getByRole('menu', { name: 'Machines' });
+  await check(menu);
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+}
+
 /** The app is up (its keys bound), then Ctrl , opens the settings on General. */
 async function openSettings(page: Page) {
-  await expect(page.locator('aside.sidebar').getByText(/\d+ active/).first()).toBeVisible();
   await page.keyboard.press('Control+Comma');
   await expect(heading(page)).toHaveText('General');
 }
 
-test('Ctrl , then Appearance › Light: the page takes the light theme, « Setting saved » says it once, Escape goes back to the atelier', async ({ page }) => {
+test('Ctrl , then Appearance › Light: the page takes the light theme, « Setting saved » says it once, the Atelier tab is back from the activity bar', async ({ page }) => {
   await fakeDaemon(page, eight, { projects: twoProjects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await openSettings(page);
   await expect(tab(page, 'General')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -56,10 +79,9 @@ test('Ctrl , then Appearance › Light: the page takes the light theme, « Setti
   await savedOnce(page, 'Setting saved · Light theme · Pebble');
   // The light tokens reach the page itself, not only the attribute.
   await expect.poll(background).not.toBe(dark);
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('banner').getByText('Atelier')).toBeVisible();
+  await toAtelier(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
-  await expect(nav(page)).toHaveCount(0);
+  await expect(nav(page)).toBeHidden();
   // Nothing else was saved on the way: opening the settings, changing section and leaving say nothing.
   expect((await said(page)).filter(t => t.startsWith('Setting saved'))).toEqual(['Setting saved · Light theme · Pebble']);
   // Kept: a reload stays light.
@@ -71,7 +93,7 @@ test('Machines › Add a machine: an SSH server shows once the daemon broadcasts
   const daemon = await fakeDaemon(page, eight, { projects: twoProjects });
   const remote = await fakeRemote(page, 'gpu-box', []);
   remote.close();   // the server never answers: it is saved offline
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await openSettings(page);
   await tab(page, 'Machines').click();
   await expect(heading(page)).toHaveText('Machines');
@@ -93,8 +115,10 @@ test('Machines › Add a machine: an SSH server shows once the daemon broadcasts
   await savedOnce(page, 'Setting saved · GPU box added');
   await expect(gpu).toContainText('Offline');
   await expect(alert).toBeVisible();
-  // The app's sidebar lists it too, offline.
-  await expect(page.locator('aside.sidebar .st-mach', { hasText: 'GPU box' })).toHaveAttribute('title', /offline/);
+  // The Rigs view's machine menu lists it too, offline.
+  await rigsMachines(page, menu => expect(menu.getByRole('menuitemradio', { name: /GPU box/ })).toContainText('offline'));
+  await page.keyboard.press('Control+Comma');
+  await expect(heading(page)).toHaveText('Machines');
 
   await gpu.getByRole('button', { name: 'Remove' }).click();
   await expect(gpu.getByRole('alert')).toContainText('Remove GPU box?');
@@ -102,7 +126,7 @@ test('Machines › Add a machine: an SSH server shows once the daemon broadcasts
   await expect(gpu).toHaveCount(0);
   await savedOnce(page, 'Setting saved · GPU box removed');
   await expect(alert).toHaveCount(0);
-  await expect(page.locator('aside.sidebar .st-mach', { hasText: 'GPU box' })).toHaveCount(0);
+  await rigsMachines(page, async menu => { await expect(menu.getByRole('menuitemradio', { name: /Local/ })).toBeVisible(); await expect(menu.getByRole('menuitemradio', { name: /GPU box/ })).toHaveCount(0); });
   const last = daemon.received.filter(m => m.type === 'machines.set').at(-1) as Extract<ClientMessage, { type: 'machines.set' }>;
   expect(last.machines).toEqual([{ id: 'local', label: 'Local' }]);
   expect((await said(page)).filter(t => t.startsWith('Setting saved'))).toEqual(['Setting saved · GPU box added', 'Setting saved · GPU box removed']);
@@ -113,7 +137,7 @@ test('Projects › a remembered folder re-pointed to Website: its filed agent le
   const kit = session('kit', { name: 'Kit', cwd: '/tmp/scratch', project: 'scratch' });
   const projects: Projects = { ...twoProjects, rules: [{ machine: 'local', path: '/tmp/scratch', project: 'ledge' }] };
   const daemon = await fakeDaemon(page, [...eight, kit], { projects });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await expect(page.getByRole('region', { name: 'Ledge table' }).getByRole('button', { name: /^Kit,/ })).toBeVisible();
   await openSettings(page);
   await tab(page, 'Projects').click();
@@ -135,7 +159,7 @@ test('Projects › a remembered folder re-pointed to Website: its filed agent le
   await expect(website).toContainText('4 agents');
   expect((await said(page)).filter(t => t.startsWith('Setting saved'))).toEqual(['Setting saved · /tmp/scratch → Website']);
   // Back in the atelier, Kit sits at the Website table.
-  await page.getByRole('button', { name: /Back to the atelier/ }).click();
+  await toAtelier(page);
   await expect(page.getByRole('region', { name: 'Website table' }).getByRole('button', { name: /^Kit,/ })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Ledge table' }).getByRole('button', { name: /^Kit,/ })).toHaveCount(0);
 });
@@ -146,7 +170,7 @@ test('a 900 px window: the settings fit without a side scroll, their section bar
   await fakeDaemon(page, eight, { projects, machines: [{ id: 'local', label: 'Local' }, { id: 'devbox', label: 'A build server in the basement with a rather long name for the narrow layout', ssh: 'devbox' }] });
   const remote = await fakeRemote(page, 'devbox', []);
   remote.close();
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await openSettings(page);
   const bar = nav(page);
   const content = page.locator('.settings-content');
@@ -183,7 +207,7 @@ test('a 900 px window: the settings fit without a side scroll, their section bar
 
 test('Appearance › Profile photo: a real picture is cropped to its centre square at 128 px, then shows beside « You » in the thread (#50)', async ({ page }) => {
   await fakeDaemon(page, fleet, { projects: twoProjects, threads: { otto: ottoThread } });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await openSettings(page);
   await tab(page, 'Appearance').click();
   const profile = page.getByRole('region', { name: 'Profile' });

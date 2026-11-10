@@ -1000,7 +1000,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
         }
         footer={<Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines} />}
         // No amber in the IDE's status bar: the alert is told once, in a toast (red stays at 100 %).
-        usage={showUsage ? <UsageFooter groups={usage.groups} threshold={Infinity} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} /> : undefined} />
+        usage={showUsage ? <UsageFooter groups={usage.groups} threshold={Infinity} alertAt={usage.threshold} label={usage.label} now={usage.now} onSettings={() => dispatch({ type: 'settings', section: 'general' })} /> : undefined} />
     );
   })();
   return (

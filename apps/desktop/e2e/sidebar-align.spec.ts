@@ -1,7 +1,12 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './fixtures';
+import { test, expect, seedAtelier } from './fixtures';
 import type { Session } from '@ledge/protocol';
 import { fakeDaemon, session, twoProjects } from './daemon';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
 
 // The sidebar's rows line up in compact and normal mode: an archive or « Sans projet » without a project's colour keeps its place.
 // With LEDGE_VISUAL=1 it also captures them: LEDGE_VISUAL=1 pnpm exec playwright test e2e/sidebar-align.spec.ts

@@ -1,7 +1,13 @@
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect, seedAtelier } from './fixtures';
 import { fileURLToPath } from 'node:url';
 import { fakeDaemon, twoProjects, type ChatReply, openAtelier } from './daemon';
 import { fleet, ottoThread } from './thread';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
 
 // Captures Ledge Desktop for docs/screens (README, tour), in French, against the simulated daemon.
 // Skipped unless asked: LEDGE_SCREENSHOTS=1 pnpm --filter desktop exec playwright test e2e/screenshots.spec.ts

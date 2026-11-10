@@ -1,7 +1,20 @@
 import type { Page } from '@playwright/test';
 import type { ClientMessage, FoundRepo } from '@ledge/protocol';
-import { test, expect, openNewProject } from './fixtures';
-import { eight, fakeDaemon, twoProjects, type ChatReply, openAtelier } from './daemon';
+import { test, expect, openNewProject, seedAtelier } from './fixtures';
+import { eight, fakeDaemon, twoProjects, type ChatReply } from './daemon';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
+
+// The first tests of a run pay Vite's first compile of the IDE chunk: on a loaded machine that is past 20 s.
+test.setTimeout(60_000);
+/** The IDE is up on its Atelier tab, the agents seated. */
+async function booted(page: Page) {
+  await expect(page.locator('.ide')).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator('.ide-atelier button[data-agent]').first()).toBeVisible({ timeout: 15_000 });
+}
 
 type ProjectsSet = Extract<ClientMessage, { type: 'projects.set' }>;
 const sets = (received: ClientMessage[]) => received.filter((m): m is ProjectsSet => m.type === 'projects.set');
@@ -23,11 +36,10 @@ const paperDisk = disk.filter(r => r.path !== '/w/ledge-cli');
 const projects = { ...twoProjects, projects: twoProjects.projects.map(p => p.id === 'ledge' ? { ...p, repos: [{ machine: 'local', path: '/w/ledge' }] } : p) };
 
 async function boot(page: Page) {
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await booted(page);
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
 }
 async function openProjectsSettings(page: Page) {
-  await expect(page.locator('aside.sidebar').getByText(/\d+ active/).first()).toBeVisible();
   await page.keyboard.press('Control+Comma');
   await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('button', { name: /^Projects( |$)/ }).click();
   await expect(page.locator('.settings-head h1')).toHaveText('Projects');
@@ -58,6 +70,9 @@ test('New project › Let Ledge do it: the steps, then the proposal; uncheck one
   expect(sent).toHaveLength(1);
   const made = sent[0]!.projects.projects.find(p => p.name === 'Paper')!;
   expect(made.repos).toEqual([{ machine: 'local', path: '/w/paper-fonts' }, { machine: 'local', path: '/w/paper-render' }]);
+  // The explorer's eye hides a project with no live agent: released, it lists every project, Paper among them.
+  const eye = page.getByRole('button', { name: 'Only projects with a live agent (H)' });
+  if (await eye.getAttribute('aria-pressed') === 'true') await eye.click();
   await expect(sidebarProjects(page).getByRole('button', { name: /^Paper/ })).toBeVisible();
 });
 
@@ -95,9 +110,9 @@ test('The chat proposes a project: Review the proposal opens the editor prefille
   };
   const daemon = await fakeDaemon(page, eight, { projects, chat });
   await boot(page);
-  await page.keyboard.press('Control+/');
+  // The IDE's chat is open on the right from the start (Ctrl / would fold it).
   const ask = page.getByRole('complementary', { name: 'Chat Ledge' }).getByPlaceholder('Ask Ledge…');
-  await expect(ask).toBeFocused();
+  await ask.click();
   await ask.fill('Group my paper repositories');
   await ask.press('Enter');
   const panel = page.getByRole('complementary', { name: 'Chat Ledge' });

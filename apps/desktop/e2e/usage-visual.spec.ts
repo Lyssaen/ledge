@@ -1,14 +1,22 @@
 import { expect, type Page } from '@playwright/test';
 import type { HarnessUsage, UsageStateMessage } from '@ledge/protocol';
-import { test } from './fixtures';
-import { fakeDaemon, twoProjects, openAtelier } from './daemon';
+import { test, seedAtelier } from './fixtures';
+import { fakeDaemon, twoProjects } from './daemon';
 import { fleet } from './thread';
 
-// Visual review of the harnesses' limits (docs/mockups/ledge-harness-usage.html, v2 variant B), not an assertion suite: the
-// footer on every screen, its states, the detail, a narrow window, in both themes. Compare with ledge-harness-usage-*.png.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
+
+// Visual review of the harnesses' limits in the IDE, not an assertion suite: the status bar's right end (docs/mockups/
+// ledge-ide-interactive.html v27, « Barre d'état : limites d'usage »; the chips and details of ledge-harness-usage.html v2 B), its
+// states, each detail open above it, several harnesses, an alert told once in a toast (usageTold.ts), in both themes; compare
+// with v27. The old footer's other places are gone in the IDE: no heading row on a session (lot 3, option A), no « À toi » card for
+// an alert (a toast, the user 2026-11-09); under 1280 px the IDE's states are still to be drawn (plan 4.1 point 5).
 // LEDGE_VISUAL=1 pnpm --filter desktop exec playwright test e2e/usage-visual.spec.ts
 test.skip(!process.env.LEDGE_VISUAL, 'set LEDGE_VISUAL=1 to capture the usage screens');
-test.use({ deviceScaleFactor: 2, reducedMotion: 'reduce' });
+test.use({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2, reducedMotion: 'reduce' });
 test.setTimeout(120_000);
 
 const at = (min: number) => new Date(Date.now() + min * 60_000).toISOString();
@@ -52,91 +60,71 @@ const sessions = fleet.map(s => (s.name === 'Nova' ? { ...s, model: 'claude-opus
 async function boot(page: Page, theme: 'dark' | 'light', lang: 'fr' | 'en', harnesses: HarnessUsage[]) {
   await page.addInitScript(([t, l]) => { try { localStorage.setItem('desktop.lang', l!); localStorage.setItem('desktop.theme', t!); } catch { /* ignore */ } }, [theme, lang]);
   await fakeDaemon(page, sessions, { launcher: ['ledge'], projects: twoProjects, usage: usage(harnesses) });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/');
+  // The IDE's chunk compiles on Vite's first visit: under load it takes a while.
+  await expect(page.locator('.ide')).toBeVisible({ timeout: 45_000 });
+  await limits(page).locator('.ugroup').first().waitFor();
 }
-const footer = (page: Page) => page.locator('.workspace-footer');
-// The footer and what opens above it, zoomed: the right half of the window's bottom.
+/** The status bar's usage limits (IdeStatusBar's `usage`). */
+const limits = (page: Page) => page.locator('.ide-status .usage-foot');
+const chip = (page: Page, name: RegExp) => limits(page).getByRole('button', { name });
+// The status bar's right end and what opens above it, zoomed.
 const zoom = async (page: Page, path: string) => {
   const vp = page.viewportSize()!;
   await page.waitForTimeout(300);
-  await page.screenshot({ path, clip: { x: vp.width / 2, y: vp.height - 420, width: vp.width / 2, height: 420 } });
+  await page.screenshot({ path, clip: { x: vp.width - 960, y: vp.height - 460, width: 960, height: 460 } });
 };
 
 for (const theme of ['dark', 'light'] as const) {
-  test(`usage footer, ${theme}`, async ({ page }, info) => {
-    await page.setViewportSize({ width: 1440, height: 860 });
+  test(`usage in the status bar, ${theme}`, async ({ page }, info) => {
     await boot(page, theme, 'fr', STATES.ok!);
-    await footer(page).locator('.ugroup').first().waitFor();
     await page.screenshot({ path: info.outputPath(`usage-overview-ok-${theme}.png`) });
-    await footer(page).getByRole('button', { name: /Claude Code/ }).click();
+    const vp = page.viewportSize()!;
+    await page.screenshot({ path: info.outputPath(`usage-bar-${theme}.png`), clip: { x: 0, y: vp.height - 40, width: vp.width, height: 40 } });
+    await chip(page, /Claude Code/).click();
     await page.screenshot({ path: info.outputPath(`usage-overview-open-${theme}.png`) });
     await zoom(page, info.outputPath(`usage-zoom-open-${theme}.png`));
-    // A session page has it too.
+    // A session's tab keeps the same bar.
     await page.keyboard.press('Escape');
     await page.getByRole('tree').getByRole('button', { name: /^Nova/ }).click();
     await page.locator('.session-page').waitFor({ timeout: 30_000 });
     await page.screenshot({ path: info.outputPath(`usage-session-${theme}.png`) });
-    // The heading's line and its tooltip, zoomed.
-    await page.locator('.session-meta').hover();
-    await page.waitForTimeout(300);
-    const head = (await page.locator('.pane-heading').first().boundingBox())!;
-    await page.screenshot({ path: info.outputPath(`usage-zoom-header-${theme}.png`), clip: { x: head.x, y: head.y, width: 900, height: 200 } });
   });
 
-  for (const st of ['over', 'codex', 'loading', 'expired', 'stale', 'unreachable', 'cursorMonth', 'cursorOver', 'cursorWeek', 'cursorUnread', 'cursorExpired', 'cursorStale', 'cursorUnreachable', 'claudeCursor'] as const) {
-    test(`usage footer ${st}, ${theme}`, async ({ page }, info) => {
-      await page.setViewportSize({ width: 1440, height: 860 });
+  for (const st of ['over', 'codex', 'loading', 'expired', 'stale', 'unreachable', 'cursorMonth', 'cursorOver', 'claudeCursor', 'threeHarnesses'] as const) {
+    test(`usage in the status bar, ${st}, ${theme}`, async ({ page }, info) => {
       await boot(page, theme, 'fr', STATES[st]!);
-      await footer(page).locator('.ugroup').first().waitFor();
-      if (st === 'over') await footer(page).getByRole('button', { name: /Claude Code/ }).click();
+      if (st === 'over') await chip(page, /Claude Code/).click();
       await zoom(page, info.outputPath(`usage-zoom-${st}-${theme}.png`));
       // The Cursor chip's detail, for the states that have one.
-      if (['cursorMonth', 'cursorOver', 'cursorWeek', 'cursorUnread'].includes(st)) {
-        await footer(page).getByRole('button', { name: /Cursor/ }).click();
+      if (['cursorMonth', 'cursorOver', 'threeHarnesses'].includes(st)) {
+        await chip(page, /Cursor/).click();
         await zoom(page, info.outputPath(`usage-zoom-${st}-open-${theme}.png`));
       }
+      // Never past the bar: the limits end before the disposition, inside the window.
+      const vp = page.viewportSize()!, box = (await limits(page).boundingBox())!;
+      expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
     });
   }
 
-  test(`usage footer narrow, three harnesses, ${theme}`, async ({ page }, info) => {
-    await page.setViewportSize({ width: 820, height: 700 });
-    await boot(page, theme, 'fr', STATES.threeHarnesses!);
-    await footer(page).locator('.ugroup').first().waitFor();
-    await page.screenshot({ path: info.outputPath(`usage-narrow-three-${theme}.png`) });
-    await footer(page).getByRole('button', { name: /Cursor/ }).click();
-    await page.screenshot({ path: info.outputPath(`usage-narrow-three-open-${theme}.png`) });
-    const box = (await footer(page).boundingBox())!;
-    expect(await footer(page).evaluate(el => el.scrollWidth <= el.clientWidth + 1), `footer overflows (${box.width}px)`).toBe(true);
-  });
-
-  test(`usage footer narrow, ${theme}`, async ({ page }, info) => {
-    await page.setViewportSize({ width: 820, height: 700 });
-    await boot(page, theme, 'fr', STATES.ok!);
-    await footer(page).locator('.ugroup').first().waitFor();
-    await page.screenshot({ path: info.outputPath(`usage-narrow-${theme}.png`) });
-  });
-}
-
-for (const theme of ['dark', 'light'] as const) {
-  test(`usage alerts and setting, ${theme}`, async ({ page }, info) => {
-    await page.setViewportSize({ width: 1440, height: 860 });
+  test(`a usage alert told once in a toast; the detail's « Réglages », ${theme}`, async ({ page }, info) => {
     alerts = ALERTS;
     try {
       await boot(page, theme, 'fr', STATES.over!);
-      await page.locator('.st-usage').first().waitFor();
-      await footer(page).getByRole('button', { name: /Claude Code/ }).click();
+      const toast = page.locator('.toast');
+      await expect(toast).toBeVisible();
+      await page.screenshot({ path: info.outputPath(`usage-alert-toast-${theme}.png`) });
+      await chip(page, /Claude Code/).click();
       await page.locator('.usage-pop').getByRole('button', { name: 'Réglages' }).click();
       await page.getByRole('combobox', { name: 'Alerte de limite d’usage' }).waitFor();
       await page.waitForTimeout(300);
       await page.screenshot({ path: info.outputPath(`usage-alert-setting-${theme}.png`) });
-      await page.screenshot({ path: info.outputPath(`usage-zoom-yours-${theme}.png`), clip: { x: 0, y: 200, width: 420, height: 420 } });
     } finally { alerts = []; }
   });
 }
 
-test('usage footer, English', async ({ page }, info) => {
-  await page.setViewportSize({ width: 1440, height: 860 });
+test('usage in the status bar, English', async ({ page }, info) => {
   await boot(page, 'light', 'en', STATES.over!);
-  await footer(page).getByRole('button', { name: /Claude Code/ }).click();
+  await chip(page, /Claude Code/).click();
   await zoom(page, info.outputPath('usage-zoom-over-light-en.png'));
 });
