@@ -3,7 +3,7 @@
 // the rail and the two panes. Light and dark.
 // SHOTS=<dir> saves a capture of each screen there; compare with captures/ledge-mobile-refonte-m0-s*.png.
 import { devices, expect, test, type Page } from '@playwright/test';
-import { copy } from '../src/copy';
+import { copy, copyFor } from '../src/copy';
 import { PC_NAME, startHarness, type Harness } from './harness';
 import { hasWebkit } from './webkit';
 
@@ -31,9 +31,9 @@ async function pair(page: Page, theme: 'dark' | 'light') {
   h.pc.ok();
   await page.getByRole('link', { name: copy.compare.seePending }).click();
 }
-const nav = (page: Page) => page.getByRole('navigation', { name: copy.nav.label });
+const nav = (page: Page, label: string = copy.nav.label) => page.getByRole('navigation', { name: label });
 // A tab's name is its label, then its badge's count when it has one.
-const tab = (page: Page, name: string) => nav(page).getByRole('link', { name: new RegExp(`^${name}( \\d+\\+?)?$`) });
+const tab = (page: Page, name: string, label?: string) => nav(page, label).getByRole('link', { name: new RegExp(`^${name}( \\d+\\+?)?$`) });
 
 for (const theme of ['dark', 'light'] as const) {
   test.describe(`on a phone, ${theme}`, () => {
@@ -112,3 +112,26 @@ for (const theme of ['dark', 'light'] as const) {
     });
   });
 }
+
+// English (m0-langue.html): chosen in Réglages, the whole app turns at once, still on Réglages; kept after a reload.
+test.describe('in English, on a phone', () => {
+  test.use(iPhone13);
+  test('Français · English in Réglages › Apparence, applied at once', async ({ page }) => {
+    const en = copyFor('en');
+    await pair(page, 'light');
+    await page.getByRole('link', { name: copy.nav.settings, exact: true }).click();
+    await page.getByRole('group', { name: copy.settings.lang }).getByText('English').click();
+    await expect(page.getByRole('heading', { name: en.nav.settings, level: 1 })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(nav(page, en.nav.label).getByRole('link')).toHaveText([/^For you/, 'Sessions', 'MR/PR', 'Rigs', 'Ledge']);
+    await shot(page, 'phone-settings-en');
+    await page.reload();
+    await expect(page.getByRole('heading', { name: en.nav.settings, level: 1 })).toBeVisible();
+    await tab(page, en.nav.atoi, en.nav.label).click();
+    await expect(page.getByRole('heading', { name: en.inbox.title, level: 1 })).toBeVisible();
+    await shot(page, 'phone-atoi-en');
+    await tab(page, en.nav.rigs, en.nav.label).click();
+    await expect(page.getByRole('heading', { name: en.rigs.notSent(PC_NAME) })).toBeVisible();
+    await shot(page, 'phone-rigs-en');
+  });
+});
