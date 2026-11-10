@@ -2,6 +2,7 @@ import { PHONE_PROTOCOL, type PhoneChatTurn, type PhoneClientMessage, type Phone
 import type { PinnedPc } from '../../src/link/keys';
 import type { LinkState, PhoneLink, Reach } from '../../src/link/link';
 import type { Pairing, PairingState } from '../../src/link/pairing';
+import type { Recovery, RecoveryState } from '../../src/link/recover';
 
 /** A Storage held in memory, one per test, so nothing leaks between them. */
 export class MemoryStorage implements Storage {
@@ -23,6 +24,7 @@ export function fakeLink(initial: LinkState = 'ready') {
   /** The link's own calls (pairing, relink, signOut, retry, resume), in order. */
   const calls: string[] = [];
   let pairingState: PairingState | null = null;
+  let recoveryState: RecoveryState | null = null;
   let pinned: PinnedPc | null = null;
   let received: string | null = null;
   // As the real link: a PC off the relay is out of reach, a ready one is on it (setReach says which side when it matters).
@@ -44,6 +46,19 @@ export function fakeLink(initial: LinkState = 'ready') {
     },
     state: () => pairingState ?? { step: 'committing' }
   };
+  const recovery: Recovery = {
+    async receive() {},
+    again() {
+      calls.push('again');
+      if (recoveryState?.step === 'failed' && recoveryState.why === 'none') { recoveryState = { step: 'faceid', pcName: recoveryState.pcName }; notify(); return true; }
+      return false;
+    },
+    cancel() {
+      calls.push('cancelRecovery');
+      if (recoveryState?.step === 'reaching' || recoveryState?.step === 'faceid' || recoveryState?.step === 'checking') { recoveryState = { step: 'cancelled' }; notify(); }
+    },
+    state: () => recoveryState ?? { step: 'reaching' }
+  };
   const link: PhoneLink = {
     state: () => state,
     reach: () => reach,
@@ -56,6 +71,8 @@ export function fakeLink(initial: LinkState = 'ready') {
     },
     pairing: () => pairingState ? pairing : null,
     startPairing() { calls.push('startPairing'); },
+    recovery: () => recoveryState ? recovery : null,
+    startRecovery() { calls.push('startRecovery'); },
     async relink() { calls.push('relink'); },
     async signOut() { calls.push('signOut'); },
     retry() { calls.push('retry'); },
@@ -73,6 +90,8 @@ export function fakeLink(initial: LinkState = 'ready') {
     set(s: LinkState) { state = s; align(); notify(); },
     /** The pairing under way as the link would show it; null for none. */
     setPairing(s: PairingState | null) { pairingState = s; notify(); },
+    /** The passkey recovery as the link would show it; null for none. */
+    setRecovery(s: RecoveryState | null) { recoveryState = s; notify(); },
     setPinned(pc: PinnedPc | null) { pinned = pc; notify(); },
     setReceivedKey(fp: string | null) { received = fp; notify(); },
     setReach(r: Reach) { reach = r; notify(); },

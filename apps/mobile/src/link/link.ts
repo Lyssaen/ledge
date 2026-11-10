@@ -6,6 +6,8 @@ import { openChannel, type ChannelEvent, type PhoneChannel } from './channel';
 import { ensureIdentity, type KeyStore, type PinnedPc } from './keys';
 import { deviceLabel } from './label';
 import { startPairing, type Pairing, type PairingState } from './pairing';
+import { startRecovery, type Recovery, type RecoveryState } from './recover';
+import { getDiscoverable } from './webauthn';
 import { openRelaySocket, type SocketState } from './socket';
 
 /**
@@ -39,6 +41,13 @@ export interface PhoneLink {
   pairing(): Pairing | null;
   /** Starts a new pairing, once the socket is open, unless a PC is pinned. A pairing under way is dropped silently. */
   startPairing(): void;
+  /** The passkey recovery under way, or the last one (its outcome); null before the first, or once a pairing started. */
+  recovery(): Recovery | null;
+  /**
+   * « Se reconnecter avec ma passkey »: a new device key and `recover_start`, unless a PC is pinned. A PC not on the relay
+   * ends it at once (`offline`, screen 2 d), and it starts again by itself once the PC is back. A pairing is dropped.
+   */
+  startRecovery(): void;
   /** Forgets the keys (the pinned PC, the identity, the cache) and pairs again: the way out of `key_changed` and `denied`. */
   relink(): Promise<void>;
   /** Closes the socket, `POST /auth/logout`, forgets the keys: `signed_out`, for good. */
@@ -113,6 +122,13 @@ export function createPhoneLink(opts: {
   /** The pairing showing its code when the PC went away, the PC's confirmation not yet in. */
   let pairingAway: Pairing | null = null;
 
+  /** A recovery was asked for and not dropped since (by a pairing, a relink, a sign-out). */
+  let recoveryWanted = false;
+  let recoveryGen = 0;
+  let recovery: Recovery | null = null;
+  /** The device's own sheet is asked for the relay's host, the passkey's relying party. */
+  const rpId = new URL(opts.url).hostname;
+
   const listeners = new Set<() => void>();
   const messageListeners = new Set<(m: PhoneServerMessage) => void>();
 
@@ -123,7 +139,7 @@ export function createPhoneLink(opts: {
     if (unreadable) return 'storage_unavailable';
     if (keyChanged) return 'key_changed';
     if (denied) return 'denied';
-    if (!pinned || !identity) return pairingWanted ? 'pairing' : 'unpaired';
+    if (!pinned || !identity) return pairingWanted || recoveryLive() ? 'pairing' : 'unpaired';
     if (pcOnline !== true) return pcOnline === false ? 'pc_offline' : 'handshaking';
     return channel?.ready() ? 'ready' : 'handshaking';
   };
@@ -260,6 +276,97 @@ export function createPhoneLink(opts: {
     check();
   };
 
+  // ---- the passkey recovery ----
+
+  const recoveryLive = () => {
+    const st = recovery?.state().step;
+    return st === 'reaching' || st === 'faceid' || st === 'checking';
+  };
+
+  /** A recovery that ended before anything was sent: the PC is not on the relay (screen 2 d). */
+  const offlineRecovery = (): Recovery => {
+    const st: RecoveryState = { step: 'failed', why: 'offline', pcName: null };
+    return { receive: async () => {}, again: () => false, cancel: () => {}, state: () => st };
+  };
+  /** Says « Connexion à … » while the device key is read or made, before `recover_start` can leave. */
+  const startingRecovery = (): Recovery => {
+    let st: RecoveryState = { step: 'reaching' };
+    return { receive: async () => {}, again: () => false, cancel: () => { st = { step: 'cancelled' }; check(true); }, state: () => st };
+  };
+
+  const onRecovered = async (r: Recovery, pc: PinnedPc) => {
+    const gen = keysGen;
+    try {
+      await keys.pin(pc);
+    } catch {
+      // Not pinned, so not back: the outcome stays on screen, and the PC has the device under the new key; a pairing by code
+      // gets out of it.
+      return;
+    }
+    if (recovery !== r || finished || gen !== keysGen) return;
+    pinned = pc;
+    recoveryWanted = false;
+    channel = null;
+    helloIfDue();
+    check();
+  };
+
+  const dropRecovery = () => {
+    recoveryGen++;
+    recovery?.cancel();
+    recovery = null;
+    recoveryWanted = false;
+  };
+
+  const beginRecovery = () => {
+    if (finished || keyChanged || denied || unreadable || (loaded && pinned && identity)) return;
+    dropPairing();
+    pairingWanted = false;
+    recovery?.cancel();
+    recoveryWanted = true;
+    const gen = ++recoveryGen;
+    if (socketState !== 'open' || pcOnline !== true) {
+      recovery = offlineRecovery();
+      check(true);
+      return;
+    }
+    recovery = startingRecovery();
+    check(true);
+    void (async () => {
+      await loading;
+      if (gen !== recoveryGen || finished) return;
+      if (unreadable || (pinned && identity)) { recovery = null; recoveryWanted = false; check(true); return; }
+      const id = await ensureIdentity(keys);
+      if (gen !== recoveryGen || finished) return;
+      identity = id;
+      const r: Recovery = startRecovery({
+        identity: id,
+        model: deviceLabel(globalThis.navigator?.userAgent ?? '', globalThis.navigator?.maxTouchPoints ?? 0),
+        send: (f) => sock.send('pc', f),
+        assert: (challenge) => getDiscoverable({ challenge, rpId }),
+        changed: () => {
+          if (recovery !== r) return;
+          const st = r.state();
+          if (st.step === 'done') void onRecovered(r, st.pc);
+          check(true);
+        }
+      });
+      recovery = r;
+      check(true);
+    })().catch(() => {
+      // No device key could be made or stored: nothing to recover with.
+      if (gen !== recoveryGen) return;
+      recovery = null;
+      recoveryWanted = false;
+      check(true);
+    });
+  };
+
+  /** The PC is back on the relay: a recovery that found it away starts again, as screen 2 d says it will. */
+  const recoveryBack = () => {
+    if (recoveryWanted && recovery?.state().step === 'failed' && (recovery.state() as { why: string }).why === 'offline') beginRecovery();
+  };
+
   const dropPairing = () => {
     stopPairingTimer();
     pairing?.cancel();
@@ -325,6 +432,7 @@ export function createPhoneLink(opts: {
   const beginPairing = () => {
     if (finished || keyChanged || denied || unreadable || (loaded && pinned && identity)) return;
     dropPairing();
+    dropRecovery();
     pairingWanted = true;
     const gen = ++pairingGen;
     check(true);
@@ -365,6 +473,7 @@ export function createPhoneLink(opts: {
     identity = null;
     pairingWanted = pairAfter;
     dropPairing();
+    dropRecovery();
     check();
     try {
       await keys.forget();
@@ -376,6 +485,11 @@ export function createPhoneLink(opts: {
   // ---- the socket ----
 
   const onFrame = (frame: SealedFrame) => {
+    if (frame.k.startsWith('recover_')) {
+      const r = recovery;
+      if (r) void r.receive(frame).then(() => check(true), () => check(true));
+      return;
+    }
     if (frame.k.startsWith('pair_')) {
       const p = pairing;
       if (p) void p.receive(frame).then(watchPairing, watchPairing);
@@ -408,7 +522,7 @@ export function createPhoneLink(opts: {
           pcOnline = m.online.includes('pc');
           // A new socket: the PC's channel for the old one is gone.
           helloIfDue();
-          if (pcOnline) pcBack();
+          if (pcOnline) { pcBack(); recoveryBack(); }
           else launchPairing();
           check();
           return;
@@ -423,6 +537,7 @@ export function createPhoneLink(opts: {
           if (back) {
             helloIfDue();
             pcBack();
+            recoveryBack();
           }
           check();
           return;
@@ -499,6 +614,8 @@ export function createPhoneLink(opts: {
     },
     pairing: () => pairingView,
     startPairing: beginPairing,
+    recovery: () => recovery,
+    startRecovery: beginRecovery,
     async relink() {
       if (finished) return;
       await forgetKeys(true);

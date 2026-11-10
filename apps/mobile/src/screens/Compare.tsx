@@ -24,7 +24,7 @@ const around = (sentence: string): [string, string] => {
   return [before, after];
 };
 
-function Account({ login }: { login: string | null }) {
+export function Account({ login }: { login: string | null }) {
   if (!login) return null;
   return (
     <div className="flex h-8 items-center gap-2 self-center rounded-full border border-line pr-3 pl-1 text-body text-muted">

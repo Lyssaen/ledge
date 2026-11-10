@@ -9,8 +9,11 @@ const compare = (over: { pcConfirmed?: boolean; phoneConfirmed?: boolean } = {})
   ({ step: 'compare' as const, code: '123 456', pcConfirmed: false, phoneConfirmed: false, ...over });
 
 describe('comparing the code', () => {
-  it('unpaired → a pairing starts at once', () => {
+  it('unpaired → the choice first (passkey-reinstall.html, 1 a); « Appairer avec un code » starts the pairing', () => {
     const t = app('unpaired');
+    expect(t.calls).toEqual([]);
+    expect(screen.getByRole('heading', { name: 'Relier cet appareil' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Appairer avec un code' }));
     expect(t.calls).toEqual(['startPairing']);
   });
 
@@ -147,6 +150,7 @@ describe('comparing the code', () => {
 
   it('a pairing that could not start (no identity, keys not stored) → « Recommencer », not a spinner forever', () => {
     const t = app('unpaired');
+    fireEvent.click(screen.getByRole('button', { name: 'Appairer avec un code' }));
     expect(t.calls).toEqual(['startPairing']);
     act(() => t.set('pairing'));
     expect(screen.getByRole('status')).toHaveTextContent('En attente du code du PC…');

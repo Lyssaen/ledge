@@ -54,7 +54,16 @@ export const ICONS = {
   passkey: ['M12 3a6 6 0 0 0-6 6v3h12V9a6 6 0 0 0-6-6z', 'M5 12h14v9H5z'],
   /** A linked device, after its kind (the desktop's glyphs, apps/desktop/src/settings/PairingDialog.tsx). */
   phone: ['M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z', 'M11 18h2'],
-  tablet: ['M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M11 18h2']
+  tablet: ['M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M11 18h2'],
+  /** The passkey screens (docs/mockups/ledge-mobile-passkey/passkey-reinstall.html). */
+  key: [circle(7.5, 15.5, 5.5), 'm21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3'],
+  shield: ['M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6z'],
+  laptop: [rect(4, 4, 16, 11, 1.5), 'M2 19h20'],
+  face: ['M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9v1M15 9v1M12 9v4h-1M9 15.5a4 4 0 0 0 6 0'],
+  unlink: ['M18.8 13.4l1.6-1.6a4.5 4.5 0 0 0-6.4-6.4l-1.6 1.6M5.2 10.6l-1.6 1.6a4.5 4.5 0 0 0 6.4 6.4l1.6-1.6M8 2v3M2 8h3M16 22v-3M22 16h-3'],
+  clock: [circle(12, 12, 9), 'M12 7v5l3 2'],
+  lock: [rect(3, 11, 18, 11, 2), 'M7 11V7a5 5 0 0 1 10 0v4'],
+  bell: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0']
 } as const satisfies Record<string, readonly string[]>;
 
 export type IconName = keyof typeof ICONS;

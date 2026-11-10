@@ -6,6 +6,14 @@ import { createI18n } from '@ledge/ui/i18n/lang';
 import { en } from './copy.en';
 
 /** Every visible string of the phone app lives here (decision D13): French below, English in copy.en.ts. */
+/** A sentence that opens on a name: « Ton PC est hors ligne », « WSL est hors ligne ». */
+const capFr = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** The device this app runs on, as the passkey screens name it: an iPhone or an iPad, else a plain device. */
+export type Model = 'iPhone' | 'iPad' | null;
+const thisFr = (m: Model) => (m ? `cet ${m}` : 'cet appareil');
+/** The device a passkey names, as the PC calls it: « l’iPad », or its own name in quotes. */
+const theFr = (name: string | undefined) => (!name ? 'l’appareil' : /^(iPhone|iPad|Android)$/.test(name) ? `l’${name}` : `« ${name} »`);
+
 const fr = {
   appName: 'Ledge',
   /** A percentage as the language writes it (« 84 % », "84%"). */
@@ -707,6 +715,109 @@ const fr = {
     failed: 'L’activation n’a pas abouti : le PC n’a pas reçu l’abonnement. Vérifie la connexion, puis réessaie.',
     noPush: 'Les notifications ne sont pas disponibles sur ce PC.',
     stale: 'Le PC a changé de clés : réactive les notifications pour que cet appareil les reçoive à nouveau.'
+  },
+  /** Reconnecting with the passkey after a reinstall (docs/mockups/ledge-mobile-passkey/passkey-reinstall.html, 1 to 3). */
+  recover: {
+    title: (m: Model) => `Relier ${thisFr(m)}`,
+    lead: 'Tu as déjà utilisé Ledge sur cet appareil ? Ta passkey peut le reconnecter à ton PC, sans code.',
+    notes: [
+      'Ta passkey est restée dans le trousseau iCloud, même si l’app a été supprimée.',
+      'Cet appareil vérifie que la passkey a été créée pour ton PC avant d’envoyer quoi que ce soit.',
+      'Ton PC est prévenu de la reconnexion et peut révoquer cet appareil.'
+    ],
+    go: 'Se reconnecter avec ma passkey',
+    code: 'Appairer avec un code',
+    cancel: 'Annuler',
+    retry: 'Réessayer',
+    checking: {
+      title: 'Vérification de ta passkey',
+      body: (pc: string) => `${capFr(pc)} vérifie que cette passkey est celle d’un de ses appareils.`,
+      reaching: (pc: string) => `Connexion à ${pc}…`,
+      reached: (pc: string) => `${capFr(pc)} joint`,
+      /** The device's own check: Face ID on an iPhone or an iPad. */
+      faceId: 'Face ID', check: 'Vérification de l’appareil',
+      verifying: (pc: string) => `${capFr(pc)} vérifie la passkey…`
+    },
+    done: {
+      title: (m: Model, pc: string) => `${m ?? 'Appareil'} reconnecté à ${pc}`,
+      body: (pc: string) => `Pas besoin de code : ta passkey a suffi. ${capFr(pc)} a gardé le nom de cet appareil, ses réglages et l’historique de ses conversations.`,
+      told: (pc: string) => `${capFr(pc)} affiche cette reconnexion et peut révoquer l’appareil.`,
+      notify: 'La réinstallation a coupé les notifications. Réactive-les pour ouvrir une demande depuis ton écran verrouillé.'
+    },
+    no: {
+      none: {
+        title: 'Aucune passkey n’a été utilisée',
+        body: (pc: string) => `La vérification a été annulée, ou cet appareil n’a pas de passkey de Ledge. Rien n’a été envoyé à ${pc}.`,
+        hintTitle: 'Première fois sur cet appareil ?', hint: 'Appaire-le avec un code : il n’a encore jamais été relié.'
+      },
+      revoked: {
+        title: (m: Model) => `${capFr(thisFr(m))} a été révoqué`,
+        /** `date`: « 3 nov. », absent when the PC no longer keeps it (more than 90 days, or a passkey it never knew). */
+        body: (pc: string, date: string | null) => `Il a été révoqué dans Ledge sur ${pc}${date ? ` le ${date}` : ''}. Sa passkey n’ouvre plus rien.`,
+        hint: 'Pour le relier à nouveau, appaire-le avec un code et approuve-le sur le PC.'
+      },
+      old: {
+        title: 'Ta passkey est trop ancienne',
+        body: 'Elle a été créée avant que Ledge sache reconnecter un appareil sans code. Rien n’a été envoyé.',
+        hintTitle: 'Une dernière fois avec un code.',
+        hint: (m: Model) => `Appaire ${thisFr(m)} avec un code ; Ledge te proposera ensuite de mettre à jour ta passkey. La prochaine fois, elle suffira.`
+      },
+      offline: {
+        title: (pc: string) => `${capFr(pc)} est hors ligne`,
+        body: (pc: string) => `Ouvre Ledge sur ${pc} et active l’accès mobile : la reconnexion reprend dès qu’il est en ligne.`
+      },
+      otherPc: {
+        title: (pc: string) => `Cette passkey n’est pas celle de ${pc}`,
+        body: 'Elle a été créée pour un autre PC que celui qui répond sur ton compte. Cet appareil s’est arrêté là : rien n’a été envoyé, rien n’a été enregistré.',
+        inPasskey: 'Dans la passkey', expected: 'PC attendu', received: 'Reçue', unknown: 'inconnue',
+        reinstalledTitle: 'Tu as réinstallé Ledge sur le PC, ou changé de PC ?', reinstalledBody: 'C’est normal : appaire avec un code.',
+        otherwise: 'Sinon,', warning: 'n’insiste pas et préviens l’administrateur du serveur.',
+        signOut: 'Se déconnecter'
+      },
+      connected: {
+        /** `device`: the device the passkey names, as the PC calls it (« iPad »). */
+        title: (device: string | undefined) => `Cette passkey est celle de ${theFr(device)}, connecté en ce moment`,
+        body: (pc: string) => `iCloud partage ta passkey entre tes appareils Apple. Ledge ne remplace pas un appareil connecté. ${capFr(pc)} a été prévenu.`,
+        otherTitle: (device: string | undefined) => `Tu es sur un autre appareil que ${theFr(device)} ?`,
+        other: 'Appaire-le avec un code : il aura sa propre place.',
+        reinstalledTitle: (device: string | undefined) => `Tu as réinstallé ${theFr(device)} ?`,
+        reinstalled: (device: string | undefined) => `Ferme Ledge dans Safari sur ${theFr(device)}, puis réessaie.`
+      },
+      rate: {
+        title: 'Trop d’essais',
+        /** `min`: the minutes left before the PC takes a recovery again; null when it does not say. */
+        body: (pc: string, min: number | null) => `5 reconnexions en une heure : ${pc} en refuse d’autres pour l’instant. ${min !== null ? `Réessaie dans ${min} min` : 'Réessaie plus tard'}, ou appaire avec un code.`,
+        retryIn: (min: number) => `Réessayer dans ${min} min`
+      },
+      blocked: {
+        title: (pc: string) => `Reconnexion bloquée sur ${pc}`,
+        body: (pc: string) => `3 vérifications de passkey ont échoué. ${capFr(pc)} refuse les reconnexions par passkey jusqu’à ce que tu les débloques sur le PC.`,
+        /** The way, around the button's word set apart: « Dans Ledge sur WSL : … › Débloquer. » */
+        hintBefore: (pc: string) => `Dans Ledge sur ${pc} : Réglages › Accès mobile › Appareils › `,
+        unblock: 'Débloquer',
+        hintAfter: '. L’appairage avec un code marche toujours.'
+      },
+      timeout: {
+        title: (pc: string) => `${capFr(pc)} n’a pas répondu`,
+        body: 'La vérification n’a pas abouti à temps. Rien n’a été enregistré sur cet appareil.'
+      }
+    }
+  },
+  /** A paired device whose passkey predates recovery: « Mettre à jour la passkey » (passkey-reinstall.html, 4). */
+  passkeyUpdate: {
+    title: 'Mettre à jour ta passkey',
+    body: (m: Model) => `Avec une passkey à jour, ${thisFr(m)} pourra revenir sans code après une réinstallation. Face ID sera demandé une fois.`,
+    /** The same on a device without Face ID. */
+    bodyOther: (m: Model) => `Avec une passkey à jour, ${thisFr(m)} pourra revenir sans code après une réinstallation. Une vérification sur cet appareil sera demandée une fois.`,
+    go: 'Mettre à jour la passkey', later: 'Plus tard', updating: 'Mise à jour…', retry: 'Réessayer',
+    done: 'Passkey mise à jour',
+    doneBody: (m: Model) => `${capFr(thisFr(m))} pourra se reconnecter sans code après une réinstallation.`,
+    cancelled: 'Mise à jour annulée. Ton ancienne passkey protège toujours tes accords.',
+    failed: (pc: string) => `La mise à jour n’a pas abouti : ${pc} n’a pas reçu la nouvelle passkey. L’ancienne marche toujours.`,
+    /** Réglages › Connexion. */
+    row: 'Reconnexion sans code', rowHint: 'Ta passkey doit être mise à jour une fois', update: 'Mettre à jour', ready: 'Prête',
+    /** The step after a pairing by code, once an old passkey was seen (screen 2 c). */
+    stepBody: (m: Model) => `Elle protégera tes accords à impact élevé, et permettra à ${thisFr(m)} de revenir sans code après une réinstallation.`
   },
   compare: {
     /** The name this phone gives itself in its `pair_commit`, when its user agent names no known device. */
