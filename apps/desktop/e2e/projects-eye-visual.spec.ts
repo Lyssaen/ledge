@@ -1,7 +1,12 @@
 import type { Page } from '@playwright/test';
 import type { Projects, Session } from '@ledge/protocol';
-import { test, expect } from './fixtures';
+import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon, session } from './daemon';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
 
 // Visual review of docs/mockups/ledge-projects-eye.html (not an assertion suite): « Projets » with the eye pressed, released,
 // and with nobody live, comfortable and compact, dark and light. LEDGE_VISUAL=1 pnpm exec playwright test e2e/projects-eye-visual.spec.ts
@@ -40,17 +45,20 @@ const projects = (page: Page) => page.locator('aside.sidebar section[aria-label=
 
 for (const theme of ['dark', 'light'] as const) for (const dense of [false, true]) {
   const mode = dense ? 'compact' : 'normal';
+  // The IDE's explorer has no « +N projects with no live agent » line (Tree.tsx, `!p.ide`): the eye in its head releases them.
+  const eye = (page: Page) => page.locator('aside.sidebar').getByRole('button', { name: 'Seulement les projets avec un agent actif (H)' });
   test(`eye pressed, released, nobody live — ${mode}, ${theme}`, async ({ page }, info) => {
     await open(page, theme, dense, true);
-    await expect(projects(page).getByRole('button', { name: '+3 projets sans agent actif' })).toBeVisible({ timeout: 30_000 });
+    await expect(eye(page)).toHaveAttribute('aria-pressed', 'true', { timeout: 30_000 });
+    await expect(projects(page).getByRole('button', { name: /^Doccle Channel/ })).toHaveCount(0);
     await projects(page).screenshot({ path: info.outputPath(`eye-pressed-${mode}-${theme}.png`) });
-    await projects(page).getByRole('button', { name: '+3 projets sans agent actif' }).click();
+    await eye(page).click();
     await expect(projects(page).getByRole('button', { name: /^Doccle Channel/ })).toBeVisible();
     await projects(page).screenshot({ path: info.outputPath(`eye-released-${mode}-${theme}.png`) });
   });
   test(`projects but no session — ${mode}, ${theme}`, async ({ page }, info) => {
     await open(page, theme, dense, true, []);
-    await expect(projects(page).getByRole('button', { name: '+6 projets sans agent actif' })).toBeVisible({ timeout: 30_000 });
+    await expect(projects(page).getByRole('button', { name: 'Créer une session' })).toBeVisible({ timeout: 30_000 });
     await projects(page).screenshot({ path: info.outputPath(`eye-nosession-${mode}-${theme}.png`) });
   });
   test(`nobody live — ${mode}, ${theme}`, async ({ page }, info) => {
