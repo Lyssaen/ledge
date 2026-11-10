@@ -85,9 +85,9 @@ describe('the phone (t05ecf7)', () => {
     expect(forPhone(tasks.run({ type: 'task.cmd', rid: 's', by: 'otto', op: 'give', to: 'Pim', title: 'x' }).task!)).toBe(false);
   });
 
-  it('is pushed a new decision: who waits, its title, Ledge\'s chat', () => {
+  it('is pushed a new decision: who waits (its name too, for the phone\'s own title, Q29), its title, Ledge\'s chat', () => {
     const p = decisionPayload(ask('Fusionner feat/roles ?'), 3);
-    expect(p).toEqual({ v: 1, kind: 'decision', title: 'Otto attend votre décision', body: 'Fusionner feat/roles ?', url: '/#/chat', badge: 3, tag: expect.stringMatching(/^t[0-9a-f]{6}$/) });
+    expect(p).toEqual({ v: 1, kind: 'decision', title: 'Otto attend votre décision', name: 'Otto', body: 'Fusionner feat/roles ?', url: '/#/chat', badge: 3, tag: expect.stringMatching(/^t[0-9a-f]{6}$/) });
     expect(PushPayloadSchema.safeParse(p).success).toBe(true);
     expect(PushPayloadSchema.safeParse(decisionPayload(ask('x'.repeat(500)), 5000)).success).toBe(true);
   });
