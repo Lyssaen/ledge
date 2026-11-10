@@ -78,9 +78,13 @@ Le code est dans `packages/ledge/src/mobile/recover.ts`, branché dans `service.
 1. que la reconnexion n'est pas bloquée. Sinon : `blocked` ;
 2. qu'il n'y a pas déjà eu 5 `recover_start` dans l'heure sur le compte. Sinon : `rate`, avec `retryInMs` ;
 3. qu'il n'y a pas déjà 3 reconnexions en attente d'une preuve. Sinon : `failed`. Il y en a au plus une par pair : un nouveau `recover_start` remplace la précédente ;
-4. que la clé `d` est un point P-256. Sinon : `failed`.
+4. que le nonce `n` fait 32 octets. Sinon : `failed`.
 
-Si tout passe, l'essai est compté et le PC envoie `recover_offer`.
+Ces contrôles ne laissent rien attendre : l'essai est alors compté et sa place prise **avant** la lecture de la clé, si bien que des `recover_start` livrés ensemble se voient les uns les autres et ne dépassent ni les 5 par heure ni les 3 en attente.
+
+5. Le PC vérifie enfin que la clé `d` est un point P-256. Sinon : `failed`, et l'essai reste compté.
+
+Si un `recover_start` plus récent du même pair a pris la place pendant cette lecture, seul le plus récent reçoit une réponse. Sinon, le PC envoie `recover_offer`.
 
 **À la réception de `recover_proof`** :
 1. Le nonce est consommé **avant toute vérification**. S'il est absent, ou si les 60 s sont passées : `failed`. Ce cas n'est pas compté comme un échec.
@@ -90,9 +94,12 @@ Si tout passe, l'essai est compté et le PC envoie `recover_offer`.
 4. Le PC **recalcule le défi avec sa propre clé** et vérifie l'assertion : signature, origine, `rpId`, drapeaux UP et UV, compteur. Il vérifie ensuite que le `userHandle` porte l'empreinte de sa clé.
    - Sinon : le PC **compte un échec**. Au 3e échec, il bloque la reconnexion pour **tout le compte** (P12) et répond `blocked` ; avant le 3e, il répond `failed`.
    - Le `userHandle` n'est pas signé par WebAuthn : côté PC, c'est un contrôle de cohérence. C'est le défi signé qui lie la clé du PC.
-5. Si l'appareil visé est **connecté** : `connected`, avec `device`. Desktop est prévenu (voir § 5).
+5. Ces vérifications attendent la cryptographie. Après la dernière attente, **sans plus rien attendre jusqu'à la remise en place**, le PC relit :
+   - le blocage, qu'une autre preuve a pu poser entre-temps : `blocked` ;
+   - la passkey de l'appareil, qu'une réinscription a pu changer entre-temps. Si l'appareil ou sa passkey n'est plus celle qui a signé : `failed`, sans compter d'échec.
+6. Si l'appareil visé est **connecté** à ce moment : `connected`, avec `device`. Desktop est prévenu (voir § 5).
    - Ce refus n'est donné qu'à une preuve valide : sans la passkey, personne ne peut faire apparaître une alerte sur le PC.
-6. Sinon, le PC remet l'appareil en place et répond `recover_ok { name }`. Les échecs passés sont oubliés.
+7. Sinon, le PC remet l'appareil en place et répond `recover_ok { name }`. Les échecs passés sont oubliés.
 
 **La remise en place, dans `~/.ledge/devices.json`** :
 - La nouvelle entrée prend comme id l'empreinte de la nouvelle clé, et `lastPeer` / `peers` sont le pair de la nouvelle app.
@@ -101,7 +108,10 @@ Si tout passe, l'essai est compté et le PC envoie `recover_offer`.
   - le credential, avec son compteur mis à jour.
 - Elle **n'hérite pas** de `push`, ni des anciens pairs, ni de `lastSeenAt`, ni de `refused`.
 - Elle porte `recovered { at, model?, pending: true }`.
-- L'historique du chat `~/.ledge/mobile/chat/<ancien id>` est **renommé** vers le nouvel id.
+- L'historique du chat `~/.ledge/mobile/chat/<ancien id>` est **renommé** vers le nouvel id, avant l'écriture de la liste :
+  - si le dossier ne peut pas être déplacé, ou si le nouvel id en a déjà un, rien ne change et la réponse est `failed` ;
+  - si la liste ne peut pas être écrite, le dossier est remis sous l'ancien id, l'ancien appareil reste approuvé, et la réponse est `failed`.
+  - Aucun de ces cas ne compte comme un échec.
 - L'ancienne entrée disparaît :
   - ses pairs reçoivent `denied` et sont révoqués sur le relais, comme pour une révocation ;
   - **aucune pierre tombale n'est créée** : la passkey vit dans la nouvelle entrée.

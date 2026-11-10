@@ -1,6 +1,6 @@
 // Mobile access: files, relay link, sign-in, pairing and channels put together, as one state and a set of commands
 // for the local fronts. Nothing secret (relay token, device code, keys, nonces, message texts) reaches the state or the log.
-import { renameSync } from 'node:fs';
+import { existsSync, renameSync } from 'node:fs';
 import { hostname } from 'node:os';
 import type WebSocket from 'ws';
 import { DEFAULT_DEVICE_PREFS, DeviceNameSchema, DevicePrefsSchema, PushSendResultSchema, SealedFrameSchema, deviceKindOfLabel, type DeviceKind, type DevicePrefs, type PushSend, type PushSendResult, type MobileClientMessage, type MobileConfig, type MobileRecoveryEvent, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
@@ -190,6 +190,7 @@ export async function createMobileService(opts: {
     restore(old, next) {
       const d = devices.find((x) => x.id === old.id);
       if (!d || !d.credential) throw new Error('no such device');
+      if (d.credential.id !== old.credential.id || d.credential.publicKey !== old.credential.publicKey) throw new Error('its passkey changed');
       if (devices.some((x) => x.id === next.id)) throw new Error('that key is already approved');
       const at = new Date(now()).toISOString();
       // Inherits what the user knows the device by; the push and the peers belonged to the deleted app.
@@ -198,10 +199,22 @@ export async function createMobileService(opts: {
         ...kept, id: next.id, publicKey: next.publicKey, lastPeer: next.peer, peers: [next.peer],
         credential: { ...d.credential, counter: next.counter }, recovered: { at, ...(next.model ? { model: next.model } : {}), pending: true }
       };
-      // The thread's folder first: the old id leaving the list drops its thread, folder included.
-      try { renameSync(deviceChatDir(paths().dir, old.id), deviceChatDir(paths().dir, next.id)); }
-      catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') log(`mobile recovery: chat of ${old.id} not moved (${(e as NodeJS.ErrnoException).code ?? 'error'})`); }
-      saveDevices([...devices.filter((x) => x.id !== old.id).map((x) => withoutPeer(x, next.peer)), entry]);
+      // The thread's folder first: the old id leaving the list drops its thread, folder included. A folder that cannot be moved
+      // stops the restore with nothing changed, and a list that cannot be written puts the folder back: the thread is never lost.
+      const from = deviceChatDir(paths().dir, old.id);
+      const to = deviceChatDir(paths().dir, next.id);
+      if (existsSync(to)) throw new Error('the new key already has a chat folder');
+      let moved = false;
+      try { renameSync(from, to); moved = true; }
+      catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`its chat was not moved (${(e as NodeJS.ErrnoException).code ?? 'error'})`); }
+      try { saveDevices([...devices.filter((x) => x.id !== old.id).map((x) => withoutPeer(x, next.peer)), entry]); }
+      catch (e) {
+        if (moved) {
+          try { renameSync(to, from); }
+          catch (back) { log(`mobile recovery: chat of ${old.id} left at ${next.id} (${(back as NodeJS.ErrnoException).code ?? 'error'})`); }
+        }
+        throw e;
+      }
       channels.dropDevice(old.id);
       // The old app's relay sessions go, as in a revocation, but its passkey lives on in the new entry: no tombstone.
       const others = new Set(devices.flatMap(peersOf));

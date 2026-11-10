@@ -41,7 +41,7 @@ const realSchedule: Schedule = (fn, ms) => {
 
 /**
  * `byCredential` names the approved device a passkey belongs to; `restore` moves that device under its new
- * key (and returns the name it keeps); `refused` notes on a connected device that another tried to take its place. `file` is the
+ * key (and returns the name it keeps), synchronously, given the passkey that signed so it can refuse one that changed since; `refused` notes on a connected device that another tried to take its place. `file` is the
  * persisted memory (recovery.json), written after each change. `now` and `schedule` are for tests.
  */
 export function createRecovery(opts: {
@@ -85,12 +85,17 @@ export function createRecovery(opts: {
       return no(peer, 'rate', { retryInMs: Math.max(0, oldest + HOUR_MS - t) });
     }
     if (entries.size >= RECOVERIES_MAX) return no(peer, 'failed');
-    try { await importPublicKey(f.d); } catch { return no(peer, 'failed'); }
-    if (fromB64u(f.n).length !== 32 || stopped) return no(peer, 'failed');
+    let nonce: Uint8Array;
+    try { nonce = fromB64u(f.n); } catch { return no(peer, 'failed'); }
+    if (nonce.length !== 32) return no(peer, 'failed');
+    // Counted and its place taken before anything waits: starts delivered together each see the others.
     save({ ...mem, attempts: [...attempts, new Date(t).toISOString()] });
     const e: Entry = { peer, device: f.d, deviceNonce: f.n, pcNonce: randomNonce(), ...(f.model ? { model: f.model } : {}), expiresAt: t + RECOVER_TTL_MS, cancel: () => {} };
     e.cancel = schedule(() => { if (entries.get(peer) === e) entries.delete(peer); }, RECOVER_TTL_MS);
     entries.set(peer, e);
+    try { await importPublicKey(f.d); } catch { drop(e); return no(peer, 'failed'); }
+    // A later start of the same peer, a new welcome or a stop took its place while the key was read: that one answers, or none.
+    if (stopped || entries.get(peer) !== e) return;
     const name = opts.pcName();
     opts.send(peer, { k: 'recover_offer', pc: opts.pc.publicKey, n: e.pcNonce, ...(name ? { name } : {}) });
   };
@@ -116,24 +121,34 @@ export function createRecovery(opts: {
     if (mem.blocked) return no(peer, 'blocked');
     const rp = opts.rp();
     if (!rp) return no(peer, 'failed');
-    const target = opts.byCredential(f.assertion.id);
-    if (!target) {
+    const found = opts.byCredential(f.assertion.id);
+    if (!found) {
       const t = mem.tombstones.find(x => x.credentialId === f.assertion.id && Date.parse(x.revokedAt) > now() - TOMBSTONE_MS);
       return no(peer, 'revoked', t ? { device: t.device, revokedAt: t.revokedAt } : {});
     }
+    // The passkey as it is now: the checks after the waits below compare against it, not against what the list holds then.
+    const target: RecoverTarget = { ...found, credential: { ...found.credential } };
     const challenge = await recoverChallenge({ pcPublicKey: opts.pc.publicKey, devicePublicKey: e.device, pcNonce: e.pcNonce, deviceNonce: e.deviceNonce });
     const verified = verifyAssertion(f.assertion, target.credential, rp, challenge);
     if (!verified.ok) return failed(peer, verified.why);
     // Not signed by WebAuthn: a consistency check only; the signed challenge is what binds the PC key (rule 1).
     if ((await userHandleMatches(f.userHandle, opts.pc.publicKey)) !== 'ok') return failed(peer, 'userHandle');
+    const id = await fingerprint(e.device);
+    // Nothing waits from here to the restore: the block, the passkey and the device's presence are read as the restore finds them.
     if (stopped) return;
+    if (mem.blocked) return no(peer, 'blocked');
+    const now_ = opts.byCredential(f.assertion.id);
+    if (!now_ || now_.id !== target.id || now_.credential.publicKey !== target.credential.publicKey) {
+      log(`mobile recovery: the passkey of device ${target.id} changed during the verification`);
+      return no(peer, 'failed');
+    }
     if (opts.online(target.id)) {
       opts.refused(target.id, e.model);
       return no(peer, 'connected', { device: target.name });
     }
     let name: string;
     try {
-      name = opts.restore(target, { publicKey: e.device, id: await fingerprint(e.device), peer, ...(e.model ? { model: e.model } : {}), counter: verified.counter });
+      name = opts.restore(target, { publicKey: e.device, id, peer, ...(e.model ? { model: e.model } : {}), counter: verified.counter });
     } catch (err) {
       log(`mobile recovery: device ${target.id} not restored (${(err as Error).message})`);
       return no(peer, 'failed');

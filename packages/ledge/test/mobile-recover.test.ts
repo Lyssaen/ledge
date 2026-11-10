@@ -74,12 +74,15 @@ async function setup(o: { online?: boolean; file?: Partial<RecoveryFile>; rp?: t
     return { device, n, offer: last(peer) };
   };
   /** The phone's proof over the offer it got, as the real phone builds it; `tamper` changes what goes into it. */
-  const prove = async (peer: string, s: Awaited<ReturnType<typeof start>>, tamper: { pcKey?: string; userHandle?: string; key?: ReturnType<typeof softAuthenticator> } = {}) => {
+  const prove = async (peer: string, s: Awaited<ReturnType<typeof start>>, tamper: { pcKey?: string; userHandle?: string; key?: ReturnType<typeof softAuthenticator>; during?: () => void } = {}) => {
     const offer = s.offer as Extract<SealedFrame, { k: 'recover_offer' }>;
     const challenge = await recoverChallenge({ pcPublicKey: tamper.pcKey ?? offer.pc, devicePublicKey: s.device.publicKey, pcNonce: offer.n, deviceNonce: s.n });
     const assertion = (tamper.key ?? auth).get(RP, challenge);
     const proof: SealedFrame = { k: 'recover_proof', assertion: { ...assertion, id: auth.id }, userHandle: tamper.userHandle ?? userHandle };
-    await rec.receive(peer, proof);
+    const received = rec.receive(peer, proof);
+    // What changes on the PC while the proof is being verified.
+    tamper.during?.();
+    await received;
     return proof;
   };
   return { pc, clock, auth, ipad, rec, sent, calls, online, file: () => file, userHandle, to, last, start, prove };
@@ -256,7 +259,8 @@ describe('passkey recovery: refusals', () => {
     const badKey = await setup();
     await badKey.rec.receive('d_a', { k: 'recover_start', d: 'A'.repeat(87), n: randomNonce() });
     expect(badKey.last('d_a')).toEqual({ k: 'recover_no', why: 'failed' });
-    expect(badKey.file().attempts).toEqual([]);
+    // Counted before the key is read, so that starts delivered together see each other.
+    expect(badKey.file().attempts).toHaveLength(1);
 
     const crowd = await setup();
     for (const p of ['d_1', 'd_2', 'd_3']) await crowd.start(p);
@@ -274,6 +278,55 @@ describe('passkey recovery: refusals', () => {
     expect(throws.last('d_a')).toEqual({ k: 'recover_no', why: 'failed' });
     // Not the phone's fault: its earlier failures stay as they were, none added.
     expect(throws.file().failures).toEqual(['x']);
+  });
+
+  it('starts delivered together: no more than 3 offers waiting, no more than 5 counted, and one peer gets one offer', async () => {
+    const t = await setup();
+    const keys = await Promise.all(Array.from({ length: 8 }, () => generateIdentity()));
+    await Promise.all(keys.map((k, i) => t.rec.receive(`d_${i}`, { k: 'recover_start', d: k.publicKey, n: randomNonce() })));
+    expect(t.sent.filter(([, f]) => f.k === 'recover_offer')).toHaveLength(3);
+    expect(t.sent.filter(([, f]) => f.k === 'recover_no').map(([, f]) => (f as { why: string }).why)).toEqual(Array(5).fill('failed'));
+    expect(t.file().attempts).toHaveLength(3);
+
+    const one = await setup();
+    await Promise.all(keys.slice(0, 7).map(k => one.rec.receive('d_one', { k: 'recover_start', d: k.publicKey, n: randomNonce() })));
+    expect(one.file().attempts).toHaveLength(RECOVER_PER_HOUR);
+    expect(one.to('d_one').filter(f => f.k === 'recover_no').map(f => (f as { why: string }).why)).toEqual(['rate', 'rate']);
+    // Each start replaced the one before it: the last counted one was replaced by a refused one, so no offer stands.
+    expect(one.to('d_one').filter(f => f.k === 'recover_offer')).toHaveLength(0);
+
+    const pair = await setup();
+    await Promise.all(keys.slice(0, 2).map(k => pair.rec.receive('d_two', { k: 'recover_start', d: k.publicKey, n: randomNonce() })));
+    expect(pair.to('d_two').filter(f => f.k === 'recover_offer')).toHaveLength(1);
+  });
+
+  it('the device comes online while the proof is verified: connected, not restored', async () => {
+    const t = await setup();
+    const s = await t.start('d_phone', 'iPhone');
+    await t.prove('d_phone', s, { during: () => { t.online.value = true; } });
+    expect(t.last('d_phone')).toEqual({ k: 'recover_no', why: 'connected', device: 'iPad de G' });
+    expect(t.calls.restored).toEqual([]);
+    expect(t.calls.refused).toEqual([['ipad-id', 'iPhone']]);
+  });
+
+  it('the passkey is registered again while the proof is verified: failed, not restored, not counted', async () => {
+    const t = await setup();
+    const s = await t.start('d_phone');
+    await t.prove('d_phone', s, { during: () => { t.ipad.credential = { ...t.ipad.credential, publicKey: softAuthenticator().publicKey }; } });
+    expect(t.last('d_phone')).toEqual({ k: 'recover_no', why: 'failed' });
+    expect(t.calls.restored).toEqual([]);
+    expect(t.file().failures).toEqual([]);
+  });
+
+  it('recovery is blocked while a valid proof is verified: blocked, not restored', async () => {
+    const t = await setup({ file: { failures: ['2026-11-10T07:58:00.000Z', '2026-11-10T07:59:00.000Z'] } });
+    const good = await t.start('d_good');
+    const bad = await t.start('d_bad');
+    // The good proof waits on three digests, the bad one on one: the block lands between them.
+    await Promise.all([t.prove('d_good', good), t.prove('d_bad', bad, { key: softAuthenticator() })]);
+    expect(t.last('d_bad')).toEqual({ k: 'recover_no', why: 'blocked' });
+    expect(t.last('d_good')).toEqual({ k: 'recover_no', why: 'blocked' });
+    expect(t.calls.restored).toEqual([]);
   });
 
   it('a new welcome drops the recoveries waiting for their proof', async () => {

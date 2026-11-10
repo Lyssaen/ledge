@@ -1,6 +1,7 @@
 // Passkey recovery through the mobile service over the real relay: a reinstalled app comes back as the same device.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IncomingMessage } from 'node:http';
@@ -170,5 +171,42 @@ describe('passkey recovery through the service', () => {
     await t.s.handle({ type: 'mobile.recovery.unblock' });
     expect(t.s.state()).not.toHaveProperty('recovery');
     expect(await t.recover()).toMatchObject({ k: 'recover_ok' });
+  });
+  it('a chat folder that cannot be moved stops the restore with nothing changed: the old device and its thread stay', async () => {
+    const t = await reinstalled();
+    const parent = dirname(t.chat);
+    chmodSync(parent, 0o555);
+    cleanups.push(() => chmodSync(parent, 0o755));
+    expect(await t.recover()).toEqual({ k: 'recover_no', why: 'failed' });
+    expect(readDevices().map(x => x.id)).toEqual([t.oldId]);
+    expect(readFileSync(join(t.chat, 'turns.json'), 'utf8')).toBe('[]');
+    expect(t.revoked).toEqual([]);
+    expect(t.events).toEqual([]);
+    // Not the phone's fault: no failure counted.
+    expect(readRecovery().failures).toEqual([]);
+  });
+
+  it('a new key that already has a chat folder stops the restore: neither folder is touched', async () => {
+    const t = await reinstalled();
+    const there = deviceChatDir(paths().dir, await fingerprint(t.app.publicKey));
+    mkdirSync(there, { recursive: true });
+    writeFileSync(join(there, 'stray'), 'x');
+    expect(await t.recover()).toEqual({ k: 'recover_no', why: 'failed' });
+    expect(readDevices().map(x => x.id)).toEqual([t.oldId]);
+    expect(readFileSync(join(t.chat, 'turns.json'), 'utf8')).toBe('[]');
+    expect(readFileSync(join(there, 'stray'), 'utf8')).toBe('x');
+  });
+
+  it('a device list that cannot be written puts the chat folder back: the old device stays approved with its thread', async () => {
+    const t = await reinstalled();
+    // devices.json replaced by a folder: the write's final rename fails.
+    rmSync(paths().devices);
+    mkdirSync(paths().devices);
+    expect(await t.recover()).toEqual({ k: 'recover_no', why: 'failed' });
+    expect(t.s.state().devices.map(x => x.id)).toEqual([t.oldId]);
+    expect(readFileSync(join(t.chat, 'turns.json'), 'utf8')).toBe('[]');
+    expect(existsSync(deviceChatDir(paths().dir, await fingerprint(t.app.publicKey)))).toBe(false);
+    expect(t.revoked).toEqual([]);
+    expect(t.events).toEqual([]);
   });
 });
