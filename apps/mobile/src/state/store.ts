@@ -147,6 +147,8 @@ export interface MobileStore {
   registerCredential(c: Credential, userId?: string): string | null;
   /** The pinned PC's public key, the one a passkey made now names; null when unpaired. */
   pcKey(): string | null;
+  /** The pinned PC's name, as its snapshots gave it; null when unknown. */
+  pcName(): string | null;
   /** Names this device on the PC (`device.rename`); its next snapshot carries the name. The op's id, or null when nothing was sent. */
   renameDevice(name: string): string | null;
   /** Stores this device's own settings on the PC, whole (`device.prefs`); its next snapshot carries them. Resolves when the PC answers. */
@@ -876,6 +878,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     },
 
     pcKey: () => link.pinned()?.publicKey ?? null,
+    pcName: () => link.pinned()?.name ?? state.daemon?.name ?? null,
 
     forgetDevice() {
       if (closed || !ready()) return Promise.resolve(false);

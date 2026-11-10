@@ -11,7 +11,7 @@ import { BackLink } from '../ui/Header';
 import { OUTLINE } from '../ui/Board';
 import { Segmented } from '../ui/Segmented';
 import { setTheme, useThemeChoice, type ThemeChoice } from '../theme';
-import { ProtectRow } from './Enroll';
+import { ProtectRow, UpdateRow } from './Enroll';
 import { NotificationsRow } from './Notifications';
 import { PcSection } from './PcSection';
 import { LedgePrefs, ManagedOnPc, MotionRow, NotificationPrefs } from './Settings';
@@ -101,6 +101,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
               </div>
             ))}
             <ProtectRow store={store} />
+            <UpdateRow store={store} />
           </dl>
         </section>
         <ManagedOnPc store={store} />

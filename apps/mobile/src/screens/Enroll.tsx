@@ -6,8 +6,9 @@ import { deviceLabel } from '../link/label';
 import { href } from '../router';
 import { useMobile, type ConfirmChallenge, type MobileStore } from '../state/store';
 import { Notice } from '../ui/Notice';
-import { OUTLINE, PRIMARY } from '../ui/Board';
-import { usePlatform } from './device';
+import { OUTLINE, PRIMARY, Spinner } from '../ui/Board';
+import { Icon } from '../ui/icons';
+import { isApple, usePlatform } from './device';
 import { modelOf } from './Recover';
 
 const E = copy.enroll;
@@ -145,5 +146,88 @@ export function ProtectStep({ store, onDone, update = false }: {
       </section>
       <a href={inbox} onClick={onDone} className={OUTLINE}>{E.later}</a>
     </>
+  );
+}
+
+const U = copy.passkeyUpdate;
+/** « Plus tard » on the card, per device: only the row of Connection offers the update after that (P7). */
+const LATER_KEY = 'ledge.mobile.passkeyUpdateLater';
+const laterFor = (storage: Storage | undefined, device: string | undefined): boolean => {
+  try { return !!device && storage?.getItem(LATER_KEY) === device; } catch { return false; }
+};
+
+/**
+ * The card at the top of « À toi » on a device whose passkey predates recovery (passkey-reinstall.html, 4 a–f): « Mettre à
+ * jour la passkey » with Face ID, « Plus tard ». Once done, a receipt that stays until « À toi » is opened again. It is not a
+ * request: it counts in no badge.
+ */
+export function UpdateCard({ store, storage = globalThis.localStorage }: { store: MobileStore; storage?: Storage }) {
+  const e = useEnroll(store, 'update');
+  const device = useMobile(store).device?.id;
+  const [later, setLater] = useState(() => laterFor(storage, device));
+  // Shown in this visit: the receipt replaces it once the PC took the new passkey.
+  const [shown, setShown] = useState(false);
+  useEffect(() => { if (e.offered && !later) setShown(true); }, [e.offered, later]);
+  if (!shown) return null;
+  if (e.registered) {
+    return (
+      <div role="status" className="flex items-start gap-3 rounded-card border border-line bg-surface p-4">
+        <Icon name="check" className="size-5 text-ok" />
+        <span className="flex flex-col gap-0.5"><strong className="text-body font-semibold">{U.done}</strong><small className="text-small text-muted">{U.doneBody(modelOf())}</small></span>
+      </div>
+    );
+  }
+  if (later) return null;
+  const putOff = () => {
+    try { if (device) storage?.setItem(LATER_KEY, device); } catch { /* the card comes back next time */ }
+    setLater(true);
+    setShown(false);
+  };
+  const failed = e.problem === 'failed' || e.problem === 'prepareFailed' || e.problem === 'unsupported';
+  const problem = e.problem === 'cancelled' ? U.cancelled : failed ? U.failed(store.pcName() ?? copy.yourPc) : null;
+  return (
+    <section aria-labelledby="passkey-update-title" className="flex flex-col gap-3 rounded-card border border-info/30 bg-info/[0.06] p-4">
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden="true" className="inline-flex size-9 items-center justify-center rounded-full bg-raised text-muted"><Icon name="key" className="size-[18px]" /></span>
+        <h2 id="passkey-update-title" className="text-title leading-[1.35] font-semibold">{U.title}</h2>
+      </div>
+      {problem
+        ? <Notice title={problem} tone={e.problem === 'cancelled' ? 'warning' : 'danger'} role="alert" />
+        : <p className="text-body leading-[1.6] text-muted">{isApple() ? U.body(modelOf()) : U.bodyOther(modelOf())}</p>}
+      <div className={problem ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'}>
+        {problem
+          ? <button type="button" onClick={failed ? e.retry : e.go} disabled={!failed && !e.challenge} className={PRIMARY}>{U.retry}</button>
+          : <button type="button" onClick={e.go} disabled={!e.challenge || e.asking} className={PRIMARY}>{e.asking ? <><Spinner size="size-4" />{U.updating}</> : e.challenge ? U.go : copy.confirm.preparing}</button>}
+        <button type="button" onClick={putOff} disabled={e.asking} className={OUTLINE}>{U.later}</button>
+      </div>
+    </section>
+  );
+}
+
+/** The row of Connection: « Reconnexion sans code », « Prête » or the way to update the passkey (4 g, 4 h). Nothing before the accepts are protected. */
+export function UpdateRow({ store }: { store: MobileStore }) {
+  const e = useEnroll(store, 'update');
+  const device = useMobile(store).device;
+  if (!device?.confirm) return null;
+  if (e.registered) {
+    return (
+      <div className="flex items-baseline justify-between gap-4 border-b border-line px-4 py-3 last:border-b-0">
+        <dt className="flex-none text-muted">{U.row}</dt>
+        <dd className="text-right text-ok">{U.ready}</dd>
+      </div>
+    );
+  }
+  if (!e.offered) return null;
+  return (
+    <div className="flex flex-col gap-2 border-b border-line px-4 py-3 last:border-b-0">
+      <div className="flex items-center justify-between gap-4">
+        <dt className="flex min-w-0 flex-col"><span>{U.row}</span><span className="text-small text-muted">{U.rowHint}</span></dt>
+        <dd className="flex-none">
+          <button type="button" disabled={!e.challenge || e.asking} onClick={e.problem === 'failed' || e.problem === 'prepareFailed' ? e.retry : e.go}
+            className="inline-flex min-h-10 items-center justify-center rounded-control border border-line px-3 text-body font-medium disabled:opacity-45">{e.asking ? U.updating : U.update}</button>
+        </dd>
+      </div>
+      {e.problem && <Notice title={e.problem === 'cancelled' ? U.cancelled : U.failed(store.pcName() ?? copy.yourPc)} tone="warning" role="alert" />}
+    </div>
   );
 }

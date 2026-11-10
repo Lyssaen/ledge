@@ -13,6 +13,7 @@ import { navigate } from '../router';
 import { buttonClass, chipClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 import { Tag } from '../ui/Tag';
+import { UpdateCard } from './Enroll';
 
 type InboxFilter = Filter | 'tasks';
 const FILTERS: InboxFilter[] = ['all', 'permission', 'question', 'tasks'];
@@ -80,6 +81,8 @@ export function Inbox({ store }: { store: MobileStore }) {
   const subtitle = offline ? (state.syncedAt ? copy.link.lastKnownAt(clock(state.syncedAt)) : copy.inbox.lastKnown) : closed.length ? copy.inbox.subtitleTasks(all.length, closed.length) : copy.inbox.subtitle(all.length);
   return (
     <TabPage title={copy.inbox.title} subtitle={subtitle} bodyClassName="pb-1">
+        {/* « Mettre à jour ta passkey » at the top, not counted (passkey-reinstall.html, 4 a). */}
+        <div className="flex flex-col gap-3 mb-3 empty:hidden"><UpdateCard store={store} /></div>
         <div role="group" aria-label={copy.inbox.filtersLabel} className="mb-1.5 flex gap-1">
           {FILTERS.map(f => (
             <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className={chipClass(filter === f)}>{copy.inbox.filters[f]}</button>
