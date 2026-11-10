@@ -2,7 +2,7 @@
 // the passkey over that very launch, and the new session's id in the result.
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PhoneClientMessageSchema, PhoneServerMessageSchema, type PhoneLaunch, type Projects, type RepoInfo } from '@ledge/protocol';
@@ -194,5 +194,21 @@ describe('the PC side of a phone launch (phoneLaunch)', () => {
     fail = new Error('tmux: no server');
     await expect(run({ tool: 'claude', cwd: api, prompt: 'Go' })).rejects.toThrow('tmux: no server');
     expect(calls).toEqual([api, api, api]);
+  });
+
+  it('a folder that is a link to the home folder or the root is refused as they are, first folder or added one', async () => {
+    const h = realpathSync(mkdtempSync(join(tmpdir(), 'ledge-phone-launch-link-')));
+    const api = join(h, 'code', 'api'); mkdirSync(api, { recursive: true });
+    const toHome = join(h, 'code', 'home'); symlinkSync(h, toHome);
+    const toRoot = join(h, 'code', 'root'); symlinkSync('/', toRoot);
+    const toApi = join(h, 'code', 'api-link'); symlinkSync(api, toApi);
+    const calls: string[] = [];
+    const run = phoneLaunch(async req => { calls.push(req.cwd); return { id: 'local:s1' } as never; }, h);
+    await expect(run({ tool: 'claude', cwd: toHome, prompt: 'Go' })).rejects.toMatchObject({ reason: 'invalid', message: 'the folder is a home folder' });
+    await expect(run({ tool: 'claude', cwd: toRoot, prompt: 'Go' })).rejects.toMatchObject({ reason: 'invalid', message: 'the folder is the root' });
+    await expect(run({ tool: 'claude', cwd: api, dirs: [toHome], prompt: 'Go' })).rejects.toMatchObject({ reason: 'invalid' });
+    // A link to an ordinary folder is still taken, under the name the project gives it.
+    expect(await run({ tool: 'claude', cwd: toApi, prompt: 'Go' })).toEqual({ id: 'local:s1' });
+    expect(calls).toEqual([toApi]);
   });
 });

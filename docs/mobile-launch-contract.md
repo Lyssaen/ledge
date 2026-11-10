@@ -90,7 +90,7 @@ Codes de refus (`reason`) :
 | Code | Cas |
 |---|---|
 | `not_found` | un dossier n'est plus là sur le PC |
-| `invalid` | ce que l'agent ne prend pas : plusieurs dossiers pour Codex ou Cursor, un dossier en double, `approval` hors OMP, un modèle ou un effort refusé par le PC ; ou un dossier trop large (le dossier personnel ou au-dessus) |
+| `invalid` | ce que l'agent ne prend pas : plusieurs dossiers pour Codex ou Cursor, un dossier en double, `approval` hors OMP, un modèle ou un effort refusé par le PC ; ou un dossier trop large (le dossier personnel ou au-dessus, ou un lien symbolique qui y mène) |
 | `stale` | le projet n'existe plus, ou un dossier n'est plus déclaré par le projet, ou appartient à une autre machine : recharger les projets |
 | `confirm_required` | pas de passkey enregistrée, ou pas d'assertion |
 | `assertion_invalid`, `assertion_expired`, `assertion_replayed` | comme pour les autres actions vérifiées : refaire la vérification |
