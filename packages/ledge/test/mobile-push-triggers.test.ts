@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PushPayloadSchema, pendingKey, type Session } from '@ledge/protocol';
-import { pushFor, safeTag } from '../src/mobile/push/triggers.js';
+import { chatEndPayload, decisionPayload, pushFor, resolvedFor, safeTag } from '../src/mobile/push/triggers.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (over: Partial<Session> = {}): Session => ({
@@ -8,6 +8,25 @@ const mk = (over: Partial<Session> = {}): Session => ({
   state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...over
 });
 const req = (text: string, kind: 'permission' | 'question' = 'permission'): NonNullable<Session['pending']> => ({ kind, text, source: 'hook' });
+
+describe('the name the phone writes its title with (Q29)', () => {
+  it('each payload about someone carries that name; the chat end none; an older phone still reads it', () => {
+    const asking = mk({ state: 'idle', pending: req('Run ls') });
+    expect(pushFor(mk(), asking, [asking])).toMatchObject({ kind: 'request', name: 'Otto' });
+    const q = mk({ state: 'idle', pending: req('Which db?', 'question') });
+    expect(pushFor(mk(), q, [q])).toMatchObject({ kind: 'question', name: 'Otto' });
+    expect(pushFor(mk(), mk({ state: 'idle' }), [])).toMatchObject({ kind: 'finished', name: 'Otto' });
+    expect(resolvedFor(asking, mk({ state: 'idle' }), [])).toMatchObject({ kind: 'resolved', name: 'Otto' });
+    const decision = decisionPayload({ id: 't1', giverName: 'Pim', title: 'Ship it?' } as never, 1);
+    expect(decision).toMatchObject({ kind: 'decision', name: 'Pim' });
+    expect(PushPayloadSchema.parse(decision)).toEqual(decision);
+    expect(chatEndPayload(undefined, 0)).not.toHaveProperty('name');
+    expect(pushFor(mk(), mk({ state: 'idle', name: 'N'.repeat(150) }), [])!.name).toHaveLength(100);
+    // A payload from an older daemon, without the name, is still valid.
+    const { name: _n, ...old } = pushFor(mk(), asking, [asking])!;
+    expect(PushPayloadSchema.safeParse(old).success).toBe(true);
+  });
+});
 
 describe('pushFor', () => {
   it('announces a new request once, with the key the phone routes on', () => {
