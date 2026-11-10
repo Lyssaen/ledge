@@ -1,4 +1,5 @@
 import { shellCommand, type MachineState } from '@ledge/fleet';
+import type { Session } from '@ledge/protocol';
 import type { Messages } from '../i18n/messages';
 import type { NativeShell } from './backend';
 
@@ -40,9 +41,19 @@ export function shellLaunch(kind: ShellKind, ctx: { dir: string; machines: reado
     return argv ? { argv } : null;
   }
   const machine = ctx.machines.find(m => m.id && m.id !== 'local' && m.ssh && `ssh:${m.id}` === kind);
-  const argv = machine ? shellCommand(machine, '~') : null;
+  const argv = machine ? shellCommand(machine, ctx.dir || '~') : null;
   return argv ? { argv } : null;
 }
+
+/** A session's own shell (OMP's « Ouvrir un shell »): on its machine, over SSH when that machine is reached that way, else WSL;
+ *  in its worktree, else its folder. Never the shell last chosen in the menu, which may not take a folder. */
+export function sessionShell(s: Pick<Session, 'machineId' | 'workdir' | 'cwd'>, machines: readonly MachineState[]): { kind: ShellKind; dir: string; remote: boolean } {
+  const machine = s.machineId && s.machineId !== 'local' ? machines.find(m => m.id === s.machineId && m.ssh) : undefined;
+  return { kind: machine ? `ssh:${machine.id}` : 'wsl', dir: s.workdir ?? s.cwd, remote: !!machine };
+}
+
+/** The menu's SSH shells start at the machine's home: the focused session's folder is a path of this machine. */
+export function menuDir(kind: ShellKind, dir: string): string { return kind.startsWith('ssh:') ? '' : dir; }
 
 const KINDS = ['wsl', 'powershell', 'cmd', 'gitbash', 'ledge'];
 export function loadLastShell(): ShellKind {

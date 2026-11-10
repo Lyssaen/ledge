@@ -358,7 +358,8 @@ body.ide-resizing-y { cursor: row-resize; user-select: none; }
 .modal:has(> .launch-modal) > .modal-title .ledge-btn { width: 28px !important; height: 28px !important; }
 .launch-modal { padding: 0 22px 22px; display: flex; flex-direction: column; gap: 16px; }
 .launch-modal-sub { margin: 0; color: var(--muted-foreground); font-size: 12px; }
-.launch-modal-fld { display: grid; grid-template-columns: 150px 1fr; gap: 10px 16px; align-items: start; font-size: 12.5px; }
+/* minmax(0, 1fr): a long model description (Codex) ellipsizes in its column instead of widening the modal into a side scroll. */
+.launch-modal-fld { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px 16px; align-items: start; font-size: 12.5px; }
 .launch-modal-fld > .launch-modal-lbl { color: var(--muted-foreground); padding-top: 5px; }
 .launch-modal-txt { padding-top: 5px; }
 .launch-modal .mut { color: var(--muted-foreground); }
