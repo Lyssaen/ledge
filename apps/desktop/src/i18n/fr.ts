@@ -343,7 +343,11 @@ export const fr = {
       about: 'Versions et mises à jour.'
     } as Record<SectionId, string>,
     machineOffline: 'Une machine est hors ligne', updateWaiting: 'Une mise à jour est disponible',
-    mobileOffline: "L'accès mobile est hors ligne", mobileAsks: "Un appareil demande l'accès", mobileRecovery: 'Une reconnexion par passkey à vérifier',
+    mobileOffline: "L'accès mobile est hors ligne", mobileAsks: "Un appareil demande l'accès", // The tab's dot after a passkey recovery: one label per cause, a count when there are several (P18).
+    mobileRecovery: {
+      recovered: 'Une reconnexion par passkey à vérifier', refused: 'Une tentative de reconnexion refusée', blocked: 'Reconnexion par passkey bloquée',
+      several: (n: number) => `Accès mobile : ${n} points à vérifier`
+    },
     workspace: {
       openSession: 'Ouvrir une session',
       active: 'Dans le groupe actif', right: 'À droite', saved: (where: string) => `Ouvrir une session : ${where}`,

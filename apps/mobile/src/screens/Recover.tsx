@@ -36,7 +36,7 @@ export function Choose({ login, platform, onPasskey, onCode }: { login: string |
       </div>
       {platform && (
         <ul className="flex flex-col gap-3 text-body leading-5 text-fg/85">
-          {R.notes.map((n, i) => <li key={i} className="flex items-start gap-3"><Icon name={NOTE_ICONS[i]!} className="size-5 text-muted" />{n}</li>)}
+          {R.notes(modelOf()).map((n, i) => <li key={i} className="flex items-start gap-3"><Icon name={NOTE_ICONS[i]!} className="size-5 text-muted" />{n}</li>)}
         </ul>
       )}
       <Fill />

@@ -12,10 +12,13 @@ export interface DeviceWord { text: string; named: boolean }
 export const deviceWord = (d: Pick<Device, 'name' | 'label'> | undefined): DeviceWord | null =>
   d === undefined ? null : d.name ? { text: d.name, named: true } : { text: d.label.split(' · ')[0] || d.label, named: false };
 
-/** A device's passkey recovery needs the user's look: it came back and nobody said « C'était bien moi », or another device was
- *  refused its place. The tab's dot (P10) stays as long as one does. */
-export const mobileRecovery = (m: MobileState | undefined): boolean =>
-  m !== undefined && m.devices.some(d => d.recovered?.pending === true || d.refused !== undefined);
+/** What a passkey recovery leaves for the user to look at: a device back that nobody said « C'était bien moi » for, another
+ *  device refused its place, recovery blocked. The tab's dot (P10) stays as long as one does; its label names it (P18). */
+export type RecoveryPoint = 'recovered' | 'refused' | 'blocked';
+export const mobileRecovery = (m: MobileState | undefined): RecoveryPoint[] => m === undefined ? [] : [
+  ...m.devices.flatMap(d => [...(d.recovered?.pending === true ? ['recovered' as const] : []), ...(d.refused !== undefined ? ['refused' as const] : [])]),
+  ...(m.recovery?.blocked ? ['blocked' as const] : [])
+];
 
 /** A request to bring one device's row into view (the toast's « Voir »). `seq` makes asking twice for the same device a new request. */
 export interface DeviceViewRequest { id: string; seq: number }

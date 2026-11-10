@@ -108,6 +108,7 @@ export function SettingsPage({ section: asked, ctx, noBack = false }: { section:
   const layers = useRef<EscapeLayers>({ list: [] }).current;
   useScreenKeys(e => e.key === 'Escape' && (e.repeat || escapeLayers(layers)));
   const pairingOpen = usePairingDialogOpen();
+  const recoveryPoints = mobileRecovery(ctx.mobile);
   const alert = (id: SectionId): string | null =>
     // A machine whose daemon restarts for its update is not « offline » (#48).
     id === 'machines' && ctx.machines.some(m => shownOf(m) === 'offline' && !ctx.daemonUpdates.updating.has(m.id)) ? s.machineOffline
@@ -126,7 +127,7 @@ export function SettingsPage({ section: asked, ctx, noBack = false }: { section:
               onClick={() => dispatch({ type: 'settings', section: id })}>
               <Icon d={SECTION_ICONS[id]} size={15} /><span>{t.sections[id]}</span>{note && <b className="side-alert" role="img" aria-label={note} />}
               {id === 'mobile' && mobileAsks(ctx.mobile, pairingOpen) && <b className="side-alert mob-ask" role="img" aria-label={s.mobileAsks} />}
-              {id === 'mobile' && mobileRecovery(ctx.mobile) && <b className="side-alert" role="img" aria-label={s.mobileRecovery} />}
+              {id === 'mobile' && recoveryPoints.length > 0 && <b className="side-alert" role="img" aria-label={recoveryPoints.length === 1 ? s.mobileRecovery[recoveryPoints[0]!] : s.mobileRecovery.several(recoveryPoints.length)} />}
             </button>
           );
         })}

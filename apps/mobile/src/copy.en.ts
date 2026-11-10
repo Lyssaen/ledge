@@ -14,7 +14,7 @@ const ATOI = 'For you';
 const capEn = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const thisEn = (m: Model) => (m ? `this ${m}` : 'this device');
 /** The device a passkey names, as the PC calls it: « the iPad », or its own name in quotes. */
-const theEn = (name: string | undefined) => (!name ? 'the device' : /^(iPhone|iPad|Android)$/.test(name) ? `the ${name}` : `“${name}”`);
+const theEn = (name: string | undefined) => (!name || name === 'Android' ? 'the device' : /^(iPhone|iPad)$/.test(name) ? `the ${name}` : `“${name}”`);
 
 export const en: Copy = {
   appName: 'Ledge',
@@ -720,8 +720,8 @@ export const en: Copy = {
   recover: {
     title: (m) => `Link ${thisEn(m)}`,
     lead: 'Used Ledge on this device before? Your passkey can reconnect it to your PC, without a code.',
-    notes: [
-      'Your passkey stayed in the iCloud keychain, even though the app was deleted.',
+    notes: (m) => [
+      m ? 'Your passkey stayed in the iCloud keychain, even though the app was deleted.' : 'Your passkey stayed in your passkey manager, even though the app was deleted.',
       'This device checks that the passkey was made for your PC before sending anything.',
       'Your PC is told about the reconnection and can revoke this device.'
     ],
@@ -773,7 +773,7 @@ export const en: Copy = {
         signOut: 'Sign out'
       },
       connected: {
-        title: (device) => `This passkey is ${theEn(device)}'s, which is connected right now`,
+        title: (device) => `This passkey belongs to ${theEn(device)}, which is connected right now`,
         body: (pc) => `iCloud shares your passkey between your Apple devices. Ledge doesn't replace a connected device. ${capEn(pc)} was told.`,
         otherTitle: (device) => `On another device than ${theEn(device)}?`,
         other: 'Pair it with a code: it will have its own place.',

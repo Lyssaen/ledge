@@ -11,8 +11,8 @@ const capFr = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 /** The device this app runs on, as the passkey screens name it: an iPhone or an iPad, else a plain device. */
 export type Model = 'iPhone' | 'iPad' | null;
 const thisFr = (m: Model) => (m ? `cet ${m}` : 'cet appareil');
-/** The device a passkey names, as the PC calls it: « l’iPad », or its own name in quotes. */
-const theFr = (name: string | undefined) => (!name ? 'l’appareil' : /^(iPhone|iPad|Android)$/.test(name) ? `l’${name}` : `« ${name} »`);
+/** The device a passkey names, as the PC calls it: « l’iPad », « l’appareil « Tablette salon » » for a name it was given (P17). */
+const theFr = (name: string | undefined) => (!name || name === 'Android' ? 'l’appareil' : /^(iPhone|iPad)$/.test(name) ? `l’${name}` : `l’appareil « ${name} »`);
 
 const fr = {
   appName: 'Ledge',
@@ -720,8 +720,9 @@ const fr = {
   recover: {
     title: (m: Model) => `Relier ${thisFr(m)}`,
     lead: 'Tu as déjà utilisé Ledge sur cet appareil ? Ta passkey peut le reconnecter à ton PC, sans code.',
-    notes: [
-      'Ta passkey est restée dans le trousseau iCloud, même si l’app a été supprimée.',
+    /** The first note names iCloud's keychain on an iPhone or an iPad, a passkey manager elsewhere (P16). */
+    notes: (m: Model) => [
+      m ? 'Ta passkey est restée dans le trousseau iCloud, même si l’app a été supprimée.' : 'Ta passkey est restée dans ton gestionnaire de passkeys, même si l’app a été supprimée.',
       'Cet appareil vérifie que la passkey a été créée pour ton PC avant d’envoyer quoi que ce soit.',
       'Ton PC est prévenu de la reconnexion et peut révoquer cet appareil.'
     ],

@@ -317,7 +317,10 @@ export const en: Messages = {
       about: 'Versions and updates.'
     },
     machineOffline: 'A machine is offline', updateWaiting: 'An update is available',
-    mobileOffline: 'Mobile access is offline', mobileAsks: 'A device asks for access', mobileRecovery: 'A passkey reconnection to check',
+    mobileOffline: 'Mobile access is offline', mobileAsks: 'A device asks for access', mobileRecovery: {
+      recovered: 'A passkey reconnection to check', refused: 'A reconnection attempt refused', blocked: 'Passkey reconnection blocked',
+      several: (n: number) => `Mobile access: ${n} things to check`
+    },
     workspace: {
       openSession: 'Open a session',
       active: 'In the active group', right: 'To the right', saved: (where: string) => `Open a session: ${where}`,

@@ -120,6 +120,12 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   const platform = usePlatform();
   // The pairing by code was chosen after the passkey was found too old (screen 2 c): its last step offers the update (4 i).
   const [sawOld, setSawOld] = useState(false);
+  // Screen 1 d offers the notifications until the PC's snapshot says whether this device can have them; once offered, the
+  // step stays, so the snapshot arriving does not swap it for another button under the user's finger.
+  const [recoverNotify, setRecoverNotify] = useState(false);
+  const wantsNotify = recovery?.step === 'done' && (!mobile.fresh || offersNotifications(mobile.device?.push));
+  useEffect(() => { if (wantsNotify) setRecoverNotify(true); }, [wantsNotify]);
+  useEffect(() => { if (recovery && recovery.step !== 'done') setRecoverNotify(false); }, [recovery?.step]);
 
   const loginError = signinError(issue);
   const kind = issue === 'not_allowed' ? 'denied'
@@ -213,7 +219,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
             state={recovery!} login={login} reach={link.reach()}
             onRetry={() => { if (!link.recovery()?.again()) link.startRecovery(); }}
             onCode={pairByCode} onCancel={() => link.recovery()?.cancel()} onSignOut={signOut} onDone={() => setDoneSeen(true)}
-            actions={!mobile.fresh || offersNotifications(mobile.device?.push)
+            actions={recoverNotify
               ? <NotifyStep store={store} fetchImpl={fetchImpl} body={copy.recover.done.notify} onDone={() => setDoneSeen(true)} />
               : undefined}
           />

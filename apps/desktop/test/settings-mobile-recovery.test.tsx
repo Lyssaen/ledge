@@ -111,12 +111,13 @@ describe('Settings › Accès mobile › Appareils: passkey recovery', () => {
     expect(into.mock.contexts[0]).toBe(screen.getByRole('article', { name: 'iPhone · Safari' }));
   });
 
-  it('the tab’s dot: a pending recovery or a refused attempt, not an acknowledged one nor a block', () => {
-    expect(mobileRecovery({ ...ONLINE, devices: [{ ...IPAD, recovered: { at: LINKED, pending: true } }] })).toBe(true);
-    expect(mobileRecovery({ ...ONLINE, devices: [{ ...IPAD, refused: { at: LINKED } }] })).toBe(true);
-    expect(mobileRecovery({ ...ONLINE, devices: [{ ...IPAD, recovered: { at: LINKED } }] })).toBe(false);
-    expect(mobileRecovery({ ...ONLINE, devices: [IPAD], recovery: { blocked: { since: LINKED, failures: 3 } } })).toBe(false);
-    expect(mobileRecovery(undefined)).toBe(false);
+  it('the tab’s dot: a pending recovery, a refused attempt, a block, not an acknowledged recovery (P18)', () => {
+    expect(mobileRecovery({ ...ONLINE, devices: [{ ...IPAD, recovered: { at: LINKED, pending: true } }] })).toEqual(['recovered']);
+    expect(mobileRecovery({ ...ONLINE, devices: [{ ...IPAD, refused: { at: LINKED } }] })).toEqual(['refused']);
+    expect(mobileRecovery({ ...ONLINE, devices: [{ ...IPAD, recovered: { at: LINKED } }] })).toEqual([]);
+    expect(mobileRecovery({ ...ONLINE, devices: [IPAD], recovery: { blocked: { since: LINKED, failures: 3 } } })).toEqual(['blocked']);
+    expect(mobileRecovery({ ...ONLINE, devices: [{ ...IPAD, recovered: { at: LINKED, pending: true } }, { ...IPHONE, refused: { at: LINKED } }], recovery: { blocked: { since: LINKED, failures: 3 } } })).toHaveLength(3);
+    expect(mobileRecovery(undefined)).toEqual([]);
   });
 });
 

@@ -35,6 +35,14 @@ describe('the app without a key (passkey-reinstall.html, 1 a)', () => {
     expect(screen.queryByText(/trousseau iCloud/)).not.toBeInTheDocument();
     expect(screen.getByText('Tu as déjà utilisé Ledge sur cet appareil ? Ta passkey peut le reconnecter à ton PC, sans code.')).toBeInTheDocument();
   });
+
+  it('names a passkey manager, not iCloud, on a device that is not an iPhone or an iPad (P16)', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36');
+    app('unpaired');
+    expect(await screen.findByText('Ta passkey est restée dans ton gestionnaire de passkeys, même si l’app a été supprimée.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Relier cet appareil' })).toBeInTheDocument();
+    expect(screen.queryByText(/trousseau iCloud/)).not.toBeInTheDocument();
+  });
 });
 
 describe('the recovery under way and back (1 c, 1 d)', () => {
@@ -72,6 +80,8 @@ describe('each way a recovery stops (2 a–i)', () => {
     ['offline', { step: 'failed', why: 'offline', pcName: null }, 'Ton PC est hors ligne', 'Ouvre Ledge sur ton PC et active l’accès mobile : la reconnexion reprend dès qu’il est en ligne.', ['Réessayer', 'Annuler']],
     ['otherPc', failed('otherPc', { tags: ['7F3A 91C2', 'D044 18EB'] }), 'Cette passkey n’est pas celle de WSL', '7F3A 91C2 · PC attendu', ['Appairer avec un code', 'Se déconnecter']],
     ['connected', failed('connected', { device: 'iPad' }), 'Cette passkey est celle de l’iPad, connecté en ce moment', 'Ferme Ledge dans Safari sur l’iPad, puis réessaie.', ['Appairer avec un code', 'Réessayer']],
+    ['connected, a name it was given (P17)', failed('connected', { device: 'Tablette salon' }), 'Cette passkey est celle de l’appareil « Tablette salon », connecté en ce moment', 'Ferme Ledge dans Safari sur l’appareil « Tablette salon », puis réessaie.', ['Appairer avec un code', 'Réessayer']],
+    ['connected, no model (P17)', failed('connected', { device: 'Android' }), 'Cette passkey est celle de l’appareil, connecté en ce moment', 'Tu as réinstallé l’appareil ?', ['Appairer avec un code', 'Réessayer']],
     ['rate', failed('rate', { retryInMs: 2_500_000 }), 'Trop d’essais', '5 reconnexions en une heure : WSL en refuse d’autres pour l’instant. Réessaie dans 42 min, ou appaire avec un code.', ['Appairer avec un code', 'Réessayer dans 42 min']],
     ['blocked', failed('blocked'), 'Reconnexion bloquée sur WSL', 'Débloquer', ['Appairer avec un code']],
     ['timeout', failed('timeout'), 'WSL n’a pas répondu', 'La vérification n’a pas abouti à temps. Rien n’a été enregistré sur cet appareil.', ['Réessayer', 'Appairer avec un code']]

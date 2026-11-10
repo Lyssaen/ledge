@@ -5,15 +5,16 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { devices, expect, test, type CDPSession, type Page } from '@playwright/test';
 import type { SealedFrame } from '@ledge/protocol';
-import { b64u, userHandleMatches } from '@ledge/seal';
+import { userHandleMatches } from '@ledge/seal';
 import { copy } from '../src/copy';
+import { createDeviceCheck } from '../test/fakePc';
 import { PC_NAME, startHarness, type Harness } from './harness';
 
 const { defaultBrowserType: _phone, ...iPhone13 } = devices['iPhone 13'];
 test.use(iPhone13);
 
 let h: Harness;
-test.beforeEach(async () => { h = await startHarness(); });
+test.beforeEach(async () => { h = await startHarness(); h.daemon.device = createDeviceCheck(h.url); });
 test.afterEach(async () => { await h.close(); });
 
 async function shot(page: Page, name: string) {
@@ -141,7 +142,7 @@ test('each way a recovery stops: nothing pinned, and the way out offered', async
       await cdp.send('WebAuthn.clearCredentials', { authenticatorId });
       await cdp.send('WebAuthn.addCredential', {
         authenticatorId,
-        credential: { credentialId: b64u(new Uint8Array([1, 2, 3, handle.length])), isResidentCredential: true, rpId: new URL(h.url).hostname, privateKey: pkcs8(), userHandle: Buffer.from(handle).toString('base64'), signCount: 0 }
+        credential: { credentialId: Buffer.from([1, 2, 3, handle.length]).toString('base64'), isResidentCredential: true, rpId: new URL(h.url).hostname, privateKey: pkcs8(), userHandle: Buffer.from(handle).toString('base64'), signCount: 0 }
       });
       await reinstall(page);
       const proofs = h.pc.frames.filter(f => f.k === 'recover_proof').length;
