@@ -234,6 +234,27 @@ test('a crowded table: six seats, four at the ends, +N filters the atelier on th
   await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
 });
 
+// A task sheet (design-ux, 2026-11-10): a dictionary word longer than the sheet breaks with a hyphen; a path no dictionary knows
+// wraps without one; neither runs out of the sheet's 84 px.
+test('a long word on a task sheet hyphenates, a long path wraps, and neither leaves the sheet', async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('desktop.lang', 'fr'); } catch { /* ignore */ } });
+  const tasks = [session('doc', { name: 'Doc', cwd: '/w/ledge', project: 'ledge', topic: 'Documenter le protocole' }), session('path', { name: 'Path', cwd: '/w/ledge', project: 'ledge', topic: 'apps/desktop/src/atelier/ProjectTable.tsx' })];
+  await fakeDaemon(page, tasks, { projects: twoProjects });
+  await page.goto('/'); await booted(page);
+  const sheets = page.locator('.task-sheet p');
+  await expect(sheets).toHaveCount(2);
+  for (const p of await sheets.all()) {
+    await expect(p).toHaveAttribute('lang', 'fr');
+    expect(await p.evaluate(el => el.scrollWidth <= el.clientWidth + 1), `${await p.textContent()} stays inside its sheet`).toBe(true);
+  }
+  // The path's sheet is as wide as the plain one: break-word does not lower min-content, so a sheet sized on its content would grow.
+  const sheetWidth = (hasText: string) => page.locator('.task-sheet', { hasText }).evaluate(el => el.getBoundingClientRect().width);
+  expect(Math.abs(await sheetWidth('ProjectTable') - await sheetWidth('protocole'))).toBeLessThan(0.5);
+  // Every line of the path still shows: it wrapped rather than being cut off at the sheet's edge.
+  const path = sheets.filter({ hasText: 'ProjectTable' });
+  expect(await path.evaluate(el => el.getClientRects().length > 0 && el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+});
+
 test('a long project name on the rug is cut with an ellipsis and stays inside the rug', async ({ page }) => {
   const long = { projects: [{ ...twoProjects.projects[0]!, name: 'Payment Service Platform Migration Europe' }, twoProjects.projects[1]!], rules: [] };
   await fakeDaemon(page, eight, { projects: long });

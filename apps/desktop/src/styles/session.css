@@ -174,7 +174,8 @@
 .action-mark{display:inline-flex;align-items:center;justify-content:center;flex:none}
 .mark-success{color:var(--success)}
 .mark-unknown{width:13px;font-weight:700;color:var(--muted-foreground)}
-.vb{display:inline-flex;align-items:center;gap:6px;width:86px;flex:none;color:var(--muted-foreground)}
+/* At least the verbs' column; a longer verb (« Commande » and its icon) widens it rather than running into the target. */
+.vb{display:inline-flex;align-items:center;gap:6px;min-width:86px;flex:none;color:var(--muted-foreground)}
 .tg{flex:0 1 auto;min-width:0;padding:0;border:0;background:none;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px 'Geist Mono',monospace;color:var(--foreground)}
 button.tg:not(:disabled){cursor:pointer}
 button.tg:not(:disabled):hover{text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--muted-foreground)}

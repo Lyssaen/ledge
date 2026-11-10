@@ -75,7 +75,7 @@ function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.
     <div className="table-top">
       {sheets.map(s => (
         <Fragment key={s.id}>
-          <div style={{ left: s.x - W / 2 }} className={`task-sheet sheet-${s.slot} sheet-${s.state}`}><p>{s.task}</p>{marks(s.state)}</div>
+          <div style={{ left: s.x - W / 2 }} className={`task-sheet sheet-${s.slot} sheet-${s.state}`}><p lang="fr" /* the phone is in French (D13): its notes hyphenate as French */>{s.task}</p>{marks(s.state)}</div>
           {s.note && (
             <div style={{ left: noteX(s.x, sheets.filter(o => o.slot === s.slot).map(o => o.x), length) }} className={`sheet-note note-${s.slot} sheet-${s.note.state}`}>
               <p>{s.note.task}</p>{marks(s.note.state)}{s.note.more > 0 && <em className="note-more">+{s.note.more}</em>}

@@ -52,6 +52,8 @@ it('sheets carry the state marks', () => {
   expect(sheets.map(s => [...s.classList].find(c => /^sheet-(approval|question|done|offline|working)$/.test(c)))).toEqual(['sheet-approval', 'sheet-question', 'sheet-done', 'sheet-done', 'sheet-offline']);
   expect(sheets.map(s => [!!s.querySelector('.sheet-flag'), !!s.querySelector('.sheet-stamp')])).toEqual([[true, false], [true, false], [false, true], [false, true], [false, false]]);
   expect(screen.getByRole('button', { name: /^e,/ })).toHaveClass('seat-offline');
+  // A long word on a sheet hyphenates in the interface's language (the test's provider: English).
+  expect(sheets.map(s => s.querySelector('p')!.getAttribute('lang'))).toEqual(['en', 'en', 'en', 'en', 'en']);
 });
 it("helpers sit at the ends with ↳ parent; the first one's task is a post-it with +N; hidden with the toggle", () => {
   const otto = main('otto', { name: 'Otto', helpers: [{ id: 'h1', kind: 'Explore', task: 'Lire le code', state: 'working' }, helper('h2')] });
