@@ -1,0 +1,5 @@
+[
+  {"transitionId":9,"qitemId":"qitem-20261110172122-6564b59e8db394a5","ts":"2026-11-10T17:21:32.821Z","actorSession":"dev-back@ledge-dev","change":"claimed","summary":"Refonte mobile B4 : relevé OpenRig (topologie, queue, kernel) et exposition au téléphone avec actions","bodyPreview":null,"rig":"ledge-dev","targetKind":"mission","target":"ledge-refonte-mobile"},
+  {"transitionId":19,"qitemId":"qitem-20261110170907-85493e3d611998a2","ts":"2026-11-10T17:25:47.762Z","actorSession":"pilot-lead@ledge-dev","change":"blocked","summary":"Refonte app mobile et tablette Ledge : découper en lots et faire passer dans ledge-dev","bodyPreview":null,"rig":"ledge-dev","targetKind":"mission","target":"ledge-refonte-mobile"},
+  {"transitionId":20,"qitemId":"qitem-recovery-fef58ae7258650b0","ts":"2026-11-10T17:30:39.514Z","actorSession":"stuck-sweep@system","change":"completed","summary":null,"bodyPreview":null,"rig":null,"targetKind":"qitem","target":"qitem-recovery-fef58ae7258650b0"}
+]

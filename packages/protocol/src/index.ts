@@ -29,6 +29,7 @@ export * from './relay.js';
 export * from './relayAuth.js';
 export * from './mobile.js';
 export * from './phone.js';
+export * from './phoneRigs.js';
 export * from './push.js';
 export * from './handover.js';
 export * from './actions.js';

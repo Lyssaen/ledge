@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { OpenRigQueueSchema, OpenRigQueueStateSchema, RigRowSchema } from '@ledge/protocol';
-import { createOpenRig, readQueue, readRow, rowFrom, type RigRun } from '../src/daemon/openrig.js';
+import { OpenRigQueueSchema, OpenRigQueueStateSchema, RigRoutingEntrySchema, RigRowSchema } from '@ledge/protocol';
+import { createOpenRig, readQueue, readRouting, readRow, rowFrom, type RigRun } from '../src/daemon/openrig.js';
 
 const LIST = JSON.parse(readFileSync(new URL('./fixtures/openrig-0.7/queue-list.json', import.meta.url), 'utf8')) as Record<string, any>[];
 const AT = '2026-11-08T15:05:00.000Z';
@@ -101,5 +101,46 @@ describe('OpenRig queue', () => {
     expect(w.httpCalls).toEqual([]);
     expect(await world({ installed: false }).rig.queue('kernel')).toEqual({ rows: [], truncated: false, error: 'not_installed' });
     expect(await world({ daemon: 'stopped' }).rig.queue('kernel')).toEqual({ rows: [], truncated: false, error: 'daemon_stopped' });
+  });
+});
+
+const ROUTING = JSON.parse(readFileSync(new URL('./fixtures/openrig-0.7/recent-transitions.json', import.meta.url), 'utf8')) as unknown[];
+
+describe('readRouting: the queue\'s routing steps (OpenRig 0.7.10 recent-transitions)', () => {
+  it('keeps the row, time, actor, change, rig and summary, oldest first; an item without its row or change is left out', () => {
+    const r = readRouting([...ROUTING, { ts: AT, change: 'claimed' }])!;
+    expect(r.map(x => [x.qitem, x.seat, x.change, x.rig])).toEqual([
+      ['qitem-20261110172122-6564b59e8db394a5', 'dev-back@ledge-dev', 'claimed', 'ledge-dev'],
+      ['qitem-20261110170907-85493e3d611998a2', 'pilot-lead@ledge-dev', 'blocked', 'ledge-dev'],
+      ['qitem-recovery-fef58ae7258650b0', 'stuck-sweep@system', 'completed', '']
+    ]);
+    expect(r[0]!.summary).toMatch(/^Refonte mobile B4/);
+    expect(r[2]).not.toHaveProperty('summary');
+    for (const x of r) expect(RigRoutingEntrySchema.safeParse(x).success).toBe(true);
+  });
+  it('keeps the last 20 of a longer list, and is undefined for what is not a list', () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({ qitemId: `qitem-${i}`, ts: AT, actorSession: 's@r', change: 'claimed', rig: 'r' }));
+    expect(readRouting(many)!.map(x => x.qitem)).toEqual(many.slice(5).map(x => x.qitemId));
+    expect(readRouting({ error: 'x' })).toBeUndefined();
+  });
+});
+
+describe('OpenRig closed rows and routing', () => {
+  it('asks the closed states of the rig, newest updated first, and filters by the rig again', async () => {
+    const { rig, httpCalls } = world({ http: () => LIST });
+    const r = await rig.closed!('ledge-survey');
+    expect(httpCalls).toEqual(['/api/queue/list?state=done,handed-off,canceled,failed,denied&rig=ledge-survey&sort=updated&compact=1&limit=20']);
+    expect(r.error).toBeUndefined();
+    expect(r.rows.every(x => x.to.endsWith('@ledge-survey') || x.from.endsWith('@ledge-survey'))).toBe(true);
+    expect(await world({ http: () => undefined }).rig.closed!('ledge-survey')).toEqual({ rows: [], error: 'failed' });
+    expect(await world({ http: () => LIST }).rig.closed!('nope')).toEqual({ rows: [], error: 'unknown_rig' });
+  });
+  it('reads the routing of the whole machine, or says why not', async () => {
+    const { rig, httpCalls } = world({ http: () => ROUTING });
+    expect((await rig.routing!()).entries).toHaveLength(3);
+    expect(httpCalls).toEqual(['/api/queue/recent-transitions?scope=instance&limit=20']);
+    expect(await world({ http: () => 'nope' }).rig.routing!()).toEqual({ entries: [], error: 'failed' });
+    expect(await world({ daemon: 'stopped' }).rig.routing!()).toEqual({ entries: [], error: 'daemon_stopped' });
+    expect(await world({ installed: false }).rig.routing!()).toEqual({ entries: [], error: 'not_installed' });
   });
 });

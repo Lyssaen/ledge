@@ -6,7 +6,7 @@ import { parse as parseYaml } from 'yaml';
 import { composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { KERNEL_RIG, QitemIdSchema, RigNameSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole, composes, launchCommands } from '@ledge/protocol';
+import { KERNEL_RIG, QitemIdSchema, RigNameSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole, composes, launchCommands, RIG_CLOSED_STATES, RIG_QUEUE_CLOSED_MAX, RIG_ROUTING_MAX, type RigRoutingEntry } from '@ledge/protocol';
 import { log } from '../log.js';
 import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
@@ -211,6 +211,13 @@ export interface OpenRig {
   /** A rig's open requests (`pending`, `in-progress`, `blocked`) naming one of its seats as destination or source, from the daemon's
    *  `/api/queue/list` (no CLI fallback: the route is contractual), read at each ask. `truncated`: the list was full. Same `error`s as `graph`, plus `failed`. */
   queue(rig: string): Promise<{ rows: RigRow[]; truncated: boolean; error?: string }>;
+  /** A rig's lately closed requests (`done`, `handed-off`, `canceled`, `failed`, `denied`) naming one of its seats, newest first,
+   *  `RIG_QUEUE_CLOSED_MAX` at most, from `/api/queue/list`. Same `error`s as `queue`. Optional only for the doubles of older tests:
+   *  without it (or `routing`) the phone gets no `daemon.rigs`. */
+  closed?(rig: string): Promise<{ rows: RigRow[]; error?: string }>;
+  /** The queue's latest routing steps on the machine, every rig (`/api/queue/recent-transitions?scope=instance`), oldest first,
+   *  `RIG_ROUTING_MAX` at most. `error`: `not_installed`, `daemon_stopped`, `failed`. */
+  routing?(): Promise<{ entries: RigRoutingEntry[]; error?: string }>;
 }
 export interface RolesResult { roles: RoleSummary[]; openrigVersion?: string; error?: string }
 export interface RoleResult { role?: RoleDetail; error?: string }
@@ -766,7 +773,24 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return live ?? none('failed');
   }
 
-  return { state, act, specs, launch, reseat, roles, role, roleFile, duplicateRole, row, graph, snapshots, permissions, queue };
+  async function closed(name: string): Promise<{ rows: RigRow[]; error?: string }> {
+    const none = (error: string) => ({ rows: [], error });
+    const st = await state();
+    if (!st.installed) return none('not_installed');
+    if (!st.rigs.some(r => r.name === name)) return none(st.daemon.state === 'running' ? 'unknown_rig' : 'daemon_stopped');
+    const live = await http(closedPath(name)).then(raw => readQueue(raw, name, new Date(now()).toISOString()), () => undefined);
+    return live ? { rows: live.rows.slice(0, RIG_QUEUE_CLOSED_MAX) } : none('failed');
+  }
+
+  async function routing(): Promise<{ entries: RigRoutingEntry[]; error?: string }> {
+    const st = await state();
+    if (!st.installed) return { entries: [], error: 'not_installed' };
+    if (st.daemon.state !== 'running') return { entries: [], error: 'daemon_stopped' };
+    const live = await http(ROUTING_PATH).then(readRouting, () => undefined);
+    return live ? { entries: live } : { entries: [], error: 'failed' };
+  }
+
+  return { state, act, specs, launch, reseat, roles, role, roleFile, duplicateRole, row, graph, snapshots, permissions, queue, closed, routing };
 }
 
 /** A seat's permissions from `rig seat status <session> --json` (`permissions.effective.{effectiveMode, source, launchPosture}`,
@@ -893,4 +917,23 @@ export function readQueue(raw: unknown, rig: string, at: string): { rows: RigRow
   const time = (r: RigRow) => { const t = Date.parse(r.updatedAt); return Number.isNaN(t) ? -Infinity : t; };
   rows.sort((a, b) => time(b) - time(a)); // stable: ties keep OpenRig's order
   return { rows, truncated: raw.length >= QUEUE_LIMIT };
+}
+
+/** A rig's closed rows, newest first: `rig=` keeps the rows naming it on OpenRig 0.7.10; `readQueue` filters again for an older one that ignores it. */
+const closedPath = (rig: string): string =>
+  `/api/queue/list?state=${RIG_CLOSED_STATES.join(',')}&rig=${encodeURIComponent(rig)}&sort=updated&compact=1&limit=${RIG_QUEUE_CLOSED_MAX}`;
+const ROUTING_PATH = `/api/queue/recent-transitions?scope=instance&limit=${RIG_ROUTING_MAX}`;
+
+/** The routing steps out of `GET /api/queue/recent-transitions` (an array, oldest first); an item without its row, time, actor or change is
+ *  left out. Undefined when it is not a list. */
+export function readRouting(raw: unknown): RigRoutingEntry[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: RigRoutingEntry[] = [];
+  for (const item of raw) {
+    const j = obj(item);
+    const qitem = str(j.qitemId), at = str(j.ts), seat = str(j.actorSession), change = str(j.change), summary = str(j.summary);
+    if (!qitem || !at || !seat || !change) continue;
+    out.push({ qitem, at, seat, change, rig: str(j.rig) ?? '', ...(summary ? { summary } : {}) });
+  }
+  return out.slice(-RIG_ROUTING_MAX);
 }

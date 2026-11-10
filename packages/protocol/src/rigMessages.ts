@@ -358,6 +358,10 @@ export const OpenRigRowStateSchema = z.object({
 export type OpenRigRow = z.infer<typeof OpenRigRowSchema>;
 export type OpenRigRowState = z.infer<typeof OpenRigRowStateSchema>;
 
+/** How many recently closed rows of a rig a read gives (`done`, `handed-off`, `canceled`, `failed`, `denied`), newest first. */
+export const RIG_QUEUE_CLOSED_MAX = 20;
+export const RIG_CLOSED_STATES = ['done', 'handed-off', 'canceled', 'failed', 'denied'] as const;
+
 /** A front asks a machine for a rig's open requests (`pending`, `in-progress`, `blocked`) that name one of its seats, as destination or source. */
 export const OpenRigQueueSchema = z.object({ type: z.literal('openrig.queue'), requestId: z.string().min(1).max(100), machineId: z.string().optional(), rig: RigNameSchema });
 /** The rows as OpenRig lists them; `truncated`: OpenRig's list was full (100), so older rows of this rig may be missing. `error`: `unknown_rig`,

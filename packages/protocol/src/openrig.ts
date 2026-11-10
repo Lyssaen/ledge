@@ -142,6 +142,16 @@ export type RigGraphSeat = z.infer<typeof RigGraphSeatSchema>;
 export type RigLink = z.infer<typeof RigLinkSchema>;
 export type RigGraph = z.infer<typeof RigGraphSchema>;
 
+/** One step of the queue's routing on the machine (OpenRig's `GET /api/queue/recent-transitions?scope=instance`, 0.7.10): a row
+ *  claimed, handed off, blocked, resumed, completed… `change` is OpenRig's own words (`claimed`, `handed off to <seat>`, `blocked on
+ *  <row>`, `completed`, `canceled`…), `seat` who made it (the actor), `rig` the rig it belongs to; oldest first, as OpenRig lists them. */
+export const RigRoutingEntrySchema = z.object({
+  qitem: z.string(), at: z.string(), seat: z.string(), change: z.string(), rig: z.string(), summary: z.string().optional()
+});
+export type RigRoutingEntry = z.infer<typeof RigRoutingEntrySchema>;
+/** The most routing steps OpenRig gives in one read. */
+export const RIG_ROUTING_MAX = 20;
+
 /** A front asks a machine for a rig's topology. */
 export const OpenRigGraphSchema = z.object({ type: z.literal('openrig.graph'), requestId: z.string().min(1).max(100), machineId: z.string().optional(), rig: RigNameSchema });
 /** The topology, or why not: `unknown_rig`, `not_installed`, `daemon_stopped`, or the fleet's `offline` / `outdated`. */

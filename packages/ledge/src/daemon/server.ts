@@ -1722,6 +1722,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     mobile,
     // « À toi » on the phone (lot 3): this PC's OpenRig, as the desktop has it; a phone's answer goes through the same checks.
     openrig: { list: () => human.list(), answer: (qitemId, answer) => human.answer(qitemId, answer), follow: followAsks },
+    // Rigs and the kernel on the phone (refonte mobile B4): the Desktop's reads and actions through `dispatch`, and these two reads it does not make.
+    ...(openrig.closed && openrig.routing ? { rigs: { closed: openrig.closed.bind(openrig), routing: openrig.routing.bind(openrig) } } : {}),
     // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
     chats: { ...threads, async drop(id: string) {
       const waiting = [...new Set(threads.queuedRelays().filter(q => q.thread === `device:${id}`).map(q => q.relay.id))];
