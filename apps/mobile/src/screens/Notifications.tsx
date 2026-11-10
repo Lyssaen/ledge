@@ -4,7 +4,7 @@ import { disablePush, enablePush, pushSupport, type EnableResult } from '../push
 import { href, navigate } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
 import { Notice } from '../ui/Notice';
-import { OUTLINE, BRAND } from '../ui/Board';
+import { OUTLINE, PRIMARY } from '../ui/Board';
 import { Switch } from '../ui/Switch';
 
 const N = copy.notifications;
@@ -83,7 +83,7 @@ export function NotifyStep({ store, onDone, fetchImpl, body = N.body }: { store:
         <h2 id="notify-title" className="text-title leading-[1.35] font-semibold">{N.title}</h2>
         <p className="text-body leading-[1.6] text-muted">{body}</p>
         {n.problem && <Notice title={n.problem} tone="warning" role="alert" />}
-        <button type="button" disabled={n.busy || !fresh} onClick={go} className={BRAND}>{n.busy ? N.working : fresh ? N.enable : N.waiting}</button>
+        <button type="button" disabled={n.busy || !fresh} onClick={go} className={PRIMARY}>{n.busy ? N.working : fresh ? N.enable : N.waiting}</button>
       </section>
       <a href={href({ name: 'atoi' })} onClick={onDone} className={OUTLINE}>{N.later}</a>
     </>

@@ -6,7 +6,7 @@ import { deviceLabel } from '../link/label';
 import { href } from '../router';
 import { useMobile, type ConfirmChallenge, type MobileStore } from '../state/store';
 import { Notice } from '../ui/Notice';
-import { OUTLINE, BRAND, Spinner } from '../ui/Board';
+import { OUTLINE, PRIMARY, Spinner } from '../ui/Board';
 import { Icon } from '../ui/icons';
 import { isApple, usePlatform } from './device';
 import { modelOf } from './Recover';
@@ -128,12 +128,12 @@ export function ProtectStep({ store, onDone, update = false }: {
   const [shown, setShown] = useState(false);
   useEffect(() => { if (e.offered) setShown(true); }, [e.offered]);
   const inbox = href({ name: 'atoi' });
-  if (!shown) return <a href={inbox} onClick={onDone} className={BRAND}>{copy.compare.seePending}</a>;
+  if (!shown) return <a href={inbox} onClick={onDone} className={PRIMARY}>{copy.compare.seePending}</a>;
   if (e.registered) {
     return (
       <>
         <Notice title={E.done} role="status" />
-        <a href={inbox} onClick={onDone} className={BRAND}>{copy.compare.seePending}</a>
+        <a href={inbox} onClick={onDone} className={PRIMARY}>{copy.compare.seePending}</a>
       </>
     );
   }
@@ -142,7 +142,7 @@ export function ProtectStep({ store, onDone, update = false }: {
       <section aria-labelledby="protect-title" className="flex flex-col gap-3 rounded-control border border-line bg-surface p-4">
         <h2 id="protect-title" className="text-title leading-[1.35] font-semibold">{update ? copy.passkeyUpdate.title : E.title}</h2>
         <p className="text-body leading-[1.6] text-muted">{update ? copy.passkeyUpdate.stepBody(modelOf()) : E.body}</p>
-        <Action e={e} className={BRAND} label={update ? copy.passkeyUpdate.go : E.go} />
+        <Action e={e} className={PRIMARY} label={update ? copy.passkeyUpdate.go : E.go} />
       </section>
       <a href={inbox} onClick={onDone} className={OUTLINE}>{E.later}</a>
     </>
@@ -196,8 +196,8 @@ export function UpdateCard({ store, storage = globalThis.localStorage }: { store
         : <p className="text-body leading-[1.6] text-muted">{isApple() ? U.body(modelOf()) : U.bodyOther(modelOf())}</p>}
       <div className={problem ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'}>
         {problem
-          ? <button type="button" onClick={failed ? e.retry : e.go} disabled={!failed && !e.challenge} className={BRAND}>{U.retry}</button>
-          : <button type="button" onClick={e.go} disabled={!e.challenge || e.asking} className={BRAND}>{e.asking ? <><Spinner size="size-4" />{U.updating}</> : e.challenge ? U.go : copy.confirm.preparing}</button>}
+          ? <button type="button" onClick={failed ? e.retry : e.go} disabled={!failed && !e.challenge} className={PRIMARY}>{U.retry}</button>
+          : <button type="button" onClick={e.go} disabled={!e.challenge || e.asking} className={PRIMARY}>{e.asking ? <><Spinner size="size-4" />{U.updating}</> : e.challenge ? U.go : copy.confirm.preparing}</button>}
         <button type="button" onClick={putOff} disabled={e.asking} className={OUTLINE}>{U.later}</button>
       </div>
     </section>
