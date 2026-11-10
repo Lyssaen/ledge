@@ -114,11 +114,12 @@ export function joinTerm(p: Panel, ref: string, column: string): Panel {
   const target = stacks.find(s => s.refs.includes(column));
   if (!target) return p;
   if (target.refs[target.refs.length - 1] === ref && target.active === target.refs.length - 1) return p;
+  // The column is kept as found: `ref` may be `column` itself (its shown tab dropped on its own body), and a column of that one
+  // tab, shown, left above, so the column is still there once `ref` is taken out.
+  if (!target.id) target.id = target.refs[0];
   dropRef(stacks, ref);
-  const s = stacks.find(x => x.refs.includes(column))!;
-  if (!s.id) s.id = s.refs[0];
-  s.refs.push(ref);
-  s.active = s.refs.length - 1;
+  target.refs.push(ref);
+  target.active = target.refs.length - 1;
   return arranged(p, stacks, 'term');
 }
 

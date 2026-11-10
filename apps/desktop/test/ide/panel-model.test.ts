@@ -54,6 +54,10 @@ describe('the bottom panel model', () => {
     // A tab of that column dropped on its body moves to its end; a column that is not there leaves the panel as it was.
     expect(joinTerm(back, 'shell:1', 'shell:2').stacks).toEqual([{ id: 'shell:1', refs: ['shell:2', 'shell:1'], active: 1 }]);
     expect(joinTerm(back, 'shell:9', 'shell:7')).toBe(back);
+    // The shown tab dropped on its own column's body (joinTerm(p, A, A)): to the end, shown, no throw.
+    const wslFront = joinTerm(activateTerm(back, 'shell:1'), 'shell:1', 'shell:1');
+    expect(wslFront.stacks).toEqual([{ id: 'shell:1', refs: ['shell:2', 'shell:1'], active: 1 }]);
+    expect(joinTerm(back, 'shell:2', 'shell:2')).toBe(back);
   });
 
   it('the right edge opens a column; choosing a stacked tab shows it; closing one leaves the other', () => {
