@@ -6,7 +6,7 @@ import { deviceLabel } from '../link/label';
 import type { Reach } from '../link/link';
 import type { RecoveryState } from '../link/recover';
 import { href } from '../router';
-import { Board, Fill, H1, OUTLINE, PRIMARY, Spinner } from '../ui/Board';
+import { Board, Fill, H1, OUTLINE, BRAND, Spinner } from '../ui/Board';
 import { Icon, type IconName } from '../ui/icons';
 import { Mascot } from '../ui/MobileBot';
 import { Account } from './Compare';
@@ -41,8 +41,8 @@ export function Choose({ login, platform, onPasskey, onCode }: { login: string |
       )}
       <Fill />
       <div className="flex flex-col gap-3">
-        {platform && <button type="button" onClick={onPasskey} className={PRIMARY}><Icon name="face" />{R.go}</button>}
-        <button type="button" onClick={onCode} className={platform ? OUTLINE : PRIMARY}>{R.code}</button>
+        {platform && <button type="button" onClick={onPasskey} className={BRAND}><Icon name="face" />{R.go}</button>}
+        <button type="button" onClick={onCode} className={platform ? OUTLINE : BRAND}>{R.code}</button>
       </div>
     </Board>
   );
@@ -101,8 +101,8 @@ export interface RecoverProps {
 /** Screens 1 c, 1 d and 2 a to 2 i: the recovery as it goes, back, or stopped. */
 export function Recover({ state, login, reach, onRetry, onCode, onCancel, onSignOut, onDone, actions }: RecoverProps) {
   const model = modelOf();
-  const code = (primary = true) => <button key="code" type="button" onClick={onCode} className={primary ? PRIMARY : OUTLINE}>{R.code}</button>;
-  const retry = (primary = false) => <button key="retry" type="button" onClick={onRetry} className={primary ? PRIMARY : OUTLINE}>{R.retry}</button>;
+  const code = (primary = true) => <button key="code" type="button" onClick={onCode} className={primary ? BRAND : OUTLINE}>{R.code}</button>;
+  const retry = (primary = false) => <button key="retry" type="button" onClick={onRetry} className={primary ? BRAND : OUTLINE}>{R.retry}</button>;
 
   if (state.step === 'reaching' || state.step === 'faceid' || state.step === 'checking') {
     const pc = (state.step === 'reaching' ? null : state.pcName) ?? copy.yourPc;
@@ -144,7 +144,7 @@ export function Recover({ state, login, reach, onRetry, onCode, onCancel, onSign
         </div>
         <p role="status" className="flex items-center gap-2 self-center text-small text-ok"><Icon name="check" className="size-4" />{R.done.told(pc)}</p>
         <Fill />
-        {actions ?? <a href={href({ name: 'atoi' })} onClick={onDone} className={PRIMARY}>{copy.compare.seePending}</a>}
+        {actions ?? <a href={href({ name: 'atoi' })} onClick={onDone} className={BRAND}>{copy.compare.seePending}</a>}
       </Board>
     );
   }

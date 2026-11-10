@@ -111,8 +111,17 @@ describe('each way a recovery stops (2 a–i)', () => {
     expect(screen.getByText('WSL a accepté ta passkey, mais cet iPhone n’a pas pu enregistrer la clé de WSL : son stockage est peut-être plein. Rien n’est encore relié.')).toBeInTheDocument();
     expect(await screen.findByText('@paradow')).toBeInTheDocument();
     expect(buttons()).toEqual(['Réessayer', 'Appairer avec un code']);
+    // The mockup's lead button is the red one (`.btn.primary`), in both themes; the other way stays outlined.
+    expect(screen.getByRole('button', { name: 'Réessayer' })).toHaveClass('bg-primary');
+    expect(screen.getByRole('button', { name: 'Appairer avec un code' })).not.toHaveClass('bg-primary');
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     expect(t.calls.at(-1)).toBe('startRecovery');
+  });
+
+  it('a failure whose only way out is the code leads with it, in red', () => {
+    const t = app('unpaired');
+    act(() => t.setRecovery(failed('revoked')));
+    expect(screen.getByRole('button', { name: 'Appairer avec un code' })).toHaveClass('bg-primary');
   });
 
   it('« Réessayer » after Face ID was cancelled opens the sheet again on the same offer', () => {

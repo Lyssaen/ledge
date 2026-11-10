@@ -3,6 +3,8 @@ import { buttonClass } from './Button';
 
 /** The one action the board leads to, and the other ways out: the large buttons of ui/Button. */
 export const PRIMARY = buttonClass({ variant: 'primary', size: 'lg', block: true });
+/** The passkey boards' lead action, in the red of the validated mockups (passkey-reinstall.html, `.btn.primary`). */
+export const BRAND = buttonClass({ variant: 'brand', size: 'lg', block: true });
 export const OUTLINE = buttonClass({ size: 'lg', block: true });
 export const ICON = 'size-5 flex-none fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.5]';
 export const H1 = 'text-display leading-8 font-semibold tracking-[-.025em]';
