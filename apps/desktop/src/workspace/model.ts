@@ -9,6 +9,9 @@
  */
 
 export type TabKind = 'session' | 'seat' | 'changes' | 'terminal' | 'pr' | 'rig' | 'openrig' | 'atoi' | 'atelier' | 'settings';
+/** Every tab kind, as the Ledge guide (docs/ledge-guide.md) describes the screens: a Record, so a new kind fails to compile until it is listed. */
+const TAB_KIND: Record<TabKind, true> = { session: true, seat: true, changes: true, terminal: true, pr: true, rig: true, openrig: true, atoi: true, atelier: true, settings: true };
+export const TAB_KINDS = Object.keys(TAB_KIND) as TabKind[];
 export type View = 'thread' | 'terminal' | 'role';
 export interface Tab { kind: TabKind; ref: string; /** session and seat tabs: the view in front. */ view?: View }
 /** The link colours (the user, 2026-11-09: more than two), none of them a state colour nor Ledge's coral. */

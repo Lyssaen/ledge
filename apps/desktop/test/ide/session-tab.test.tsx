@@ -8,7 +8,7 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { TermStore } from '../../src/term/store';
 import { PROJECTS, seedAtelier } from '../helpers';
@@ -42,7 +42,7 @@ const PERMISSION = { state: 'waiting_permission', pending: { kind: 'permission',
 
 /** `stream`: the machine streams the agents' panes (their xterm a fake one), so their screens attach in the test. */
 async function mount({ stream = false }: { stream?: boolean } = {}) {
-  await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+  await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
   seedAtelier();
   const d = await createMockDaemon(); daemons.push(d);
   if (stream) { d.extras.daemon = { version: '0.49.0', install: 'npm', systemd: true, terminalStream: true }; env.backend = fakeBackend(); }

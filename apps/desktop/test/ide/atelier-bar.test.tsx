@@ -10,7 +10,7 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { PROJECTS, seedAtelier } from '../helpers';
 
@@ -91,7 +91,7 @@ describe('offersRigs', () => {
 
 describe('the Atelier tab in the IDE', () => {
   it('shows the bar above the atelier; « Projets » regroups', async () => {
-    await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+    await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
     seedAtelier();
    
     const d = await createMockDaemon(); daemons.push(d);

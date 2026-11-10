@@ -7,7 +7,7 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { loadComposer } from '../../src/launch/lazy';
 import { saveOpenSession } from '../../src/workspace/openPrefs';
@@ -22,7 +22,7 @@ beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'f
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
 
 async function mount({ layout }: { layout?: Workspace } = {}) {
-  await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde(), loadComposer()]);
+  await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde(), loadComposer()]);
   if (layout) localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(layout)));
   const d = await createMockDaemon(); daemons.push(d);
   d.options.autoLaunch = true;

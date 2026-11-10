@@ -6,7 +6,7 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { TermStore } from '../../src/term/store';
 import { PROJECTS } from '../helpers';
@@ -35,7 +35,7 @@ afterEach(async () => { env.backend = null; cleanup(); vi.restoreAllMocks(); for
 
 async function mount(tabs: Tab[], rig = false, pty = true, side = true, terminalStream = true) {
   localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(tabs.reduce((w, t, i) => open(w, t, i && side ? 'right' : undefined), empty()))));
-  await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+  await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
  
   const d = await createMockDaemon(); daemons.push(d);
   d.extras.daemon = { version: '0.49.0', install: 'npm', systemd: true, terminalStream }; d.extras.launcher = ['ledge']; env.backend = pty ? fakeBackend() : null;

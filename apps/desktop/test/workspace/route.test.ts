@@ -88,7 +88,7 @@ describe('routeNav', () => {
   });
 });
 
-const nav = (place: NavState['place']): NavState => ({ place, modal: null, chat: false, chatFocus: 0, fullscreen: false, helpers: false, paused: false });
+const nav = (place: NavState['place']): NavState => ({ place, modal: null, chat: false, chatFocus: 0, helpers: false, paused: false });
 describe('tabNav', () => {
   it('a session tab matching the place gets the real nav', () => {
     const n = nav({ kind: 'session', id: 's1', view: 'atelier', project: 'all' });

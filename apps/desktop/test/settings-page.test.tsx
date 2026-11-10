@@ -102,9 +102,4 @@ describe('the Settings page', () => {
     expect(css).toContain('.set-radios label:hover input{border-color:var(--ring)}');
   });
 
-  it('the sidebar’s footer is styled once, by sidebar.css: the Settings sheet does not repeat it', () => {
-    const sheet = (name: string) => readFileSync(resolve(__dirname, '../src/styles', name), 'utf8');
-    expect(sheet('sidebar.css')).toContain('.side-footer{');
-    expect(sheet('settings.css')).not.toContain('.side-footer');
-  });
 });

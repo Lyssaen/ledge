@@ -13,7 +13,7 @@ import { App } from '../src/App';
 import { loadWorkspace } from '../src/session/lazy';
 import { loadComposer } from '../src/launch/lazy';
 import { loadEditor } from '../src/projects/lazy';
-import { loadChat, loadHome } from '../src/chat/lazy';
+import { loadChat } from '../src/chat/lazy';
 import { loadIde } from '../src/ide/lazy';
 import { loadSettings } from '../src/settings/lazy';
 import { empty, open, serialize } from '../src/workspace/model';
@@ -147,7 +147,6 @@ export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, l
   await loadComposer();
   await loadEditor();
   await loadSettings();
-  await loadHome();
   // The IDE (lot 12b: the only interface): its chunk and the right panel's chat are there before the first render, and the
   // workspace starts on the Atelier tab, as a first run has it.
   await loadIde();

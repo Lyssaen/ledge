@@ -6,11 +6,8 @@ import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { HumanAsk, HumanChannel, OpenRigAnswered, Session } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
 import { AsksColumn } from '../src/asks/AsksColumn';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { bySection, endOf, markOf, sectionOf } from '../src/asks/model';
 import { Attention } from '../src/shell/sidebar/Attention';
-import { RigGroups } from '../src/shell/sidebar/RigGroups';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -226,14 +223,6 @@ describe('a partial read and the counts (design-ux)', () => {
     expect(screen.getByRole('region', { name: 'Nouvelles' }).querySelector('.ask-n')).toHaveClass('neutral');
     expect(screen.getByRole('region', { name: 'Décisions' }).querySelector('.ask-n')).not.toHaveClass('neutral');
   });
-  it('« Le point » takes half the zone at most and scrolls inside, its head and section titles staying up', () => {
-    const css = readFileSync(resolve(__dirname, '../src/styles/shell.css'), 'utf8');
-    expect(css).toMatch(/\.home-body \{[^}]*container-type: size/);
-    expect(css).toMatch(/\.le-point \{[^}]*max-height: 50cqh;[^}]*overflow-y: auto/);
-    expect(css).toMatch(/\.le-point \.lp-head \{[^}]*position: sticky; top: 0/);
-    expect(css).toMatch(/\.le-point \.ask-sec-title \{[^}]*position: sticky; top: var\(--lp-head\)/);
-    expect(css).toMatch(/\.le-point\.lp-more::after \{[^}]*height: 16px/);
-  });
 });
 
 describe('the sidebar', () => {
@@ -258,16 +247,8 @@ describe('the sidebar', () => {
     expect(markOf([ask({ kind: 'update', questions: [] })])).toBeNull();
     expect(markOf([ask({ questions: [] }), ask({ kind: 'parked', questions: [] })])).toBe('parked');
     expect(markOf([ask({ kind: 'parked', questions: [] }), ask()])).toBe('decision');
-    render(<LangProvider lang="fr"><aside className="st"><RigGroups sessions={[BIX]} current={null} paused dispatch={vi.fn()} dense={false} onToggleDense={vi.fn()} asks={[ask({ kind: 'update', questions: [] })]} /></aside></LangProvider>);
-    expect(document.querySelector('.st-ask-mark')).toBeNull();
-    expect(document.querySelector('.st-rig .t-need')).toBeNull();
   });
 
-  it('Rigs: the asking seat’s row says « décision » in red, and its rig counts it', () => {
-    render(<LangProvider lang="fr"><aside className="st"><RigGroups sessions={[BIX]} current={null} paused dispatch={vi.fn()} dense={false} onToggleDense={vi.fn()} asks={[ask()]} /></aside></LangProvider>);
-    expect(document.querySelector('.st-ask-mark')).toHaveTextContent('décision');
-    expect(document.querySelector('.st-rig .t-need')).toHaveTextContent('1');
-  });
 });
 
 describe('Markdown bodies (the lead: folded = words without syntax, unfolded = rendered)', () => {
@@ -422,10 +403,5 @@ describe('review of f382bce6: the asks are this computer’s, never a namesake s
     expect(card).not.toHaveTextContent('Bix distant');
     expect(card.querySelector('.ask-hex')).not.toBeNull();
     expect(card).toHaveTextContent('ledge-dev· pilotdécision');
-  });
-  it('the sidebar marks only the local seat, and counts it in its rig only', () => {
-    render(<LangProvider lang="fr"><aside className="st"><RigGroups sessions={[remote, BIX]} current={null} paused dispatch={vi.fn()} dense={false} onToggleDense={vi.fn()} asks={[ask()]} /></aside></LangProvider>);
-    const marked = [...document.querySelectorAll('.st-ask-mark')].map(m => m.closest('[role="treeitem"]')!.querySelector('strong')!.textContent);
-    expect(marked).toEqual(['Bix']);
   });
 });

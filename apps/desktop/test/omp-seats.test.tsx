@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { Session } from '@ledge/protocol';
-import { LangProvider } from '../src/i18n/lang';
-import { RigGroups } from '../src/shell/sidebar/RigGroups';
-import type { SidebarOpenRig } from '../src/openrig/sidebarState';
 import { SESSION_KEY, viewShown } from '../src/session/prefs';
 import { boot, closeDaemons } from './helpers';
 
@@ -19,46 +16,7 @@ const IVO = omp('rig-ivo', 'Ivo', 'dev-omp', 'dev.agent', { state: 'working' });
 const PIA = omp('rig-pia', 'Pia', 'dev-omp', 'review.reviewer');
 const TOM = omp('rig-tom', 'Tom', 'split-omp', 'split.splitter', { state: 'exited', exitedAt: '2026-11-03T09:00:00.000Z' });
 const ANA = omp('rig-ana', 'Ana', 'split-omp', 'analysis.analyst');
-const LU = fakeSession('rig-lu', { name: 'Lu', cwd: '/w/ledge', state: 'exited', source: 'rig', rig: { seat: 'pilot-lead@ledge-dev', name: 'ledge-dev', role: 'pilot.lead' } });
 
-const openrig = (): SidebarOpenRig => ({ installed: true, daemonUp: true, kernelState: () => 'ready', labelOf: m => m, canStart: true, installedOn: null, starting: false, failed: null, start: vi.fn() });
-function mount(sessions: readonly Session[], lang: 'fr' | 'en' = 'fr') {
-  render(<LangProvider lang={lang}><aside className="st"><RigGroups sessions={sessions} current={null} paused dispatch={vi.fn()} openrig={openrig()} dense={false} onToggleDense={vi.fn()} /></aside></LangProvider>);
-}
-const rowOf = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) }).closest('[role="treeitem"]') as HTMLElement;
-
-describe('OMP seats in the sidebar', () => {
-  it('a running OMP seat is a seat row like the others: the omp logo, its name, « rôle · omp », counted while it works', () => {
-    mount([IVO, PIA]);
-    expect(rowOf('Ivo')).toHaveTextContent('dev · omp');
-    expect(rowOf('Pia')).toHaveTextContent('review.reviewer · omp');
-    // Sidebar rows wear their provider's logo, not a mascot (d036a563).
-    expect(rowOf('Ivo').querySelector('.st-bot .logo')).toHaveAttribute('title', 'omp');
-    expect(rowOf('Ivo')).not.toHaveClass('off');
-    const head = screen.getByRole('button', { name: /^dev-omp/ }).closest('[role="treeitem"]')!;
-    expect(head.querySelector('.t-work')).toHaveTextContent('1');
-  });
-
-  it('a stopped OMP seat stays under its rig, greyed « arrêté », with its omp logo, out of the rig’s count', () => {
-    mount([ANA, TOM, { ...ANA, id: 'rig-sol', name: 'Sol', state: 'working', rig: { ...ANA.rig!, seat: 'review-reviewer@split-omp', role: 'review.reviewer' } }]);
-    const tom = rowOf('Tom');
-    expect(tom).toHaveClass('off');
-    expect(tom.querySelector('.st-time')).toHaveTextContent('arrêté');
-    expect(tom.querySelector('.st-bot .logo')).toHaveAttribute('title', 'omp');
-    const head = screen.getByRole('button', { name: /^split-omp/ }).closest('[role="treeitem"]')!;
-    expect(head.querySelector('.t-work')).toHaveTextContent('1');
-    cleanup();
-    mount([ANA, TOM], 'en');
-    expect(rowOf('Tom').querySelector('.st-time')).toHaveTextContent('stopped');
-  });
-
-  it('a stopped Claude seat still leaves the list, and so does an archived OMP seat', () => {
-    mount([ANA, LU, { ...TOM, archivedAt: '2026-11-03T09:30:00.000Z' }]);
-    expect(screen.queryByRole('button', { name: /^Lu/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Tom/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^ledge-dev/ })).toBeNull();
-  });
-});
 
 describe('the view an OMP seat’s page shows (Fil | Terminal, design-ux 2026-11-03 12:23Z)', () => {
   it('the preference, for any session but an OMP seat of OpenRig', () => {

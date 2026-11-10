@@ -36,9 +36,7 @@ export const en: Messages = {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name) => `The rig ${name} on the OpenRig page`, rigAsks: (n) => `${n} ${pluralEn(n, 'request', 'requests')}`, 
     label: 'Sidebar', newSession: 'New session', searchLabel: 'Search a session',
     views: 'Views', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projects', newProject: 'New project', unassigned: 'No project',
-    machines: 'Machines', manageMachines: 'Manage machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', seatStopped: 'stopped', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
-    ledgeHome: 'Home: Ledge, the operator', ledgeLine: (yours: number) => `${yours} yours`,
-    kernelTag: { ready: 'operational', starting: 'starting', stopped: 'stopped' },
+    machines: 'Machines', agents: (n) => pluralEn(n, `${n} agent`, `${n} agents`), offline: 'offline', seatStopped: 'stopped', daemonUpdating: 'daemon updating', settings: 'Settings', shortcuts: 'Keyboard shortcuts',
     empty: {
       sessions: 'No session yet.', sessionsBody: 'A session runs an agent in a folder or a project.', newSession: 'Create a session',
       stopped: 'OpenRig is stopped.', stoppedBody: 'Starting it also starts the kernel: the operator, the advisor and the queue.', start: 'Start OpenRig', starting: 'Starting OpenRig…',
@@ -47,7 +45,6 @@ export const en: Messages = {
       installedOn: (machine: string) => `It’s installed on ${machine}: start it from its page.`, offlineOf: (n: number, m: number) => `offline · ${n}/${m}`,
       noRig: 'No rig yet.', noRigBody: 'A rig is a team of agents.', noRigOperator: (name: string) => `${name}, the kernel’s operator, can help you put one together.`
     },
-    openChat: 'Open the conversation with Ledge',
     active: (n) => `${n} active`,
     yours: 'Your turn', yoursMore: (n) => `See the other ${n}`, yoursLess: 'Show less',
     allow: 'Yes', deny: 'No', reply: 'Reply', see: 'View',
@@ -262,12 +259,12 @@ export const en: Messages = {
       ok: (stop, what) => `${stop ? 'Stop' : 'Restart'} ${what}`
     }
   },
-  crumb: { atelier: 'Atelier', list: 'List', settings: 'Settings', clearFilter: 'Remove the filter: show every project', clearFilterTitle: 'Every project (Esc)', escape: 'Esc', openParent: (n) => `Open ${n}’s conversation` },
+  crumb: { atelier: 'Atelier', list: 'List', settings: 'Settings', clearFilter: 'Remove the filter: show every project', escape: 'Esc', openParent: (n) => `Open ${n}’s conversation` },
   top: {
     grouping: 'Group OpenRig’s seats', groupingBy: { projects: 'Projects', rigs: 'Rigs' }, groupingHint: { projects: 'Your projects’ sessions, without OpenRig’s seats', rigs: 'OpenRig’s seats: each rig, the kernel apart' }, 
-    viewTabs: 'Agents view', helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
-    chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)', fullscreen: 'Full screen', fullscreenExit: 'Exit full screen',
-    panelShow: 'Show the panel: shells and changes', panelHide: 'Hide the panel', panelShowTitle: 'Show the panel: shells and changes (O)', panelHideTitle: 'Hide the panel (O)', terminalGone: 'Seat stopped: no terminal'
+    helpersHide: 'Hide subagents', helpersShow: 'Show subagents', pause: 'Freeze animations', play: 'Animate',
+    chat: 'Chat Ledge', shortcuts: 'Keyboard shortcuts (?)',
+    panelHide: 'Hide the panel', panelHideTitle: 'Hide the panel (O)', terminalGone: 'Seat stopped: no terminal'
   },
   usage: {
     harness: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' } as Record<string, string>,
@@ -342,7 +339,7 @@ export const en: Messages = {
       autostartFailed: 'Windows did not take this setting.', autostartOff: 'No start with Windows',
       tool: 'Default agent', toolHint: 'For Ledge’s chat and its cards.', toolSaved: (name) => `Default agent: ${name}`,
       context: 'Max context', contextHint: 'Past it, a session is near its limit: « Your turn » offers to hand it over, and Ledge relieves on its own a session that works without asking.',
-      usageAlert: 'Usage limit alert', usageAlertHint: 'Past it, « For you » warns that a harness usage window (5 h, week, per model) is nearing its limit. Limits are the account’s, read on each machine.',
+      usageAlert: 'Usage limit alert', usageAlertHint: 'Past it, Ledge Desktop tells you once that a harness usage window (5 h, week, per model) is nearing its limit. Limits are the account’s, read on each machine.',
       usageAlertSaved: (pct) => `Usage limit alert: ${pct} %`, usageAlertUnknown: 'No machine gives its harnesses’ limits yet: update Ledge, or sign in to Claude Code.',
       contextSaved: (pct) => `Max context: ${pct} %`, contextUnknown: 'Update the local Ledge daemon to set this threshold.'
     },
@@ -613,7 +610,7 @@ export const en: Messages = {
   },
   search: {
     title: 'Go to a session', placeholder: 'Agent, task, project or machine…', empty: 'No session matches this search.', results: 'Sessions',
-    browse: 'Browse', open: 'Open', closeKey: 'Close', enter: 'Enter', escape: 'Esc', newSession: 'New session'
+    browse: 'Browse', open: 'Open', enter: 'Enter', escape: 'Esc', newSession: 'New session'
   },
   shortcuts: {
     title: 'Keyboard shortcuts',
@@ -695,7 +692,6 @@ export const en: Messages = {
     operator: (sessions: number, machines: number) => `Operator · sees ${sessions} ${sessions === 1 ? 'session' : 'sessions'}, ${machines} ${machines === 1 ? 'machine' : 'machines'} · read only`,
     tabsLabel: 'Ledge views',
     tabs: { conversation: 'Conversation', tasks: (n: number) => `Tasks · ${n}`, history: 'History' },
-    toAtelier: 'Back to the atelier',
     point: {
       title: 'The point', yours: 'Yours', given: 'Given by Ledge',
       summarize: 'Summarise the day', summarizeQuestion: 'Summarise the day: what moved, what waits for my decision, what is stuck.',
@@ -706,7 +702,6 @@ export const en: Messages = {
     },
     suggestions: ['Give a task to…', 'Who needs me?'],
     readOnly: 'read only · nothing without your click',
-    mentions: 'Mention', mentionSession: (name: string) => `session ${name}`,
     tasks: {
       filters: 'Filters', all: 'All', open: 'Open', closed: 'Closed', giver: 'Giver', anyGiver: 'Anyone', ledge: 'Ledge', sessions: 'The sessions', decisions: 'Decisions',
       none: 'No task.', result: 'Result', reason: 'Reason', log: 'History', from: (giver: string, owner: string) => `from ${giver} to ${owner}`, close: 'Close',

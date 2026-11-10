@@ -52,10 +52,10 @@ describe('IdeExplorer', () => {
 
 describe('Sidebar section', () => {
   const waiting: Session = fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } });
-  const sidebar = (section?: 'projects' | 'rigs' | 'atoi') => render(<LangProvider lang="en">
-    <Sidebar nav={initialNav({ helpers: [], paused: false } as never)} dispatch={vi.fn()} sessions={[waiting]} archived={[]} machines={[]} projects={null} order={[waiting]} projectIdOf={() => null}
+  const sidebar = (section: 'projects' | 'atoi') => render(<LangProvider lang="en">
+    <Sidebar nav={initialNav({ helpers: [], paused: false } as never)} dispatch={vi.fn()} sessions={[waiting]} archived={[]} projects={null} order={[waiting]} projectIdOf={() => null}
       filing={{ dragging: null } as unknown as Filing} actions={{ pending: null, allowed: () => true } as unknown as SessionActions} decisions={{ decide: vi.fn() } as unknown as Decisions}
-      waits={new Map()} menu={{ menu: null } as unknown as ContextMenuState} notify={vi.fn()} onTerminal={vi.fn()} revealArchives={0} revealCurrent={0} {...(section ? { section } : {})} /></LangProvider>);
+      waits={new Map()} menu={{ menu: null } as unknown as ContextMenuState} notify={vi.fn()} onTerminal={vi.fn()} revealArchives={0} revealCurrent={0} section={section} /></LangProvider>);
 
   it('atoi: the waiting session shows, neither the tree nor the Archives, nor the chrome', () => {
     sidebar('atoi');
@@ -67,22 +67,12 @@ describe('Sidebar section', () => {
 
   it('atoi with nothing waiting: one line, « Rien ne t’attend. », in the middle (the user, 2026-11-09)', () => {
     render(<LangProvider lang="fr">
-      <Sidebar section="atoi" nav={initialNav({ helpers: [], paused: false } as never)} dispatch={vi.fn()} sessions={[]} archived={[]} machines={[]} projects={null} order={[]} projectIdOf={() => null}
+      <Sidebar section="atoi" nav={initialNav({ helpers: [], paused: false } as never)} dispatch={vi.fn()} sessions={[]} archived={[]} projects={null} order={[]} projectIdOf={() => null}
         filing={{ dragging: null } as unknown as Filing} actions={{ pending: null, allowed: () => true } as unknown as SessionActions} decisions={{ decide: vi.fn() } as unknown as Decisions}
         waits={new Map()} menu={{ menu: null } as unknown as ContextMenuState} notify={vi.fn()} onTerminal={vi.fn()} revealArchives={0} revealCurrent={0} /></LangProvider>);
     const line = screen.getByText('Rien ne t’attend.');
     expect(line).toHaveClass('st-attn-none');
     expect(line.parentElement).toHaveClass('st-scroll-atoi');
-  });
-
-  it('atoi: no usage card, the IDE tells it once in a toast', () => {
-    const alert = { id: 'claude|five_hour|1', harness: 'claude', level: 'threshold', at: new Date().toISOString(), window: { kind: 'five_hour', pct: 84 } } as never;
-    render(<LangProvider lang="en">
-      <Sidebar section="atoi" nav={initialNav({ helpers: [], paused: false } as never)} dispatch={vi.fn()} sessions={[]} archived={[]} machines={[]} projects={null} order={[]} projectIdOf={() => null}
-        filing={{ dragging: null } as unknown as Filing} actions={{ pending: null, allowed: () => true } as unknown as SessionActions} decisions={{ decide: vi.fn() } as unknown as Decisions}
-        waits={new Map()} menu={{ menu: null } as unknown as ContextMenuState} notify={vi.fn()} onTerminal={vi.fn()} revealArchives={0} revealCurrent={0} usageAlerts={[alert]} /></LangProvider>);
-    expect(document.querySelector('.st-usage')).toBeNull();
-    expect(screen.getByText('Nothing waits for you.')).toBeVisible();
   });
 
   it('projects: Archives, without Ledge\'s entry', () => {
@@ -92,9 +82,4 @@ describe('Sidebar section', () => {
     expect(screen.queryByRole('region', { name: 'Your turn' })).toBeNull();
   });
 
-  it('without a section, the sidebar is the whole one', () => {
-    sidebar();
-    expect(document.querySelector('.st-ledge')).not.toBeNull();
-    expect(document.querySelector('.st-foot')).not.toBeNull();
-  });
 });

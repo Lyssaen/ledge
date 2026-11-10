@@ -5,9 +5,6 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { App } from '../src/App';
 import { boot, closeDaemons, declarations, openProjectEditor, TWO_PROJECTS } from './helpers';
-import { LangProvider } from '../src/i18n/lang';
-import { initialNav } from '../src/nav/state';
-import { TopBar } from '../src/shell/TopBar';
 
 // « Open in Ledge » from the island, delivered by hand: the shell's event never fires outside Tauri.
 const island = vi.hoisted(() => ({ open: null as null | ((raw: string) => void) }));
@@ -136,32 +133,8 @@ describe('the Atelier shell', () => {
     expect(declarations('sidebar.css', '.st-time.t-error')).toBe('color:var(--danger-text)');
   });
 
-  it('Ledge’s entry and the Atelier view are set apart, as far as the entry is from the title bar; the views breathe (sidebar tidy, point 1)', () => {
-    expect(declarations('sidebar.css', '.st-ask')).toContain('margin:10px10px0');
-    expect(declarations('sidebar.css', '.st-views')).toContain('margin:10px10px8px');
-    expect(declarations('sidebar.css', '.st-views')).toContain('padding:4px');
-    expect(declarations('sidebar.css', '.st .st-views button')).toContain('height:30px');
-    // The toggle has the views' side margins and padding: the same width (point 4).
-    expect(declarations('sidebar.css', '.st-grouping')).toContain('margin:010px8px');
-    expect(declarations('sidebar.css', '.st-grouping')).toContain('padding:4px');
-    // The list keeps its scrollbar's gutter: the kernel box keeps its width when the list scrolls.
-    expect(declarations('sidebar.css', '.st-scroll')).toContain('scrollbar-gutter:stable');
-  });
-
   it('the toast sits above a dialog and the narrow chat', () => {
     expect(declarations('shell.css', '.toast-region')).toBe('position:fixed;width:0;height:0;z-index:10');
-  });
-  it('a long project name truncates in the session crumb, full name in its title', () => {
-    const nova = fakeSession('nova', { name: 'Nova', cwd: '/w/pay', state: 'working', topic: 'Migrate the ledger' });
-    const nav = { ...initialNav({ view: 'atelier', helpers: true, paused: false }), place: { kind: 'session' as const, id: 'nova', view: 'atelier' as const, project: 'all' } };
-    render(<LangProvider lang="en"><TopBar nav={nav} dispatch={() => {}} session={nova} projects={TWO_PROJECTS} projectIdOf={() => 'pay'} helper={null} terminal={false} onTerminal={() => {}} /></LangProvider>);
-    const link = within(screen.getByRole('banner')).getByRole('button', { name: 'Payment Service Platform Migration Europe' });
-    expect(link).toHaveClass('crumb-link');
-    expect(link).toHaveAttribute('title', 'Payment Service Platform Migration Europe');
-    // The top bar never wraps: a crumb link stays on one line and ends with « … ».
-    const rule = declarations('shell.css', '.breadcrumb .crumb-link');
-    for (const d of ['white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis', 'min-width:0', 'max-width:180px']) expect(rule).toContain(d);
-    expect(within(screen.getByRole('banner')).getByText('Migrate the ledger')).toHaveAttribute('title', 'Migrate the ledger');
   });
   it('the rules lot 3 ported for nothing are gone', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/shell.css'), 'utf8');

@@ -8,7 +8,7 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveResumeOnStart } from '../../src/workspace/prefs';
 import { empty, open, serialize } from '../../src/workspace/model';
@@ -27,7 +27,7 @@ async function mount(sessions: Session[] = [
   fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', branch: 'feat/ide', lastActivityAt: '2026-11-07T10:00:00.000Z' }),
   fakeSession('nova', { name: 'Nova', tool: 'codex', cwd: '/w/ledge', state: 'idle', lastActivityAt: '2026-11-07T09:00:00.000Z' })
 ]) {
-  await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+  await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
  
   const d = await createMockDaemon(); daemons.push(d);
   d.extras.daemon = CAN;

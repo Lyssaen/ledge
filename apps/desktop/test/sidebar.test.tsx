@@ -35,12 +35,6 @@ describe('the sidebar shell', () => {
     expect(await screen.findByRole('dialog', { name: /New session/ })).toBeVisible();
   });
 
-  it('the shortcuts tooltip shows on hover and on keyboard focus', () => {
-    const css = readFileSync(resolve(__dirname, '../src/styles/sidebar.css'), 'utf8');
-    expect(css).toMatch(/\.st-keys:hover \.st-keys-tip/);
-    expect(css).toMatch(/\.st-keys:focus-within \.st-keys-tip/);
-  });
-
   it('no shortcut reminder at the foot of the sidebar, in the overview or in a session: the ? holds them (#51)', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
     const reminder = () => {

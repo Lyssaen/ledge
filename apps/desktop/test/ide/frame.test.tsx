@@ -9,7 +9,7 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { saveOpenSession } from '../../src/workspace/openPrefs';
 import type { DaemonInfo, Machines } from '@ledge/protocol';
@@ -24,7 +24,7 @@ beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'f
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
 
 async function mount({ machines = [{ id: 'local', label: 'Local' }], daemon }: { machines?: Machines; daemon?: DaemonInfo } = {}) {
-  await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+  await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
   seedAtelier();
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(machines);

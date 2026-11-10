@@ -7,7 +7,7 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { serialize } from '../../src/workspace/model';
 import { WORKSPACE_KEY } from '../../src/workspace/store';
@@ -105,7 +105,7 @@ describe('the bottom panel in the IDE (App)', () => {
   afterEach(async () => { env.shells = null; env.chunk = null; cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
 
   async function mountApp() {
-    await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+    await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
    
     const d = await createMockDaemon(); daemons.push(d);
     d.machines([{ id: 'local', label: 'Local' }]);

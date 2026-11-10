@@ -23,7 +23,7 @@ import { ScreenKeysContext, type ScreenKeys } from './nav/screenKeys';
 import { dotOf, mainOrder } from './nav/agents';
 import { focusFrontTab, focusThread, useKeys, type IdeKeys } from './nav/useKeys';
 import { Sidebar } from './shell/Sidebar';
-import { waitingSessions } from './shell/TitleBar';
+import { waitingSessions } from './shell/waiting';
 import { Footer } from './shell/Footer';
 import { UsageFooter } from './usage/UsageFooter';
 import { useUsageView } from './usage/useUsageView';
@@ -42,7 +42,7 @@ import { takeWhatsNew } from './update/notes';
 import { openWhatsNew, useWhatsNew } from './update/whatsNewView';
 import { WhatsNew } from './update/WhatsNew';
 import { useLaunch } from './launch/useLaunch';
-import { closedLedgeTasks, useTasksApi } from './tasks/useTasksApi';
+import { useTasksApi } from './tasks/useTasksApi';
 import { Atelier } from './atelier/Atelier';
 import { useOpenRigAsks } from '@ledge/fleet/openrigAsks';
 import { readOpenRigOnce, rigGone } from '@ledge/fleet/openrig';
@@ -51,7 +51,6 @@ import { useSidebarOpenRig } from './openrig/sidebarState';
 import { offersRigs, setGrouping, useGrouping } from './openrig/grouping';
 import { Modal } from './shell/Modal';
 import { ShortcutsHelp } from './shell/ShortcutsHelp';
-import { useWindowFullscreen } from './shell/useWindowFullscreen';
 import { Toast, useToast } from './shell/Toast';
 import { preloadPlaces } from './shell/preload';
 import { useFiling } from './atelier/filing';
@@ -496,7 +495,6 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const screenKeys = useRef<ScreenKeys>({ current: null }).current;
   // Drafts, reading positions and the last item seen, per session and subagent: they survive navigation, not a restart.
   const memory = useRef(createSessionMemory()).current;
-  useWindowFullscreen(nav.fullscreen, () => dispatch({ type: 'fullscreen', on: false }));
   const session = place.kind === 'session' ? known.find(s => s.id === place.id) ?? null : null;
   // Ledge shows the agent's screen (focused window, pane open, agent tab active): that is the terminal in front, no sound.
   // In the IDE, the front tab of the focused group on its own view, never the stored preference.
@@ -938,12 +936,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           : layout.sideView === 'rigs'
           ? <IdeRigs client={fleetClient} machines={machines} sessions={sessions} asks={asks.asks} activeTab={front ?? null} dispatch={dispatch} onTab={onTab}
               onMenu={(id, at, opener) => sessionMenu.open(id, at, opener)} />
-          : <Sidebar section={layout.sideView} onAtoiPage={() => onTab({ kind: 'atoi', ref: 'main' })} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} machines={machines} updating={daemonUpdates.updating} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
+          : <Sidebar section={layout.sideView === 'atoi' ? 'atoi' : 'projects'} onAtoiPage={() => onTab({ kind: 'atoi', ref: 'main' })} nav={nav} dispatch={dispatch} sessions={sessions} archived={fleetView.archived} projects={projects} order={order} projectIdOf={projectIdOf} filing={filing}
             actions={actions} decisions={decisions} waits={waits} menu={sessionMenu} notify={notify}
             broadcast={canBroadcast(machines)} broadcastSent={broadcastSent}
-            openrig={sidebarOpenRig} onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
-            ledge={{ closedTasks: closedLedgeTasks(tasksApi.tasks).length }} tasksApi={tasksApi}
-            usageAlerts={usage.alerts} onAckUsage={id => fleet.ackUsage(id)}
+            onTerminal={sessionMenu.terminal} revealArchives={revealArchives} revealCurrent={revealCurrent}
+            tasksApi={tasksApi}
             // A rig's request is read and answered on the page « À toi » (lot 12, card 12): its card unfolded there, ringed a moment.
             asks={asks.asks} onSeeAsk={id => { setAskFocus({ id, n: ++askSeq.current }); onTab({ kind: 'atoi', ref: 'main' }); }} />
         }
