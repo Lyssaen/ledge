@@ -28,7 +28,7 @@ liraient l'autre arbre). Travaille et teste dans ce dossier.
 
 ## Livrer
 
-- Changement minimal et cohérent ; tests du comportement modifié ; `pnpm test` (Node 22) et `pnpm typecheck` du
+- Changement minimal et cohérent ; tests du comportement modifié ; `pnpm test` (Node 24) et `pnpm typecheck` du
   paquet touché au minimum.
 - Commits locaux sur ta branche. Pas de push, PR ou merge sans accord explicite de l'utilisateur.
 - Transfère à `review-qa@ledge-dev` par `rig queue handoff` : chemin du worktree, branche, commit(s), maquette de

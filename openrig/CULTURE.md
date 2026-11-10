@@ -35,7 +35,7 @@ la met en tête d'« À toi ».
   non commité. Chaque dev crée un worktree par tâche (voir son rôle) et y fait `pnpm install`.
 - Pas de push, de PR, de merge, de release ni d'opération destructive sans autorisation explicite de l'utilisateur
   pour cette action-là.
-- Tests : Node 22 (`~/.local/share/pi-node`). Node 18 et `hook.test` sous charge échouent aussi sur `main` : ce n'est
+- Tests : Node 24 (le Node par défaut, via nvm). Node 18 et `hook.test` sous charge échouent aussi sur `main` : ce n'est
   pas une régression du changement.
 
 ## Réseau Docker (machine WSL derrière un proxy)

@@ -25,8 +25,7 @@ messages and these files are in English.
 
 ## Commands
 
-- Node 22 is required: `PATH=~/.local/share/pi-node/current/bin:$PATH` (not `pi-node/bin`, which leaves you on another
-  Node). Tests failing under Node 18, and `hook.test` failing under load, fail on `main` too: not a regression.
+- Node 24 is required (the default Node, through nvm). Tests failing under Node 18, and `hook.test` failing under load, fail on `main` too: not a regression.
 - `pnpm install` once per worktree, then `pnpm test`, `pnpm typecheck`, `pnpm build` for everything, or
   `pnpm --filter <name> test|typecheck|test:e2e` for one project (names in the table above).
 - `cargo test --workspace` and `pnpm --filter desktop tauri dev|build` only run on Windows (CI's Windows runner). Say so
