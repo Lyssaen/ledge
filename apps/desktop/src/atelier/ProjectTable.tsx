@@ -64,11 +64,13 @@ const marks = (state: SheetMark) => <>
  *  first sub-agent's sticky note next to its parent's sheet, in the free gap of the same row. */
 function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.Element {
   const W = 84;
+  // The sheet's words hyphenate in the interface's language.
+  const { lang } = useI18n();
   return (
     <div className="table-top">
       {sheets.map(s => (
         <Fragment key={s.id}>
-          <div style={{ left: s.x - W / 2 }} className={`task-sheet sheet-${s.slot} sheet-${s.state}`}><p>{s.task}</p>{marks(s.state)}</div>
+          <div style={{ left: s.x - W / 2 }} className={`task-sheet sheet-${s.slot} sheet-${s.state}`}><p lang={lang}>{s.task}</p>{marks(s.state)}</div>
           {s.note && (
             <div style={{ left: noteX(s.x, sheets.filter(o => o.slot === s.slot).map(o => o.x), length) }} className={`sheet-note note-${s.slot} sheet-${s.note.state}`}>
               <p>{s.note.task}</p>{marks(s.note.state)}{s.note.more > 0 && <em className="note-more">+{s.note.more}</em>}

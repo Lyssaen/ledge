@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { cleanup as cleanupAll, render, screen, fireEvent, within } from '@testing-library/react';
 import type { ChatProposal, ChatTurn } from '@ledge/protocol';
 import { ChatView, type ChatViewProps } from '../src/chat/ChatView';
 import { ChatCopyProvider } from '../src/chat/copy';
@@ -14,6 +14,14 @@ const view = (proposals: ChatProposal[], extra: Partial<ChatViewProps> = {}) =>
   render(<ChatCopyProvider value={copy}><ChatView {...base} turns={turnWith(proposals)} now={Date.parse(T0)} {...extra} /></ChatCopyProvider>);
 
 describe('the grouped launch card (#24)', () => {
+  it('the launch buttons never wrap nor shrink: the hint beside them wraps instead', () => {
+    view([row('a')]);
+    const single = screen.getByRole('button', { name: /Launch/ });
+    expect(single).toHaveStyle({ whiteSpace: 'nowrap', flex: 'none' });
+    cleanupAll();
+    view([row('a'), row('b')]);
+    expect(screen.getByRole('button', { name: /^Launch all/ })).toHaveStyle({ whiteSpace: 'nowrap', flex: 'none' });
+  });
   it('one row per session, each with its own launch, and « Launch all » for the checked rows', () => {
     const onLaunch = vi.fn();
     view([row('a'), row('b', { prompt: 'Rebase' }), row('c')], { onLaunchProposal: onLaunch });

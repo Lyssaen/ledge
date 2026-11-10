@@ -20,7 +20,8 @@ export { relayPill } from './relayPill';
 const muted: React.CSSProperties = { color: 'var(--muted-foreground)' };
 const row: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' };
 const foot: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderTop: '1px solid var(--sidebar-border)' };
-const small: React.CSSProperties = { height: 28, padding: '0 10px', gap: 6, fontSize: 12 };
+/** The footer's buttons never wrap nor shrink: the hint beside them wraps instead. */
+const small: React.CSSProperties = { height: 28, padding: '0 10px', gap: 6, fontSize: 12, whiteSpace: 'nowrap', flex: 'none' };
 
 /** The instruction the chat proposes to send (spec 2026-10-12 relay §6): proposed, queued, sent, or failed with a retry. Sending is the user's click. */
 export function RelayCard(p: RelayCardProps) {
@@ -61,7 +62,7 @@ export function RelayCard(p: RelayCardProps) {
               <Button variant="primary" size="sm" disabled={p.busy || p.disabled} onClick={p.onSend} style={small}>
                 {state === 'proposed' && <Icon size={12} {...ICONS.send} />}{p.busy ? c.sending : state === 'failed' ? c.retry : c.send}
               </Button>
-              <span style={{ ...muted, fontSize: 12 }}>{c.orRephrase}</span>
+              <span style={{ ...muted, fontSize: 12, minWidth: 0 }}>{c.orRephrase}</span>
             </div>
           )}
         </>
