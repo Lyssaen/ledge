@@ -1,6 +1,19 @@
 import type { Page } from '@playwright/test';
-import { test, expect } from './fixtures';
-import { eight, fakeDaemon, openAtelier, session, twoProjects } from './daemon';
+import { test, expect, seedAtelier } from './fixtures';
+import { eight, fakeDaemon, session, twoProjects } from './daemon';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
+  await seedAtelier(page);
+});
+
+// The first tests of a run pay Vite's first compile of the IDE chunk: on a loaded machine that is past 20 s.
+test.setTimeout(60_000);
+/** The IDE is up on its Atelier tab, the agents seated. */
+async function booted(page: Page) {
+  await expect(page.locator('.ide')).toBeVisible({ timeout: 45_000 });
+  await expect(page.locator('.ide-atelier button[data-agent]').first()).toBeVisible({ timeout: 15_000 });
+}
 
 // Visual reference of the Desktop Atelier (not an assertion suite): project rooms, a rig's room, sub-agents at a table's
 // ends, « Sans projet », dark and light. The iPad lot shares the Atelier's layout and stylesheet (packages/ui/src/atelier): these
@@ -20,7 +33,7 @@ async function open(page: Page, theme: 'dark' | 'light') {
   await page.addInitScript(([t]) => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t!); } catch { /* ignore */ } }, [theme]);
   await fakeDaemon(page, sessions, { projects: twoProjects, launcher: ['ledge'] });
   await page.goto('/');
-  await openAtelier(page);
+  await booted(page);
   await expect(page.locator('.atelier-room').first()).toBeVisible({ timeout: 30_000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(800);
