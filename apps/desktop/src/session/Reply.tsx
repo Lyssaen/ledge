@@ -188,16 +188,19 @@ export function Reply({ session, helper, asker, since, decisions, memory, memoKe
       return true;
     }
     if (!pending) return false;
-    // A held key repeats: once the first press lands, the next request would take the repeats. Only a new press decides.
-    if (e.repeat && (k === 'y' || k === 'n' || /^[1-9]$/.test(k))) return false;
-    if (sort === 'approval' && (k === 'y' || k === 'n')) { decisions.decide(session, k === 'y' ? 'accept' : 'deny'); return true; }
-    if (sort === 'plan' && (k === 'y' || k === 'n')) {
+    const option = /^[1-9]$/.test(k) ? pending.options?.[Number(k) - 1] : undefined;
+    const decides = ((sort === 'approval' || sort === 'plan') && (k === 'y' || k === 'n')) || (sort === 'question' && option !== undefined && !isFreeRow(option));
+    if (!decides) return false;
+    // A held key repeats: once the first press lands, the next request would take the repeats. Only a new press decides; the
+    // repeats are taken all the same, or the IDE's global N would open « New session ».
+    if (e.repeat) return true;
+    if (sort === 'approval') { decisions.decide(session, k === 'y' ? 'accept' : 'deny'); return true; }
+    if (sort === 'plan') {
       if (k === 'y') decisions.decide(session, 'accept'); else askRevision(tp.reviseKey);
       return true;
     }
-    const option = /^[1-9]$/.test(k) ? pending.options?.[Number(k) - 1] : undefined;
-    if (sort === 'question' && option !== undefined && !isFreeRow(option)) { decisions.reply(session, k); return true; }
-    return false;
+    decisions.reply(session, k);
+    return true;
   };
   useEffect(() => { keys.current = onScreenKey; });
   useEffect(() => () => { keys.current = null; }, [keys]);

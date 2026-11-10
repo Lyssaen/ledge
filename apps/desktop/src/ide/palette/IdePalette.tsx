@@ -44,6 +44,9 @@ export function IdePalette({ sessions, commands, rigs, prs = [], sessionOf, onCl
   const at = Math.min(index, Math.max(0, rows.length - 1));
   const list = useId();
   const box = useRef<HTMLDivElement>(null);
+  // Captured during render, before the field's autoFocus: Escape gives the focus back there, as the old search did. A command
+  // run puts it where it goes, and a click outside where it was clicked.
+  const [before] = useState(() => document.activeElement as HTMLElement | null);
   const run = (r: PaletteRow) => { onClose(); r.run(); };
   useEffect(() => {
     const down = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) onClose(); };
@@ -60,7 +63,7 @@ export function IdePalette({ sessions, commands, rigs, prs = [], sessionOf, onCl
           onChange={e => { setQuery(e.target.value); setIndex(0); }}
           onKeyDown={e => {
             if (e.nativeEvent.isComposing) return;
-            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); }
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); if (before?.isConnected) before.focus(); }
             else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setIndex(Math.max(0, Math.min(rows.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)))); }
             else if (e.key === 'Enter' && rows[at]) { e.preventDefault(); run(rows[at]!); }
           }} />

@@ -87,8 +87,8 @@ describe('the pinned request and the reply', () => {
     expect(sent(env.d, 'session.reply')).toEqual([]);
   });
 
-  // 12b: in the IDE a repeated N on a session page is not taken by the page and falls to the IDE's global N: « New session » opens.
-  it.skip('a held N decides nothing and opens nothing', async () => {
+  // A held N's repeats are taken by the page: none falls to the IDE's global N (« New session »).
+  it('a held N decides nothing and opens nothing', async () => {
     const { d } = await open('Otto');
     press('n', true);
     await new Promise(r => setTimeout(r, 100));

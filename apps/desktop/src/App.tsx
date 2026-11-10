@@ -275,6 +275,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const revealArchives = 0;
   // The session page's « N sous-agents » bumps this; the tree unfolds that session and scrolls to it (0 never counts).
   const [revealCurrent, setRevealCurrent] = useState(0);
+  // « Toutes les modifications »: the file each session's Changes tab is asked to show (its `n` grows at each ask).
+  const [changesWant, setChangesWant] = useState<Record<string, { path: string; n: number }>>({});
   // The IDE's tab right-click menu: which tab, and where.
   const [tabMenu, setTabMenu] = useState<{ tab: Tab; at: { x: number; y: number } } | null>(null);
   // Its tab gone (closed, its session deleted), the menu goes, and does not come back with a new tab of the same key.
@@ -828,12 +830,15 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           pr={prOfSession(forge.prs, s.id) ?? null} onPr={() => { const p = prOfSession(forge.prs, s.id); if (p) onTab({ kind: 'pr', ref: p.id }); }}
           prUnknown={sessionForge(forge.prs, forge.forges, forge.followed, s.id) ?? null} prMachine={machineLabel(s.machineId ?? 'local')}
           onPrUnknown={() => { if (!(layout.sideOpen && layout.sideView === 'prs')) onLayout({ type: 'view', view: 'prs' }); }}
-          onChanges={() => wsStore.update(w => { const hit = findTab(w, keyOf(tab)); return hit ? beside(w, hit.group.id, 'changes', s.id) : w; })} />;
+          onChanges={path => {
+            if (path) setChangesWant(m => ({ ...m, [s.id]: { path, n: (m[s.id]?.n ?? 0) + 1 } }));
+            wsStore.update(w => { const hit = findTab(w, keyOf(tab)); return hit ? beside(w, hit.group.id, 'changes', s.id) : w; });
+          }} />;
       }
       // « +N −N »'s tab: an action clicked there brings the session's tab forward (R10).
       if (tab.kind === 'changes') {
         const s = known.find(x => x.id === tab.ref);
-        return s ? <ChangesPlace client={fleetClient} session={s} notify={notify} onTouch={() => dispatch({ type: 'open', id: s.id })} /> : null;
+        return s ? <ChangesPlace client={fleetClient} session={s} notify={notify} onTouch={() => dispatch({ type: 'open', id: s.id })} want={changesWant[s.id] ?? null} /> : null;
       }
       // A bottom-panel shell in a tab: the kind row (`shell`), then its xterm; closing the tab kills it (R9, wsStore's `closed`).
       if (tab.kind === 'terminal' && tab.ref.startsWith('shell:')) {

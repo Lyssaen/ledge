@@ -104,8 +104,8 @@ describe('global shortcuts', () => {
     expect(frontName()).toBe('Settings');
   });
 
-  // 12b: the IDE palette (Ctrl K) gives no focus back on closing (the old SearchPalette did): app gap, reported.
-  it.skip('focus goes back to where it was when the search closes', async () => {
+  // Escape gives the focus back; a command run or a click outside puts it elsewhere.
+  it('focus goes back to where it was when the search closes', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     const btn = within(screen.getByRole('navigation', { name: 'Activity bar' })).getByRole('button', { name: 'Projects' });
     btn.focus();

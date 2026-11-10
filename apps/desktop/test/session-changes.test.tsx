@@ -51,8 +51,7 @@ it('Thread / Changes with the count; files grouped by folder; the diff with its 
   expect([...pane().querySelectorAll('.touch-link')].map(e => e.textContent)).toEqual(['Edit · turn 1+1−1', 'Edit · turn 2+1−1']);
   expect([...pane().querySelectorAll('.diff-line')].map(r => r.className.replace('diff-line ', '') + ':' + r.querySelector('.code')!.textContent)).toEqual(['del:a', 'add:b', 'del:c', 'add:d']);
 });
-// 12b: the IDE's Changes tab (ChangesTab.tsx) binds no J / K and no Escape, which the old right panel had.
-it.skip('J / K walk the files, never while typing; Copy the path says so', async () => {
+it('J / K walk the files, never while typing; Copy the path says so', async () => {
   const { user } = await openOtto();
   await showChanges(user);
   await user.keyboard('j');
@@ -103,8 +102,7 @@ it('« View the change » on an absolute path finds the file a relative path ope
   expect(side.querySelector('.side-title code')).toHaveTextContent('src/b.ts');
   expect([...side.querySelectorAll('.diff-line .code')].map(c => c.textContent)).toEqual(['x', 'y', 'y', 'z']);   // both actions' diffs
 });
-// 12b: the IDE's Changes tab binds no Escape for its file list.
-it.skip('on a narrow page, Escape closes the file list and the page stays', async () => {
+it('on a narrow page, Escape closes the file list and the page stays', async () => {
   const { user } = await openOtto();
   await showChanges(user);
   await user.click(within(pane()).getByRole('button', { name: 'Files · 2' }));
@@ -114,8 +112,7 @@ it.skip('on a narrow page, Escape closes the file list and the page stays', asyn
   expect(nav).not.toHaveClass('open');
   expect(document.querySelector('.session-page')).not.toBeNull();
 });
-// 12b: the IDE's Changes tab binds no J / K.
-it.skip('a held J does not walk the files: only a new press does', async () => {
+it('a held J does not walk the files: only a new press does', async () => {
   const { user } = await openOtto();
   await showChanges(user);
   fireEvent.keyDown(document.activeElement ?? document.body, { key: 'j', repeat: true });
