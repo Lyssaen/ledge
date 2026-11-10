@@ -33,6 +33,16 @@ describe('the forge runner', () => {
     expect(r.code).toBe(3);
   });
 
+  it('gives glab GLAB_NO_PROMPT and never NO_PROMPT, which glab 1.99 warns about on stdout before the JSON', async () => {
+    // A glab that behaves like 1.99: the warning lands on stdout whenever NO_PROMPT is set, even by the login shell.
+    const bin = join(dir, 'bin199'); mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, 'glab'), '#!/usr/bin/env node\nif (process.env.NO_PROMPT !== undefined) process.stdout.write("DEPRECATION WARNING: The environment variable NO_PROMPT has been deprecated\\n");\nprocess.stdout.write(JSON.stringify({ noPrompt: process.env.GLAB_NO_PROMPT }));\n');
+    chmodSync(join(bin, 'glab'), 0o755);
+    const r = await execForge(async () => ({ ...process.env, NO_PROMPT: '1', PATH: `${bin}:${process.env.PATH}` }))('glab', ['api', 'projects/1']);
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual({ noPrompt: '1' });
+  });
+
   it('answers code null when the binary is not there', async () => {
     const r = await execForge(async () => ({ ...process.env, PATH: empty }))('glab', ['api', 'version']);
     expect(r.code).toBeNull();

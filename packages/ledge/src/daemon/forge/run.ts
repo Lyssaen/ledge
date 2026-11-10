@@ -17,8 +17,10 @@ const TIMEOUT_MS = 20_000;
 export function execForge(env: () => Promise<NodeJS.ProcessEnv>, opts0: { maxOutput?: number } = {}): ForgeRun {
   const max = opts0.maxOutput ?? MAX_OUTPUT;
   return async (file, args, opts = {}) => {
-    // No prompt, no colour, no update notice: the CLIs print plain JSON to a pipe.
-    const e = { ...(await env()), GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_PROMPT: '1', GLAB_CHECK_UPDATE: 'false', GLAB_SEND_TELEMETRY: 'false', NO_COLOR: '1', CLICOLOR: '0' };
+    // No prompt, no colour, no update notice: the CLIs print plain JSON to a pipe. glab's prompt switch is GLAB_NO_PROMPT, and a
+    // NO_PROMPT left over from the login shell is dropped: glab 1.99 prints its deprecation warning on stdout, before the JSON.
+    const { NO_PROMPT: _deprecated, ...base } = await env();
+    const e = { ...base, GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', GLAB_NO_PROMPT: '1', GLAB_CHECK_UPDATE: 'false', GLAB_SEND_TELEMETRY: 'false', NO_COLOR: '1', CLICOLOR: '0' };
     return new Promise<ForgeRunResult>(res => {
       let settled = false;
       const done = (r: ForgeRunResult): void => { if (!settled) { settled = true; clearTimeout(timer); res(r); } };
