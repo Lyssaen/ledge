@@ -1,6 +1,7 @@
 // Starts the sessions of a chat card (spec 2026-10-12 §4), for the PC's overlays and for a phone alike.
+import { resolve } from 'node:path';
 import type { ChatProposal } from '@ledge/protocol';
-import type { Chat, ChatMessage } from './service.js';
+import { folderTooWide, type Chat, type ChatMessage } from './service.js';
 
 export interface LaunchDeps {
   chat: Pick<Chat, 'proposal' | 'markLaunched' | 'markFailed'>;
@@ -10,7 +11,7 @@ export interface LaunchDeps {
   /** The `qid#row` launches under way, shared by every caller: a second click is passed over until the first one has answered. */
   inFlight: Set<string>;
   /** Why a proposal is not launched (the phone refuses a folder too wide), or null. The card row is marked failed, nothing starts. */
-  refuse?: (p: ChatProposal) => string | null;
+  refuse?: (p: ChatProposal) => string | null | Promise<string | null>;
 }
 
 /** Thrown when no row can start at all: every one is already launched, or the card has no such row. */
@@ -30,7 +31,7 @@ export async function launchFromChat(deps: LaunchDeps, qid: string, rows: number
       const p = chat.proposal(qid, r);
       if (!p || p.launchedId) { inFlight.delete(`${qid}#${r}`); continue; }
       try {
-        const refused = deps.refuse?.(p) ?? null;
+        const refused = (await deps.refuse?.(p)) ?? null;
         if (refused !== null) throw new Error(refused);
         const id = await deps.launch(p);
         launched.push(id);
@@ -41,3 +42,9 @@ export async function launchFromChat(deps: LaunchDeps, qid: string, rows: number
   } finally { for (const r of todo) inFlight.delete(`${qid}#${r}`); }
   return { launched, failed };
 }
+
+/** The refusal the PC applies to a card's folder: the home folder, the root or a folder holding them, named or reached through a link. */
+export const refuseTooWide = (userHome: string) => async (p: ChatProposal): Promise<string | null> => {
+  const wide = await folderTooWide(resolve(p.cwd), userHome);
+  return wide ? `the folder is ${wide}` : null;
+};

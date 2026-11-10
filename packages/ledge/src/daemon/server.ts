@@ -31,7 +31,7 @@ import { extraRoots, scanRepos } from './scan.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
-import { tooWide, type Chat } from '../chat/service.js';
+import { type Chat } from '../chat/service.js';
 import { createChatThreads } from '../chat/threads.js';
 import { createForge } from '../chat/forge.js';
 import { paths } from '../paths.js';
@@ -47,7 +47,7 @@ import { createHumanChannel, type HumanChannelService } from './openrigHuman.js'
 import { createGoals, type GoalsService } from './openrigGoals.js';
 import type { OpenRigState } from '@ledge/protocol';
 import { createRelay, free } from './relay.js';
-import { launchFromChat, LaunchRefused } from '../chat/launch.js';
+import { launchFromChat, LaunchRefused, refuseTooWide } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
@@ -1742,7 +1742,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       return launchFromChat({
         chat: c, emit: threads.emitterOf(thread) ?? (() => {}), inFlight: chatLaunches,
         launch: async p => (await launch({ tool: p.tool, cwd: p.cwd, prompt: p.prompt, model: p.model, effort: p.effort })).id,
-        refuse: p => { const wide = tooWide(resolve(p.cwd), userHome); return wide ? `the folder is ${wide}` : null; }
+        refuse: refuseTooWide(userHome)
       }, qid, rows);
     },
     closeChat: (thread, qid, rows) => {
