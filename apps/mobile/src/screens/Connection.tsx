@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { copy } from '../copy';
+import { LANGS, copy, setLang, useLang } from '../copy';
 import type { PinnedPc } from '../link/keys';
 import type { LinkState } from '../link/link';
 import { groupFingerprint } from '../model/fingerprint';
@@ -21,7 +21,8 @@ import { olderThan } from '../state/pc';
 
 const N = copy.connection;
 const S = copy.settings;
-const THEMES: { value: ThemeChoice; label: string }[] = [
+/** Read at render, so the words follow the language chosen. */
+const themes = (): { value: ThemeChoice; label: string }[] => [
   { value: 'system', label: N.themes.system }, { value: 'light', label: N.themes.light }, { value: 'dark', label: N.themes.dark }
 ];
 const status = (s: LinkState): string => s === 'ready' ? N.states.online : s === 'handshaking' ? N.states.connecting : N.states.offline;
@@ -41,6 +42,7 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
 }) {
   const state = useMobile(store);
   const theme = useThemeChoice();
+  const lang = useLang();
   useEffect(() => { if (section === 'link') document.getElementById('link-title')?.scrollIntoView({ block: 'start' }); }, [section]);
   const pc = pinned?.name ?? state.daemon?.name ?? null;
   // The PC's version, in the warning colour when it is older than this app.
@@ -66,7 +68,15 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
         <ThisDevice store={store} pinned={pinned} />
         <section aria-labelledby="appearance-title" className="flex flex-col gap-2.5">
           <h2 id="appearance-title" className="text-small font-medium text-muted">{S.appearance}</h2>
-          <Segmented name="theme" legend={N.appearance} options={THEMES} value={theme} onChange={v => setTheme(v)} />
+          {/* Thème, then Langue, each with its title (m0-langue.html, §1); a language is written in its own language. */}
+          <div className="flex flex-col gap-1.5">
+            <span aria-hidden="true" className="text-small text-muted">{S.theme}</span>
+            <Segmented name="theme" legend={S.theme} options={themes()} value={theme} onChange={v => setTheme(v)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span aria-hidden="true" className="text-small text-muted">{S.lang}</span>
+            <Segmented name="lang" legend={S.lang} options={LANGS.map(l => ({ value: l, label: S.langs[l], lang: l }))} value={lang} onChange={setLang} />
+          </div>
           <MotionRow />
         </section>
         {state.device?.push && (

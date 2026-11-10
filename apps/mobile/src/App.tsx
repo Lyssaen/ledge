@@ -27,7 +27,7 @@ import { Terminal } from './screens/Terminal';
 import { Thread } from './screens/Thread';
 import { Unrecognized } from './screens/Unrecognized';
 import { Update } from './screens/Update';
-import { copy } from './copy';
+import { copy, copyFor, useLang } from './copy';
 import { Split, SplitEmpty, useWide } from './ui/layout';
 import { ownName } from './screens/ThisDevice';
 import { useMobile, type MobileStore } from './state/store';
@@ -90,6 +90,8 @@ export interface AppProps {
 const defaultFetch: typeof fetch = (input, init) => globalThis.fetch(input, init);
 
 export function App({ link, store, storage, fetchImpl = defaultFetch, updates = null, signin = null, lost = false, relay = globalThis.location.host }: AppProps) {
+  // A language chosen in Réglages renders the whole app again in it, on the same screen (m0-langue.html, §1).
+  const lang = useLang();
   const state = useLink(link);
   const mobile = useMobile(store);
   const route = useRoute();
@@ -262,7 +264,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   })();
 
   return (
-    <UiCopyProvider copy={copy.ui}>
+    <UiCopyProvider copy={copyFor(lang).ui}>
     <div className="app flex flex-col" data-route={route.name}>
       {forgetNote && state !== 'ready' && <p role="status" className="mx-4 my-3 text-body text-muted">{copy.forget.pending}</p>}
       {screen}

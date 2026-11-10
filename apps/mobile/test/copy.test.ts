@@ -1,5 +1,10 @@
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { copyFor } from '../src/copy';
+import { copy, copyFor, lang, locale, setLang } from '../src/copy';
+import { snapshot } from './state/helpers';
+import { app } from './screens/app-setup';
+
+vi.mock('../src/link/webauthn', () => ({ platformAvailable: vi.fn(async () => false), createCredential: vi.fn(), getAssertion: vi.fn() }));
 
 /** Every plain string of a table, with its key path (the functions' outputs depend on their arguments, not swept here). */
 function strings(node: unknown, path = ''): [string, string][] {
@@ -9,46 +14,66 @@ function strings(node: unknown, path = ''): [string, string][] {
   return [];
 }
 
-afterEach(() => { localStorage.clear(); vi.resetModules(); });
+afterEach(() => { setLang('fr'); localStorage.clear(); vi.resetModules(); });
 
-describe('the languages (question Q2: French and English)', () => {
-  it('shows French until a language is chosen', async () => {
+describe('the languages (m0-langue.html: Français · English, French by default)', () => {
+  it('shows French until English is chosen', async () => {
     const m = await import('../src/copy');
     expect(m.lang).toBe('fr');
     expect(m.copy.nav.settings).toBe('Réglages');
     expect(m.locale).toBe('fr-FR');
   });
 
-  it('shows the stored language, English with Desktop\'s locale', async () => {
-    localStorage.setItem('ledge.lang', 'en');
+  it('shows the language kept on this device under mobile.lang, English with Desktop\'s locale', async () => {
+    localStorage.setItem('mobile.lang', 'en');
     const m = await import('../src/copy');
     expect(m.lang).toBe('en');
-    expect(m.copy).toBe(m.copyFor('en'));
+    expect(m.copy.nav.atoi).toBe('For you');
     expect(m.locale).toBe('en-GB');
   });
 
   it('ignores a stored value that is no language of the app', async () => {
-    localStorage.setItem('ledge.lang', 'de');
+    localStorage.setItem('mobile.lang', 'de');
     expect((await import('../src/copy')).lang).toBe('fr');
+  });
+
+  it('changes every word at once, those a module kept included, and keeps the choice', () => {
+    const nav = copy.nav;
+    setLang('en');
+    expect(lang).toBe('en');
+    expect(locale).toBe('en-GB');
+    expect(nav.settings).toBe('Settings');
+    expect(copy.percent(84)).toBe('84%');
+    expect(Object.keys(copy.nav)).toEqual(Object.keys(copyFor('en').nav));
+    expect(localStorage.getItem('mobile.lang')).toBe('en');
+    expect(document.documentElement.lang).toBe('en');
+    setLang('fr');
+    expect(nav.settings).toBe('Réglages');
+    expect(copy.percent(84)).toBe('84 %');
   });
 
   it('says the MR/PR pane as the owner validated it', () => {
     expect(copyFor('fr').prs.pane).toEqual({ title: 'Rien à afficher', body: 'Une MR ou une PR et son pipeline s’ouvrent ici.' });
-    // « À toi » is "For you" in English, as on Desktop (design-ux, 2026-11-10 19:53Z).
+    // « À toi » is "For you" in English, as on Desktop (m0-langue.html, §2).
     expect(copyFor('en').nav.atoi).toBe('For you');
     expect(copyFor('en').prs.pane).toEqual({ title: 'Nothing to show', body: 'An MR or PR and its pipeline open here.' });
   });
 
-  it('leaves no French in the English table', () => {
-    const french = strings(copyFor('en')).filter(([, s]) => /[éèêàùçôîœ«»]|\b(le|la|les|des|une|est|pas|sur|avec)\b/i.test(s));
+  it('leaves no French in the English table, but the languages\' own names', () => {
+    const french = strings(copyFor('en')).filter(([k]) => !k.startsWith('settings.langs.')).filter(([, s]) => /[éèêàùçôîœ«»]|\b(le|la|les|des|une|est|pas|sur|avec)\b/i.test(s));
     expect(french).toEqual([]);
   });
 
-  it('turns every English function into English too', () => {
-    const en = copyFor('en');
-    expect(en.inbox.subtitle(2)).not.toMatch(/demande/);
-    expect(en.offline.title('WSL')).toContain('WSL');
-    expect(en.host.offline('WSL')).toContain('WSL');
-    expect(en.link.connecting('WSL')).toContain('WSL');
+  it('Réglages › Apparence: Thème then Langue, each language in its own; a tap turns the app to English, still on Réglages', () => {
+    const t = app('ready', { hash: '#/connection' });
+    act(() => t.deliver(snapshot([], 'PC-Desan')));
+    const group = screen.getByRole('group', { name: 'Langue' });
+    expect(within(group).getByLabelText('Français')).toBeChecked();
+    expect(within(group).getByText('English').closest('label')).toHaveAttribute('lang', 'en');
+    expect(screen.getByRole('group', { name: 'Thème' })).toBeInTheDocument();
+    act(() => { fireEvent.click(within(group).getByLabelText('English')); });
+    expect(screen.getByRole('heading', { name: 'Settings', level: 1 })).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Language' })).getByLabelText('English')).toBeChecked();
+    expect(location.hash).toBe('#/connection');
   });
 });

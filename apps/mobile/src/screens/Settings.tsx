@@ -138,7 +138,7 @@ export function LedgePrefs({ store }: { store: MobileStore }) {
         <Row label={S.context} hint={S.contextHint}>
           {d => (
             <select className={`${FIELD} w-auto`} aria-label={S.context} aria-describedby={d} disabled={!state.fresh || near !== null} value={shownNear} onChange={e => chooseNear(Number(e.target.value))}>
-              {NEARS.map(n => <option key={n} value={n}>{n} %</option>)}
+              {NEARS.map(n => <option key={n} value={n}>{copy.percent(n)}</option>)}
             </select>
           )}
         </Row>

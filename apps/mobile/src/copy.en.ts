@@ -12,6 +12,8 @@ const ATOI = 'For you';
  *  mockups' English column (docs/mockups/ledge-mobile-refonte), then from Ledge Desktop's en.ts. */
 export const en: Copy = {
   appName: 'Ledge',
+  /** A percentage as the language writes it (« 84 % », "84%"). */
+  percent: (n: number) => `${n}%`,
   /** The name beside the mark, in the header of the five tabs. */
   brand: 'Ledge',
   inbox: {
@@ -68,7 +70,7 @@ export const en: Copy = {
       progress: (done: number, given: number) => `${done}/${given}`,
       state: { open: 'open', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' },
       calm: 'Nothing is waiting for you. Ask Ledge what you want to know or do.',
-      near: (pct: number) => `context ${pct} %`, nearHint: 'The relief is started from the PC.',
+      near: (pct: number) => `context ${pct}%`, nearHint: 'The relief is started from the PC.',
       /** The harnesses' limits (docs/mockups/ledge-harness-usage.html, « LIMITES »): percent and reset only. */
       limits: 'LIMITS', limitsLabel: 'Limits', harness: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' } as Record<string, string>,
       harnessShort: { claude: 'Claude', codex: 'Codex', cursor: 'Cursor' } as Record<string, string>,
@@ -76,7 +78,7 @@ export const en: Copy = {
       resumes: (at: string) => `resumes at ${at}`, resumesOn: (at: string) => `resumes on ${at}`, loading: 'Reading…',
       notOnPc: (harness: string) => `Cannot read: reconnect ${harness} on the PC.`,
       unread: 'Limit not read: Cursor does not give it for this plan.', unreach: (age: string) => `Not read for ${age}.`, unreachNever: 'Cannot read for now.', stale: (age: string) => `Read ${age} ago.`,
-      reachedLabel: (h: string, w: string) => `${h} · ${w} reached`, overLabel: (h: string, w: string, p: number) => `${h} · ${w} at ${p} %`,
+      reachedLabel: (h: string, w: string) => `${h} · ${w} reached`, overLabel: (h: string, w: string, p: number) => `${h} · ${w} at ${p}%`,
       /** A decision a session put to the user: answered in the chat, through the card Ledge proposes. */
       decision: 'Decision', asks: 'asks you', answer: 'Answer', answerLabel: (title: string) => `Answer “${title}”`,
       someone: 'A session',
@@ -207,7 +209,7 @@ export const en: Copy = {
     tooMany: (n: number, max: number) => `${n} sessions in this group, ${max} at most: write to them from the PC`,
     nobody: 'Nobody to write to', notSent: 'Message not sent', uncertain: 'Message sent; check on the PC',
     /** A session's context and relief (context handover spec §3.2): shown here, started from the PC. */
-    context: (pct: number) => `context ${pct} %`,
+    context: (pct: number) => `context ${pct}%`,
     relief: { briefing: 'relief: brief asked', launching: 'relief: launching…', done: 'relieved', failed: 'relief failed' } as Record<'briefing' | 'launching' | 'done' | 'failed', string>,
     relievedBy: (name: string) => `relieved by ${name}`, relieves: (name: string) => `relieves ${name}`
   },
@@ -573,6 +575,8 @@ export const en: Copy = {
   /** Settings: what this device chooses for itself, the PC's shared threshold, and what stays on the PC. */
   settings: {
     appearance: 'Appearance',
+    /** The two rows of Appearance, and the languages written in their own language (m0-langue.html, its handoff sheet). */
+    theme: 'Theme', lang: 'Language', langs: { fr: 'Français', en: 'English' },
     motion: 'Reduce motion', motionHint: 'When off, the device’s setting applies.',
     notifications: 'Notifications on this device',
     notify: {

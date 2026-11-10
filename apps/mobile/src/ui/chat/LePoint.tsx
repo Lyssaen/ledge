@@ -92,7 +92,7 @@ export function LePoint({ store, sessions, tasks, syncedAt, fresh, threshold = C
                 <span aria-hidden="true" className={`flex size-5 flex-none items-center justify-center rounded-md ${tone === 'red' ? 'bg-danger-bg text-approval' : 'text-attention'}`} style={tone === 'red' ? undefined : { background: 'var(--status-warning-soft)' }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 14l4-4" /><path d="M3.3 19a10 10 0 1 1 17.4 0" /></svg>
                 </span>
-                <span className="min-w-0 flex-1 text-body">{P.harnessShort[harness] ?? harness} · {which} <b className={`font-medium ${TONE_TEXT[tone]}`}>{w.pct} %</b></span>
+                <span className="min-w-0 flex-1 text-body">{P.harnessShort[harness] ?? harness} · {which} <b className={`font-medium ${TONE_TEXT[tone]}`}>{copy.percent(w.pct)}</b></span>
                 {w.resetsAt && <span className="flex-none whitespace-nowrap text-small text-muted">↺ {resetLabel(w.resetsAt, now, true)}</span>}
               </div>
             );

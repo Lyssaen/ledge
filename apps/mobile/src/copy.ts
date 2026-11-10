@@ -1,11 +1,15 @@
 import { MESSAGE_MAX, type ActionErrorCode } from '@ledge/protocol';
 import { actionWords, type ActionVars } from '@ledge/ui/chat/actionWords';
 
+import { useSyncExternalStore } from 'react';
+import { createI18n } from '@ledge/ui/i18n/lang';
 import { en } from './copy.en';
 
 /** Every visible string of the phone app lives here (decision D13): French below, English in copy.en.ts. */
 const fr = {
   appName: 'Ledge',
+  /** A percentage as the language writes it (« 84 % », "84%"). */
+  percent: (n: number) => `${n} %`,
   /** The name beside the mark, in the header of the five tabs. */
   brand: 'Ledge',
   inbox: {
@@ -568,6 +572,8 @@ const fr = {
   /** Réglages: what this device chooses for itself, the PC's shared threshold, and what stays on the PC. */
   settings: {
     appearance: 'Apparence',
+    /** The two rows of Apparence, and the languages written in their own language (m0-langue.html, its handoff sheet). */
+    theme: 'Thème', lang: 'Langue', langs: { fr: 'Français', en: 'English' },
     motion: 'Réduire les animations', motionHint: 'Désactivé, le réglage de l’appareil s’applique.',
     notifications: 'Notifications sur cet appareil',
     notify: {
@@ -878,17 +884,50 @@ type Widen<T> = T extends string ? string
 export type Copy = Widen<typeof fr>;
 
 export type Lang = 'fr' | 'en';
-const LANGS: readonly Lang[] = ['fr', 'en'];
+export const LANGS: readonly Lang[] = ['fr', 'en'];
 const tables: Record<Lang, Copy> = { fr, en };
-const LANG_KEY = 'ledge.lang';
-
-/** The language shown: French until the way to choose it is designed (question to design-ux, 2026-11-10); a stored choice wins. */
-export function loadLang(): Lang {
-  try { const v = localStorage.getItem(LANG_KEY); if (v && (LANGS as readonly string[]).includes(v)) return v as Lang; } catch { /* storage unavailable */ }
-  return 'fr';
-}
-export const lang: Lang = loadLang();
 export const copyFor = (l: Lang): Copy => tables[l];
-export const copy: Copy = tables[lang];
-/** Dates and times in the language shown, as Desktop writes them (fr-FR, en-GB). */
-export const locale = lang === 'fr' ? 'fr-FR' : 'en-GB';
+
+/** Desktop's language mechanism (m0-langue.html): kept on this device under `mobile.lang`, French when nothing is chosen. */
+const i18n = createI18n<Lang, Copy>({ langs: LANGS, messages: tables, fallback: 'fr', prefix: 'mobile', uiCopy: m => m.ui });
+export const loadLang = i18n.loadLang;
+
+/** The language shown, and its dates (fr-FR, en-GB, as Desktop): live bindings, changed by setLang. */
+export let lang: Lang = loadLang();
+export let locale = localeOf(lang);
+function localeOf(l: Lang): string { return l === 'fr' ? 'fr-FR' : 'en-GB'; }
+
+/**
+ * Every string of the language shown. A view of the current table, not a copy: `copy.x.y` read at render, or kept in a
+ * module's `const C = copy.x`, gives the words of the language chosen since, without a reload (m0-langue.html, §2).
+ */
+function view(path: readonly string[]): object {
+  const at = (): Record<string, unknown> => path.reduce<Record<string, unknown>>((o, k) => o[k] as Record<string, unknown>, tables[lang] as unknown as Record<string, unknown>);
+  return new Proxy({}, {
+    get: (_, k) => {
+      const v = at()[k as string];
+      return v && typeof v === 'object' && !Array.isArray(v) && typeof k === 'string' ? view([...path, k]) : v;
+    },
+    has: (_, k) => k in at(),
+    ownKeys: () => Reflect.ownKeys(at()),
+    getOwnPropertyDescriptor: (_, k) => {
+      const d = Reflect.getOwnPropertyDescriptor(at(), k);
+      return d && { ...d, configurable: true, value: (view(path) as Record<string | symbol, unknown>)[k] };
+    }
+  });
+}
+export const copy = view([]) as Copy;
+
+const listeners = new Set<() => void>();
+/** Shows the app in `l` at once and keeps the choice on this device. */
+export function setLang(l: Lang): void {
+  if (l === lang) return;
+  lang = l; locale = localeOf(l);
+  i18n.saveLang(l);
+  if (typeof document !== 'undefined') document.documentElement.lang = l;
+  listeners.forEach(f => f());
+}
+/** For useSyncExternalStore: the app renders again in the new language. */
+export function onLang(f: () => void): () => void { listeners.add(f); return () => { listeners.delete(f); }; }
+/** The language shown; a component that calls it renders again, with its whole tree, when it changes. */
+export function useLang(): Lang { return useSyncExternalStore(onLang, () => lang); }

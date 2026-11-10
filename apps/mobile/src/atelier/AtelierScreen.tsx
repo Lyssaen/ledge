@@ -142,7 +142,7 @@ export function AtelierScreen({ store, sessionId, requestKey, storage, onReconne
         <div className={`atelier-ipad${offline ? ' atelier-frozen' : ''}`}>
           <div className="zoom-controls" role="toolbar" aria-label={copy.atelier.zoom.bar}>
             <button type="button" className="ledge-btn" data-variant="ghost" aria-label={copy.atelier.zoom.out} onClick={() => view.step(-1)}>−</button>
-            <button type="button" className="zoom-level" aria-label={copy.atelier.zoom.reset} onClick={() => view.zoomTo(1)}>{Math.round(view.zoom * 100)} %</button>
+            <button type="button" className="zoom-level" aria-label={copy.atelier.zoom.reset} onClick={() => view.zoomTo(1)}>{copy.percent(Math.round(view.zoom * 100))}</button>
             <button type="button" className="ledge-btn" data-variant="ghost" aria-label={copy.atelier.zoom.in} onClick={() => view.step(1)}>+</button>
             <span className="zoom-sep" />
             <button type="button" className="ledge-btn zoom-fit" data-variant={view.fitted ? 'secondary' : 'ghost'} aria-pressed={view.fitted} title={copy.atelier.zoom.fitTitle} onClick={view.fit}>

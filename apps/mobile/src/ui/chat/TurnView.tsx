@@ -49,7 +49,8 @@ function Steps({ steps, sessions, running }: { steps: PhoneChatStep[]; sessions:
   );
 }
 
-const ERROR: Record<ChatErrorCode, string> = { busy: copy.chat.busy, timeout: copy.chat.timeout, failed: copy.chat.failed, cancelled: copy.chat.cancelled };
+/** Read at render, so the words follow the language chosen. */
+const errorText = (c: ChatErrorCode): string => ({ busy: copy.chat.busy, timeout: copy.chat.timeout, failed: copy.chat.failed, cancelled: copy.chat.cancelled })[c];
 
 /**
  * One question and what came of it. `live` is the question being answered: its steps and the text so far
@@ -73,7 +74,7 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onStop
       {!live && text && <Answer text={text} names={names} />}
       {!live && turn.answer && <Sources names={sourcesOf(steps)} ids={names} />}
       {!live && turn.cut && <span className="px-1 text-small text-muted">{copy.chat.cut}</span>}
-      {!live && turn.error && <p role="status" className="px-1 text-body text-danger-fg">{ERROR[turn.error]}</p>}
+      {!live && turn.error && <p role="status" className="px-1 text-body text-danger-fg">{errorText(turn.error)}</p>}
       {!live && turn.closes && <CloseCards store={store} qid={turn.qid} closes={turn.closes} canConfirm={canConfirm} sessions={list} />}
       {!live && !turn.closes && relay && <RelayCard store={store} qid={turn.qid} relay={relay} target={list.find(x => x.id === relay.id)} known={list.some(x => x.id === relay.id)} ignoredAt={turn.ignoredAt} />}
       {!live && !turn.closes && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} ignoredAt={turn.ignoredAt} />}

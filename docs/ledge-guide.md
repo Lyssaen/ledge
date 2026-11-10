@@ -353,7 +353,7 @@ Une demande seule : autorisation, question, plan ou modifications. On l'approuve
 
 S'ouvre depuis la roue dentée en en-tête (par-dessus l'onglet courant, qui reste allumé), ou depuis « Réglages » en bas du rail sur tablette. Dans l'ordre :
 - **Cet appareil :** son nom (« Renommer »).
-- **Apparence :** le thème, et « Réduire les animations », propres à cet appareil.
+- **Apparence :** le thème, la langue (Français ou English ; français par défaut, appliquée tout de suite) et « Réduire les animations », propres à cet appareil.
 - **Notifications sur cet appareil :** l'interrupteur principal ; une fois activées, « Agent terminé », « Réponse de Ledge » et « Décision à prendre » se coupent une à une, et « Pause » (1 h, 4 h, jusqu'à demain 8 h) les suspend toutes. Les demandes d'accord et les questions préviennent toujours, sauf pendant une pause.
 - **Ledge :** « Contexte max » (le seuil partagé avec le PC, comme Réglages › Général sur le desktop) et « Agent du chat » (l'agent qui répond aux questions posées depuis cet appareil ; « PC » : le même que le chat du PC).
 - **Projets :** la liste dans son ordre, chaque projet avec sa couleur et ses agents. Monter ou descendre un projet, « Modifier » (nom, couleur), « Nouveau projet » (un projet vide), et « Supprimer le projet… » avec la passkey de l'appareil : ses agents, ses dossiers et ses règles vont sans projet ou vers un autre projet. « Dossiers… » liste les dossiers du projet (« Retirer ») ; « Ajouter un dossier » parcourt les dossiers du PC, ses dossiers récents en tête, et ajoute celui affiché avec la passkey de l'appareil. Les dossiers d'un serveur et les règles de rangement se règlent sur le desktop.
