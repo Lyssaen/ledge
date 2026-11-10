@@ -58,14 +58,20 @@ export function sweepStaleRuns(root: string): string[] {
   return removed;
 }
 
+/** The folder of a run, marked: in the runs' root after its sweep, or beside it when the root is not provably ours (then neither
+ *  swept nor used, and the run is still removed at its end). */
+export function makeRun(base: string): string {
+  const root = runsRoot(base);
+  if (root) sweepStaleRuns(root);
+  const dir = mkdtempSync(root ? join(root, RUN_PREFIX) : join(base, `${RUNS_ROOT}-${RUN_PREFIX}`));
+  writeFileSync(join(dir, RUN_MARKER), JSON.stringify({ mark: MARK, pid: process.pid }));
+  return dir;
+}
+
 /** vitest's globalSetup: the temporary variables point at this run's folder before any worker starts, so `os.tmpdir()` returns it in
  *  every test and in every process a test starts. */
 export default function setup(): () => void {
-  const root = runsRoot(tmpdir());
-  // A root that is not provably ours is neither swept nor used: the run then sits beside it, and is still removed at its end.
-  if (root) sweepStaleRuns(root);
-  const dir = mkdtempSync(join(root ?? tmpdir(), root ? RUN_PREFIX : `${RUNS_ROOT}-${RUN_PREFIX}`));
-  writeFileSync(join(dir, RUN_MARKER), JSON.stringify({ mark: MARK, pid: process.pid }));
+  const dir = makeRun(tmpdir());
   const before = TMP_VARS.map(k => [k, process.env[k]] as const);
   for (const k of TMP_VARS) process.env[k] = dir;
   return () => {
