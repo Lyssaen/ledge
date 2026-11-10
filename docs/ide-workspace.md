@@ -238,14 +238,16 @@ Les réglages s'ouvrent en onglet (`Ctrl+,`). Les sections d'avant ne changent p
 | `Ctrl+\` | Diviser le groupe à droite. |
 | `Ctrl+B` | Replier ou déplier la barre latérale. |
 | `Ctrl+J` | Afficher ou masquer le panneau du bas. |
-| `Ctrl+/` | Afficher ou masquer le panneau de droite. `/` (hors d'un champ) l'ouvre sur la Conversation. |
+| `Ctrl+/` | Afficher le panneau de droite, le curseur dans le champ du chat ; le masquer rend le clavier à l'onglet actif. `/` (hors d'un champ) l'ouvre sur la Conversation. |
+| `Alt+1…9` | Ouvrir la Nième session de la liste. |
+| `Alt+←` / `→` | Session précédente ou suivante. |
 | `Ctrl+W` / `Ctrl+Maj+T` | Fermer l'onglet ; rouvrir le dernier fermé. |
 | `Ctrl+Tab`, `Ctrl+PgSuiv` / `PgPréc` | Onglet suivant ou précédent du groupe. |
 | `Ctrl+Alt+←` / `→` | Envoyer l'onglet dans le groupe voisin. |
 | `?` | La liste des raccourcis. |
 | `Ctrl+,` | Réglages. |
 | `Ctrl+Entrée` | Lancer la nouvelle session, ou le rig dans « Lancer un rig ». |
-| Échap | Fermer une fenêtre modale, un menu, une confirmation. |
+| Échap | Fermer une fenêtre modale, un menu, une confirmation ou le chat ; retirer un filtre. |
 
 ## Points ouverts
 

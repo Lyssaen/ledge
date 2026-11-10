@@ -57,13 +57,14 @@ Raccourcis principaux :
 - `N` ouvre « Nouvelle session » (sur une autorisation en attente, `N` la refuse) ;
 - `Y` / `N` autorisent ou refusent la demande de la session active ;
 - `/` ou `Ctrl+/` ouvre le chat de Ledge dans le panneau de droite ;
-- `Ctrl+B`, `Ctrl+J` et `Ctrl+/` affichent ou masquent la barre latérale, le panneau du bas et le panneau de droite ;
+- `Ctrl+B`, `Ctrl+J` et `Ctrl+/` affichent ou masquent la barre latérale, le panneau du bas et le panneau de droite ; `Ctrl+/` met le curseur dans le champ du chat, et le rend à l'onglet actif en masquant le panneau ;
+- `Alt+1…9` ouvre la Nième session de la liste, `Alt+←/→` la session précédente ou suivante ;
 - `Ctrl+\` divise le groupe à droite, `Ctrl+1…9` va au groupe N ;
 - `Ctrl+W` ferme l'onglet, `Ctrl+Maj+T` rouvre le dernier fermé, `Ctrl+Tab` passe à l'onglet suivant du groupe, `Ctrl+Alt+←/→` envoie l'onglet dans le groupe voisin ;
 - `` Ctrl+` `` bascule l'onglet d'une session entre son fil et son terminal ; `` Ctrl+Maj+` `` sort du terminal sans changer de vue ;
 - `Ctrl+,` ouvre les réglages ;
 - `?` liste les raccourcis ;
-- Échap ferme une fenêtre modale, un menu ou une confirmation.
+- Échap ferme une fenêtre modale, un menu, une confirmation ou le chat, ou retire un filtre.
 
 ### Barre latérale
 
