@@ -207,7 +207,8 @@ describe('rig.act and rig.seats', () => {
     const c = withRigs();
     expect(ok('rig.act', { kind: 'rig.restart', rig: 'ledge-dev' }, c)).toMatchObject({ args: { kind: 'rig.restart', rig: 'ledge-dev' }, risk: 'destructive', summary: 'Redémarrer le rig **ledge-dev**' });
     expect(ok('rig.act', { kind: 'rig.start', rig: 'idle' }, c)).toMatchObject({ risk: 'reversible', summary: 'Démarrer le rig **idle**' });
-    expect(ok('rig.act', { kind: 'rig.snapshot', rig: 'ledge-dev' }, c).risk).toBe('reversible');
+    // « de le » contracts into « du » (mockup M3 §5).
+    expect(ok('rig.act', { kind: 'rig.snapshot', rig: 'ledge-dev' }, c)).toMatchObject({ risk: 'reversible', summary: 'Prendre un snapshot du rig **ledge-dev**' });
     expect(ok('rig.act', { kind: 'kernel.stop' }, c)).toMatchObject({ args: { kind: 'kernel.stop' }, risk: 'destructive', summary: 'Arrêter le kernel' });
     expect(code('rig.act', { kind: 'rig.start', rig: 'ledge-dev' }, c)).toBe('running');
     expect(code('rig.act', { kind: 'rig.stop', rig: 'idle' }, c)).toBe('not_running');

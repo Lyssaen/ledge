@@ -63,7 +63,8 @@ const withSession = (ctx: ResolveCtx, ref: unknown, check: (s: Session) => Refus
 
 /** A rig runs when OpenRig says so, or some of its seats do. */
 const rigRuns = (r: OpenRigState['rigs'][number]) => r.status === 'running' || r.status === 'partial' || r.running > 0;
-const RIG_VERB: Record<string, string> = { start: 'Démarrer', stop: 'Arrêter', restart: 'Redémarrer', snapshot: 'Prendre un snapshot de' };
+/** Each kind's words up to its object, article included: French contracts « de le » into « du » (« Prendre un snapshot du rig »). */
+const RIG_VERB: Record<string, string> = { start: 'Démarrer le', stop: 'Arrêter le', restart: 'Redémarrer le', snapshot: 'Prendre un snapshot du' };
 
 const IMPLS: Partial<Record<ActionId, Impl>> = {
   // A rig's or the kernel's power, checked against OpenRig as last read: a start of what runs, or a stop of what does not, is refused.
@@ -75,13 +76,13 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
       const runs = st.kernel.state === 'ready' || st.kernel.state === 'starting';
       if (kind === 'kernel.start' && runs) return no('running', 'the kernel already runs');
       if (kind !== 'kernel.start' && !runs) return no('not_running', 'the kernel does not run');
-      return row('rig.act', { kind }, `${verb} le kernel`, { kind, rig: KERNEL_RIG });
+      return row('rig.act', { kind }, `${verb} kernel`, { kind, rig: KERNEL_RIG });
     }
     const rig = st.rigs.find(r => r.name === a.rig);
     if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`);
     if (kind === 'rig.start' && rigRuns(rig)) return no('running', `${rig.name} already runs`);
     if ((kind === 'rig.stop' || kind === 'rig.restart') && !rigRuns(rig)) return no('not_running', `${rig.name} does not run`);
-    return row('rig.act', { kind, rig: rig.name }, `${verb} le rig ${b(rig.name)}`, { kind, rig: rig.name });
+    return row('rig.act', { kind, rig: rig.name }, `${verb} rig ${b(rig.name)}`, { kind, rig: rig.name });
   },
   // A role's seats, as the Rigs screen changes them: removing one stops its agent, so that row is destructive.
   'rig.seats': (a, ctx) => {
