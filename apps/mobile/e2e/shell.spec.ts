@@ -124,6 +124,13 @@ test.describe('in English, on a phone', () => {
     await expect(page.getByRole('heading', { name: en.nav.settings, level: 1 })).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(nav(page, en.nav.label).getByRole('link')).toHaveText([/^For you/, 'Sessions', 'MR/PR', 'Rigs', 'Ledge']);
+    // Theme and language sit at their natural width, on the left of the section (m0-langue.html, §1).
+    const section = await page.getByRole('heading', { name: en.settings.appearance, level: 2 }).locator('..').boundingBox();
+    for (const name of [en.settings.theme, en.settings.lang]) {
+      const box = await page.getByRole('group', { name }).boundingBox();
+      expect(box!.x).toBe(section!.x);
+      expect(box!.width).toBeLessThan(section!.width * 0.8);
+    }
     await shot(page, 'phone-settings-en');
     await page.reload();
     await expect(page.getByRole('heading', { name: en.nav.settings, level: 1 })).toBeVisible();

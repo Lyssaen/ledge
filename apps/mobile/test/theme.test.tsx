@@ -67,5 +67,8 @@ describe('theme', () => {
     expect(screen.getByRole('radio', { name: 'Clair' })).toBeChecked();
     expect(root().dataset.theme).toBe('light');
     expect(group).toBeInTheDocument();
+    // Both rows sit at their natural width, on the left, as the mockup draws them (review qitem-20261110202518-91216702).
+    expect(group).toHaveAttribute('data-fit', 'true');
+    expect(screen.getByRole('group', { name: 'Langue' })).toHaveAttribute('data-fit', 'true');
   });
 });

@@ -69,13 +69,13 @@ export function Connection({ store, login, relay, pinned, linkState, build, onSi
         <section aria-labelledby="appearance-title" className="flex flex-col gap-2.5">
           <h2 id="appearance-title" className="text-small font-medium text-muted">{S.appearance}</h2>
           {/* Thème, then Langue, each with its title (m0-langue.html, §1); a language is written in its own language. */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col items-start gap-1.5">
             <span aria-hidden="true" className="text-small text-muted">{S.theme}</span>
-            <Segmented name="theme" legend={S.theme} options={themes()} value={theme} onChange={v => setTheme(v)} />
+            <Segmented name="theme" legend={S.theme} options={themes()} value={theme} onChange={v => setTheme(v)} fit />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col items-start gap-1.5">
             <span aria-hidden="true" className="text-small text-muted">{S.lang}</span>
-            <Segmented name="lang" legend={S.lang} options={LANGS.map(l => ({ value: l, label: S.langs[l], lang: l }))} value={lang} onChange={setLang} />
+            <Segmented name="lang" legend={S.lang} options={LANGS.map(l => ({ value: l, label: S.langs[l], lang: l }))} value={lang} onChange={setLang} fit />
           </div>
           <MotionRow />
         </section>
