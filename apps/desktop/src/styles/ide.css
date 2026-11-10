@@ -304,6 +304,8 @@ body.ide-resizing-y { cursor: row-resize; user-select: none; }
 .ide-bar-pill .tab-count { font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .ide-bar-browser-live { color: var(--foreground); }
 @container (max-width: 560px) { .ide-bar-chip.pj, .ide-bar-kids .lbl, .ide-bar-browser .lbl { display: none; } .ide-bar-kids .n { display: inline; } }
+/* The « | » only separates: with the project gone, it shows only while a branch, a terminal or an MR/PR chip follows it (design-ux, 2026-11-10). */
+@container (max-width: 560px) { .ide-bar-sep:not(:has(~ .ide-bar-chip.br, ~ .ide-bar-chip.tm, ~ .fg-chip)) { display: none; } }
 @container (max-width: 470px) { .ide-bar-ctx b, .ide-bar .model-chip .car { display: none; } }
 /* Under 400 px the model's name gives way too (ellipsis): a bar with every chip on its right still fits a 300 px group. */
 @container (max-width: 400px) { .ide-bar-chip.br, .ide-bar-chip.tm, .ide-bar-sep { display: none; } .ide-bar-model { flex-shrink: 1; overflow: hidden; } }
