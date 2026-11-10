@@ -74,7 +74,7 @@ describe('the recovery under way and back (1 c, 1 d)', () => {
 describe('each way a recovery stops (2 a–i)', () => {
   const cases: Array<[string, RecoveryState, string, string, (string | null)[]]> = [
     ['none', failed('none'), 'Aucune passkey n’a été utilisée', 'Première fois sur cet appareil ?', ['Réessayer', 'Appairer avec un code']],
-    ['revoked', failed('revoked', { revokedAt: '2026-11-03T10:00:00.000Z' }), 'Cet iPhone a été révoqué', 'révoqué dans Ledge sur WSL le 3 nov', ['Appairer avec un code']],
+    ['revoked', failed('revoked', { revokedAt: '2026-11-03T10:00:00.000Z' }), 'Cet iPhone a été révoqué', 'révoqué dans Ledge sur WSL le 3 nov. Sa passkey', ['Appairer avec un code']],
     ['revoked, no date', failed('revoked'), 'Cet iPhone a été révoqué', 'Il a été révoqué dans Ledge sur WSL. Sa passkey n’ouvre plus rien.', ['Appairer avec un code']],
     ['old', failed('old'), 'Ta passkey est trop ancienne', 'Une dernière fois avec un code.', ['Appairer avec un code']],
     ['offline', { step: 'failed', why: 'offline', pcName: null }, 'Ton PC est hors ligne', 'Ouvre Ledge sur ton PC et active l’accès mobile : la reconnexion reprend dès qu’il est en ligne.', ['Réessayer', 'Annuler']],

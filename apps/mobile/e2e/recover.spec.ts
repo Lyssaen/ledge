@@ -1,7 +1,8 @@
 // A reinstalled app back with its passkey (docs/mockups/ledge-mobile-passkey/passkey-reinstall.html): Chromium's virtual
 // authenticator keeps the passkey as iOS's keychain would, the app's keys are wiped as a reinstall wipes them, and the fake
 // PC answers the recovery frames as the daemon would (it does not verify the proof: packages/ledge tests do).
-// SHOTS=<dir> saves a capture of each screen there; SHOTS_LANG=en runs the same screens in English.
+// SHOTS=<dir> saves a capture of each screen there; SHOTS_LANG=en runs the same screens in English, SHOTS_THEME=light|dark
+// in that theme.
 import { generateKeyPairSync } from 'node:crypto';
 import { devices, expect, test, type CDPSession, type Page } from '@playwright/test';
 import type { SealedFrame } from '@ledge/protocol';
@@ -15,12 +16,14 @@ test.use(iPhone13);
 
 let h: Harness;
 const LANG = process.env.SHOTS_LANG === 'en' ? 'en' : 'fr';
+const THEME = process.env.SHOTS_THEME === 'dark' || process.env.SHOTS_THEME === 'light' ? process.env.SHOTS_THEME : null;
 setLang(LANG);
 test.beforeEach(async ({ page }) => {
   h = await startHarness();
   h.daemon.device = createDeviceCheck(h.url);
-  // A reinstall wipes the stored language too: it is set again before each load.
+  // A reinstall wipes the stored language and theme too: they are set again before each load.
   if (LANG === 'en') await page.addInitScript(() => { localStorage.setItem('mobile.lang', 'en'); });
+  if (THEME) await page.addInitScript(t => { localStorage.setItem('ledge.theme', t); }, THEME);
 });
 test.afterEach(async () => { await h.close(); });
 
@@ -28,7 +31,7 @@ async function shot(page: Page, name: string) {
   if (!process.env.SHOTS) return;
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${process.env.SHOTS}/recover-${name}${LANG === 'en' ? '-en' : ''}.png` });
+  await page.screenshot({ path: `${process.env.SHOTS}/recover-${name}${LANG === 'en' ? '-en' : ''}${THEME ? `-${THEME}` : ''}.png` });
 }
 
 /** Deleting the app on iOS: its key store and its storage are gone, the relay's cookie and the passkey are not. */
@@ -123,6 +126,23 @@ test('each way a recovery stops: nothing pinned, and the way out offered', async
     h.pc.sendFrame({ k: 'recover_no', why: 'rate', retryInMs: 2_520_000 });
     await expect(page.getByRole('button', { name: copy.recover.no.rate.retryIn(42) })).toBeDisabled();
     await shot(page, 'rate');
+  });
+
+  await test.step('the PC accepts but the phone cannot keep its key: « Reconnexion non enregistrée », nothing linked', async () => {
+    await reinstall(page);
+    // The storage full, as Safari's quota says it: the PC key's write fails, and only that one.
+    await page.evaluate(() => {
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+        if (key === 'pc') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+        return put.call(this, value, key);
+      };
+    });
+    await recoverUntilProof(page);
+    h.pc.recoverOk('iPhone');
+    await expect(alert().getByRole('heading', { name: copy.recover.no.unsaved.title })).toBeVisible();
+    await expect(page.getByRole('button', { name: copy.recover.retry })).toBeVisible();
+    await shot(page, 'unsaved');
   });
 
   await test.step('Face ID refused: « Aucune passkey n’a été utilisée », nothing sent', async () => {

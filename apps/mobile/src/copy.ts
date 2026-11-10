@@ -754,7 +754,8 @@ const fr = {
       revoked: {
         title: (m: Model) => `${capFr(thisFr(m))} a été révoqué`,
         /** `date`: « 3 nov. », absent when the PC no longer keeps it (more than 90 days, or a passkey it never knew). */
-        body: (pc: string, date: string | null) => `Il a été révoqué dans Ledge sur ${pc}${date ? ` le ${date}` : ''}. Sa passkey n’ouvre plus rien.`,
+        // « le 3 nov. » ends the sentence with its own abbreviation point: no second one.
+        body: (pc: string, date: string | null) => `Il a été révoqué dans Ledge sur ${pc}${date ? ` le ${date.replace(/\.$/, '')}` : ''}. Sa passkey n’ouvre plus rien.`,
         hint: 'Pour le relier à nouveau, appaire-le avec un code et approuve-le sur le PC.'
       },
       old: {
