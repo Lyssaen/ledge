@@ -7,8 +7,8 @@ test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
 });
 
-// The IDE's Atelier tab sits between the sidebar and the chat: at 1280 × 800 its floor no longer fits at the 40 % floor of the
-// zoom (it did in the old interface). The IDE's size, as its mockups and the ide-* specs.
+// The IDE's size, as its mockups and the ide-* specs: between the sidebar and the chat, the floor fits there (at 1280 × 800 it
+// stays at the zoom's 40 % floor, its own case below).
 test.use({ viewport: { width: 1920, height: 1080 } });
 // The first tests of a run pay Vite's first compile of the IDE chunk: on a loaded machine that is past 20 s.
 test.setTimeout(60_000);
@@ -63,6 +63,27 @@ test('at fit nothing scrolls; Ctrl + wheel zooms under the pointer; + - 0', asyn
   await expect.poll(() => pct(page)).toBeLessThan(fit);
   await page.keyboard.press('0');
   await expect(level(page)).toHaveText(fitted!);
+});
+
+// At 1280 × 800 the floor does not fit at the zoom's 40 % floor, which is wanted (design-ux, 2026-11-10): what matters is that
+// the zoom bar stays on screen and the floor can be reached by zooming and dragging.
+test('at 1280 × 800 the floor stays at 40 %: the zoom bar on screen, the floor zooms and pans', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await fakeDaemon(page, [...eight, kit], { projects: twoProjects });
+  await page.goto('/'); await booted(page);
+  await expect(page.getByRole('region', { name: 'Ledge table' })).toBeVisible();
+  await expect.poll(() => pct(page)).toBe(40);
+  const bar = (await page.getByRole('toolbar', { name: 'Atelier zoom' }).boundingBox())!;
+  expect(bar.y + bar.height).toBeLessThanOrEqual(800);
+  expect(bar.x + bar.width).toBeLessThanOrEqual(1280);
+  await page.keyboard.press('+');
+  await expect.poll(() => pct(page)).toBeGreaterThan(40);
+  const v = (await scroller(page).boundingBox())!;
+  const s0 = await scroller(page).evaluate(el => ({ l: el.scrollLeft, t: el.scrollTop }));
+  const x = v.x + 12, y = v.y + v.height - 12;
+  await page.mouse.move(x, y); await page.mouse.down(); await page.mouse.move(x + 60, y - 50, { steps: 5 }); await page.mouse.up();
+  const s1 = await scroller(page).evaluate(el => ({ l: el.scrollLeft, t: el.scrollTop }));
+  expect(s1.l !== s0.l || s1.t !== s0.t, 'the floor moved').toBe(true);
 });
 
 test('two fingers pinch the floor, not the window: the zoom follows them, the page stays at scale 1', async ({ page }) => {

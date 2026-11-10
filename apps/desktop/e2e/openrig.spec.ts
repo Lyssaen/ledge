@@ -74,9 +74,13 @@ test('launching a rig: 3 builders and 3 reviewers, then launched', async ({ page
   await dialog.getByLabel('Dossier').fill('~/Workspace/ledge');
   await dialog.getByLabel('Nom', { exact: true }).fill('ledge-scale');
   for (const role of ['dev.build', 'dev.qa']) for (let i = 0; i < 2; i++) await dialog.getByRole('button', { name: `Un siège de plus pour ${role}` }).click();
+  // No check step (docs/mockups/ledge-ide-rigs.html, rigLaunchModal()): the modal shows the command, « Lancer » goes straight
+  // to the rig's view.
+  await expect(dialog.locator('.ide-rl-cmd')).toContainText('ledge-scale');
   await page.screenshot({ path: info.outputPath('openrig-launch.png'), fullPage: true });
   await dialog.getByRole('button', { name: /^Lancer/ }).click();
   await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.dv-tab').filter({ hasText: 'Rig · ledge-scale' })).toBeVisible();
   await expect.poll(() => daemon.received.filter(m => m.type === 'openrig.launch' && !(m.launch as { plan?: boolean }).plan).map(m => m.type === 'openrig.launch' && m.launch)).toEqual([
     expect.objectContaining({ spec: 'factory', cwd: '~/Workspace/ledge', name: 'ledge-scale', seats: expect.objectContaining({ 'dev.build': 3, 'dev.qa': 3 }) })
   ]);
