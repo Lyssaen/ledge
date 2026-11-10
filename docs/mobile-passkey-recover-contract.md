@@ -82,9 +82,9 @@ Le code est dans `packages/ledge/src/mobile/recover.ts`, branché dans `service.
 
 Ces contrôles ne laissent rien attendre : l'essai est alors compté et sa place prise **avant** la lecture de la clé, si bien que des `recover_start` livrés ensemble se voient les uns les autres et ne dépassent ni les 5 par heure ni les 3 en attente.
 
-5. Le PC vérifie enfin que la clé `d` est un point P-256. Sinon : `failed`, et l'essai reste compté.
+5. Le PC vérifie enfin que la clé `d` est un point P-256.
 
-Si un `recover_start` plus récent du même pair a pris la place pendant cette lecture, seul le plus récent reçoit une réponse. Sinon, le PC envoie `recover_offer`.
+Si un `recover_start` plus récent du même pair, un nouveau `welcome` ou l'arrêt du service a pris la place pendant cette lecture, cette demande ne reçoit **aucune** réponse, ni offre ni refus : seul le plus récent répond. Sinon, une clé illisible reçoit `failed` (l'essai reste compté), et une clé valide `recover_offer`.
 
 **À la réception de `recover_proof`** :
 1. Le nonce est consommé **avant toute vérification**. S'il est absent, ou si les 60 s sont passées : `failed`. Ce cas n'est pas compté comme un échec.

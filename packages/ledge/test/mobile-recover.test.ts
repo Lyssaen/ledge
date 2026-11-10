@@ -300,6 +300,27 @@ describe('passkey recovery: refusals', () => {
     expect(pair.to('d_two').filter(f => f.k === 'recover_offer')).toHaveLength(1);
   });
 
+  it('a start replaced, reset or stopped while its unreadable key is read gets no answer: only the current start speaks', async () => {
+    const t = await setup();
+    const good = await generateIdentity();
+    const bad = t.rec.receive('d_one', { k: 'recover_start', d: 'A'.repeat(87), n: randomNonce() });
+    const next = t.rec.receive('d_one', { k: 'recover_start', d: good.publicKey, n: randomNonce() });
+    await Promise.all([bad, next]);
+    expect(t.to('d_one').map(f => f.k)).toEqual(['recover_offer']);
+
+    const reset = await setup();
+    const r = reset.rec.receive('d_one', { k: 'recover_start', d: 'A'.repeat(87), n: randomNonce() });
+    reset.rec.reset();
+    await r;
+    expect(reset.to('d_one')).toEqual([]);
+
+    const stop = await setup();
+    const s = stop.rec.receive('d_one', { k: 'recover_start', d: 'A'.repeat(87), n: randomNonce() });
+    stop.rec.stop();
+    await s;
+    expect(stop.to('d_one')).toEqual([]);
+  });
+
   it('the device comes online while the proof is verified: connected, not restored', async () => {
     const t = await setup();
     const s = await t.start('d_phone', 'iPhone');

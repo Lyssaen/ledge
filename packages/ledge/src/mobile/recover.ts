@@ -93,9 +93,11 @@ export function createRecovery(opts: {
     const e: Entry = { peer, device: f.d, deviceNonce: f.n, pcNonce: randomNonce(), ...(f.model ? { model: f.model } : {}), expiresAt: t + RECOVER_TTL_MS, cancel: () => {} };
     e.cancel = schedule(() => { if (entries.get(peer) === e) entries.delete(peer); }, RECOVER_TTL_MS);
     entries.set(peer, e);
-    try { await importPublicKey(f.d); } catch { drop(e); return no(peer, 'failed'); }
+    let readable = true;
+    try { await importPublicKey(f.d); } catch { readable = false; }
     // A later start of the same peer, a new welcome or a stop took its place while the key was read: that one answers, or none.
     if (stopped || entries.get(peer) !== e) return;
+    if (!readable) { drop(e); return no(peer, 'failed'); }
     const name = opts.pcName();
     opts.send(peer, { k: 'recover_offer', pc: opts.pc.publicKey, n: e.pcNonce, ...(name ? { name } : {}) });
   };
