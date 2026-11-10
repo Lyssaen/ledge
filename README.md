@@ -12,11 +12,11 @@ The workshop of one person who runs coding agents (Claude Code, Codex, Cursor Ag
 
 You hold the organisation: Ledge proposes, you decide. Personal project. Windows host + WSL2, with remote Linux machines over SSH.
 
-<img src="docs/screens/desktop-atelier-dark.png" alt="Ledge Desktop's atelier: two project tables, eight agents seated, Otto writing to Nova, two requests waiting in « À toi »" width="900">
+<img src="docs/screens/desktop-atelier-dark.png" alt="Ledge Desktop's IDE on its Atelier tab: the Projects view, two project tables with eight agents, Otto writing to Nova, Ledge's chat on the right" width="900">
 
 <p>
-  <img src="docs/screens/desktop-session-dark.png" alt="A session: its thread and the command waiting for your approval" width="440">
-  <img src="docs/screens/desktop-chat-dark.png" alt="Ask Ledge: who needs me, and a card to start a session" width="440">
+  <img src="docs/screens/desktop-session-dark.png" alt="A session in its tab: its thread and the command waiting for your approval" width="440">
+  <img src="docs/screens/desktop-chat-dark.png" alt="Ledge's chat in the right panel: who needs me, and a card to start a session" width="440">
 </p>
 
 **[Take the tour](docs/tour.md)**: Ledge Desktop and the island, captured from the real app.
@@ -563,7 +563,7 @@ docs/                design specs, implementation plans, mockups, the approved p
 
 ### Ledge Desktop
 
-`apps/desktop` is the Windows app: its main window (home, atelier, settings), the notch as a second window (`apps/overlay`, built into `dist/notch/`), the tray and the updater. Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
+`apps/desktop` is the Windows app: its main window (an IDE-like workspace: tab groups, detached windows, the terminals panel, Ledge's chat on the right), the notch as a second window (`apps/overlay`, built into `dist/notch/`), the tray and the updater. Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
 Its installer, `Ledge.Desktop_<version>_x64-setup.exe`, is the only one on a release, with its updater manifest (`latest-desktop.json`).
 The Desktop and overlay packages, the two crates and the npm package always carry the same version: `pnpm version:set <x.y.z>` stamps all of them, and the release workflow does it from the tag.
 
