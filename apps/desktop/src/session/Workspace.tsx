@@ -89,6 +89,8 @@ export function Workspace({ client, prefs, setPrefs, onRevealCurrent, onShell, .
   };
   // « Toutes les modifications » (the side pane's change): the panel, on Modifications, on that file.
   const onAllChanges = (path: string) => {
+    // In the IDE there is no right panel: the session's Changes tab, beside, on that file.
+    if (p.ide) { p.onChanges?.(path); return; }
     setOwn({ file: path, listOpen: false });
     store?.select(p.session.id, changesTabId(p.session.id));
     if (!prefs.terminal) setPrefs(x => ({ ...x, terminal: true }));

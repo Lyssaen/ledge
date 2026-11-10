@@ -63,19 +63,25 @@ it('a document card under the message; several items become closable tabs; « Vi
   expect(side().queryAllByRole('tab')).toHaveLength(0);                              // one tab left: no tab bar
   expect(side().getByText('Guide de Ledge')).toBeVisible();
 });
-// 12b: in an IDE tab « All changes » asks for the page's right panel (Workspace.tsx onAllChanges), which an IDE tab never shows
-// (its prefs keep `terminal` false): the button does nothing visible. It should open the session's Changes tab on that file.
-it.skip('« All changes » opens the panel on Modifications, on that file; the reading pane stays beside the thread', async () => {
-  const { user } = await openOtto();
+// In the IDE there is no right panel: « All changes » opens the session's Changes tab beside (as « +N −N »), on that file.
+const dvTab = (name: string) => screen.getAllByRole('tab').find(t => t.closest('.dv-tabs-container') && t.getAttribute('aria-label') === name);
+const changesTitle = () => document.querySelector('.ide-changes .file-title code');
+it('« All changes » opens the session\'s Changes tab beside, on that file; the reading pane stays beside the thread', async () => {
+  const more: ThreadItem[] = [{ kind: 'tool', id: 'w1', at: new Date().toISOString(), turn: 2, tool: 'Write', label: '/w/ledge/docs/guide.md', status: 'success', files: [{ path: '/w/ledge/docs/guide.md', change: 'write', diff: '+ # Guide' }] }];
+  const { user } = await openOtto(more);
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
   expect(side().getByText('Change · App.tsx')).toBeVisible();
-  expect(side().getByText('1 / 1')).toHaveClass('file-pos');
   expect([...document.querySelectorAll('.side-diff .diff-line .code')].map(c => c.textContent)).toEqual(['a', 'b']);
   await user.click(side().getByRole('button', { name: 'All changes' }));
-  const panel = within(screen.getByRole('region', { name: 'Panel: shells and changes' }));
-  expect(panel.getByRole('tab', { name: /^Changes/ })).toHaveAttribute('aria-selected', 'true');
-  expect(document.querySelector('.right-panel .file-title code')).toHaveTextContent('src/App.tsx');
+  await vi.waitFor(() => expect(dvTab('Changes · Otto')).toHaveAttribute('aria-selected', 'true'));
+  // Not the list's first file (docs/guide.md, the newest): the one the pane showed.
+  await vi.waitFor(() => expect(changesTitle()).toHaveTextContent('src/App.tsx'));
   expect(side().getByText('Change · App.tsx')).toBeVisible();
+  // Asked again on another file, the same tab moves to it.
+  await user.click(within(document.querySelector<HTMLElement>('[data-tool="w1"]')!).getByRole('button', { name: 'View the change' }));
+  await user.click(side().getByRole('button', { name: 'All changes' }));
+  await vi.waitFor(() => expect(changesTitle()).toHaveTextContent('docs/guide.md'));
+  expect(screen.getAllByRole('tab').filter(t => t.getAttribute('aria-label') === 'Changes · Otto')).toHaveLength(1);
 });
 it('Enlarge and the keyboard on the handle move the split, bounded and remembered', async () => {
   const { user } = await openOtto();
