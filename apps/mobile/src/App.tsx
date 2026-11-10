@@ -215,7 +215,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
         );
     }
     const shell: ShellLink = { pc: pcName, look: lookOf(mobile.fresh, !!mobile.syncedAt, link.reach()), reach: link.reach(), since: clock(mobile.syncedAt), retry };
-    const badges = { atoi: atoiBadge(requestsOf([...mobile.sessions.values()])) };
+    const badges = { atoi: atoiBadge(requestsOf([...mobile.sessions.values()]), mobile.asks ?? []) };
     const inbox = <Inbox store={store} />;
     const sessions = <Agents store={store} />;
     // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
@@ -241,7 +241,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       })();
       return <ShellProvider value={shell}>{content}<Rail route={route} active={tab ?? 'settings'} badges={badges} atelier={!!mobile.daemon?.atelier} /></ShellProvider>;
     }
-    // A phone: the header and the five tabs around a tab's screen and Réglages; a thread, a terminal or a request fill the screen.
+    // A phone: the five tabs, always there (m0-socle.html, §1); the header above a tab's screen, a thread, a terminal, a request
+    // and Réglages bring their own.
     const framed = (body: ReactNode, top = true) => (
       <ShellProvider value={shell}>
         {top && <TopBar />}
@@ -256,10 +257,10 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'rigs': return framed(<Rigs />);
       case 'chat': return framed(chat);
       case 'connection': return framed(connection, false);
-      case 'thread': return <ShellProvider value={shell}><Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} /></ShellProvider>;
-      case 'terminal': return <ShellProvider value={shell}><Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} /></ShellProvider>;
+      case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />, false);
+      case 'terminal': return framed(<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />, false);
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
-      case 'request': return <ShellProvider value={shell}><RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} /></ShellProvider>;
+      case 'request': return framed(<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />, false);
     }
   })();
 

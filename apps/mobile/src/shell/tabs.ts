@@ -1,3 +1,4 @@
+import type { HumanAsk } from '@ledge/protocol';
 import type { InboxItem } from '../model/requests';
 import { href, type Route } from '../router';
 
@@ -40,12 +41,12 @@ export const tabHref = (t: Tab): string => left.get(t) ?? href(rootOf(t));
 export const forgetTabs = (): void => left.clear();
 
 /**
- * The badge of À toi, as Desktop's activity bar: the permissions waiting, in red; without any, the questions, in amber; else
- * none. The OpenRig requests join the amber count once the phone receives them (M1). Past 99, « 99+ ».
+ * À toi's badge (m0-socle.html, §1, Desktop's rule): the permissions in red; without one, the questions and what OpenRig asks
+ * the person (its decisions and the rows parked on them; a piece of news is no ask) in amber; past 99, « 99+ ».
  */
-export function atoiBadge(items: readonly InboxItem[]): { text: string; tone: 'red' | 'amber' } | null {
+export function atoiBadge(items: readonly InboxItem[], asks: readonly Pick<HumanAsk, 'kind'>[] = []): { text: string; tone: 'red' | 'amber' } | null {
   const perm = items.filter(i => i.filter === 'permission').length;
-  const ask = items.length - perm;
+  const ask = items.length - perm + asks.filter(a => a.kind !== 'update').length;
   const n = perm || ask;
   if (!n) return null;
   return { text: n > 99 ? '99+' : String(n), tone: perm ? 'red' : 'amber' };

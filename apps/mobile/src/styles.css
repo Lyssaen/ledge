@@ -92,6 +92,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   box-sizing: border-box;
 }
 .bleed { margin-left: calc(-1 * var(--bleed-l)); margin-right: calc(-1 * var(--bleed-r)); }
+/* What a screen's own footer keeps clear at the bottom: the home indicator, unless the tab bar below already does. */
+.app { --foot-inset: env(safe-area-inset-bottom); }
+.app:has(> .tabbar) { --foot-inset: 0px; }
 
 /* The phone's five tabs (m0-socle.html, §1): 58 px, then the home indicator's inset, on the sidebar's colour to the bottom edge. */
 .app:has(> .tabbar) { padding-bottom: 0; }

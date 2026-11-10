@@ -1,3 +1,4 @@
+import { copy } from '../copy';
 import type { AskQuestion, PhonePending, PhoneSession, RiskReason, Tool } from '@ledge/protocol';
 
 /** One request waiting on the PC, as the inbox and the detail show it. */
@@ -59,10 +60,11 @@ export const filterItems = (items: InboxItem[], f: Filter): InboxItem[] => f ===
 
 export function ageLabel(since: string, now: number): string {
   const s = Math.max(0, Math.floor((now - Date.parse(since)) / 1000));
-  if (s < 60) return `${s} s`;
-  if (s < 3600) return `${Math.floor(s / 60)} min`;
-  if (s < 86_400) return `${Math.floor(s / 3600)} h`;
-  return `${Math.floor(s / 86_400)} j`;
+  const A = copy.inbox.age;
+  if (s < 60) return A.s(s);
+  if (s < 3600) return A.min(Math.floor(s / 60));
+  if (s < 86_400) return A.h(Math.floor(s / 3600));
+  return A.d(Math.floor(s / 86_400));
 }
 
 export const firstLine = (t: string) => t.split('\n').find(l => l.trim())?.trim() ?? '';
@@ -70,8 +72,8 @@ export const firstLine = (t: string) => t.split('\n').find(l => l.trim())?.trim(
 export function headline(item: InboxItem): string {
   switch (item.kind) {
     case 'question': return item.text;
-    case 'plan': return 'Plan à valider';
-    case 'diff': return `Modifier ${firstLine(item.text)}`.trim();
+    case 'plan': return copy.inbox.plan;
+    case 'diff': return copy.inbox.diff(firstLine(item.text)).trim();
     default: return firstLine(item.text);
   }
 }

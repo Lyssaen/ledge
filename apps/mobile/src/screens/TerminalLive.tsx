@@ -234,7 +234,7 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
         )}
       </main>
       {held ? (
-        <footer className="flex flex-none flex-col gap-1 pt-2 pb-[max(8px,env(safe-area-inset-bottom))]">
+        <footer className="flex flex-none flex-col gap-1 pt-2 pb-[max(8px,var(--foot-inset))]">
           {lineMode && (
             <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); sendLine(); }}>
               <input id="term-line" value={line} onChange={e => setLine(e.target.value)} aria-label={L.lineField} autoCapitalize="off" enterKeyHint="send"
@@ -265,7 +265,7 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
           </div>
         </footer>
       ) : (
-        <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-[max(16px,env(safe-area-inset-bottom))]">
+        <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-[max(16px,var(--foot-inset))]">
           {(releasedLine || exitLine || refusedLine || holdRefusedLine) && (
             <p role="status" className="text-center text-small text-muted">{refusedLine ?? exitLine ?? holdRefusedLine ?? releasedLine}</p>
           )}

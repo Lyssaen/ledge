@@ -17,6 +17,9 @@ export const en: Copy = {
   /** The name beside the mark, in the header of the five tabs. */
   brand: 'Ledge',
   inbox: {
+    /** A request's first line when it has no words of its own (Desktop's « Plan to approve »), and an age in the list. */
+    plan: 'Plan to approve', diff: (file: string) => `Edit ${file}`,
+    age: { s: (n: number) => `${n}s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} d` },
     title: ATOI,
     subtitle: (n: number) => n === 0 ? 'All quiet' : n === 1 ? '1 request. Choose where to start.' : `${n} requests. Choose where to start.`,
     filtersLabel: 'Filter the requests',

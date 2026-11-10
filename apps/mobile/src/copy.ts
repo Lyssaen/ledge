@@ -13,6 +13,9 @@ const fr = {
   /** The name beside the mark, in the header of the five tabs. */
   brand: 'Ledge',
   inbox: {
+    /** A request's first line when it has no words of its own, and an age in the list (« 3 min », « 2 j »). */
+    plan: 'Plan à valider', diff: (file: string) => `Modifier ${file}`,
+    age: { s: (n: number) => `${n} s`, min: (n: number) => `${n} min`, h: (n: number) => `${n} h`, d: (n: number) => `${n} j` },
     title: 'À toi',
     subtitle: (n: number) => n === 0 ? 'Tout est calme' : n === 1 ? '1 demande. Choisis par où commencer.' : `${n} demandes. Choisis par où commencer.`,
     filtersLabel: 'Filtrer les demandes',

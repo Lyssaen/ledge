@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type PhoneFolder, type ProjectColor, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice, type PhoneHarnessUsage
+  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice, type PhoneHarnessUsage, type HumanAsk
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -37,7 +37,7 @@ export interface MobileState {
   /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
   device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string; /** This device's own settings (`daemon.settings`). */ prefs?: DevicePrefs } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true; /** Sends `usage.state`. */ usage?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true; /** Sends `usage.state`. */ usage?: true; /** Answers `openrig.asks` (« À toi »). */ openrig?: true } | null;
   /** The user's projects, in their order (`daemon.atelier`): the Atelier's rooms. Kept for an offline start; empty from an older PC. */
   projects: PhoneProject[];
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
@@ -69,6 +69,8 @@ export interface MobileState {
   usage: PhoneHarnessUsage[] | null;
   /** The usage alert threshold the PC keeps (`usage.state`'s `prefs.alert`): past it a window is amber and in « À toi ». */
   usageAlert: number | null;
+  /** What OpenRig on this PC asks the person (`openrig.asks`, `daemon.openrig`): null until it sends them. Never cached. */
+  asks: HumanAsk[] | null;
 }
 
 /** The request a challenge is asked for, as `session.decide` names it. */
@@ -265,6 +267,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     tasks: new Map(),
     usage: null,
     usageAlert: null,
+    asks: null,
     checklists: new Map(),
     pc: null
   };
@@ -339,6 +342,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
   const notify = () => { for (const fn of [...listeners]) fn(); };
   const setChat = (c: ChatState) => { chatState = c; notify(); };
+  let asksAsked = false;
   const askHistory = () => { historyAsked = true; send({ type: 'chat.history' }); };
   const set = (patch: Partial<MobileState>) => { state = { ...state, ...patch }; notify(); };
   const persist = () => {
@@ -399,12 +403,14 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (visible !== null) send({ type: 'presence', visible });
     if (lastThread && state.threads.get(lastThread)?.status !== 'gone') askThread(lastThread);
     historyAsked = false;
+    asksAsked = false;
     askedSinceReady.clear();
     if (state.device?.chat) askHistory();
   }
 
   function onLost() {
     historyAsked = false;
+    asksAsked = false;
     askedSinceReady.clear();
     // A list asked on the lost channel never comes: it is asked again. Those already answered stay.
     for (const tool of [...modelAsks]) if (!state.models[tool]) modelAsks.delete(tool);
@@ -440,6 +446,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         const checklists = new Map([...state.checklists].filter(([id]) => sessions.has(id)));
         set({ sessions, previews, threads, checklists, capabilities: m.capabilities, device: m.device ?? null, daemon: m.daemon, projects: m.projects ?? [], fresh: true, syncedAt: now, pc, modelFailures: failuresKept(state.modelFailures, state.sessions, sessions), ...(bootChanged ? { models: {}, commands: {} } : {}) });
         persist();
+        // OpenRig's asks, once per link: the PC then pushes them whole at each change (the amber badge of « À toi »).
+        if (m.daemon.openrig && !asksAsked && ready()) { asksAsked = true; send({ type: 'openrig.asks' }); }
         adoptRunsOf(m.sessions);
         // The instructions and interrupts left uncertain (those in flight on this link are `sending`) go again if this PC may not have applied them.
         if (ready()) resend(o => o.phase === 'uncertain' && expectKey(o.message) === undefined);
@@ -490,6 +498,9 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       case 'tasks':
         set({ tasks: new Map(m.tasks.map(x => [x.id, x])) });
         return;
+      case 'openrig.asks':
+        set({ asks: m.asks });
+        break;
       case 'usage.state':
         set({ usage: m.harnesses, usageAlert: m.prefs.alert });
         return;
@@ -676,12 +687,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     lastThread = null;
     threadAsks = [];
     historyAsked = false;
+    asksAsked = false;
     chatState = emptyChat();
     settle(new Error('lost'));
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, projects: [], fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {}, folderListing: null, recentFolders: null, projectFolders: {}, usage: null, usageAlert: null });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, projects: [], fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {}, folderListing: null, recentFolders: null, projectFolders: {}, usage: null, usageAlert: null, asks: null });
     modelAsks.clear(); commandAsks.clear(); rigAsks.clear();
     stopPcWatch();
   }
