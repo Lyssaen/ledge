@@ -359,9 +359,12 @@ export function seatPlan(nodes: readonly { logicalId: string }[], seats: Record<
 export const OpenRigSeatsSchema = z.object({
   type: z.literal('openrig.seats'), requestId: z.string().min(1).max(100), machineId: z.string().optional(),
   rig: RigNameSchema, seats: z.record(RigRoleSchema, z.number().int().min(0).max(9)),
-  /** How the added seats are linked, where OpenRig can add links to a running rig (0.7+): like a launch's. */ delegation: z.enum(['pairs', 'all']).optional()
+  /** How the added seats are linked, where OpenRig can add links to a running rig (0.7+): like a launch's. */ delegation: z.enum(['pairs', 'all']).optional(),
+  /** Refuse, before anything runs, a change whose plan (computed on the rig as read then) removes a seat: `remove_unconfirmed`. The phone
+   *  sends it when it has no passkey for the change, so the check holds on the plan actually run, not on an earlier read. */
+  noRemove: z.literal(true).optional()
 });
-/** The seats changed (or not). `added` / `removed`: the seats, as `pod.member`; `error`: `rig_not_running`, `rig_root_unknown` (its
+/** The seats changed (or not). `added` / `removed`: the seats, as `pod.member`; `error`: `rig_not_running`, `remove_unconfirmed` (`noRemove` and the plan removes one), `rig_root_unknown` (its
  *  agents cannot be found to copy a seat), `busy`, the fleet's `offline` / `outdated`, or what `rig` said. */
 export const OpenRigReseatedSchema = z.object({
   type: z.literal('openrig.reseated'), requestId: z.string(), machineId: z.string().optional(), ok: z.boolean(),

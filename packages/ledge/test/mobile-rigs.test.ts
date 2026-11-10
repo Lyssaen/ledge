@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { PhoneServerMessageSchema, type ClientMessage, type Goal, type OpenRigAction, type OpenRigState, type RigRow, type ServerMessage } from '@ledge/protocol';
+import { PhoneServerMessageSchema, seatPlan, type ClientMessage, type Goal, type OpenRigAction, type OpenRigState, type RigRow, type ServerMessage } from '@ledge/protocol';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
 import { flush, setup, stopAll } from './helpers/gateway.js';
-import { rigsSubject } from '../src/mobile/gateway.js';
+import { redactPaths, rigsSubject } from '../src/mobile/gateway.js';
 
 afterEach(stopAll);
 
@@ -25,8 +25,12 @@ const row = (id: string, state: string, summary = 'B4'): RigRow => ({ id, state,
 const GOAL: Goal = { goalId: 'goal-0001', qitemId: 'qitem-g1', text: 'Refaire le mobile', folder: null, sentAt: AT, to: 'operator-agent@kernel', state: 'sent',
   proposal: null, question: null, trail: [], current: null };
 
-/** A daemon that answers the Desktop's `openrig.*` like server.ts: `acts` records what reached it, `answers` overrides an answer. */
-function make(opts: { rigs?: boolean; done?: Partial<Extract<ServerMessage, { type: 'openrig.done' }>>; queueError?: string } = {}) {
+/**
+ * A daemon that answers the Desktop's `openrig.*` like server.ts: `acts` records what reached it. `live` is the rig's seats as OpenRig has
+ * them when the change runs (the status may show older ones), `reseated` overrides that answer.
+ */
+function make(opts: { rigs?: boolean; done?: Partial<Extract<ServerMessage, { type: 'openrig.done' }>>; queueError?: string; live?: string[];
+  reseated?: Partial<Extract<ServerMessage, { type: 'openrig.reseated' }>> } = {}) {
   const acts: ClientMessage[] = [];
   const dispatch = async (msg: ClientMessage, reply: (m: ServerMessage) => void) => {
     switch (msg.type) {
@@ -40,9 +44,13 @@ function make(opts: { rigs?: boolean; done?: Partial<Extract<ServerMessage, { ty
       case 'openrig.act':
         acts.push(msg);
         return reply({ type: 'openrig.done', requestId: msg.requestId, ok: true, commands: ['rig down ledge-dev'], ...opts.done });
-      case 'openrig.seats':
+      case 'openrig.seats': {
         acts.push(msg);
-        return reply({ type: 'openrig.reseated', requestId: msg.requestId, ok: true, commands: ['rig expand'], added: ['dev.back-2'], removed: [] });
+        // As the daemon's reseat: the plan on the rig as it is now, refused before anything runs when it removes a seat under `noRemove`.
+        const plan = seatPlan((opts.live ?? STATE.rigs[0]!.nodes.map(n => n.logicalId)).map(logicalId => ({ logicalId })), msg.seats);
+        if (msg.noRemove && plan.remove.length > 0) return reply({ type: 'openrig.reseated', requestId: msg.requestId, ok: false, commands: [], added: [], removed: [], error: 'remove_unconfirmed' });
+        return reply({ type: 'openrig.reseated', requestId: msg.requestId, ok: true, commands: ['rig expand'], added: ['dev.back-2'], removed: [], ...opts.reseated });
+      }
       case 'openrig.goal.send':
         acts.push(msg);
         return reply({ type: 'openrig.goal.sent', requestId: msg.requestId, goalId: msg.goalId, ok: true, qitemId: 'qitem-g2' });
@@ -201,14 +209,65 @@ describe('phone gateway: rigs and the kernel', () => {
     expect(r.result).toMatchObject({ status: 'applied' });
     expect(r.told).toMatchObject({ ok: true, added: ['dev.back-2'], removed: [] });
     const fewer = { 'dev.front': 0 };
+    // Without a passkey the change goes with `noRemove`: the daemon refuses it on its own plan, and the phone hears `confirm_required`.
+    expect(acts[0]).toMatchObject({ type: 'openrig.seats', noRemove: true });
     r = await op(g, { type: 'rigs.seats', rig: 'ledge-dev', seats: fewer }, 'rigs.reseated');
     expect(r.result).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
-    expect(acts).toHaveLength(1);
+    expect(r.told).toMatchObject({ ok: false, rejected: 'confirm_required', removed: [] });
+    expect(acts.at(-1)).toMatchObject({ type: 'openrig.seats', seats: fewer, noRemove: true });
     const auth = await enroll(g);
+    // A check for another change does not remove this seat.
+    const other = await challenge(g, { rigSeats: { rig: 'ledge-dev', seats: { 'dev.back': 0 } } });
+    r = await op(g, { type: 'rigs.seats', rig: 'ledge-dev', seats: fewer, assertion: auth.get(rp, other, { counter: 1 }) }, 'rigs.reseated');
+    expect(r.result).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
+    expect(acts).toHaveLength(2);
     const c = await challenge(g, { rigSeats: { rig: 'ledge-dev', seats: fewer } });
-    r = await op(g, { type: 'rigs.seats', rig: 'ledge-dev', seats: fewer, assertion: auth.get(rp, c, { counter: 1 }) }, 'rigs.reseated');
+    r = await op(g, { type: 'rigs.seats', rig: 'ledge-dev', seats: fewer, assertion: auth.get(rp, c, { counter: 2 }) }, 'rigs.reseated');
     expect(r.result).toMatchObject({ status: 'applied' });
     expect(acts.at(-1)).toMatchObject({ type: 'openrig.seats', rig: 'ledge-dev', seats: fewer });
+    expect(acts.at(-1)).not.toHaveProperty('noRemove');
+  });
+
+  it('a seat added since the phone last read the rig is not removed without the passkey (review B4, finding 2)', async () => {
+    // The status the phone saw has one dev.back; OpenRig has two by the time the change runs. Asking for 1 removes dev.back-2.
+    const { g, acts } = make({ live: ['dev.back', 'dev.back-2', 'dev.front'] });
+    g.send('dev1', { type: 'rigs.state' });
+    await flush();
+    const r = await op(g, { type: 'rigs.seats', rig: 'ledge-dev', seats: { 'dev.back': 1 } }, 'rigs.reseated');
+    expect(r.result).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    expect(r.told).toMatchObject({ ok: false, rejected: 'confirm_required', removed: [] });
+    expect(acts).toEqual([expect.objectContaining({ type: 'openrig.seats', seats: { 'dev.back': 1 }, noRemove: true })]);
+  });
+
+  it('gives the commands of a seat added without the PC\'s paths (review B4, finding 3)', async () => {
+    const { g } = make({ reseated: { commands: ['rig add rid dev /home/me/.ledge/rigs/x/seats/dev.back-2.json --rig-root /home/me/My Project', 'rig snapshot rid'] } });
+    const r = await op(g, { type: 'rigs.seats', rig: 'ledge-dev', seats: { 'dev.back': 2 } }, 'rigs.reseated');
+    expect(r.told).toMatchObject({ ok: true, commands: ['rig add rid dev … --rig-root …', 'rig snapshot rid'] });
+    expect(JSON.stringify(r.told)).not.toContain('/home/me');
+    expect(JSON.stringify(r.told)).not.toContain('Project');
+    const said = make({ reseated: { ok: false, error: 'cannot read C:\\Users\\me\\rig.yaml: denied', commands: [] } });
+    const f = await op(said.g, { type: 'rigs.seats', rig: 'ledge-dev', seats: { 'dev.back': 2 } }, 'rigs.reseated');
+    expect(f.told).toMatchObject({ ok: false, error: 'failed', message: 'cannot read …' });
+  });
+
+  it('hides a path in a command, a flag\'s value or OpenRig\'s line, and keeps the rest', () => {
+    expect(redactPaths('rig add R1 dev /r/x/seats/dev.build-2.json --rig-root /w/My Project --json')).toBe('rig add R1 dev … --rig-root … --json');
+    expect(redactPaths('rig up --cwd=/home/me/p --yes')).toBe('rig up --cwd=… --yes');
+    expect(redactPaths('rig up ~/specs/a.yaml')).toBe('rig up …');
+    expect(redactPaths('rig edge add R1 dev.build dev.review --kind delegates_to')).toBe('rig edge add R1 dev.build dev.review --kind delegates_to');
+  });
+
+  it('asks the passkey to put back the spec\'s policy, which may be yolo (review B4, finding 1)', async () => {
+    const { g, acts } = make();
+    const spec: OpenRigAction = { kind: 'rig.policy', rig: 'ledge-dev', policy: 'spec', seats: ['dev-back@ledge-dev'] };
+    let r = await op(g, { type: 'rigs.act', action: spec }, 'rigs.done');
+    expect(r.result).toMatchObject({ status: 'rejected', reason: 'confirm_required' });
+    expect(acts).toHaveLength(0);
+    const auth = await enroll(g);
+    const c = await challenge(g, { rigAct: spec });
+    r = await op(g, { type: 'rigs.act', action: spec, assertion: auth.get(rp, c, { counter: 1 }) }, 'rigs.done');
+    expect(r.result).toMatchObject({ status: 'applied' });
+    expect(acts).toEqual([expect.objectContaining({ type: 'openrig.act', action: spec })]);
   });
 
   it('gives the goals, follows them, and sends the person\'s goal and words to the operator', async () => {

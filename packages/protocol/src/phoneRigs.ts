@@ -46,7 +46,7 @@ export const RigSeatCountsSchema = z.record(RigRoleSchema, z.number().int().min(
 
 /**
  * Whether an action needs the device's passkey on the phone: what stops something (a rig, the kernel, the daemon, a restart, which stops
- * first, a deletion, a seat moved to the other harness) and what lets agents run without asking (`full_bypass`, `yolo`). Starts, snapshots and other permissions do not.
+ * first, a deletion, a seat moved to the other harness) and what lets agents run without asking (`full_bypass`, `yolo`, or the spec's policy, which may be `yolo`). Starts, snapshots and other permissions do not.
  */
 export function rigActNeedsCheck(a: OpenRigAction): boolean {
   switch (a.kind) {
@@ -54,7 +54,8 @@ export function rigActNeedsCheck(a: OpenRigAction): boolean {
     // A move to the other harness stops the seat now (a successor takes its context).
     case 'seat.set': return a.permissions === 'full_bypass' || (a.runtime !== undefined && !a.dryRun);
     case 'rig.permissions': return a.mode === 'full_bypass';
-    case 'rig.policy': return a.policy === 'yolo';
+    // `spec` puts back what the rig's spec gives each seat, which may be `yolo`: the phone cannot know, so it always asks.
+    case 'rig.policy': return a.policy === 'yolo' || a.policy === 'spec';
     default: return false;
   }
 }

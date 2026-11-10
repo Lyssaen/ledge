@@ -186,7 +186,7 @@ export interface OpenRig {
   launch(l: RigLaunch): Promise<LaunchResult>;
   /** Brings a running rig's roles to `seats` (role -> count): copies of each role's first seat added, the last copies removed,
    *  the spec's links ensured where this OpenRig can, then a snapshot so a restart keeps the new size. */
-  reseat(rig: string, seats: Record<string, number>, delegation?: 'pairs' | 'all'): Promise<ReseatResult>;
+  reseat(rig: string, seats: Record<string, number>, delegation?: 'pairs' | 'all', noRemove?: boolean): Promise<ReseatResult>;
   /** The machine's roles (agent specs), read-only. */
   roles(): Promise<RolesResult>;
   /** One role by library id: from its spec and from each seat that runs it. */
@@ -483,13 +483,15 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return spec ? dirname(spec.path) : null;
   }
 
-  async function reseat(rigName: string, seats: Record<string, number>, delegation: 'pairs' | 'all' = 'pairs'): Promise<ReseatResult> {
+  async function reseat(rigName: string, seats: Record<string, number>, delegation: 'pairs' | 'all' = 'pairs', noRemove = false): Promise<ReseatResult> {
     const none = { added: [] as string[], removed: [] as string[] };
     const st = await state(true);
     const rig = st.rigs.find(r => r.name === rigName);
     if (!rig || (rig.status !== 'running' && rig.status !== 'partial' && rig.running === 0)) return { ok: false, commands: [], ...none, error: 'rig_not_running' };
     const plan = seatPlan(rig.nodes, seats);
     if (plan.add.length === 0 && plan.remove.length === 0) return { ok: true, commands: [], ...none };
+    // Checked on this plan, the one that runs: a seat added meanwhile is not removed without the caller's confirmation.
+    if (noRemove && plan.remove.length > 0) return { ok: false, commands: [], ...none, error: 'remove_unconfirmed' };
     if (acting) return { ok: false, commands: [], ...none, error: 'busy' };
     acting = true;
     try {

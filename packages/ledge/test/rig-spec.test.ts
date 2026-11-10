@@ -269,6 +269,13 @@ describe('OpenRig 0.7: rig up --name and rig edge', () => {
     expect((await r.reseat('nope', { 'dev.build': 2 })).error).toBe('rig_not_running');
     expect(calls.some(c => c[0] === 'add')).toBe(false);
   });
+  it('with noRemove, refuses a plan that removes a seat before anything runs, and still adds', async () => {
+    const { rig: r, calls } = rig('0.7.7');
+    expect(await r.reseat('starter', { 'dev.build': 0 }, 'pairs', true)).toEqual({ ok: false, commands: [], added: [], removed: [], error: 'remove_unconfirmed' });
+    expect(calls.some(c => c[0] === 'remove' || c[0] === 'add' || c[0] === 'snapshot')).toBe(false);
+    expect(await r.reseat('starter', { 'dev.build': 2 }, 'pairs', true)).toMatchObject({ ok: true, added: ['dev.build-2'] });
+    expect((await r.reseat('starter', { 'dev.build': 0 })).removed).toEqual(['dev.build']);
+  });
 });
 
 describe('permissions at launch', () => {

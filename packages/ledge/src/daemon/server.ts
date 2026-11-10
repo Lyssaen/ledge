@@ -1273,7 +1273,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'openrig.seats': {
-        const done = await openrig.reseat(msg.rig, msg.seats, msg.delegation);
+        const done = await openrig.reseat(msg.rig, msg.seats, msg.delegation, msg.noRemove === true);
         reply({ type: 'openrig.reseated', requestId: msg.requestId, ...done });
         if (done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
         return;

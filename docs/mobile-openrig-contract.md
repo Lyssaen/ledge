@@ -70,7 +70,10 @@ Les réglages du daemon « relancer les rigs qui tournaient » et « sans le ker
 navigateur (`apps/desktop/src/ide/openrig/prefs.ts`) ; le téléphone garde les siens de la même façon.
 
 `rigs.done` :
-- `commands` : les commandes `rig` lancées, comme Desktop les montre ;
+- `commands` : les commandes `rig` lancées, comme Desktop les montre, mais **sans les chemins du PC** : un mot qui contient `/`
+  ou `\` ou commence par `~` devient `…`, ainsi que les mots qui le suivent jusqu'au prochain `--drapeau` (un dossier peut
+  contenir des espaces), et `--drapeau=/chemin` devient `--drapeau=…`. Exemple : `rig add R1 dev … --rig-root …`. Même règle
+  pour `message` ;
 - `error` : `busy` (une autre action tourne ; `operation.result` dit `rejected` / `busy`, on peut réessayer), `not_installed`,
   `spec_unknown`, `spec_no_policy`, `spec_policy_unsupported`, ou `failed` avec `message` (dernière ligne d'OpenRig, ≤ 500
   caractères) ;
@@ -86,7 +89,8 @@ Il faut la passkey de l'appareil pour ce qui **arrête** quelque chose ou **reti
 `rigActNeedsCheck(action)` (exporté par le protocole) répond.
 - Oui : `daemon.stop`, `daemon.restart`, `kernel.stop`, `kernel.restart`, `rig.stop` (avec ou sans `delete`), `rig.restart`,
   `seat.set` avec `permissions: 'full_bypass'` ou un changement de `runtime` hors `dryRun`, `rig.permissions` en
-  `full_bypass`, `rig.policy` en `yolo`.
+  `full_bypass`, `rig.policy` en `yolo` ou en `spec` (remettre la politique du spec, qui peut être `yolo` : le téléphone ne
+  peut pas le savoir, il demande donc toujours).
 - Non : les démarrages, `rig.snapshot`, les autres permissions, `seat.set` sans changement de harnais.
 
 Déroulé :
@@ -109,11 +113,19 @@ n'en arrête pas un autre. Refus : `operation.result` `rejected` avec `confirm_r
 C'est l'`openrig.seats` de Desktop : un rôle nommé passe au nombre donné, les autres ne bougent pas. Les ajouts copient le premier
 siège du rôle sous le numéro libre suivant ; les retraits enlèvent les dernières copies d'abord, le premier siège seulement à 0.
 `added` / `removed` sont des `pod.member`. `error` : `rig_not_running`, `rig_root_unknown`, `busy`, ou `failed` + `message`.
+`commands` et `message` sont sans chemins du PC, comme au § 4.
 
-**Passkey** quand la modification retire un siège. Le téléphone le sait d'avance avec `seatPlan(rig.nodes, seats).remove`
-(exporté par le protocole) sur son dernier `rigs.state`. Le PC refait le calcul sur l'état qu'il lit à l'instant ; s'il voit
-un retrait que le téléphone n'avait pas vu (ou ne peut pas lire le rig), il répond `rejected: 'confirm_required'` : le
-téléphone demande alors la passkey et renvoie **avec un nouvel `op`**.
+**Passkey** quand la modification retire un siège. Le contrôle porte sur le plan **effectivement exécuté**, pas sur une lecture
+antérieure :
+- **sans `assertion`**, la passerelle envoie la modification au daemon avec `noRemove` : le daemon relit le rig, calcule son
+  plan et, si ce plan retire un siège (même un siège ajouté depuis le dernier `rigs.state` du téléphone), refuse avant de rien
+  lancer (`remove_unconfirmed`). Le téléphone reçoit `operation.result` `rejected` / `confirm_required` et
+  `rigs.reseated { ok: false, rejected: 'confirm_required' }` ;
+- **avec `assertion`** (défi `rigSeats: { rig, seats }`, § 5), la modification part sans `noRemove` et peut retirer des sièges.
+
+Le téléphone peut prévoir le cas avec `seatPlan(rig.nodes, seats).remove` (exporté par le protocole) sur son dernier
+`rigs.state`, et demander la passkey d'emblée. Ce n'est qu'une prévision : sur `confirm_required`, il demande la passkey et
+renvoie **avec un nouvel `op`**.
 
 ## 7. Objectifs à l'operator (`goals`)
 
