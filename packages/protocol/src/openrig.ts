@@ -106,7 +106,8 @@ export type OpenRigAction = z.infer<typeof OpenRigActionSchema>;
 /** A front asks a machine for its OpenRig. */
 export const OpenRigStatusSchema = z.object({ type: z.literal('openrig.status'), requestId: z.string().min(1).max(100), machineId: z.string().optional() });
 /** A front asks a machine to act on its OpenRig. */
-export const OpenRigActSchema = z.object({ type: z.literal('openrig.act'), requestId: z.string().min(1).max(100), action: OpenRigActionSchema, machineId: z.string().optional() });
+export const OpenRigActSchema = z.object({ type: z.literal('openrig.act'), requestId: z.string().min(1).max(100), action: OpenRigActionSchema, machineId: z.string().optional(),
+  /** The answer's `commands` without the PC's paths (`showRigCommandWithoutPaths`): the phone's gateway asks it. */ noPaths: z.literal(true).optional() });
 
 /** Why a machine could not answer: `offline` it dropped, `outdated` its daemon does not know OpenRig. */
 export const OpenRigUnreachableSchema = z.enum(['offline', 'outdated']);
@@ -250,6 +251,18 @@ export function rigCommands(a: OpenRigAction, specPolicies?: Record<string, stri
 /** How a command reads in a front: `rig down starter --snapshot`, without the `--json` Ledge adds for itself. */
 export const showRigCommand = (args: string[]): string => ['rig', ...args.filter(x => x !== '--json')].join(' ');
 
+/** Whether one argument of a `rig` command names a place on the PC: it holds `/` or `\`, or starts with `~`. */
+const isPathArg = (a: string): boolean => /[/\\]/.test(a) || a.startsWith('~');
+/**
+ * A command as `showRigCommand` reads it, with each argument that is a path replaced by `…` (`--flag=/a/path` keeps its flag), for a
+ * device that must not learn the PC's folders. Masked argument by argument before they are joined: a folder with spaces or dashes is
+ * one argument, never a guess on the joined line.
+ */
+export const showRigCommandWithoutPaths = (args: string[]): string => showRigCommand(args.map(a => {
+  const eq = a.startsWith('-') ? a.indexOf('=') : -1;
+  return eq > 0 ? (isPathArg(a.slice(eq + 1)) ? `${a.slice(0, eq + 1)}…` : a) : isPathArg(a) ? '…' : a;
+}));
+
 
 // ── Lot 2: launching a rig (docs/mockups/ledge-openrig.html, view 6) ──
 
@@ -362,7 +375,8 @@ export const OpenRigSeatsSchema = z.object({
   /** How the added seats are linked, where OpenRig can add links to a running rig (0.7+): like a launch's. */ delegation: z.enum(['pairs', 'all']).optional(),
   /** Refuse, before anything runs, a change whose plan (computed on the rig as read then) removes a seat: `remove_unconfirmed`. The phone
    *  sends it when it has no passkey for the change, so the check holds on the plan actually run, not on an earlier read. */
-  noRemove: z.literal(true).optional()
+  noRemove: z.literal(true).optional(),
+  /** The answer's `commands` without the PC's paths, as `openrig.act`'s. */ noPaths: z.literal(true).optional()
 });
 /** The seats changed (or not). `added` / `removed`: the seats, as `pod.member`; `error`: `rig_not_running`, `remove_unconfirmed` (`noRemove` and the plan removes one), `rig_root_unknown` (its
  *  agents cannot be found to copy a seat), `busy`, the fleet's `offline` / `outdated`, or what `rig` said. */

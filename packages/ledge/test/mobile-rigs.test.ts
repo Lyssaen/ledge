@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { PhoneServerMessageSchema, seatPlan, type ClientMessage, type Goal, type OpenRigAction, type OpenRigState, type RigRow, type ServerMessage } from '@ledge/protocol';
+import { PhoneServerMessageSchema, seatPlan, showRigCommand, showRigCommandWithoutPaths, type ClientMessage, type Goal, type OpenRigAction, type OpenRigState, type RigRow, type ServerMessage } from '@ledge/protocol';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
 import { flush, setup, stopAll } from './helpers/gateway.js';
-import { redactPaths, rigsSubject } from '../src/mobile/gateway.js';
+import { redactMessage, rigsSubject } from '../src/mobile/gateway.js';
 
 afterEach(stopAll);
 
@@ -27,10 +27,11 @@ const GOAL: Goal = { goalId: 'goal-0001', qitemId: 'qitem-g1', text: 'Refaire le
 
 /**
  * A daemon that answers the Desktop's `openrig.*` like server.ts: `acts` records what reached it. `live` is the rig's seats as OpenRig has
- * them when the change runs (the status may show older ones), `reseated` overrides that answer.
+ * them when the change runs (the status may show older ones), `reseated` overrides that answer; `ran` are the arguments of the commands
+ * it ran, shown as the daemon does (without the PC's paths under `noPaths`).
  */
 function make(opts: { rigs?: boolean; done?: Partial<Extract<ServerMessage, { type: 'openrig.done' }>>; queueError?: string; live?: string[];
-  reseated?: Partial<Extract<ServerMessage, { type: 'openrig.reseated' }>> } = {}) {
+  reseated?: Partial<Extract<ServerMessage, { type: 'openrig.reseated' }>>; ran?: string[][] } = {}) {
   const acts: ClientMessage[] = [];
   const dispatch = async (msg: ClientMessage, reply: (m: ServerMessage) => void) => {
     switch (msg.type) {
@@ -49,7 +50,8 @@ function make(opts: { rigs?: boolean; done?: Partial<Extract<ServerMessage, { ty
         // As the daemon's reseat: the plan on the rig as it is now, refused before anything runs when it removes a seat under `noRemove`.
         const plan = seatPlan((opts.live ?? STATE.rigs[0]!.nodes.map(n => n.logicalId)).map(logicalId => ({ logicalId })), msg.seats);
         if (msg.noRemove && plan.remove.length > 0) return reply({ type: 'openrig.reseated', requestId: msg.requestId, ok: false, commands: [], added: [], removed: [], error: 'remove_unconfirmed' });
-        return reply({ type: 'openrig.reseated', requestId: msg.requestId, ok: true, commands: ['rig expand'], added: ['dev.back-2'], removed: [], ...opts.reseated });
+        const commands = opts.ran ? opts.ran.map(msg.noPaths ? showRigCommandWithoutPaths : showRigCommand) : ['rig expand'];
+        return reply({ type: 'openrig.reseated', requestId: msg.requestId, ok: true, commands, added: ['dev.back-2'], removed: [], ...opts.reseated });
       }
       case 'openrig.goal.send':
         acts.push(msg);
@@ -240,21 +242,24 @@ describe('phone gateway: rigs and the kernel', () => {
   });
 
   it('gives the commands of a seat added without the PC\'s paths (review B4, finding 3)', async () => {
-    const { g } = make({ reseated: { commands: ['rig add rid dev /home/me/.ledge/rigs/x/seats/dev.back-2.json --rig-root /home/me/My Project', 'rig snapshot rid'] } });
+    // A folder with spaces and a word starting with a dash (review B4, second pass): masked as one argument, before the join.
+    const { g, acts } = make({ ran: [['add', 'rid', 'dev', '/home/me/.ledge/rigs/x/seats/dev.back-2.json', '--rig-root', '/home/me/My -Private Project', '--json'], ['snapshot', 'rid']] });
     const r = await op(g, { type: 'rigs.seats', rig: 'ledge-dev', seats: { 'dev.back': 2 } }, 'rigs.reseated');
+    expect(acts.at(-1)).toMatchObject({ type: 'openrig.seats', noPaths: true });
     expect(r.told).toMatchObject({ ok: true, commands: ['rig add rid dev … --rig-root …', 'rig snapshot rid'] });
-    expect(JSON.stringify(r.told)).not.toContain('/home/me');
-    expect(JSON.stringify(r.told)).not.toContain('Project');
+    for (const leak of ['/home/me', 'Private', 'Project']) expect(JSON.stringify(r.told)).not.toContain(leak);
+    await op(g, { type: 'rigs.act', action: { kind: 'rig.start', rig: 'ledge-dev' } }, 'rigs.done');
+    expect(acts.at(-1)).toMatchObject({ type: 'openrig.act', noPaths: true });
     const said = make({ reseated: { ok: false, error: 'cannot read C:\\Users\\me\\rig.yaml: denied', commands: [] } });
     const f = await op(said.g, { type: 'rigs.seats', rig: 'ledge-dev', seats: { 'dev.back': 2 } }, 'rigs.reseated');
     expect(f.told).toMatchObject({ ok: false, error: 'failed', message: 'cannot read …' });
   });
 
-  it('hides a path in a command, a flag\'s value or OpenRig\'s line, and keeps the rest', () => {
-    expect(redactPaths('rig add R1 dev /r/x/seats/dev.build-2.json --rig-root /w/My Project --json')).toBe('rig add R1 dev … --rig-root … --json');
-    expect(redactPaths('rig up --cwd=/home/me/p --yes')).toBe('rig up --cwd=… --yes');
-    expect(redactPaths('rig up ~/specs/a.yaml')).toBe('rig up …');
-    expect(redactPaths('rig edge add R1 dev.build dev.review --kind delegates_to')).toBe('rig edge add R1 dev.build dev.review --kind delegates_to');
+  it('cuts OpenRig\'s line at its first path, whatever follows it', () => {
+    expect(redactMessage('cannot read /home/me/My -Private Project/rig.yaml --json: denied')).toBe('cannot read …');
+    expect(redactMessage('bad --cwd=/home/me/p')).toBe('bad --cwd=…');
+    expect(redactMessage('~/specs missing')).toBe('…');
+    expect(redactMessage('rig busy, try again')).toBe('rig busy, try again');
   });
 
   it('asks the passkey to put back the spec\'s policy, which may be yolo (review B4, finding 1)', async () => {

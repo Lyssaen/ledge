@@ -70,10 +70,12 @@ Les réglages du daemon « relancer les rigs qui tournaient » et « sans le ker
 navigateur (`apps/desktop/src/ide/openrig/prefs.ts`) ; le téléphone garde les siens de la même façon.
 
 `rigs.done` :
-- `commands` : les commandes `rig` lancées, comme Desktop les montre, mais **sans les chemins du PC** : un mot qui contient `/`
-  ou `\` ou commence par `~` devient `…`, ainsi que les mots qui le suivent jusqu'au prochain `--drapeau` (un dossier peut
-  contenir des espaces), et `--drapeau=/chemin` devient `--drapeau=…`. Exemple : `rig add R1 dev … --rig-root …`. Même règle
-  pour `message` ;
+- `commands` : les commandes `rig` lancées, comme Desktop les montre, mais **sans les chemins du PC**. La passerelle demande au
+  daemon (`noPaths`) de masquer chaque argument qui contient `/` ou `\` ou commence par `~`, **avant** de joindre la commande :
+  un dossier avec des espaces ou des tirets reste un seul argument, remplacé par `…` ; `--drapeau=/chemin` devient
+  `--drapeau=…`. Exemple : `rig add R1 dev … --rig-root …` (`showRigCommandWithoutPaths`) ;
+- `message` (ligne libre d'OpenRig) : coupée au premier mot qui désigne un chemin, remplacé par `…` ; rien de ce qui suit n'est
+  gardé ;
 - `error` : `busy` (une autre action tourne ; `operation.result` dit `rejected` / `busy`, on peut réessayer), `not_installed`,
   `spec_unknown`, `spec_no_policy`, `spec_policy_unsupported`, ou `failed` avec `message` (dernière ligne d'OpenRig, ≤ 500
   caractères) ;

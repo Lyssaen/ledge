@@ -1273,7 +1273,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         return;
       }
       case 'openrig.seats': {
-        const done = await openrig.reseat(msg.rig, msg.seats, msg.delegation, msg.noRemove === true);
+        const done = await openrig.reseat(msg.rig, msg.seats, msg.delegation, { noRemove: msg.noRemove === true, noPaths: msg.noPaths === true });
         reply({ type: 'openrig.reseated', requestId: msg.requestId, ...done });
         if (done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
         return;
@@ -1291,7 +1291,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'openrig.goal.send': { const r = await goals.send(msg.goalId, msg.text, msg.folder); pushGoals(); return reply({ type: 'openrig.goal.sent', requestId: msg.requestId, goalId: msg.goalId, ...r }); }
       case 'openrig.goal.reply': { const r = await goals.reply(msg.goalId, msg.replyId, msg.text); pushGoals(); return reply({ type: 'openrig.goal.replied', requestId: msg.requestId, goalId: msg.goalId, replyId: msg.replyId, ...r }); }
       case 'openrig.act': {
-        const done = await openrig.act(msg.action);
+        const done = await openrig.act(msg.action, { noPaths: msg.noPaths === true });
         reply({ type: 'openrig.done', requestId: msg.requestId, ...done });
         // Every front sees what the action changed, not only the one that asked.
         if (done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });

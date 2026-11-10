@@ -90,27 +90,13 @@ export const rigsSubject = (x: { act: OpenRigAction } | { rig: string; seats: Re
   `${'act' in x ? 'act' : 'seats'}:${createHash('sha256').update(stableJson('act' in x ? x.act : { rig: x.rig, seats: x.seats })).digest('base64url')}`;
 
 /**
- * A `rig` command or OpenRig's line with the PC's paths replaced by `…`, for the phone: a word holding `/` or `\` or starting with `~` is a
- * path, and so are the words after it up to the next `--flag`, since commands are shown unquoted and a folder may hold spaces
- * (`--rig-root /home/me/My Project`).
+ * What OpenRig said, for the phone: cut at its first word that names a place on the PC (holding `/` or `\`, or starting with `~`, after
+ * an optional `=`), which becomes `…`. Free text has no argument boundaries, and a folder may hold spaces or dashes, so nothing after it
+ * is kept. Commands are masked argument by argument by the daemon instead (`noPaths`).
  */
-export function redactPaths(line: string): string {
-  const isPath = (w: string) => /[/\\]/.test(w) || w.startsWith('~');
-  const out: string[] = [];
-  let inPath = false;
-  for (const word of line.split(' ')) {
-    if (word.startsWith('-')) {
-      // `--flag=/a/path` keeps its flag.
-      const eq = word.indexOf('=');
-      inPath = eq > 0 && isPath(word.slice(eq + 1));
-      out.push(inPath ? `${word.slice(0, eq + 1)}…` : word);
-      continue;
-    }
-    if (inPath) continue;
-    if (isPath(word)) { inPath = true; out.push('…'); continue; }
-    out.push(word);
-  }
-  return out.join(' ');
+export function redactMessage(line: string): string {
+  const m = /(^|\s)(\S*?=)?(~|\S*[/\\])/.exec(line);
+  return m ? `${line.slice(0, m.index + m[1]!.length)}${m[2] ?? ''}…` : line;
 }
 
 /** How long a phone's read of OpenRig waits for the daemon (whose `rig` reads give up first). */
@@ -981,8 +967,9 @@ export function createPhoneGateway(deps: {
   /** A daemon's error for an action or a change of seats: its code when the contract names it, else `failed` with OpenRig's line, shortened. */
   const RIG_ACT_CODES = new Set(['busy', 'not_installed', 'spec_unknown', 'spec_no_policy', 'spec_policy_unsupported', 'rig_not_running', 'rig_root_unknown']);
   const rigFailure = (e: string | undefined): { error?: string; message?: string } =>
-    e === undefined ? {} : RIG_ACT_CODES.has(e) ? { error: e } : { error: 'failed', message: phoneText(redactPaths(e)) };
-  const phoneCommands = (c: readonly string[]) => c.slice(0, 400).map(x => phoneText(redactPaths(x)));
+    e === undefined ? {} : RIG_ACT_CODES.has(e) ? { error: e } : { error: 'failed', message: phoneText(redactMessage(e)) };
+  /** The commands as the daemon gave them: it was asked for them without the PC's paths (`noPaths`). */
+  const phoneCommands = (c: readonly string[]) => c.slice(0, 400).map(phoneText);
   /** The end of an action: applied, refused while another runs (`busy`), or failed. */
   const rigOutcome = (ok: boolean, error: string | undefined): Outcome =>
     (ok ? { status: 'applied' } : error === 'busy' ? { status: 'rejected', reason: 'busy' } : { status: 'failed' });
@@ -997,7 +984,7 @@ export function createPhoneGateway(deps: {
       if (refused) { told({ ok: false, commands: [], rejected: rejectedOf(refused) }); return { ...refused, detail }; }
     }
     log(`phone: device ${deviceId} asked OpenRig for ${msg.action.kind}`);
-    const done = await localAnswer('openrig.done', requestId => ({ type: 'openrig.act', requestId, action: msg.action }), null);
+    const done = await localAnswer('openrig.done', requestId => ({ type: 'openrig.act', requestId, action: msg.action, noPaths: true }), null);
     if (!done) { told({ ok: false, commands: [], error: 'failed' }); return { status: 'failed', detail }; }
     told({ ok: done.ok, commands: phoneCommands(done.commands), ...rigFailure(done.error), ...(done.completed !== undefined ? { completed: done.completed } : {}) });
     return { ...rigOutcome(done.ok, done.error), detail };
@@ -1020,7 +1007,7 @@ export function createPhoneGateway(deps: {
       if (refused) { told({ ok: false, rejected: rejectedOf(refused) }); return { ...refused, detail }; }
     }
     log(`phone: device ${deviceId} asked OpenRig to change the seats of ${msg.rig}`);
-    const done = await localAnswer('openrig.reseated', requestId => ({ type: 'openrig.seats', requestId, rig: msg.rig, seats: msg.seats,
+    const done = await localAnswer('openrig.reseated', requestId => ({ type: 'openrig.seats', requestId, rig: msg.rig, seats: msg.seats, noPaths: true,
       ...(msg.delegation ? { delegation: msg.delegation } : {}), ...(checked ? {} : { noRemove: true as const }) }), null);
     if (!done) { told({ ok: false, error: 'failed' }); return { status: 'failed', detail }; }
     if (done.error === 'remove_unconfirmed') { told({ ok: false, rejected: 'confirm_required' }); return { status: 'rejected', reason: 'confirm_required', detail }; }
@@ -1043,7 +1030,7 @@ export function createPhoneGateway(deps: {
       : await localAnswer('openrig.goal.replied', requestId => ({ type: 'openrig.goal.reply', requestId, goalId: msg.goalId, replyId: msg.replyId, text: msg.text }), null);
     if (!r) { told({ ok: false }); return { status: 'failed', detail }; }
     log(`phone: device ${deviceId} ${send ? 'gave the operator a goal' : 'wrote to the operator'}`);
-    told({ ok: r.ok, ...(r.qitemId !== undefined ? { qitemId: r.qitemId } : {}), ...(r.error !== undefined ? { error: r.error } : {}), ...(r.message !== undefined ? { message: phoneText(redactPaths(r.message)) } : {}) });
+    told({ ok: r.ok, ...(r.qitemId !== undefined ? { qitemId: r.qitemId } : {}), ...(r.error !== undefined ? { error: r.error } : {}), ...(r.message !== undefined ? { message: phoneText(redactMessage(r.message)) } : {}) });
     return { status: r.ok ? 'applied' : 'failed', detail };
   };
 

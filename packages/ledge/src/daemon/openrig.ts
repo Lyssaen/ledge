@@ -6,7 +6,7 @@ import { parse as parseYaml } from 'yaml';
 import { composeSpec, fragmentOf, linksFor, memberOf, readSpec, specSeats } from './rigSpec.js';
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { KERNEL_RIG, QitemIdSchema, RigNameSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole, composes, launchCommands, RIG_CLOSED_STATES, RIG_QUEUE_CLOSED_MAX, RIG_ROUTING_MAX, type RigRoutingEntry } from '@ledge/protocol';
+import { KERNEL_RIG, QitemIdSchema, RigNameSchema, RIG_ROW_REFRESH_MS, ROLE_FILE_MAX, type RigRow, type RoleDetail, type RoleSummary, rigCommands as planAction, showRigCommand as showCommand, type OpenRigAction, type OpenRigState, type Rig, type RigGraph, type RigGraphSeat, type RigSnapshot, type RigSeatPermission, RIG_SNAPSHOTS_MAX, type RigLink, type RigLaunch, type RigSeat, type RigSpec, roleOf, seatPlan, seatsByRole, composes, launchCommands, RIG_CLOSED_STATES, RIG_QUEUE_CLOSED_MAX, RIG_ROUTING_MAX, type RigRoutingEntry, showRigCommandWithoutPaths } from '@ledge/protocol';
 import { log } from '../log.js';
 import { buildDetail, declaredPlugins, parseSpec, readLibrary, readPlugin, resolveImports, rigMembers, seatCounts, summarize, writtenMember, type KnownSeat, type LibraryEntry, type PluginInfo, type RoleIo } from './openrigRoles.js';
 
@@ -179,14 +179,16 @@ export interface ActResult { ok: boolean; commands: string[]; output?: string; e
 export interface OpenRig {
   /** This machine's OpenRig, read again unless a read is under `STATE_TTL_MS` old (`fresh` forces it). */
   state(fresh?: boolean): Promise<OpenRigState>;
-  act(action: OpenRigAction): Promise<ActResult>;
+  /** `noPaths`: the result's `commands` without the PC's paths (`showRigCommandWithoutPaths`), for a phone. */
+  act(action: OpenRigAction, opts?: { noPaths?: boolean }): Promise<ActResult>;
   /** The machine's rig specs (the kernel's left out). */
   specs(): Promise<{ specs: RigSpec[]; error?: string }>;
   /** Checks (`plan`) or launches a rig from a spec, composed when the counts, harnesses or models change. */
   launch(l: RigLaunch): Promise<LaunchResult>;
   /** Brings a running rig's roles to `seats` (role -> count): copies of each role's first seat added, the last copies removed,
-   *  the spec's links ensured where this OpenRig can, then a snapshot so a restart keeps the new size. */
-  reseat(rig: string, seats: Record<string, number>, delegation?: 'pairs' | 'all', noRemove?: boolean): Promise<ReseatResult>;
+   *  the spec's links ensured where this OpenRig can, then a snapshot so a restart keeps the new size. `noRemove`: refused
+   *  (`remove_unconfirmed`) before anything runs when the plan removes a seat; `noPaths`: `commands` without the PC's paths. */
+  reseat(rig: string, seats: Record<string, number>, delegation?: 'pairs' | 'all', opts?: { noRemove?: boolean; noPaths?: boolean }): Promise<ReseatResult>;
   /** The machine's roles (agent specs), read-only. */
   roles(): Promise<RolesResult>;
   /** One role by library id: from its spec and from each seat that runs it. */
@@ -357,7 +359,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return reading;
   }
 
-  async function act(action: OpenRigAction): Promise<ActResult> {
+  async function act(action: OpenRigAction, opts: { noPaths?: boolean } = {}): Promise<ActResult> {
     let specPolicies: Record<string, string> | undefined;
     if (action.kind === 'rig.policy' && action.policy === 'spec') {
       // OpenRig cannot clear a seat's stored policy: `spec` records, per seat, what the rig's spec gives it (its member's policy, else the rig's).
@@ -377,7 +379,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
         specPolicies[seat] = policy;
       }
     }
-    const plan = planAction(action, specPolicies), commands = plan.map(showCommand);
+    const plan = planAction(action, specPolicies), commands = plan.map(opts.noPaths ? showRigCommandWithoutPaths : showCommand);
     if (acting) return { ok: false, commands, error: 'busy' };
     acting = true;
     try {
@@ -395,7 +397,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
         }
         completed++;
       }
-      log(`openrig: ${commands.join(' && ')}`);
+      log(`openrig: ${plan.map(showCommand).join(' && ')}`);
       return { ok: true, commands, ...(output ? { output } : {}) };
     } finally {
       acting = false;
@@ -483,7 +485,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return spec ? dirname(spec.path) : null;
   }
 
-  async function reseat(rigName: string, seats: Record<string, number>, delegation: 'pairs' | 'all' = 'pairs', noRemove = false): Promise<ReseatResult> {
+  async function reseat(rigName: string, seats: Record<string, number>, delegation: 'pairs' | 'all' = 'pairs', opts: { noRemove?: boolean; noPaths?: boolean } = {}): Promise<ReseatResult> {
     const none = { added: [] as string[], removed: [] as string[] };
     const st = await state(true);
     const rig = st.rigs.find(r => r.name === rigName);
@@ -491,7 +493,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     const plan = seatPlan(rig.nodes, seats);
     if (plan.add.length === 0 && plan.remove.length === 0) return { ok: true, commands: [], ...none };
     // Checked on this plan, the one that runs: a seat added meanwhile is not removed without the caller's confirmation.
-    if (noRemove && plan.remove.length > 0) return { ok: false, commands: [], ...none, error: 'remove_unconfirmed' };
+    if (opts.noRemove && plan.remove.length > 0) return { ok: false, commands: [], ...none, error: 'remove_unconfirmed' };
     if (acting) return { ok: false, commands: [], ...none, error: 'busy' };
     acting = true;
     try {
@@ -521,7 +523,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
         for (const l of linksFor(show, after, new Set(plan.add.map(a => a.role)), delegation)) { commands.push(['edge', 'add', rig.id, l.from, l.to, '--kind', l.kind, '--json']); links++; }
       }
       commands.push(['snapshot', rig.id]);
-      const shown = commands.map(showCommand);
+      const shown = commands.map(opts.noPaths ? showRigCommandWithoutPaths : showCommand);
       const added = plan.add.map(a => `${a.pod}.${a.id}`), removed = plan.remove;
       let output = '';
       for (const args of commands) {
