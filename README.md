@@ -563,7 +563,7 @@ docs/                design specs, implementation plans, mockups, the approved p
 
 ### Ledge Desktop
 
-`apps/desktop` is the Windows app: its main window (home, atelier, settings), the notch as a second window (`apps/overlay`, built into `dist/notch/`), the tray and the updater. Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
+`apps/desktop` is the Windows app: its main window (an IDE-like workspace: tab groups, detached windows, the terminals panel, Ledge's chat on the right), the notch as a second window (`apps/overlay`, built into `dist/notch/`), the tray and the updater. Run it with `pnpm --filter desktop dev` (UI) or `pnpm --filter desktop tauri dev` (Windows only), against a daemon in WSL.
 Its installer, `Ledge.Desktop_<version>_x64-setup.exe`, is the only one on a release, with its updater manifest (`latest-desktop.json`).
 The Desktop and overlay packages, the two crates and the npm package always carry the same version: `pnpm version:set <x.y.z>` stamps all of them, and the release workflow does it from the tag.
 

@@ -6,27 +6,27 @@ All captures below are the real app, in French (its default language, English is
 
 ## Ledge Desktop
 
-Ledge Desktop is the main window. It opens on Ledge's home view, where you talk to Ledge, the operator: three tabs, « Conversation » (the chat at full width, with « Le point »: what waits for you and what Ledge handed out), « Tâches » (every task, and the decisions waiting for you) and « Historique » (today's conversations). `/` comes back to it; « Retour à l'atelier » or Échap leads to the atelier.
+Ledge Desktop is the main window, a workspace in the manner of VS Code: an activity bar on the left (« Projets », « Rigs », « À toi », « MR et PR », then the atelier and the settings, which open as tabs), the sidebar it drives, groups of tabs side by side (a session, an OpenRig seat, a merge or pull request, a rig, the atelier), a bottom panel of terminals and, on the right, Ledge's chat with three tabs: « Conversation », « Tâches » (every task, and the decisions waiting for you) and « Historique » (today's conversations). A tab dragged out of the window opens in a window of its own. « À toi » lists what waits for you, answered in place; its page adds the merge requests to look at, the sessions near their context limit and what finished since your last visit.
 
-The atelier gives each project a table: the agents sit around it, their topics lie on it as sheets, their subagents stand at the ends. The sidebar holds « Accueil », « À toi » (every request waiting, oldest first, answered in place) and the project tree by branch. When an agent writes to another, a bubble opens over the sender and a dotted line runs to the receiver's seat.
+The atelier, a tab, gives each project a table: the agents sit around it, their topics lie on it as sheets, their subagents stand at the ends. When an agent writes to another, a bubble opens over the sender and a dotted line runs to the receiver's seat.
 
 <p>
   <img src="screens/desktop-atelier-dark.png" alt="The atelier: Ledge and Website tables, eight agents, Otto writing to Nova" width="720">
   <img src="screens/desktop-atelier-light.png" alt="The same atelier in light theme" width="720">
 </p>
 
-A session opens on its thread: each exchange folds into one line, the current one shows its actions, and a request waiting for you is pinned above the reply field, with « Toujours autoriser dans ce projet » beside Autoriser and Refuser.
+A session opens in a tab, on its thread: each exchange folds into one line, the current one shows its actions, and a request waiting for you is pinned above the reply field, with « Toujours autoriser dans ce projet » beside Autoriser and Refuser.
 
 <p>
   <img src="screens/desktop-session-dark.png" alt="Otto's thread, npm test waiting for approval" width="720">
   <img src="screens/desktop-session-light.png" alt="The same session in light theme" width="720">
 </p>
 
-`N` opens « Nouvelle session »: the instruction first, then the agent and its model, the project, the machine and the repositories. The footer says which table the new agent joins.
+`N` opens « Nouvelle session »: the project, where to work (a new branch in a worktree, or the project's folder), the agent and its model, the permissions, the first message, and where the tab opens.
 
 <img src="screens/desktop-launch-dark.png" alt="New session: instruction, Claude Code, default model, project Ledge, machine Local, repository ledge" width="720">
 
-`Ctrl+/` asks Ledge from wherever you are: the chat docks on the right while the atelier stays in view; hovering a bot named in the answer lights its seat, and a proposal comes as a card you launch with one click.
+`Ctrl+/` asks Ledge from wherever you are: the chat is the right panel, beside whatever tabs are shown; hovering a bot named in the answer lights its seat, and a proposal comes as a card you launch with one click.
 
 <img src="screens/desktop-chat-dark.png" alt="Ask Ledge: Otto and Luna are waiting, a card proposes a session to fix the tests" width="720">
 

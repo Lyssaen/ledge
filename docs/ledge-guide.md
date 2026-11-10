@@ -16,7 +16,7 @@ Ledge veille sur les sessions d'agents de l'utilisateur : Claude Code, Codex, Cu
   - une session propose un fait durable pour une note avec `ledge brain propose <nom> "<fait>" "<source>"` (`new:<nom>` : une nouvelle note), ou en signale une fausse avec `ledge brain flag <nom> "<quoi>"`. Elle arrive dans « À toi » avec ses boutons, sur le PC et le téléphone : « Ajouter » écrit le fait daté sous `## Ajouts`, « Modifier » écrit ton texte à la place, « Refuser » n'écrit rien (un signalement : « Marquer à revoir », « Ignorer » ; une nouvelle note : son titre et « quand la lire » se corrigent avant « Créer la note »). Sur le téléphone, « Ajouter » demande la vérification de l'appareil. `ledge decide` y répond aussi : « oui », « oui : <texte> » ou « non » ;
   - `ledge tui` est Ledge dans un terminal ;
   - `ledge setup` et `ledge uninstall` installent et retirent les hooks et `~/.ledge`.
-- **Ledge Desktop** est l'application Windows : la fenêtre principale (accueil, atelier, sessions, réglages) et l'**encoche**.
+- **Ledge Desktop** est l'application Windows : la fenêtre principale, un espace de travail en onglets (sessions, sièges OpenRig, MR et PR, atelier, réglages) avec le chat de Ledge à droite, et l'**encoche**.
 - **L'encoche** (l'île) est une pastille en haut de l'écran : la mascotte de Ledge, puis une mascotte par session, de la couleur de son état (rouge : une autorisation à donner ; ambre : une question ; bleu : au travail ; vert : attend une consigne).
   - Une demande étire l'encoche en bulle, avec « Refuser » et « Autoriser ».
   - Survoler l'encoche, ou `Ctrl+Alt+L`, ouvre la liste des sessions, le champ « Demander à Ledge » et la vue d'une session.
@@ -35,108 +35,171 @@ Le chat les recopie à chaque question. Une session lancée par Ledge reçoit à
 
 ## Ledge Desktop
 
-La fenêtre principale a une barre latérale :
-- « Accueil » ;
-- « À toi » : les demandes en attente, avec « Oui », « Non », « Répondre » et « Voir » ;
-- « Projets » : l'arbre des sessions par branche ;
-- « Machines » ;
-- « Archives » ;
-- « Réglages ».
+La fenêtre principale est un espace de travail à la manière de VS Code : des onglets en groupes côte à côte, des panneaux et plusieurs fenêtres. De haut en bas et de gauche à droite :
+- **La barre de titre :** le champ de recherche, qui ouvre la palette (`Ctrl+K`), et les boutons qui affichent ou masquent la barre latérale, le panneau du bas et le panneau de droite.
+- **La barre d'activité**, tout à gauche : « Projets », « Rigs », « À toi » (un badge rouge pour une autorisation, ambre pour une question), « MR et PR » (un badge pour les pipelines échoués), puis « Atelier » et, en bas, « Réglages », qui s'ouvrent en onglets. Un second clic sur la vue affichée replie la barre latérale.
+- **La barre latérale :** la vue choisie dans la barre d'activité. Elle se redimensionne en glissant son bord ; un double-clic lui rend sa largeur.
+- **La zone d'édition :** des groupes d'onglets côte à côte. Un groupe vide propose « Nouvelle session », « Aller à une session », « Demander à Ledge », « Prochaine demande », OpenRig, l'atelier, un terminal, les réglages et les sessions récentes.
+- **Le panneau du bas** (`Ctrl+J`) : les terminaux et la sortie (les commandes `rig` lancées par Ledge).
+- **Le panneau de droite** (`Ctrl+/`) : le chat de Ledge, avec ses onglets « Conversation », « Tâches » et « Historique ».
+- **La barre d'état :** le daemon, OpenRig, les demandes en attente (un clic mène à la suivante), les MR et PR, les limites d'usage des comptes et la disposition en cours.
+
+**Ouvrir.** Un clic sur une session, dans l'explorateur, l'atelier, la palette ou l'encoche, l'ouvre selon Réglages › Espace de travail : dans le groupe actif ou à droite. `Ctrl`+clic l'ouvre toujours à droite. Un onglet déjà ouvert est mis au premier plan, jamais dupliqué.
+
+**Groupes.** `Ctrl+\` (ou « Diviser à droite » du menu d'un onglet) crée un groupe vide à droite. On glisse un onglet d'un groupe à l'autre ; pendant le glisser, une zone « nouveau groupe » apparaît à droite. Le carré à gauche des onglets lie un groupe à une couleur : quand on change de session dans un groupe lié, les onglets Modifications et Terminal des groupes de la même couleur la suivent. Le + d'un groupe ouvre « Nouvelle session ».
+
+**Fenêtres détachées.** Un onglet glissé hors de la fenêtre s'ouvre dans une nouvelle fenêtre, qui porte un seul groupe. Fermer cette fenêtre ramène ses onglets dans la fenêtre principale, sans rien fermer. Fermer la fenêtre principale la cache dans la zone de notification, avec ses fenêtres détachées ; « Quitter » (zone de notification) ferme tout.
+
+**Dispositions.** Le menu « Disposition » de la barre d'état enregistre sous un nom les groupes, les fenêtres et les panneaux, et les applique. Réglages › Espace de travail choisit ce que Ledge rouvre au démarrage.
 
 Raccourcis principaux :
-- `/` ouvre l'accueil ;
-- `Ctrl+/` ouvre le chat ancré ;
-- `Ctrl+K` ouvre « Aller à une session » ;
-- `N` ouvre « Nouvelle session » (depuis l'atelier) ;
+- `Ctrl+K` ouvre la palette : `@` pour les sessions et les sièges, `>` pour les commandes ;
+- `N` ouvre « Nouvelle session » (sur une autorisation en attente, `N` la refuse) ;
+- `Y` / `N` autorisent ou refusent la demande de la session active ;
+- `/` ou `Ctrl+/` ouvre le chat de Ledge dans le panneau de droite ;
+- `Ctrl+B`, `Ctrl+J` et `Ctrl+/` affichent ou masquent la barre latérale, le panneau du bas et le panneau de droite ;
+- `Ctrl+\` divise le groupe à droite, `Ctrl+1…9` va au groupe N ;
+- `Ctrl+W` ferme l'onglet, `Ctrl+Maj+T` rouvre le dernier fermé, `Ctrl+Tab` passe à l'onglet suivant du groupe, `Ctrl+Alt+←/→` envoie l'onglet dans le groupe voisin ;
+- `` Ctrl+` `` bascule l'onglet d'une session entre son fil et son terminal ; `` Ctrl+Maj+` `` sort du terminal sans changer de vue ;
 - `Ctrl+,` ouvre les réglages ;
 - `?` liste les raccourcis ;
-- Échap revient en arrière.
+- Échap ferme une fenêtre modale, un menu ou une confirmation.
 
-### Accueil (`home`)
+### Barre latérale
 
-L'application s'ouvre ici. On y vient aussi par `/` ou par l'entrée « Accueil » de la barre latérale. C'est la vue de Ledge, l'opérateur, en lecture seule. Elle a quatre onglets.
+#### Projets (`projects`)
 
-#### Conversation (`conversation`)
+Les sessions par projet, puis par branche. Un clic ouvre une session ; le clic droit propose « Ouvrir », « Ouvrir à droite », son terminal, « Envoyer un message… » et « Gérer la session ». Le menu d'un projet propose « Nouvelle session ici », « Écrire à tout le projet… », « Ajouter un dossier… » et « Modifier le projet… ». `Ctrl`+clic choisit plusieurs sessions, pour leur écrire d'un coup. On range une session en la glissant sur un projet. En bas, les **Archives**, repliables : les sessions archivées, avec leur projet et leur ancienneté. Une archive s'ouvre en lecture seule, avec « Reprendre ».
 
-C'est la conversation avec Ledge, en pleine largeur.
-- On y pose des questions et on mentionne une session.
-- On y valide les cartes que Ledge propose.
-- Le panneau « Le point » résume deux sections : « À toi » et « Confiées par Ledge ». Le bouton « Résumer la journée » est là aussi.
+Y renvoyer l'utilisateur pour retrouver une session, ou une session archivée.
 
-Y renvoyer l'utilisateur pour une longue discussion avec Ledge, ou pour faire le point sur la journée.
+#### Rigs (`rigs`)
 
-#### Tâches (`tasks`)
+OpenRig sur la machine affichée (le menu `● WSL ▾` de l'en-tête en change ; « + Lancer » ouvre « Lancer un rig »). De haut en bas : le **kernel** et ses sièges (l'operator, qui aide à composer une équipe ; l'advisor ; le queue worker), puis chaque **rig** avec ses sièges, puis la ligne du **daemon** OpenRig, collée en bas. Le kernel, chaque rig et le daemon ont sur leur ligne leurs boutons démarrer, redémarrer et arrêter ; un arrêt ou un redémarrage demande confirmation sous la ligne. Un clic sur un siège ouvre son fil, un clic sur un rig ouvre sa vue Rig, un clic sur « Daemon » ouvre la page OpenRig. OpenRig arrêté, la vue propose « Démarrer OpenRig ».
 
-Toutes les tâches données entre sessions et par Ledge.
-- Filtres : « Toutes / Ouvertes / Closes », donneur, « Décisions ».
-- Une tâche ouverte montre son résultat, sa raison et son historique.
-- Une décision se tranche ici : « Répondre », puis « Envoyer la réponse », puis « Confirmer l'envoi ».
+Y renvoyer l'utilisateur pour suivre ses rigs et leurs sièges, ou démarrer et arrêter OpenRig, son kernel ou un rig.
 
-Y renvoyer l'utilisateur pour suivre une tâche ou trancher une décision qui l'attend.
+#### À toi (`atoi`)
 
-#### Historique (`history`)
+Ce qui attend l'utilisateur, tranchable sur place : les autorisations et les questions des sessions (« Oui », « Non », « Répondre », « Voir »), les demandes des rigs (« Voir » les déplie dans la page À toi). Le bouton « Page » ouvre la page À toi.
 
-Les conversations du jour avec Ledge, chacune avec « Voir dans la conversation ».
+#### MR et PR (`prs`)
 
-### Atelier (`overview`)
+Les MR GitLab et les PR GitHub des branches des sessions et des sièges, lues par `gh` et `glab` : les ouvertes, puis les fusionnées. Chacune montre son hôte, son dépôt, son état, son agent, son pipeline et ses commentaires ouverts. Un clic l'ouvre dans un onglet. Quand `gh` ou `glab` manque ou n'est pas connecté sur une machine, la vue le dit et donne la commande à lancer.
 
-On y vient par Échap depuis l'accueil ou une session, par « Retour à l'atelier », ou par la vue « Atelier » de la barre latérale. Chaque projet est une table, avec ses agents assis autour et leurs sous-agents en petits bots.
-- Le menu d'une table propose « Nouvelle session », « Modifier le projet » et « Isoler cette table ».
-- On range une session en la glissant sur une table.
-- Le zoom se règle au clavier (+, −, 0) ou avec `Ctrl` + molette.
-- Le bureau « Parler à Ledge » ouvre le chat ancré.
-- La barre du haut propose « Masquer les sous-agents », « Figer les animations », « Plein écran » et « Détacher l'Atelier », qui ouvre l'atelier dans sa propre fenêtre.
+### Onglets
 
-Y renvoyer l'utilisateur pour avoir une vue d'ensemble de qui travaille où, ou pour ranger une session dans un projet.
+#### Session (`session`)
 
-### OpenRig (`openrig`)
+L'onglet porte le logo de l'agent, son nom et une pastille d'état ; il est souligné en rouge pour une autorisation, en ambre pour une question. Un sous-agent a son propre onglet.
+- **Le fil :** les échanges, et une demande épinglée au-dessus de la réponse : « Autoriser » ou « Refuser » (`Y`/`N`), « Toujours autoriser pour cette session » ou « … dans ce projet » ; un plan s'approuve ou continue ; une question se répond par une option ou par un texte libre.
+- **La réponse :** un champ sur plusieurs lignes (Entrée envoie, Maj+Entrée passe à la ligne).
+- **Le terminal :** `` Ctrl+` `` ou le menu de l'onglet bascule sur le tmux de l'agent, où l'on peut taper.
+- **La barre du bas :** le modèle (un clic en change), le contexte, la branche, le projet, la puce de sa MR ou PR, « Interrompre » pendant le travail et, tout à droite, `+N −N`, qui ouvre ses modifications à côté.
+- **Le menu « Gérer la session »** (clic droit dans l'explorateur) : « Renommer… », « Ranger dans… », « Terminer la session », « Archiver », « Supprimer… ». Quand le contexte de l'agent approche de sa limite, Ledge propose de passer le relais à une session neuve.
+- « Ouvrir dans… » envoie le dossier de la session à l'éditeur choisi dans Réglages › Espace de travail (Cursor, VS Code ou Zed).
 
-On y vient par « OpenRig » dans la barre latérale, sous « Atelier ». La page pilote OpenRig sur une machine ; les puces du haut changent de machine.
-- **Daemon :** « Démarrer », « Arrêter », « Redémarrer ». La case « Au démarrage, relancer les rigs qui tournaient » lance `rig start --last` ; « Sans le kernel » ajoute `--no-kernel`.
-- **Kernel :** l'opérateur d'OpenRig (le rig nommé `kernel`), avec « Démarrer », « Arrêter », « Redémarrer ».
-- **Rigs :** chaque rig montre son état, ses sièges et son dernier snapshot ; un clic sur son nom déplie ses sièges. « Démarrer » lance `rig up <rig> --existing`, « Arrêter » `rig down <rig>`, « Redémarrer » les deux avec un snapshot.
-- **Permissions au lancement** : « Celle de la spec », « Auto » (mode auto de Claude), « Standard », « Ouvert », « YOLO » (aucune demande) ou « Verrouillé », pour tout le rig ; la colonne « Permissions » de la table change un rôle. Avec YOLO, « Accepter les avertissements de premier lancement » (`--non-interruptive`) évite qu'un siège s'arrête sur l'avertissement de Claude.
-- **± Sièges** (rig en marche) : un compteur par rôle ajoute des copies du premier siège du rôle (`build-2`, `build-3`) ou retire les dernières, sans arrêter le rig. Les sièges ajoutés sont reliés par paires ou chacun à tous (OpenRig 0.7 et plus), puis un snapshot garde la nouvelle taille pour un redémarrage.
-- Tout arrêt ou redémarrage demande confirmation, nomme les sièges qui travaillent et montre la commande `rig` lancée.
-- **Lancer un rig…** : choisir une spec (« mes specs » ou celles d'OpenRig), le dossier de travail et le nom, le nombre de sièges par rôle avec leur harnais et leur modèle, puis comment les sièges ajoutés délèguent (par paires ou chacun à tous). « Vérifier » montre ce que `rig up --plan` conclut et la spec qui sera lancée ; « Lancer » la lance. Une spec modifiée est écrite dans `~/.ledge/rigs/<nom>/`, et « Enregistrer dans mes specs » la garde dans la bibliothèque OpenRig.
+Y renvoyer l'utilisateur pour répondre à un agent, l'interrompre, ou gérer la session (renommer, archiver, supprimer, passer le relais).
 
-Y renvoyer l'utilisateur pour démarrer, arrêter ou redémarrer OpenRig, son kernel ou un rig, ou pour lancer un rig (par exemple trois développeurs et trois relecteurs), sur n'importe quelle machine.
+#### Siège OpenRig (`seat`)
 
-### Session (`session`)
+Un siège d'un rig, comme une session, avec le nom de son rig sur l'onglet. La réponse part par `rig send`. Son terminal est une capture en lecture seule. Le menu de l'onglet ouvre aussi son `role.md`.
 
-On l'ouvre en cliquant sur un siège, sur une ligne de la barre latérale ou sur un élément « À toi ». On y accède aussi par `Alt+1…9`, par `Alt+←/→`, ou par `Ctrl+K`. Un sous-agent a sa propre page.
-- **Vues :** « Fil » (les échanges) et « Modifications » (les fichiers modifiés, avec un diff par fichier).
-- **Demandes :** une demande épinglée se tranche par « Autoriser » ou « Refuser » (`Y`/`N`). On peut aussi choisir « Toujours autoriser pour cette session » ou « … dans ce projet ». Un plan s'approuve ou continue. Une question se répond par une option ou par un texte libre.
-- **Échanges :** `R` répond, « Interrompre » coupe le tour en cours, « Arrêter » stoppe l'agent.
-- **Terminal :** `O` l'affiche. Il a un onglet « Nouveau shell » et le bouton « Ouvrir dans un terminal externe ».
-- **Menu « Gérer la session »** (clic droit) : « Renommer… », « Ranger dans… », « Terminer la session », « Archiver », « Supprimer… ». Une session archivée offre « Reprendre ».
-- **Passer le relais :** quand le contexte de l'agent approche de sa limite, ce menu propose de passer le relais à une session neuve.
+#### Modifications (`changes`)
 
-Y renvoyer l'utilisateur pour répondre à un agent, lire ses modifications, l'interrompre, ou gérer la session (renommer, archiver, supprimer, passer le relais).
+Les fichiers modifiés par une session, avec un diff par fichier. On l'ouvre par le `+N −N` de la barre du bas de la session ; il s'ouvre à côté, dans un groupe lié.
 
-### Réglages (`settings`)
+Y renvoyer l'utilisateur pour lire ce qu'un agent a modifié.
 
-On y vient par `Ctrl+,` ou par « Réglages » dans la barre latérale.
+#### Terminal (`terminal`)
 
-#### Général (`general`)
+Un terminal en onglet : celui d'un agent (attaché, on peut y taper), la capture d'un siège (lecture seule) ou un shell. Le « + ▾ » du panneau du bas ouvre un shell : WSL, PowerShell, l'invite de commandes, Git Bash, Ledge (les CLI `ledge` et `rig`) ou SSH vers une machine. Un terminal se glisse du panneau du bas vers un groupe, ou hors de la fenêtre, et revient en le déposant sur le panneau du bas.
+
+#### MR ou PR (`pr`)
+
+Une MR ou une PR, en quatre vues :
+- « Vue d'ensemble » : la description, les détails, le graphe du pipeline, « Relancer », le journal du job échoué, « Demander à X de corriger », et la revue avec « Fusionner » (seulement avec un pipeline réussi et l'approbation requise, après confirmation) ;
+- « Discussion » : les fils de commentaires ; on répond, on résout, on envoie un fil à l'agent ou « Tout envoyer à X » ;
+- « Modifications » : les fichiers, avec leurs commentaires en ligne ;
+- « Commits ».
+
+« Ouvrir sur GitHub / GitLab » est là aussi.
+
+Y renvoyer l'utilisateur pour suivre une MR ou une PR, faire corriger un pipeline ou fusionner.
+
+#### Rig (`rig`)
+
+La vue d'un rig (« Rig · nom »), ouverte d'un clic sur un rig ou sur le kernel :
+- l'en-tête : son état, ses sièges, sa machine, « Redémarrer » et « Arrêter » (ou « Démarrer ») ;
+- la topologie : les sièges et leurs liens ; un clic sur un siège ouvre son fil ;
+- les réglages : la spec, les permissions du rig (Spec, Auto, Standard, Ouvert, YOLO, Verrouillé), les sièges par rôle avec un ± quand le rig tourne, le dernier snapshot et « Snapshot maintenant » ;
+- la file OpenRig du rig.
+
+Le kernel a une vue sans réglages, avec « Parler à l'operator ».
+
+Y renvoyer l'utilisateur pour régler un rig, changer le nombre de ses sièges ou prendre un snapshot.
+
+#### OpenRig (`openrig`)
+
+La page OpenRig d'une machine (« OpenRig · machine »), ouverte par « Daemon » en bas de la vue Rigs ou par la palette. Une colonne à gauche donne l'état du daemon, ses boutons, et ses sections :
+- « Vue d'ensemble » : le daemon, le kernel, les rigs en marche, les sièges actifs et ceux qui attendent, les dernières commandes ;
+- « Rigs » : une carte par rig, kernel compris, avec « Ouvrir la vue Rig → » ;
+- « Rôles » : chaque rôle, sa description, son modèle, les rigs qui l'utilisent et son fichier de consignes ;
+- « Machines » : chaque machine, sa version d'OpenRig, ses rigs, « Afficher » et « Ajouter une machine » ;
+- « Daemon » : relancer les rigs qui tournaient, démarrer sans le kernel, les permissions proposées au lancement, et ce qui précède un arrêt (snapshot, confirmation si un siège travaille) ;
+- « Sortie » : les commandes `rig` lancées depuis Ledge.
+
+« Lancer un rig… » est en bas de la colonne.
+
+Y renvoyer l'utilisateur pour régler OpenRig sur une machine, voir ses rôles, ou lancer un rig.
+
+#### Page À toi (`atoi`)
+
+Ce qui attend la décision ou le regard de l'utilisateur, toutes sessions et tous rigs confondus. Elle s'ouvre par le bouton « Page » de la vue À toi. Ses blocs :
+- « Demandes » : autoriser, refuser, répondre, ouvrir ;
+- « Décisions » : ce que les sessions demandent par Ledge (`ledge decide`, les propositions de notes), avec « Répondre » ;
+- les demandes des rigs OpenRig ;
+- « MR et PR » : pipeline échoué (« Demander à X de corriger ») ou prête (« Fusionner ») ;
+- « Contexte presque plein » : passer le relais, ou plus tard ;
+- « Terminé depuis ton passage » : les sessions qui ont fini, avec leur dernier message, et les tâches de Ledge closes (« Voir », « Ranger »).
+
+« Résumer la journée », en haut, pose la question au chat de Ledge.
+
+Y renvoyer l'utilisateur pour voir tout ce qui l'attend, ou faire le point sur la journée.
+
+#### Atelier (`atelier`)
+
+Chaque projet est une table, avec ses agents assis autour et leurs sous-agents en petits bots ; les rigs ont leurs salles. Un clic sur un agent ouvre sa session, `Ctrl`+clic à droite. On range une session en la glissant sur une table. Le zoom se règle au clavier (+, −, 0) ou avec `Ctrl` + molette. La barre de l'onglet propose « Masquer les sous-agents », « Figer les animations » et « Détacher », qui l'envoie dans une fenêtre détachée (« Ramener » l'en fait revenir). Le bureau de Ledge ouvre le chat.
+
+Y renvoyer l'utilisateur pour avoir une vue d'ensemble de qui travaille où.
+
+#### Réglages (`settings`)
+
+Un onglet, ouvert par `Ctrl+,` ou par « Réglages » en bas de la barre d'activité.
+
+##### Général (`general`)
 
 - Langue.
 - Lancement au démarrage de Windows.
+- « Au démarrage, reprendre les sessions ouvertes ».
 - **Agent par défaut :** le harnais qui fait tourner le chat de Ledge et les sessions proposées.
 - **Contexte max :** le seuil de passation de relais.
 - Vérification des mises à jour.
 
-#### Espace de travail (`workspace`)
+##### Espace de travail (`workspace`)
 
-Visible seulement quand l'interface IDE (aperçu) est activée dans Général.
+- **Ouvrir une session :** dans le groupe actif, ou à droite.
+- **Au démarrage :** la dernière disposition, une disposition choisie, ou l'atelier seul.
+- **Dispositions :** appliquer ou supprimer.
+- **Barre d'état :** les limites d'usage des comptes, et le seuil d'alerte.
+- **Ouvrir dans… :** Cursor, VS Code ou Zed.
+- **Terminaux :** le nombre de terminaux visibles en rendu rapide (WebGL).
 
-- **Ouvrir une session :** dans le groupe actif, ou à droite (un nouveau groupe). Vaut pour un clic dans l'explorateur, l'atelier, la palette et l'encoche. `Ctrl`+clic (ou `⌘`+clic) ouvre toujours à droite.
-
-#### Apparence (`appearance`)
+##### Apparence (`appearance`)
 
 Photo de profil, thème (Galet clair, Signal sombre), couleur d'accent, échelle de l'interface, mouvements réduits, agents autour d'une table.
 
-#### Encoche (`island`)
+##### Encoche (`island`)
 
 - Afficher l'encoche, l'écran où elle se trouve, et sa position (gauche, centre, droite).
 - « Mode discret sous une fenêtre ».
@@ -146,43 +209,66 @@ Photo de profil, thème (Galet clair, Signal sombre), couleur d'accent, échelle
 - Bulles de parole, sous-agents.
 - Raccourci d'ouverture.
 
-#### Notifications (`notifications`)
+##### Notifications (`notifications`)
 
 « Ne pas déranger », et ce qui se passe quand un agent a terminé : bulle et son, bulle, son, ou état de session seul.
 
-#### Sons (`sounds`)
+##### Sons (`sounds`)
 
 Marche ou arrêt, volume et bouton de test, catégories de sons, « Seulement quand le terminal est derrière ».
 
-#### Machines (`machines`)
+##### Machines (`machines`)
 
 La machine locale (WSL) et les serveurs SSH : « Ajouter une machine » (un alias `Host` de `~/.ssh/config`), Tester, Modifier, Retirer. Y renvoyer l'utilisateur pour suivre des agents sur un serveur.
 
-#### Accès mobile (`mobile`)
+##### Accès mobile (`mobile`)
 
-Activer l'accès mobile, choisir le serveur relais, se connecter avec GitHub, voir l'état, gérer les appareils liés (« Comparer le code », « Révoquer »). « Taper dans les terminaux depuis le téléphone » (désactivé par défaut) permet à un téléphone de prendre la main sur le terminal d'un agent ; le panneau terminal de la session affiche alors « Téléphone au clavier » avec « Reprendre la main ». Y renvoyer l'utilisateur pour lier un téléphone.
+Activer l'accès mobile, choisir le serveur relais, se connecter avec GitHub, voir l'état, gérer les appareils liés (« Comparer le code », « Révoquer »). « Taper dans les terminaux depuis le téléphone » (désactivé par défaut) permet à un téléphone de prendre la main sur le terminal d'un agent ; le terminal de la session affiche alors « Téléphone au clavier » avec « Reprendre la main ». Y renvoyer l'utilisateur pour lier un téléphone.
 
-#### Projets (`projects`)
+##### Projets (`projects`)
 
 « Nouveau projet », modifier, supprimer ; « Dossiers mémorisés » (« Oublier ») ; « Laisser Ledge organiser » pour que Ledge propose des projets.
 
-#### Notes (`notes`)
+##### Notes (`notes`)
 
 Les notes de l'utilisateur (`~/.ledge/context`) : chacune avec son titre, « quand la lire », sa portée (chat et sessions, chat seulement, sessions seulement), ses projets, sa date et le nombre de ses ajouts ; « ancienne » après 60 jours sans vérification ni modification, « À revoir » quand un signalement a été validé. « Ouvrir » affiche la note ; « Vérifiée aujourd'hui » met `checked` à la date du jour ; « Effacer le signalement » retire « À revoir » ; « Ouvrir le dossier » ouvre un terminal dans le dossier. Le texte d'une note se change dans son fichier.
 
-#### Raccourcis clavier (`shortcuts`)
+##### Raccourcis clavier (`shortcuts`)
 
 Les raccourcis valables partout dans Windows. Le raccourci de l'encoche se change ici.
 
-#### À propos (`about`)
+##### À propos (`about`)
 
 Les versions de Ledge Desktop et de chaque daemon, la dernière version publiée, « Mettre à jour ». La mise à jour met à jour les serveurs, puis le daemon WSL, puis l'application, sans couper les sessions. Ledge ne se met jamais à jour sans un clic.
 
+### Le chat de Ledge, panneau de droite
+
+`/` ou `Ctrl+/` l'ouvre, à droite de tout ce qui est affiché. Il a trois onglets. « Nouvelle conversation » repart de zéro ; les conversations sont quotidiennes.
+
+#### Conversation (`conversation`)
+
+On y pose des questions à Ledge, on mentionne une session, on valide les cartes que Ledge propose. Survoler un agent nommé dans une réponse l'allume dans l'atelier.
+
+Y renvoyer l'utilisateur pour une discussion avec Ledge.
+
+#### Tâches (`tasks`)
+
+Toutes les tâches données entre sessions et par Ledge, les plus récentes d'abord, avec le nombre des ouvertes sur l'onglet.
+- Filtres : « Toutes / Ouvertes / Closes », et le donneur (« Tous », « Ledge », « Les sessions », « Décisions »).
+- Un clic ouvre une tâche à la place de la liste : son résultat, sa raison et son historique. « ‹ Tâches » ou Échap revient à la liste.
+- Une décision se tranche ici : « Répondre », puis « Envoyer la réponse », puis « Confirmer l'envoi ».
+
+Y renvoyer l'utilisateur pour suivre une tâche ou trancher une décision qui l'attend.
+
+#### Historique (`history`)
+
+Les conversations du jour avec Ledge, chacune avec « Voir dans la conversation ».
+
 ### Fenêtres de dialogue
 
-#### Aller à une session (`search`)
+#### Palette (`search`)
 
-S'ouvre par `Ctrl+K`. On y cherche une session par agent, tâche, projet ou machine.
+S'ouvre par `Ctrl+K` ou le champ de la barre de titre. On y cherche une session ou un siège (`@`, archives comprises), une commande (`>` : nouvelle session, atelier, réglages, MR et PR, nouveau terminal, diviser, lancer un rig, vue Rig, section d'OpenRig, machine affichée, dispositions) ou un mot.
 
 #### Raccourcis clavier (`shortcuts`)
 
@@ -190,8 +276,8 @@ S'ouvre par `?`. Liste complète des raccourcis.
 
 #### Nouvelle session (`launch`)
 
-S'ouvre par `N` dans l'atelier, `Ctrl+Alt+N` partout, « Nouvelle session » dans la barre latérale ou un menu de table.
-- **Champs :** consigne, agent (Claude Code, Codex, Cursor Agent, OMP), modèle et effort, projet, machine, dossiers et dépôts.
+S'ouvre par `N`, `Ctrl+Alt+N` partout dans Windows, le + d'un groupe, « Nouvelle session » d'un groupe vide, le menu d'un projet ou la palette. `Ctrl+Entrée` lance, Échap ferme.
+- **Champs :** projet, où travailler (une nouvelle branche dans un worktree, ou le dossier du projet), agent (Claude Code, Codex, Cursor Agent, OMP, avec la limite d'usage de son compte), modèle, permissions, premier message, et où ouvrir la session (groupe actif, à droite).
 
 Y renvoyer l'utilisateur pour lancer lui-même une session avec des réglages précis.
 
@@ -201,7 +287,7 @@ Crée (« Nouveau projet »), modifie ou supprime un projet. On y donne son nom,
 
 #### Écrire à plusieurs sessions (`broadcast`)
 
-S'ouvre par « Écrire à tout le projet… » dans le menu de la plaque d'un projet de l'atelier, par le ✉ de la ligne d'un projet dans la barre latérale, ou par « Écrire aux N sessions… » une fois plusieurs sessions choisies dans la barre latérale avec `Ctrl`+clic (`Échap` vide la sélection).
+S'ouvre par « Écrire à tout le projet… » dans le menu d'un projet, ou par « Écrire aux N sessions… » une fois plusieurs sessions choisies dans la vue Projets avec `Ctrl`+clic (`Échap` vide la sélection).
 - **Champ :** le message. « Envoyer » l'écrit à chaque session lancée par Ledge et vivante, sur chaque machine où le projet ou la sélection a des sessions ; chacune le reçoit dans sa file, à la fin de son tour.
 - Le compte rendu dit à qui il a été remis et qui l'a refusé, avec la raison ; une machine hors ligne, trop ancienne ou muette y est nommée.
 - Ces entrées n'apparaissent que si le daemon local connaît l'envoi groupé ; une machine distante plus ancienne ne reçoit rien et est dite « version trop ancienne ».
@@ -210,16 +296,13 @@ Y renvoyer l'utilisateur pour donner la même consigne à toutes les sessions d'
 
 #### Lancer un rig (`rigLaunch`)
 
-Interface IDE seulement. S'ouvre par « + Lancer » de la vue Rigs, sur la machine qu'elle affiche. `Ctrl+Entrée` lance, `Échap` ferme.
+S'ouvre par « + Lancer » de la vue Rigs, sur la machine qu'elle affiche, par « Lancer un rig… » de la page OpenRig, ou par la palette. `Ctrl+Entrée` lance, `Échap` ferme.
 - **Partir de :** un rig arrêté de la machine (relance, depuis son dernier snapshot ou à neuf), une spec de la bibliothèque, un rig vide (la spec `factory` avec un lead et un siège d'implémentation), ou « Composer avec l'operator » (le kernel doit tourner). Un rig en marche est grisé.
 - **Champs :** nom, machine, dossier de travail, sièges par rôle, permissions (Spec, Auto, Standard, Ouvert, YOLO, Verrouillé) ; « Plus d'options » : harnais, modèle et permission par rôle, délégation, garder la spec, « Vérifier ». La commande `rig` exacte est affichée et suit les champs.
-- « Lancer » ouvre l'onglet Rig du rig. Daemon arrêté : la fenêtre propose « Démarrer OpenRig ».
+- « Lancer » ouvre la vue Rig du rig. Daemon arrêté : la fenêtre propose « Démarrer OpenRig ».
+- **Avec l'operator :** un champ « Ce que tu veux » ; l'operator propose une équipe dans son fil, et rien ne démarre avant que l'utilisateur valide.
 
-Y renvoyer l'utilisateur pour lancer ou relancer une équipe OpenRig avec des réglages précis.
-
-### Chat ancré
-
-`Ctrl+/` ouvre le chat de Ledge à droite de la vue courante. On y pose les mêmes questions et on y valide les mêmes cartes que dans la conversation de l'accueil. « Nouvelle conversation » repart de zéro. Les conversations sont quotidiennes.
+Y renvoyer l'utilisateur pour lancer ou relancer une équipe OpenRig avec des réglages précis (par exemple trois développeurs et trois relecteurs), sur n'importe quelle machine.
 
 ## Ledge mobile
 
@@ -281,13 +364,15 @@ Ces écrans ne sont pas des adresses : l'application les montre d'elle-même, se
 
 | Il veut… | Écran |
 |---|---|
-| répondre à un agent, voir ses modifications | Session (desktop), Demande ou Fil (mobile) |
-| voir ce qui l'attend | « À toi » (desktop), À traiter (mobile) |
+| répondre à un agent, voir ses modifications | Session et Modifications (desktop), Demande ou Fil (mobile) |
+| voir ce qui l'attend, faire le point sur la journée | vue et page « À toi » (desktop), À traiter (mobile) |
 | lancer une session lui-même | Nouvelle session (`N`, `Ctrl+Alt+N`) |
-| créer, modifier ou supprimer un projet, lui ajouter un dossier | Réglages › Projets (desktop ou mobile), ou le menu d'une table ; les dossiers d'un serveur sur le desktop |
+| créer, modifier ou supprimer un projet, lui ajouter un dossier | Réglages › Projets (desktop ou mobile), ou le menu d'un projet dans la vue Projets ; les dossiers d'un serveur sur le desktop |
 | choisir les notifications d'un téléphone, les mettre en pause | Réglages (mobile) › Notifications sur cet appareil |
 | renommer, archiver, supprimer une session, passer le relais | Session › « Gérer la session » |
-| trancher une décision, suivre une tâche | Accueil › Tâches |
+| trancher une décision, suivre une tâche | Chat de Ledge › Tâches, ou la page « À toi » |
+| suivre une MR ou une PR, la faire corriger, la fusionner | vue et onglet MR et PR |
+| démarrer, arrêter, lancer ou régler un rig OpenRig | vue Rigs, vue Rig, page OpenRig, Lancer un rig |
 | ajouter un serveur | Réglages › Machines |
 | lier un téléphone | Réglages › Accès mobile |
 | changer l'agent du chat | Réglages › Général › Agent par défaut |
