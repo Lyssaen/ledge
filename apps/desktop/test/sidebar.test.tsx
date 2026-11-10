@@ -49,7 +49,7 @@ describe('the sidebar shell', () => {
   });
 
   it('the sidebar keys join the shortcuts list: in the ? dialog, in English and in French (#51)', async () => {
-    const sidebarRows = { en: [['← / →', 'Fold / unfold a project (sidebar)'], ['E', 'Archive the selected session'], ['H', 'Show / hide the finished sessions'], ['Ctrl ⇧ E', 'Focus the sidebar']], fr: [['← / →', 'Plier / déplier un projet (barre latérale)'], ['E', 'Archiver la session sélectionnée'], ['H', 'Afficher / masquer les sessions terminées'], ['Ctrl ⇧ E', 'Aller à la barre latérale']] } as const;
+    const sidebarRows = { en: [['← / →', 'Fold / unfold a project (sidebar)'], ['E', 'Archive the selected session'], ['H', 'Only projects with a live agent, or all (sidebar)'], ['Ctrl ⇧ E', 'Focus the sidebar']], fr: [['← / →', 'Plier / déplier un projet (barre latérale)'], ['E', 'Archiver la session sélectionnée'], ['H', 'Seulement les projets avec un agent actif, ou tous (barre latérale)'], ['Ctrl ⇧ E', 'Aller à la barre latérale']] } as const;
     for (const lang of ['en', 'fr'] as const) for (const row of sidebarRows[lang]) expect(MESSAGES[lang].shortcuts.rows).toContainEqual(row);
     const { user } = await boot({ projects: TWO_PROJECTS, sessions: listSessions() });
     (document.activeElement as HTMLElement | null)?.blur();
