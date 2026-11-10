@@ -63,6 +63,16 @@ const withSession = (ctx: ResolveCtx, ref: unknown, check: (s: Session) => Refus
 
 /** A rig runs when OpenRig says so, or some of its seats do. */
 const rigRuns = (r: OpenRigState['rigs'][number]) => r.status === 'running' || r.status === 'partial' || r.running > 0;
+/** The longest `seats` var: the list of seats a step stops, in a phone's confirmation sheet (M3 Q35). */
+const SEATS_VAR_MAX = 300;
+/** The seats a step stops, each as its session without `@rig` (`dev-back`), with their count and how many did not fit. */
+export function cutVars(rig: string, sessions: readonly string[]): Record<string, string> {
+  if (sessions.length === 0) return {};
+  const names = sessions.map(s => (s.endsWith(`@${rig}`) ? s.slice(0, -rig.length - 1) : s));
+  const shown: string[] = []; let len = 0;
+  for (const n of names) { const add = (shown.length ? 2 : 0) + n.length; if (len + add > SEATS_VAR_MAX) break; shown.push(n); len += add; }
+  return { ...(shown.length ? { seats: shown.join(', ') } : {}), seatCount: String(names.length), ...(shown.length < names.length ? { seatsMore: String(names.length - shown.length) } : {}) };
+}
 /** Each kind's words up to its object, article included: French contracts « de le » into « du » (« Prendre un snapshot du rig »). */
 const RIG_VERB: Record<string, string> = { start: 'Démarrer le', stop: 'Arrêter le', restart: 'Redémarrer le', snapshot: 'Prendre un snapshot du' };
 
@@ -76,13 +86,16 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
       const runs = st.kernel.state === 'ready' || st.kernel.state === 'starting';
       if (kind === 'kernel.start' && runs) return no('running', 'the kernel already runs');
       if (kind !== 'kernel.start' && !runs) return no('not_running', 'the kernel does not run');
-      return row('rig.act', { kind }, `${verb} kernel`, { kind, rig: KERNEL_RIG });
+      // What a stop or a restart cuts, when this PC reads the kernel's seats.
+      const k = kind === 'kernel.start' ? undefined : st.rigs.find(r => r.name === KERNEL_RIG);
+      return row('rig.act', { kind }, `${verb} kernel`, { kind, rig: KERNEL_RIG, ...(k ? cutVars(KERNEL_RIG, k.nodes.map(n => n.session)) : {}) });
     }
     const rig = st.rigs.find(r => r.name === a.rig);
     if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`);
     if (kind === 'rig.start' && rigRuns(rig)) return no('running', `${rig.name} already runs`);
     if ((kind === 'rig.stop' || kind === 'rig.restart') && !rigRuns(rig)) return no('not_running', `${rig.name} does not run`);
-    return row('rig.act', { kind, rig: rig.name }, `${verb} rig ${b(rig.name)}`, { kind, rig: rig.name });
+    const cuts = kind === 'rig.stop' || kind === 'rig.restart' ? cutVars(rig.name, rig.nodes.map(n => n.session)) : {};
+    return row('rig.act', { kind, rig: rig.name }, `${verb} rig ${b(rig.name)}`, { kind, rig: rig.name, ...cuts });
   },
   // A role's seats, as the Rigs screen changes them: removing one stops its agent, so that row is destructive.
   'rig.seats': (a, ctx) => {
@@ -93,9 +106,11 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
     const now = seatsByRole(rig.nodes).get(role)?.length ?? 0;
     if (now === 0) return no('unknown', `${rig.name} has no ${role} seat`);
     if (now === count) return no('unchanged', `${rig.name} already has ${count} ${role} seat(s)`);
-    const removes = seatPlan(rig.nodes, { [role]: count }).remove.length > 0;
+    const removed = seatPlan(rig.nodes, { [role]: count }).remove;
+    // The seats OpenRig removes are the role's last ones: their sessions, for the sheet's « … s'arrêtent ».
+    const cuts = removed.length ? cutVars(rig.name, removed.map(id => rig.nodes.find(n => n.logicalId === id)?.session ?? id)) : {};
     return row('rig.seats', { rig: rig.name, role, count }, `Passer ${b(role)} de ${b(rig.name)} de ${now} à ${count} siège${count > 1 ? 's' : ''}`,
-      { rig: rig.name, role, count: String(count), from: String(now) }, removes ? { risk: 'destructive' } : {});
+      { rig: rig.name, role, count: String(count), from: String(now), ...cuts }, removed.length ? { risk: 'destructive' } : {});
   },
   'session.model': (a, ctx) => withSession(ctx, a.session, writable, s => {
     const model = a.model as string | null; const effort = a.effort as string | null;

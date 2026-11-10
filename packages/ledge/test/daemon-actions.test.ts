@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ACTION_ERROR_CODES, actionById, ChatActionSchema, type OpenRigState, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Session, type Task } from '@ledge/protocol';
 import { denied } from '../src/chat/act.js';
-import { actionMessage, cardRefusal, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
+import { actionMessage, cardRefusal, cutVars, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
 
 const T0 = '2026-10-26T08:00:00.000Z';
 const mk = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w/api', project: 'api', title: `${name} · api`,
@@ -233,6 +233,30 @@ describe('rig.act and rig.seats', () => {
     expect(code('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 2 }, c)).toBe('unchanged');
     expect(code('rig.seats', { rig: 'ledge-dev', role: 'qa.review', count: 1 }, c)).toBe('unknown');
     expect(code('rig.seats', { rig: 'idle', role: 'dev.back', count: 2 }, c)).toBe('not_running');
+  });
+  it('each row carries what a phone writes its line with (M3 Q34), and an irreversible one the seats it stops (Q35)', () => {
+    const c = withRigs({ rigs: [...RIGS.rigs, { id: 'k', name: 'kernel', status: 'running', lifecycleState: 'running', seats: 2, running: 2, attention: 0, uptime: '1h', snapshot: null,
+      nodes: [{ ...seat('ops.operator'), session: 'operator-agent@kernel' }, { ...seat('ops.advisor'), session: 'advisor-agent@kernel' }] }] });
+    expect(ok('rig.act', { kind: 'rig.restart', rig: 'ledge-dev' }, c).vars).toEqual({ kind: 'rig.restart', rig: 'ledge-dev', seats: 'dev-back, dev-back-2, dev-front', seatCount: '3' });
+    expect(ok('rig.act', { kind: 'rig.stop', rig: 'ledge-dev' }, c).vars).toMatchObject({ seatCount: '3' });
+    // A start or a snapshot stops nothing.
+    expect(ok('rig.act', { kind: 'rig.snapshot', rig: 'ledge-dev' }, c).vars).toEqual({ kind: 'rig.snapshot', rig: 'ledge-dev' });
+    expect(ok('rig.act', { kind: 'rig.start', rig: 'idle' }, c).vars).toEqual({ kind: 'rig.start', rig: 'idle' });
+    expect(ok('rig.act', { kind: 'kernel.stop' }, c).vars).toEqual({ kind: 'kernel.stop', rig: 'kernel', seats: 'operator-agent, advisor-agent', seatCount: '2' });
+    // A kernel this PC does not read the seats of: the row, without them.
+    expect(ok('rig.act', { kind: 'kernel.restart' }, withRigs()).vars).toEqual({ kind: 'kernel.restart', rig: 'kernel' });
+    // Removing seats: the role's last ones, as OpenRig removes them.
+    expect(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, c).vars).toEqual({ rig: 'ledge-dev', role: 'dev.back', count: '1', from: '2', seats: 'dev-back-2', seatCount: '1' });
+    expect(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.front', count: 2 }, c).vars).toEqual({ rig: 'ledge-dev', role: 'dev.front', count: '2', from: '1' });
+  });
+  it('a long list of seats keeps what fits in 300 characters, and says how many are left out', () => {
+    const many = Array.from({ length: 40 }, (_, i) => `seat-number-${i}@big`);
+    const v = cutVars('big', many);
+    expect(v.seats!.length).toBeLessThanOrEqual(300);
+    expect(v.seats!.startsWith('seat-number-0, seat-number-1')).toBe(true);
+    expect(Number(v.seatsMore) + v.seats!.split(', ').length).toBe(40);
+    expect(v.seatCount).toBe('40');
+    expect(cutVars('big', [])).toEqual({});
   });
   it('turns the rows into the Desktop\'s own OpenRig messages, valid client messages', async () => {
     const { parseClientMessage } = await import('@ledge/protocol');
