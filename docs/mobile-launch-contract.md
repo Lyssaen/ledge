@@ -160,3 +160,22 @@ Dans le fil du parent :
 
 Une demande (permission, question) venue d'un sous-agent porte `pending.helperId`. Le terminal d'un sous-agent est celui
 de son parent, en lecture seule (`readOnly`).
+
+## 11. Q29 : les titres des notifications, écrits par le téléphone
+
+La charge d'une notification (`PushPayloadSchema`, `packages/protocol/src/push.ts`) porte maintenant `name` : de qui elle parle.
+
+| `kind` | `name` |
+|---|---|
+| `request`, `question`, `finished`, `resolved` | le nom de la session (« Pim ») |
+| `decision` | le nom de qui attend la décision |
+| `chat` | absent |
+
+- Le téléphone écrit son titre à partir de `kind` et de `name`, dans sa langue et au « tu ». Les mots sont ceux que
+  `design-ux` a dessinés pour Q29.
+- `title` reste envoyé, en français et au vouvoiement : c'est ce qu'affiche un téléphone plus ancien, ou le titre de repli
+  quand `name` manque (daemon plus ancien).
+- `name` fait au plus 100 caractères (coupé avec « … »). La notification entière tient toujours dans un enregistrement :
+  c'est `body` qui raccourcit si besoin.
+- `body` reste le texte du PC (la commande demandée, la question, la dernière réponse) : ce sont les mots de l'agent, pas
+  ceux de Ledge.
