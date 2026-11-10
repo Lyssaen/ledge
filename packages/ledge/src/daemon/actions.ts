@@ -88,14 +88,15 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
       if (kind !== 'kernel.start' && !runs) return no('not_running', 'the kernel does not run');
       // What a stop or a restart cuts, when this PC reads the kernel's seats.
       const k = kind === 'kernel.start' ? undefined : st.rigs.find(r => r.name === KERNEL_RIG);
-      return row('rig.act', { kind }, `${verb} kernel`, { kind, rig: KERNEL_RIG, ...(k ? cutVars(KERNEL_RIG, k.nodes.map(n => n.session)) : {}) });
+      const cut = k?.nodes.map(n => n.session);
+      return row('rig.act', { kind }, `${verb} kernel`, { kind, rig: KERNEL_RIG, ...(cut ? cutVars(KERNEL_RIG, cut) : {}) }, cut ? { cuts: cut } : {});
     }
     const rig = st.rigs.find(r => r.name === a.rig);
     if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`);
     if (kind === 'rig.start' && rigRuns(rig)) return no('running', `${rig.name} already runs`);
     if ((kind === 'rig.stop' || kind === 'rig.restart') && !rigRuns(rig)) return no('not_running', `${rig.name} does not run`);
-    const cuts = kind === 'rig.stop' || kind === 'rig.restart' ? cutVars(rig.name, rig.nodes.map(n => n.session)) : {};
-    return row('rig.act', { kind, rig: rig.name }, `${verb} rig ${b(rig.name)}`, { kind, rig: rig.name, ...cuts });
+    const cut = kind === 'rig.stop' || kind === 'rig.restart' ? rig.nodes.map(n => n.session) : undefined;
+    return row('rig.act', { kind, rig: rig.name }, `${verb} rig ${b(rig.name)}`, { kind, rig: rig.name, ...(cut ? cutVars(rig.name, cut) : {}) }, cut ? { cuts: cut } : {});
   },
   // A role's seats, as the Rigs screen changes them: removing one stops its agent, so that row is destructive.
   'rig.seats': (a, ctx) => {
@@ -108,9 +109,9 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
     if (now === count) return no('unchanged', `${rig.name} already has ${count} ${role} seat(s)`);
     const removed = seatPlan(rig.nodes, { [role]: count }).remove;
     // The seats OpenRig removes are the role's last ones: their sessions, for the sheet's « … s'arrêtent ».
-    const cuts = removed.length ? cutVars(rig.name, removed.map(id => rig.nodes.find(n => n.logicalId === id)?.session ?? id)) : {};
+    const cut = removed.map(id => rig.nodes.find(n => n.logicalId === id)?.session ?? id);
     return row('rig.seats', { rig: rig.name, role, count }, `Passer ${b(role)} de ${b(rig.name)} de ${now} à ${count} siège${count > 1 ? 's' : ''}`,
-      { rig: rig.name, role, count: String(count), from: String(now), ...cuts }, removed.length ? { risk: 'destructive' } : {});
+      { rig: rig.name, role, count: String(count), from: String(now), ...cutVars(rig.name, cut) }, cut.length ? { risk: 'destructive', cuts: cut } : {});
   },
   'session.model': (a, ctx) => withSession(ctx, a.session, writable, s => {
     const model = a.model as string | null; const effort = a.effort as string | null;

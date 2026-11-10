@@ -60,7 +60,7 @@ Le téléphone affiche alors, sous cette réponse, les barres de « Limites » t
 - **Un nouveau jour** range aussi la conversation de la veille. La première question du jour ouvre une nouvelle
   conversation, comme aujourd'hui.
 - Une conversation dont la dernière question date de plus de 7 jours est supprimée au démarrage du daemon et à chaque
-  nouvelle conversation.
+  nouvelle conversation. C'est vrai aussi de la conversation en cours d'un appareil qui ne revient pas.
 - Oublier l'appareil (`device.forget`) supprime ses conversations.
 
 **La liste.**
@@ -133,6 +133,10 @@ irréversible dise dans la feuille quels sièges elle coupe, ses `vars` portent 
 
 `seats` est absent quand le PC ne connaît pas les sièges, par exemple pour un kernel qu'il ne lit pas. La feuille dit alors
 seulement que l'étape est irréversible.
+
+Au moment d'appliquer, le PC recalcule les sièges coupés. S'ils ne sont plus ceux de la carte (un siège remplacé, un rôle qui
+a grandi, un siège ajouté au rig), la ligne n'est pas appliquée : elle passe `refused` avec le code `changed`, comme une
+cible qui a changé depuis la carte. Ledge peut alors proposer une nouvelle carte, avec les sièges réels.
 
 ## 6. Vérifié, et non vérifié
 

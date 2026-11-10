@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ACTION_ERROR_CODES, actionById, ChatActionSchema, type OpenRigState, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Session, type Task } from '@ledge/protocol';
-import { denied } from '../src/chat/act.js';
+import { actFromChat, denied } from '../src/chat/act.js';
 import { actionMessage, cardRefusal, cutVars, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
 
 const T0 = '2026-10-26T08:00:00.000Z';
@@ -248,6 +248,31 @@ describe('rig.act and rig.seats', () => {
     // Removing seats: the role's last ones, as OpenRig removes them.
     expect(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, c).vars).toEqual({ rig: 'ledge-dev', role: 'dev.back', count: '1', from: '2', seats: 'dev-back-2', seatCount: '1' });
     expect(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.front', count: 2 }, c).vars).toEqual({ rig: 'ledge-dev', role: 'dev.front', count: '2', from: '1' });
+  });
+  it('a confirmed step whose seats changed before it applies is refused, not applied to other seats', async () => {
+    const before = withRigs();
+    const apply = async (rows: ChatAction[], after: ResolveCtx) => {
+      const applied: string[] = [];
+      const card = [...rows];
+      const r = await actFromChat({ chat: { action: (_q: string, i: number) => card[i], markAction: (_q: string, i: number, patch: Partial<ChatAction>) => { card[i] = { ...card[i]!, ...patch }; } },
+        emit: () => {}, inFlight: new Set(), resolve: (x: ChatAction) => resolveAction(x.action, x.args, after), apply: async (x: ChatAction) => { applied.push(x.action); } }, 'q', undefined, true);
+      return { r, applied, card };
+    };
+    const ledge = RIGS.rigs[0]!;
+    const rigsWith = (nodes: typeof ledge.nodes) => withRigs({ rigs: [{ ...ledge, nodes }, RIGS.rigs[1]!] });
+    const shrink = ok('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, before);
+    expect(shrink.cuts).toEqual(['dev-back-2@ledge-dev']);
+    // The seat the card named was replaced by another: the same count, another seat stopped.
+    const replaced = await apply([shrink], rigsWith([seat('dev.back'), seat('dev.back-3'), seat('dev.front')]));
+    expect(replaced.applied).toEqual([]);
+    expect(replaced.card[0]).toMatchObject({ state: 'refused', code: 'changed', error: 'the seats it stops have changed since the card' });
+    // The role grew: going to 1 now stops two seats.
+    expect((await apply([shrink], rigsWith([seat('dev.back'), seat('dev.back-2'), seat('dev.back-3'), seat('dev.front')]))).applied).toEqual([]);
+    // A rig restarted after a seat was added.
+    const restart = ok('rig.act', { kind: 'rig.restart', rig: 'ledge-dev' }, before);
+    expect((await apply([restart], rigsWith([...ledge.nodes, seat('qa.review')]))).applied).toEqual([]);
+    // Nothing changed: it applies.
+    expect((await apply([shrink, restart], before)).applied).toEqual(['rig.seats', 'rig.act']);
   });
   it('a long list of seats keeps what fits in 300 characters, and says how many are left out', () => {
     const many = Array.from({ length: 40 }, (_, i) => `seat-number-${i}@big`);

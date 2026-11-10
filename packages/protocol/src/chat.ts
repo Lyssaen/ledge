@@ -93,6 +93,8 @@ export const ChatActionSchema = z.object({
   action: z.string().min(1).max(40), args: z.record(z.unknown()), summary: z.string().min(1).max(300), vars: ActionVarsSchema.optional(),
   detail: z.string().max(DETAIL_MAX).optional(), detailCut: z.literal(true).optional(),
   risk: ActionRiskSchema, session: z.string().optional(),
+  /** The sessions an OpenRig step stops, whole (`vars.seats` is cut for the screen): the step is refused if they changed before it applies. */
+  cuts: z.array(z.string().max(200)).max(500).optional(),
   state: ChatActionStateSchema.optional(), doneAt: z.string().datetime().optional(), error: z.string().optional(), code: z.string().max(40).optional()
 });
 export type ChatAction = z.infer<typeof ChatActionSchema>;

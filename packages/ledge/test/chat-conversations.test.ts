@@ -101,6 +101,20 @@ describe('a device keeps its conversations', { timeout: 20_000 }, () => {
     await vi.waitFor(() => expect(readdirSync(s.dir).filter(n => n !== 'index.json')).toHaveLength(1));
   });
 
+  it('the current conversation of a device that never comes back goes after 7 days, at the daemon start', async () => {
+    const s = setup();
+    await s.d1().ask('q1', 'oubliée', quiet);
+    await settle(s);
+    s.clock.t = '2026-10-26T08:00:00.000Z';
+    setup(s.home, s.clock);
+    await new Promise(r => setTimeout(r, 50));
+    expect(existsSync(join(s.dir, 'current.json'))).toBe(true);
+    s.clock.t = '2026-10-27T08:00:01.000Z';
+    setup(s.home, s.clock);
+    await vi.waitFor(() => expect(existsSync(join(s.dir, 'current.json'))).toBe(false));
+    expect(await setup(s.home, s.clock).d1().conversations!()).toEqual({ past: [] });
+  });
+
   it('forgetting the device removes its conversations', async () => {
     const s = setup();
     await s.d1().ask('q1', 'un', quiet); await s.d1().reset(quiet);

@@ -64,6 +64,8 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
         if ('refused' in current) { refused = current.code ?? 'changed'; throw new Error(current.refused); }
         // The same args at another risk is another action: confirmed for neither.
         if (JSON.stringify(current.args) !== JSON.stringify(row.args) || current.risk !== row.risk) throw new Error(row.action === 'session.decide' ? 'the request has changed since the card' : 'the target has changed since the card');
+        // The seats the user confirmed are the ones it stops: another seat in their place, or a role that grew, is not what was confirmed.
+        if (JSON.stringify(current.cuts ?? []) !== JSON.stringify(row.cuts ?? []) || current.vars?.from !== row.vars?.from) throw new Error('the seats it stops have changed since the card');
         // On the row the user saw, and as it stands now: a request that grew past the card since is cut too.
         const never = cardRefusal(row) ?? cardRefusal(current);
         if (never) { refused = never.code; throw new Error(never.refused); }

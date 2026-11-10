@@ -71,7 +71,15 @@ export function createConversations(dir: string, opts: { now?: () => string; day
     }
     return out.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
   };
-  /** Drops what is older than the kept days or beyond `PAST_MAX`, and any file the index does not hold. */
+  function readCurrent(): CurrentConversation | null {
+    try {
+      const r = CurrentSchema.safeParse(JSON.parse(readFileSync(join(dir, CURRENT), 'utf8')));
+      if (r.success) return r.data;
+      log('chat conversations: current conversation unreadable, starting empty');
+    } catch { /* none yet */ }
+    return null;
+  }
+  /** Drops what is older than the kept days or beyond `PAST_MAX`, any file the index does not hold, and a current conversation as old. */
   const pruneNow = async (index?: ChatConversationSummary[]) => {
     const all = index ?? await readIndex();
     const since = new Date(Date.parse(now()) - keepMs).toISOString();
@@ -81,18 +89,14 @@ export function createConversations(dir: string, opts: { now?: () => string; day
     if (names === null) return;
     for (const n of names) if (n.endsWith('.json') && UUID.test(n.slice(0, -5)) && !keep.has(n)) await rm(join(dir, n), { force: true });
     if (index || kept.length !== all.length || !names.includes(INDEX)) await put(INDEX, kept);
+    // The current conversation of a device that never came back goes too: its last question is older than the kept days.
+    const current = readCurrent();
+    if (current && (current.turns.at(-1)?.askedAt ?? '') < since) await rm(join(dir, CURRENT), { force: true });
   };
 
   return {
     /** The current conversation as last written; read once, when its chat is made. */
-    loadCurrent(): CurrentConversation | null {
-      try {
-        const r = CurrentSchema.safeParse(JSON.parse(readFileSync(join(dir, CURRENT), 'utf8')));
-        if (r.success) return r.data;
-        log('chat conversations: current conversation unreadable, starting empty');
-      } catch { /* none yet */ }
-      return null;
-    },
+    loadCurrent: readCurrent,
     saveCurrent(c: CurrentConversation): Promise<void> { return queue(() => put(CURRENT, c)); },
     /** Puts the conversation away, frozen, and starts none: the next question writes the new current one. */
     archive(id: string, turns: readonly ChatTurn[]): Promise<void> {
