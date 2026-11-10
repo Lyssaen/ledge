@@ -2,7 +2,7 @@
 // no machine, no free error text), and the live answer is coalesced so a slow link never builds a backlog.
 import {
   CHAT_HISTORY_BUDGET, THREAD_TEXT_MAX, TOOL_TEXT_MAX, MESSAGE_MAX, proposalRows,
-  type ChatAction, type ChatErrorCode, type ChatTurn, type PhoneChatProposal, type PhoneChatStep, type PhoneChatTurn, type PhoneServerMessage
+  type ChatAction, type ChatLimitsRead, type ChatErrorCode, type ChatTurn, type PhoneChatProposal, type PhoneChatStep, type PhoneChatTurn, type PhoneServerMessage
 } from '@ledge/protocol';
 import { ONE_AT_A_TIME, TOO_MANY, type Chat, type ChatMessage } from '../chat/service.js';
 
@@ -79,6 +79,11 @@ export function toPhoneHistory(turns: ChatTurn[]): PhoneChatTurn[] {
   return projected.slice(from);
 }
 
+/** The turns that read the limits, as `chat.limits` names them; none when no turn did. */
+export function limitsOf(turns: readonly ChatTurn[]): ChatLimitsRead[] {
+  return turns.slice(-HISTORY_TURNS).flatMap(t => (t.limitsAt ? [{ qid: t.qid, at: t.limitsAt }] : []));
+}
+
 export interface PhoneEmitterOpts { now?: () => number; throttleMs?: number; onEnd?: (end: { qid: string; code?: ChatErrorCode }) => void }
 
 /** Translates a chat's messages for one phone. `chat.delta` carries the whole text so far, at most once per `throttleMs` per question
@@ -89,6 +94,7 @@ export function phoneEmitter(
   const now = opts.now ?? Date.now;
   const throttleMs = opts.throttleMs ?? 250;
   const live = new Map<string, { text: string; sent: string; at: number }>();
+  const sendLimits = (turns: readonly ChatTurn[]) => { const reads = limitsOf(turns); if (reads.length) send({ type: 'chat.limits', reads }, 'chat.limits'); };
   const flushLive = (qid: string) => {
     const l = live.get(qid);
     if (l && l.text !== l.sent) { send({ type: 'chat.delta', qid, text: l.text.slice(0, THREAD_TEXT_MAX) }, `chat.live:${qid}`); l.sent = l.text; }
@@ -102,7 +108,7 @@ export function phoneEmitter(
     live.delete(qid);
     const turn = chat.history().find(t => t.qid === qid);
     // A turn gone from the history (a reset) must still end for the phone.
-    if (turn) send({ type: 'chat.done', qid, turn: toPhoneTurn(turn) });
+    if (turn) { send({ type: 'chat.done', qid, turn: toPhoneTurn(turn) }); if (turn.limitsAt) sendLimits(chat.history()); }
     else send({ type: 'chat.error', qid, code: 'failed' });
   };
   /** The questions that ended: a late delta for one is ignored. Bounded. */
@@ -110,7 +116,7 @@ export function phoneEmitter(
   const finish = (qid: string) => { finished.add(qid); if (finished.size > 200) finished.delete(finished.values().next().value!); };
   return (m) => {
     switch (m.type) {
-      case 'chat.history': return send({ type: 'chat.history', turns: toPhoneHistory(m.turns) }, 'chat.history');
+      case 'chat.history': send({ type: 'chat.history', turns: toPhoneHistory(m.turns) }, 'chat.history'); return sendLimits(m.turns);
       case 'chat.step': return send({ type: 'chat.step', qid: m.qid, step: stepOf(m.step) });
       case 'chat.delta': {
         if (finished.has(m.qid)) return;
@@ -143,7 +149,7 @@ export function phoneEmitter(
         // Anything else that names a turn (the relay's progress) is the turn as it stands now.
         const qid = (m as { qid?: unknown }).qid;
         const turn = typeof qid === 'string' ? chat.history().find(t => t.qid === qid) : undefined;
-        if (turn) send({ type: 'chat.done', qid: turn.qid, turn: toPhoneTurn(turn) });
+        if (turn) { send({ type: 'chat.done', qid: turn.qid, turn: toPhoneTurn(turn) }); if (turn.limitsAt) sendLimits(chat.history()); }
       }
     }
   };

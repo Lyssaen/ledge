@@ -107,7 +107,9 @@ export const ChatTurnSchema = z.object({
   steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
   projectProposal: ChatProjectProposalSchema.optional(),
   tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional(),
-  ignoredAt: z.string().datetime().optional(), attachments: z.array(AttachmentRefSchema).optional()
+  ignoredAt: z.string().datetime().optional(), attachments: z.array(AttachmentRefSchema).optional(),
+  /** When Ledge read the account limits for this answer (`limits.md`): a phone shows the limits under it (M3 Q31). */
+  limitsAt: z.string().datetime().optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 

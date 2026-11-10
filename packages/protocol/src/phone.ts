@@ -256,6 +256,10 @@ export type PhoneTask = z.infer<typeof PhoneTaskSchema>;
 export const ChatErrorCodeSchema = z.enum(['busy', 'timeout', 'cancelled', 'failed']);
 export type ChatErrorCode = z.infer<typeof ChatErrorCodeSchema>;
 
+/** An answer that read the account limits (M3 Q31): its question and when the limits were read. */
+export const ChatLimitsReadSchema = z.object({ qid: OperationIdSchema, at: z.string().datetime() }).strict();
+export type ChatLimitsRead = z.infer<typeof ChatLimitsReadSchema>;
+
 export const PhoneChatTurnSchema = z.object({
   qid: OperationIdSchema, question: z.string().max(MESSAGE_MAX), askedAt: z.string().datetime(),
   steps: z.array(PhoneChatStepSchema).max(50), answer: z.string().max(THREAD_TEXT_MAX).optional(), answeredAt: z.string().datetime().optional(),
@@ -626,6 +630,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.delta'), qid: OperationIdSchema, text: z.string().max(THREAD_TEXT_MAX) }),
   z.object({ type: z.literal('chat.done'), qid: OperationIdSchema, turn: PhoneChatTurnSchema }),
   z.object({ type: z.literal('chat.error'), qid: OperationIdSchema, code: ChatErrorCodeSchema }),
+  /** The current conversation's answers that read the account limits, and when (M3 Q31): a phone shows the limits under each. Sent after a
+   *  `chat.history` or a `chat.done` that touches one, apart from the turn so that an older phone, whose turn schema is strict, loses nothing. */
+  z.object({ type: z.literal('chat.limits'), reads: z.array(ChatLimitsReadSchema).max(50) }),
   /** The daemon updating or restarting itself, whoever asked: npm runs, then the service restarts (the link drops right after). */
   z.object({ type: z.literal('daemon.progress'), version: z.string().max(40), step: z.enum(['installing', 'restarting']) }),
   /** Nothing was changed. Never npm's output nor a command: both hold the PC's paths. */

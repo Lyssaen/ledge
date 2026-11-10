@@ -24,7 +24,7 @@ import {
 import { compareVersions } from '@ledge/ui/semver';
 import type { MobileService } from './service.js';
 import type { ChatThreads, ChatThreadId } from '../chat/threads.js';
-import { phoneCut, phoneEmitter, toPhoneHistory } from './chat.js';
+import { limitsOf, phoneCut, phoneEmitter, toPhoneHistory } from './chat.js';
 import type { ChatMessage } from '../chat/service.js';
 import { CloseRefused } from '../chat/close.js';
 import { ActRefused } from '../chat/act.js';
@@ -1337,7 +1337,12 @@ export function createPhoneGateway(deps: {
           if (chats.owner(msg.qid) === `device:${deviceId}`) chats.device(deviceId).cancel(msg.qid);
           return;
         case 'chat.reset': return await chats.device(deviceId).reset(emitterOf(deviceId));
-        case 'chat.history': return push(deviceId, { type: 'chat.history', turns: toPhoneHistory(chats.device(deviceId).history()) }, 'chat.history');
+        case 'chat.history': {
+          const turns = chats.device(deviceId).history();
+          push(deviceId, { type: 'chat.history', turns: toPhoneHistory(turns) }, 'chat.history');
+          const reads = limitsOf(turns);
+          return reads.length ? push(deviceId, { type: 'chat.limits', reads }, 'chat.limits') : undefined;
+        }
       }
     } catch (e) {
       log(`phone ${msg.type} failed (${e instanceof Error ? e.name : 'error'})`);

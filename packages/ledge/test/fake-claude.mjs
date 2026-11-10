@@ -38,6 +38,8 @@ if (agent === 'codex') {
   say({ type: 'system', subtype: 'init', session_id: sid, cwd: process.cwd() });
   say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: process.cwd() + '/sessions.md' } }] } });
   say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't2', name: 'Read', input: { file_path: process.cwd() + '/pane-a.txt' } }] } });
+  // FAKE_READ: more context files the answer reads, by name, comma-separated (`limits.md`, say).
+  for (const [i, f] of (env.FAKE_READ ?? '').split(',').filter(Boolean).entries()) say({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `r${i}`, name: 'Read', input: { file_path: process.cwd() + '/' + f } }] } });
   if (mode === 'slow') await new Promise(r => setTimeout(r, 5000));
   for (const t of ['Deux ', 'compagnons ', 'travaillent.']) say({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: t } } });
   // FAKE_ANSWER replaces the final text (a proposal block, say); `folders` answers with the folders.md Ledge was given, `projects`

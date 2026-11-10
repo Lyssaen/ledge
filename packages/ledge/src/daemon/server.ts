@@ -216,7 +216,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const reducer = new CaptureReducer();
-  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all(), rigs: () => openrig.peek?.() });
+  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all(), rigs: () => openrig.peek?.(), usage: () => opts.usage?.state().harnesses });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });

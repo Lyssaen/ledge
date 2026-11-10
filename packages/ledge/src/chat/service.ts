@@ -3,13 +3,13 @@ import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type OpenRigState, type Projects, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
+import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type HarnessUsage, type OpenRigState, type Projects, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
 import { gitSummary } from '../daemon/git.js';
-import { writeContext, stepFor } from './context.js';
+import { writeContext, stepFor, LIMITS_MD } from './context.js';
 import { installedAgents, readGuide } from './guide.js';
 import { LEDGE_VERSION } from '../version.js';
 import { asksForge, type Forge } from './forge.js';
@@ -71,6 +71,8 @@ export interface ChatDeps {
   tasks?: () => Task[];
   /** This PC's OpenRig as last read: the context's rigs.md, and what rig.act and rig.seats are checked against. */
   rigs?: () => OpenRigState | undefined;
+  /** The harnesses' account limits as the daemon last read them: the context's limits.md (M3 Q31). */
+  usage?: () => readonly HarnessUsage[] | undefined;
   /** Reads the projects' GitHub/GitLab (#23) into the context, for a question that asks about issues, PR/MR or CI. */
   forge?: Forge;
   /** A pool shared by several chats: a question takes a place while it runs. */
@@ -295,7 +297,7 @@ export function createChat(deps: ChatDeps): Chat {
     // The chat runs on the CLI's own login: an API key the daemon inherited is never billed (spec §5.2).
     const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
     const ledge = { guide: await readGuide(), version: LEDGE_VERSION, agents: await installedAgents(env.PATH) };
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), tasks: deps.tasks?.(), rigs: deps.rigs?.(), now: now(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
+    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), tasks: deps.tasks?.(), rigs: deps.rigs?.(), usage: deps.usage?.(), now: now(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
     // Only a question about the forge runs gh/glab: the others never wait on the network, and get what was read before, dated.
     if (deps.forge) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }, { read: asksForge(turn.question) }).catch(e => log(`chat ${turn.qid}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
     if (mine.cancelled) return CANCELLED;
@@ -304,6 +306,8 @@ export function createChat(deps: ChatDeps): Chat {
     const images = (turn.attachments ?? []).flatMap(a => { const path = deps.attachments?.path(a.id); return path ? [{ path, mime: a.mime }] : []; });
     let answer = ''; let resultError: string | null = null;
     const handle = runTool(tool, { question: mine.told.text ? `${mine.told.text}\n\n${turn.question}` : turn.question, cwd: ctx.dir, addDirs: ctx.repoPaths, sessionId, resume, env, bin: deps.bins?.[tool] ?? deps.bin, ...(images.length > 0 ? { images } : {}), ...(tool === 'omp' ? { sessionDir: join(deps.home, 'chat', 'omp', sessionId) } : {}) }, e => {
+      // Reading the limits is no step: the turn says when, and a phone shows the limits under the answer (M3 Q31).
+      if (e.type === 'tool' && e.path && ctx.limits && turn.limitsAt === undefined && resolve(e.path) === resolve(ctx.dir, LIMITS_MD)) turn.limitsAt = now();
       if (e.type === 'tool') { const step = e.path ? stepFor(e.path, ctx) : null; if (step && !turn.steps.some(s => sameStep(s, step))) { turn.steps.push(step); emit({ type: 'chat.step', qid: turn.qid, step }); } }
       else if (e.type === 'delta') { answer += e.text; emit({ type: 'chat.delta', qid: turn.qid, text: e.text }); }
       else if (e.type === 'result') { if (e.text) answer = e.text; if (e.isError) resultError = e.text || `${label} reported an error`; }
