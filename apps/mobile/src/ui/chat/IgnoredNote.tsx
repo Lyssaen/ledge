@@ -1,8 +1,8 @@
-import { copy } from '../../copy';
+import { copy, locale } from '../../copy';
 import type { MobileStore } from '../../state/store';
 import { GHOST } from './RelayCard';
 
-const clock = (iso: string) => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const clock = (iso: string) => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
 /** A card of a turn set aside (« Ignorer », on this phone or any other device, or on the PC): nothing of it applies until « Revoir ». */
 /** `rest`: rows of the card already went (a launched session), the note speaks of the others. */

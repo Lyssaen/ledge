@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { CONTEXT_NEAR, CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN, DEFAULT_DEVICE_PREFS, type DevicePrefs, type MutableNotification, type Tool } from '@ledge/protocol';
-import { copy } from '../copy';
+import { copy, locale } from '../copy';
 import { setReducedMotion, useReducedMotion } from '../motion';
 import { useMobile, type MobileStore } from '../state/store';
 import { FIELD } from '../ui/field';
@@ -43,10 +43,10 @@ export function pauseEnd(kind: 'hour' | 'four' | 'morning', at: Date): Date {
 
 /** The end of a pause as the user reads it: its time, « demain » before it when it is not today. */
 export function shownUntil(until: Date, now: Date): string {
-  const time = until.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const time = until.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   if (until.toDateString() === now.toDateString()) return time;
   const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
-  return until.toDateString() === tomorrow.toDateString() ? S.tomorrow(time) : `${until.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${time}`;
+  return until.toDateString() === tomorrow.toDateString() ? S.tomorrow(time) : `${until.toLocaleDateString(locale, { day: 'numeric', month: 'short' })} ${time}`;
 }
 
 /**

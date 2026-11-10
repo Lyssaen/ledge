@@ -1,5 +1,5 @@
 import type { PhoneSession } from '@ledge/protocol';
-import { copy } from '../copy';
+import { copy, locale } from '../copy';
 import { resendable, type Op } from '../state/operations';
 
 const C = copy.sessionEnd;
@@ -153,7 +153,7 @@ export function closedHere(session: PhoneSession, ops: Record<string, Op>): bool
   return o?.message.type === 'session.close' && o.phase === 'applied' && ownEnd(o, session);
 }
 
-const hhmm = (d: Date) => d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const hhmm = (d: Date) => d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 const dayOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
 /** When a session ended, next to « Terminée »: « à 18:42 » today, « hier », else « le 27 oct. ». */
@@ -162,7 +162,7 @@ export function endedAtLabel(iso: string, now: number = Date.now()): string {
   const days = Math.round((dayOf(new Date(now)) - dayOf(at)) / 86_400_000);
   if (days <= 0) return C.at(hhmm(at));
   if (days === 1) return C.yesterday;
-  return C.on(at.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }));
+  return C.on(at.toLocaleDateString(locale, { day: 'numeric', month: 'short' }));
 }
 
 /** The time of an ended session, as the thread's event line says it. */

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { AttachmentChips } from '@ledge/ui/images';
-import { copy } from '../copy';
+import { copy, lang } from '../copy';
 import { AttachButton, pastedImages } from './Attach';
 import { iconButtonClass } from './Button';
 import { Icon } from './icons';
@@ -34,7 +34,7 @@ export function MessageField({ id, label, sendLabel, value, onChange, onSend, ca
   const noAttach = attachDisabled ?? disabled;
   return (
     <div className="flex flex-col gap-2">
-      {images.items.length > 0 && <AttachmentChips items={images.items} onRemove={images.remove} size={{ w: 72, h: 54 }} removeLabel={copy.images.remove} lang="fr" />}
+      {images.items.length > 0 && <AttachmentChips items={images.items} onRemove={images.remove} size={{ w: 72, h: 54 }} removeLabel={copy.images.remove} lang={lang} />}
       <div className="flex items-end gap-2">
         <AttachButton onFiles={images.add} disabled={noAttach} />
         <label htmlFor={id} className="sr-only">{label}</label>

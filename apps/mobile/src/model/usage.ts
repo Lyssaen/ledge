@@ -1,5 +1,6 @@
 import type { PhoneHarnessUsage, PhoneSession, UsageWindow } from '@ledge/protocol';
 import { effortLabel } from './modelChoice';
+import { locale } from '../copy';
 
 /** A model id as people say it: `claude-opus-5-5` → « Opus 5.5 », `fable` → « Fable »; anything else as it is. */
 export function modelName(id: string): string {
@@ -24,7 +25,7 @@ export function span(ms: number): string {
 
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const hm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-const weekday = (d: Date) => d.toLocaleDateString('fr-FR', { weekday: 'short' });
+const weekday = (d: Date) => d.toLocaleDateString(locale, { weekday: 'short' });
 
 const WEEK_MS = 7 * 24 * 3_600_000;
 
@@ -36,7 +37,7 @@ export const resetIsDate = (iso: string, now: number): boolean => new Date(iso).
 export function resetLabel(iso: string, now: number, short = false): string {
   const d = new Date(iso);
   if (resetIsDate(iso, now)) {
-    const date = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    const date = d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
     return short ? date : `${date} ${hm(d)}`;
   }
   if (sameDay(d, new Date(now))) return hm(d);

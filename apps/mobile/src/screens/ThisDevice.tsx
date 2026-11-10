@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DEVICE_NAME_MAX } from '@ledge/protocol';
-import { copy } from '../copy';
+import { copy, locale } from '../copy';
 import type { PinnedPc } from '../link/keys';
 import { defaultDeviceName } from '../link/label';
 import { useMobile, type MobileStore } from '../state/store';
@@ -26,7 +26,7 @@ export function ThisDevice({ store, pinned }: { store: MobileStore; pinned: Pinn
   const device = state.device;
   if (!device?.id) return null;
   const name = ownName(device.name);
-  const linked = pinned ? new Date(pinned.pinnedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+  const linked = pinned ? new Date(pinned.pinnedAt).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
   const draft = editing?.trim() ?? '';
   const save = () => {
     if (!draft || draft.length > DEVICE_NAME_MAX) return;

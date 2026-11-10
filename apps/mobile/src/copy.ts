@@ -1,9 +1,10 @@
 import { MESSAGE_MAX, type ActionErrorCode } from '@ledge/protocol';
 import { actionWords, type ActionVars } from '@ledge/ui/chat/actionWords';
 
-/** The lines of the generic card the shared words have not had yet, as the PC's summary says them (names in **bold**). */
-/** Every French string of the phone app lives here (decision D13). */
-export const copy = {
+import { en } from './copy.en';
+
+/** Every visible string of the phone app lives here (decision D13): French below, English in copy.en.ts. */
+const fr = {
   appName: 'Ledge',
   /** The name beside the mark, in the header of the five tabs. */
   brand: 'Ledge',
@@ -350,7 +351,7 @@ export const copy = {
     suggestion: 'Suggestion pour la suite',
     capture: 'Capture',
     agentLabel: 'Réponse de l’agent',
-    awaiting: 'Décision attendue · dans « À traiter »', examine: 'Examiner la demande',
+    awaiting: 'Décision attendue · dans « À toi »', examine: 'Examiner la demande',
     event: {
       accept: (from: string) => `Accord pris en compte · depuis ${from}`,
       deny: (from: string) => `Refus pris en compte · depuis ${from}`,
@@ -867,3 +868,27 @@ export const copy = {
     zoom: { bar: 'Zoom de l’atelier', out: 'Dézoomer', in: 'Zoomer', reset: 'Revenir à 100 %', fit: 'Ajuster', fitTitle: 'Revenir à la vue lisible' }
   }
 } as const;
+
+/** A table's shape with its words widened: what every language's table has, string for string. */
+type Widen<T> = T extends string ? string
+  : T extends (...args: infer A) => infer R ? (...args: A) => Widen<R>
+  : T extends readonly unknown[] ? { readonly [K in keyof T]: Widen<T[K]> }
+  : T extends object ? { readonly [K in keyof T]: Widen<T[K]> }
+  : T;
+export type Copy = Widen<typeof fr>;
+
+export type Lang = 'fr' | 'en';
+const LANGS: readonly Lang[] = ['fr', 'en'];
+const tables: Record<Lang, Copy> = { fr, en };
+const LANG_KEY = 'ledge.lang';
+
+/** The language shown: French until the way to choose it is designed (question to design-ux, 2026-11-10); a stored choice wins. */
+export function loadLang(): Lang {
+  try { const v = localStorage.getItem(LANG_KEY); if (v && (LANGS as readonly string[]).includes(v)) return v as Lang; } catch { /* storage unavailable */ }
+  return 'fr';
+}
+export const lang: Lang = loadLang();
+export const copyFor = (l: Lang): Copy => tables[l];
+export const copy: Copy = tables[lang];
+/** Dates and times in the language shown, as Desktop writes them (fr-FR, en-GB). */
+export const locale = lang === 'fr' ? 'fr-FR' : 'en-GB';

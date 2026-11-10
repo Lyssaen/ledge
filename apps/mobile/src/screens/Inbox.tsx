@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { PhoneSession, PhoneTask } from '@ledge/protocol';
-import { copy } from '../copy';
+import { copy, locale } from '../copy';
 import { ageLabel, filterItems, headline, requestsOf, type Filter, type InboxItem } from '../model/requests';
 import { href, useRoute } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
@@ -17,7 +17,7 @@ import { Tag } from '../ui/Tag';
 type InboxFilter = Filter | 'tasks';
 const FILTERS: InboxFilter[] = ['all', 'permission', 'question', 'tasks'];
 
-export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
 
 function Row({ item, session, now, offline }: { item: InboxItem; session: PhoneSession | undefined; now: number; offline: boolean }) {
   const route = useRoute();
