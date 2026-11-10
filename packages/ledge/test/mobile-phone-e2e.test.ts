@@ -142,6 +142,8 @@ describe('phone protocol end to end', () => {
     const seen = JSON.stringify({ type: 'openrig.answer', op, qitemId: 'qitem-n', answer: { kind: 'seen' } });
     await phone.send(seen);
     await until(() => results(phone).some(r => r.op === op && r.status === 'applied'), 'the answer applied');
+    // The outbox sends an operation's result ahead of other queued messages: the answer's end may come just after it.
+    await until(() => parsed(phone).some(m => m.type === 'openrig.answered'), 'the answer\'s end');
     expect(parsed(phone).find(m => m.type === 'openrig.answered')).toMatchObject({ op, qitemId: 'qitem-n', ok: true, outcome: 'answered' });
     await phone.send(seen); // a replay of the same op: answered from the registry, not sent to OpenRig again
     await until(() => results(phone).filter(r => r.op === op).length >= 3, 'the replay answered');

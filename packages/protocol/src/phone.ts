@@ -14,7 +14,8 @@ import { PushSubscriptionSchema } from './push.js';
 import { DeviceKindSchema, DeviceNameSchema } from './mobile.js';
 import { EffortSchema, ModelChoiceSchema, ModelIdSchema, ModelRefusalSchema } from './models.js';
 import { SlashCommandSchema } from './commands.js';
-import { HumanAnswerErrorSchema, HumanAnswerSchema, HumanAskSchema, HumanChannelSchema } from './openrig.js';
+import { GoalErrorSchema, HumanAnswerErrorSchema, HumanAnswerSchema, HumanAskSchema, HumanChannelSchema, OpenRigActionSchema, RigGraphSchema, RigNameSchema, RigSnapshotSchema } from './openrig.js';
+import { PHONE_GOALS_MAX, PHONE_RIG_ROWS_MAX, PHONE_RIG_SEATS_MAX, PHONE_RIG_TEXT_MAX, PhoneGoalSchema, PhoneOpenRigStateSchema, PhoneRigErrorSchema, PhoneRigPermissionSchema, PhoneRigQueueRowSchema, PhoneRigRejectedSchema, PhoneRigRoutingSchema, RigSeatCountsSchema } from './phoneRigs.js';
 import { QitemIdSchema, RigRowSchema } from './rigMessages.js';
 import { FolderPathSchema, ProjectColorSchema, ProjectIdSchema, ProjectNameSchema } from './projects.js';
 import { MachineIdSchema } from './machines.js';
@@ -187,7 +188,9 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 /** `rig`: an answer to what OpenRig asks the person (« À toi », lot 3), bound to the row and to that very answer. */
 /** `project`: deleting a project (Réglages › Projets), bound to the project and to where its agents go. */
 /** `folder`: adding a folder of this PC to a project, bound to the project and to that folder. */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig', 'note', 'project', 'folder']);
+/** `rigs`: an OpenRig action that stops something or drops the prompts (`rigs.act`), or a change of seats that removes one (`rigs.seats`),
+ *  bound to that very action or change (`daemon.rigs`). */
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig', 'note', 'project', 'folder', 'rigs']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -355,7 +358,9 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     /** A `rig` challenge: the OpenRig row and the exact answer it covers. */ qitem: z.string().min(1).max(200).optional(), answer: HumanAnswerSchema.optional(),
     /** A `note` challenge: the proposal (a task) and the exact choice it covers. */ task: z.string().min(1).max(40).optional(), choice: BrainChoiceSchema.optional(),
     /** A `project` challenge: the project deleted and where its agents go (null: no project). */ project: ProjectIdSchema.optional(), moveTo: ProjectIdSchema.nullable().optional(),
-    /** A `folder` challenge: the project (`project`) and the folder of this PC added to it. */ path: FolderPathSchema.optional() }),
+    /** A `folder` challenge: the project (`project`) and the folder of this PC added to it. */ path: FolderPathSchema.optional(),
+    /** A `rigs` challenge: the action (`rigAct`) or the change of seats (`rigSeats`) it covers, exactly as it will be sent. */
+    rigAct: OpenRigActionSchema.optional(), rigSeats: z.object({ rig: RigNameSchema, seats: RigSeatCountsSchema }).strict().optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -471,7 +476,27 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   /** Installs `version` on the PC, then restarts its daemon; the phone asks for its own build's version. Passkey, purpose `pc`. */
   z.object({ type: z.literal('daemon.update'), ...pcOp, version: z.string().regex(SEMVER) }).strict(),
   /** Restarts the PC's daemon without installing anything. Passkey, purpose `pc`. */
-  z.object({ type: z.literal('daemon.restart'), ...pcOp }).strict()
+  z.object({ type: z.literal('daemon.restart'), ...pcOp }).strict(),
+  // ── Rigs and the kernel (`daemon.rigs`, docs/mobile-openrig-contract.md) ──
+  /** OpenRig on this PC, answered by `rigs.state`, then each change, whole, while the phone follows. */
+  z.object({ type: z.literal('rigs.state') }).strict(),
+  z.object({ type: z.literal('rigs.graph'), rig: RigNameSchema }).strict(),
+  /** A rig's open rows and its recently closed ones. */
+  z.object({ type: z.literal('rigs.queue'), rig: RigNameSchema }).strict(),
+  /** The queue's routing on this PC: the latest claims, handoffs, blocks and closes, every rig. */
+  z.object({ type: z.literal('rigs.routing') }).strict(),
+  z.object({ type: z.literal('rigs.permissions'), rig: RigNameSchema }).strict(),
+  z.object({ type: z.literal('rigs.snapshots'), rig: RigNameSchema }).strict(),
+  /** The goals given to the operator, answered by `rigs.goals`, then each change, whole, while the phone follows. */
+  z.object({ type: z.literal('rigs.goals') }).strict(),
+  /** An action on OpenRig, every kind the Desktop's `openrig.act` takes. One that `rigActNeedsCheck` names carries a passkey, purpose `rigs`. */
+  z.object({ type: z.literal('rigs.act'), op: OperationIdSchema, action: OpenRigActionSchema, assertion: AssertionSchema.optional() }).strict(),
+  /** A running rig's seats per role (the Desktop's `openrig.seats`). One that removes a seat carries a passkey, purpose `rigs`. */
+  z.object({ type: z.literal('rigs.seats'), op: OperationIdSchema, rig: RigNameSchema, seats: RigSeatCountsSchema, delegation: z.enum(['pairs', 'all']).optional(), assertion: AssertionSchema.optional() }).strict(),
+  /** A goal to the operator (the Desktop's `openrig.goal.send`); `goalId` is the phone's, the same for a retry. */
+  z.object({ type: z.literal('rigs.goal.send'), op: OperationIdSchema, goalId: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), text: z.string().trim().min(1).max(8000), folder: z.string().min(1).max(4096).optional() }).strict(),
+  /** The person's words to the operator about a goal (the Desktop's `openrig.goal.reply`); `replyId` the phone's, the same for a retry. */
+  z.object({ type: z.literal('rigs.goal.reply'), op: OperationIdSchema, goalId: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), replyId: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), text: z.string().trim().min(1).max(8000) }).strict()
 ]);
 export type PhoneClientMessage = z.infer<typeof PhoneClientMessageSchema>;
 
@@ -516,7 +541,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     settings: z.literal(true).optional(),
     /** The daemon sends `usage.state` (its harnesses' limits). */ usage: z.literal(true).optional(),
     /** The Atelier: the snapshot carries `projects`, each session its `projectId` and `rig`, and `projects` follows each change. Absent (an older PC): no Atelier. */
-    atelier: z.literal(true).optional() }),
+    atelier: z.literal(true).optional(),
+    /** Rigs and the kernel: the daemon answers the `rigs.*` reads and takes `rigs.act`, `rigs.seats`, `rigs.goal.send` and `.reply`. Absent (an older PC): the Rigs tab says « rien à afficher ». */
+    rigs: z.literal(true).optional() }),
   /** The user's projects (`daemon.atelier`), whole, in their order: absent from an older PC's snapshot. */
   projects: z.array(PhoneProjectSchema).max(PHONE_PROJECTS_MAX).optional(), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
     /** This device's id (its fingerprint, as decisions name it in `by`), its kind, and the name the user gave it (absent: none given). */
@@ -589,6 +616,30 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('folder.recents'), paths: z.array(FolderPathSchema).max(PHONE_RECENT_FOLDERS_MAX) }),
   /** A project's folders, in its order; `gone`: no such project now. */
   z.object({ type: z.literal('project.folders'), id: z.string(), folders: z.array(PhoneFolderSchema).max(50), gone: z.literal(true).optional() }),
-  z.object({ type: z.literal('error'), code: z.enum(['invalid', 'unknown_session', 'too_large']), request: z.string().max(40).optional() })
+  z.object({ type: z.literal('error'), code: z.enum(['invalid', 'unknown_session', 'too_large']), request: z.string().max(40).optional() }),
+  // ── Rigs and the kernel (`daemon.rigs`) ──
+  /** `error`: OpenRig could not be read (`state` absent). */
+  z.object({ type: z.literal('rigs.state'), state: PhoneOpenRigStateSchema.optional(), error: PhoneRigErrorSchema.optional() }).strict(),
+  z.object({ type: z.literal('rigs.graph'), rig: z.string(), graph: RigGraphSchema.optional(), error: PhoneRigErrorSchema.optional() }).strict(),
+  /** `rows`: open (pending, in-progress, blocked), newest first; `closed`: closed lately, newest first; `truncated`: older open rows may be missing. */
+  z.object({ type: z.literal('rigs.queue'), rig: z.string(), rows: z.array(PhoneRigQueueRowSchema).max(PHONE_RIG_ROWS_MAX), closed: z.array(PhoneRigQueueRowSchema).max(PHONE_RIG_ROWS_MAX),
+    truncated: z.boolean(), error: PhoneRigErrorSchema.optional() }).strict(),
+  /** Oldest first, at most 20. */
+  z.object({ type: z.literal('rigs.routing'), entries: z.array(PhoneRigRoutingSchema).max(20), error: PhoneRigErrorSchema.optional() }).strict(),
+  z.object({ type: z.literal('rigs.permissions'), rig: z.string(), policy: z.string().max(PHONE_RIG_TEXT_MAX).optional(), seats: z.array(PhoneRigPermissionSchema).max(PHONE_RIG_SEATS_MAX), error: PhoneRigErrorSchema.optional() }).strict(),
+  z.object({ type: z.literal('rigs.snapshots'), rig: z.string(), snapshots: z.array(RigSnapshotSchema).max(20), error: PhoneRigErrorSchema.optional() }).strict(),
+  z.object({ type: z.literal('rigs.goals'), goals: z.array(PhoneGoalSchema).max(PHONE_GOALS_MAX), partial: z.literal(true).optional(), error: PhoneRigErrorSchema.optional() }).strict(),
+  /** An action's end, under its `op` (`operation.result` says whether it ran). `commands`: the `rig` commands as shown; `error`: `busy`, `not_installed`,
+   *  `spec_unknown`, `spec_no_policy`, `spec_policy_unsupported`, or `failed` with `message`, OpenRig's last line; `completed` as the Desktop's. */
+  z.object({ type: z.literal('rigs.done'), op: OperationIdSchema, ok: z.boolean(), commands: z.array(z.string().max(PHONE_RIG_TEXT_MAX)).max(400), error: z.string().max(40).optional(),
+    message: z.string().max(PHONE_RIG_TEXT_MAX).optional(), completed: z.number().int().min(0).optional(), rejected: PhoneRigRejectedSchema.optional() }).strict(),
+  /** A change of seats ended: `added` / `removed` as `pod.member`; `error`: `rig_not_running`, `rig_root_unknown`, `busy`, or `failed` with `message`. */
+  z.object({ type: z.literal('rigs.reseated'), op: OperationIdSchema, ok: z.boolean(), commands: z.array(z.string().max(PHONE_RIG_TEXT_MAX)).max(400), added: z.array(z.string()).max(PHONE_RIG_SEATS_MAX),
+    removed: z.array(z.string()).max(PHONE_RIG_SEATS_MAX), error: z.string().max(40).optional(), message: z.string().max(PHONE_RIG_TEXT_MAX).optional(),
+    links: z.number().int().optional(), linksUnsupported: z.boolean().optional(), rejected: PhoneRigRejectedSchema.optional() }).strict(),
+  z.object({ type: z.literal('rigs.goal.sent'), op: OperationIdSchema, goalId: z.string(), ok: z.boolean(), qitemId: z.string().optional(), error: GoalErrorSchema.optional(),
+    message: z.string().max(PHONE_RIG_TEXT_MAX).optional(), rejected: PhoneRigRejectedSchema.optional() }).strict(),
+  z.object({ type: z.literal('rigs.goal.replied'), op: OperationIdSchema, goalId: z.string(), replyId: z.string(), ok: z.boolean(), qitemId: z.string().optional(), error: GoalErrorSchema.optional(),
+    message: z.string().max(PHONE_RIG_TEXT_MAX).optional(), rejected: PhoneRigRejectedSchema.optional() }).strict()
 ]);
 export type PhoneServerMessage = z.infer<typeof PhoneServerMessageSchema>;
