@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import type { OpenRigState } from '@ledge/protocol';
 import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon, session, twoProjects } from './daemon';
+import { ideReady } from './ide';
 
 // The IDE's Rigs view (lot 7b, docs/mockups/ledge-ide-rigs.html): the activity bar's Rigs button (no « ! » since 2026-11-09), the actions and their confirmation.
 test.use({ viewport: { width: 1920, height: 1080 }, reducedMotion: 'reduce' });
@@ -26,6 +27,8 @@ async function boot(page: Page, openrig: OpenRigState, opts: { ide?: boolean; wi
   }, { ide: opts.ide !== false, width: opts.width ?? 0 });
   const daemon = await fakeDaemon(page, sessions, { projects: twoProjects, openrig, rigCommands: ['rig down starter --snapshot'] });
   await page.goto('/');
+  // A Vite cold start (the run's first page) keeps the IDE's chunk loading past the default 5 s.
+  if (opts.ide !== false) await ideReady(page);
   return daemon;
 }
 
