@@ -7,12 +7,15 @@ const holder = vi.hoisted(() => ({ source: undefined as TokenSource | undefined 
 vi.mock('../src/tauri/bridge', async (orig) => ({ ...(await orig<typeof import('../src/tauri/bridge')>()), daemonTokenSource: () => holder.source }));
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
+import { loadIde } from '../src/ide/lazy';
+import { seedAtelier } from './helpers';
 
 class DeadSocket { static protocols: unknown[] = []; onopen = null; onmessage: unknown = null; onclose: ((e: unknown) => void) | null = null; onerror: ((e: unknown) => void) | null = null; readyState = 3;
   constructor(public url: string, protocols?: unknown) { DeadSocket.protocols.push(protocols); setTimeout(() => { this.onerror?.({}); this.onclose?.({ code: 1006 }); }, 0); } send() {} close() {} }
 
 let answer: TokenRead;
-beforeEach(() => { localStorage.clear(); DeadSocket.protocols = []; holder.source = createTokenSource(async () => answer); });
+// The IDE (lot 12b: the only interface) shows the notice over its editor: its chunk is there before the first render.
+beforeEach(async () => { localStorage.clear(); seedAtelier(); await loadIde(); DeadSocket.protocols = []; holder.source = createTokenSource(async () => answer); });
 afterEach(() => cleanup());
 const NPM = 'npm i -g @paradow/ledge && systemctl --user restart ledge-daemon';
 const GIT = 'cd <your Ledge clone> && git pull && pnpm install && pnpm --filter @paradow/ledge build && systemctl --user restart ledge-daemon';

@@ -8,6 +8,8 @@ import { LangProvider } from '../src/i18n/lang';
 import { MESSAGES } from '../src/i18n/messages';
 import { ProjectDialog } from '../src/projects/ProjectDialog';
 import { initialNav, navReducer } from '../src/nav/state';
+/** The app's notice (the IDE has another status region, its editor's « … opened »). */
+const notice = () => document.querySelector<HTMLElement>('.toast-region')!;
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -87,7 +89,7 @@ describe('deleting a project', () => {
 
     d.releaseProjects();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Ledge deleted. 2 agents move to « No project ».');
+    expect(notice()).toHaveTextContent('Ledge deleted. 2 agents move to « No project ».');
     expect(side.queryByRole('button', { name: /^Ledge/ })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Ledge table' })).toBeNull();
     const none = within(screen.getByRole('region', { name: 'No project' }));
@@ -117,7 +119,7 @@ describe('deleting a project', () => {
       projects: [{ ...PAYMENT, repos: [...PAYMENT.repos, ...LEDGE.repos] }, DOCS],
       rules: [{ machine: 'local', path: '/w/scratch', project: 'payment' }, { machine: 'local', path: '/w/billing', project: 'payment' }]
     });
-    expect(screen.getByRole('status')).toHaveTextContent('Ledge deleted. 2 agents join Payment Service.');
+    expect(notice()).toHaveTextContent('Ledge deleted. 2 agents join Payment Service.');
     const table = within(screen.getByRole('region', { name: 'Payment Service table' }));
     for (const n of ['Otto', 'Bix', 'Nova']) expect(table.getByRole('button', { name: new RegExp(`^${n},`) })).toBeVisible();
     expect(within(screen.getByRole('region', { name: 'No project' })).queryByRole('button', { name: /^Otto,/ })).toBeNull();
@@ -138,7 +140,8 @@ describe('deleting a project', () => {
 
   it('the project the overview is filtered on: the filter goes back to All, the view stays', async () => {
     const env = await boot({ sessions: SESSIONS, projects: STATE });
-    const top = within(screen.getByRole('banner'));
+    // The Atelier tab's bar shows the project filter (the IDE has no top bar).
+    const top = within(screen.getByRole('toolbar', { name: 'Atelier' }));
     await env.user.click(env.side.getByRole('button', { name: /^Ledge/ }));
     expect(top.getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible();
     await env.user.click(screen.getByRole('button', { name: 'Actions of project Ledge' }));
@@ -147,7 +150,6 @@ describe('deleting a project', () => {
     await env.user.click(within(screen.getByRole('dialog', { name: 'Delete Ledge' })).getByRole('button', { name: 'Delete Ledge' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(top.queryByRole('button', { name: 'Remove the filter: show every project' })).toBeNull();
-    expect(top.queryByRole('tab')).toBeNull();
     expect(top.getByText('Atelier')).toBeVisible();
     expect(screen.getByRole('region', { name: 'Payment Service table' })).toBeVisible();
     expect(within(screen.getByRole('region', { name: 'No project' })).getByRole('button', { name: /^Otto,/ })).toBeVisible();
@@ -160,20 +162,19 @@ describe('deleting a project', () => {
     await env.user.click(env.side.getByRole('button', { name: /^Ledge/ }));
     await env.user.click(screen.getByRole('button', { name: /^Otto,/ }));
     await waitFor(() => expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto'));
-    await env.user.click(env.side.getByRole('button', { name: 'New session in Ledge' }));
-    const form = within(await screen.findByRole('dialog', { name: 'New session' }));
-    await env.user.click(form.getByRole('button', { name: 'Edit the project' }));
+    // The IDE's New session has no « Edit the project »: the project's own menu, from the explorer, opens the editor.
+    fireEvent.contextMenu(env.side.getByRole('button', { name: /^Ledge/ }));
+    await env.user.click(await screen.findByRole('menuitem', { name: 'Edit project…' }));
     await env.user.click(within(screen.getByRole('dialog', { name: 'Edit Ledge' })).getByRole('button', { name: 'Delete the project' }));
     const dialog = within(screen.getByRole('dialog', { name: 'Delete Ledge' }));
     expect(items()).toEqual(['1 agent (Otto) will move to « No project ».', '1 remembered folder will be forgotten.', '1 repository leaves Ledge (the folders stay on your machines).']);
     await env.user.click(dialog.getByRole('button', { name: 'Delete Ledge' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Ledge deleted. 1 agent moves to « No project ».');
-    // The page stays on Otto, now without project; Escape goes back to the overview, on All.
+    expect(notice()).toHaveTextContent('Ledge deleted. 1 agent moves to « No project ».');
+    // The page stays on Otto, now without project; the Atelier tab is on All.
     expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto');
-    await env.user.keyboard('{Escape}');
-    await waitFor(() => expect(document.querySelector('.session-page')).toBeNull());
-    const top = within(screen.getByRole('banner'));
+    await env.user.click(screen.getByRole('button', { name: 'Atelier (tab)' }));
+    const top = within(await screen.findByRole('toolbar', { name: 'Atelier' }));
     expect(top.queryByRole('button', { name: 'Remove the filter: show every project' })).toBeNull();
     expect(within(screen.getByRole('region', { name: 'No project' })).getByRole('button', { name: /^Otto,/ })).toBeVisible();
   });
@@ -223,7 +224,7 @@ describe('the deletion view: more', () => {
     expect(side.getByRole('button', { name: /^Ledge/ })).toBeVisible();
     d.releaseProjects();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Ledge deleted. 2 agents move to « No project ».');
+    expect(notice()).toHaveTextContent('Ledge deleted. 2 agents move to « No project ».');
   });
 
   it('a target whose name is also a word of the sentence: the name in bold is the target, where it stands', async () => {

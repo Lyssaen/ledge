@@ -160,7 +160,8 @@ describe('Settings › Machines', () => {
       await d.close();
       await waitFor(() => expect(client.fleet!.machines().find(m => m.id === 'local')?.ready).toBe(false));
     });
-    expect(await screen.findByText('The local daemon is offline.')).toBeVisible();
+    // The IDE says it elsewhere too (its sidebar): the one of the Settings page.
+    await waitFor(() => expect(screen.getAllByText('The local daemon is offline.').find(e => e.closest('.settings-scroll'))).toBeVisible());
     expect(names()).toEqual(['Local', 'Dev SSH']);
     await fill(user, 'Nas', 'nas');
     await user.click(form().getByRole('button', { name: 'Save' }));
@@ -252,7 +253,7 @@ describe('Settings › Machines', () => {
 describe('Settings › Machines: Escape closes what is open before it leaves Settings', () => {
   const inSettings = () => screen.queryByRole('navigation', { name: 'Settings sections' });
 
-  it('Escape in the form closes it (the draft goes, nothing is sent); the next Escape leaves Settings', async () => {
+  it('Escape in the form closes it (the draft goes, nothing is sent); the next Escape leaves the Settings tab where it is', async () => {
     const { client, user } = await open();
     const configure = vi.spyOn(client.fleet!, 'configure');
     await fill(user, 'Nas', 'na');
@@ -262,8 +263,9 @@ describe('Settings › Machines: Escape closes what is open before it leaves Set
     expect(inSettings()).not.toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Your machines' })).toBeVisible();
     expect(names()).toEqual(['Local', 'Dev SSH']);
+    // The IDE's Settings tab has no way back: it stays, and nothing is sent.
     await user.keyboard('{Escape}');
-    expect(inSettings()).toBeNull();
+    expect(inSettings()).not.toBeNull();
     expect(configure).not.toHaveBeenCalled();
     expect(saved()).toEqual([]);
   });

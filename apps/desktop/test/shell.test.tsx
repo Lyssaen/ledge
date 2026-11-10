@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { App } from '../src/App';
 import { boot, closeDaemons, declarations, openProjectEditor, TWO_PROJECTS } from './helpers';
@@ -19,20 +19,22 @@ vi.mock('../src/tauri/bridge', async orig => ({
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
+const frontTab = () => screen.queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container')).find(t => t.getAttribute('aria-selected') === 'true');
+/** The IDE's Atelier tab bar: « Atelier », then the project filter with its clear button. */
+const abar = () => within(screen.getByRole('toolbar', { name: 'Atelier' }));
+
 describe('the Atelier shell', () => {
   it('« Voir l\'onglet du terminal » from the island opens the session on its Terminal view, the agent\'s screen', async () => {
     await boot({ projects: TWO_PROJECTS });
     await waitFor(() => expect(island.open).not.toBeNull());
     act(() => island.open!('{"kind":"terminal","id":"local:otto"}'));
-    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible());
+    // The IDE: Otto's tab in front, on its own Terminal view (a tab's view, never the stored preference).
+    await waitFor(() => expect(frontTab()).toHaveAccessibleName('Otto'));
     expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
-    expect(screen.getByRole('tab', { name: /^Terminal/ })).toHaveAttribute('aria-selected', 'true');
-    expect(JSON.parse(localStorage.getItem('desktop.session')!)).toMatchObject({ view: 'terminal' });
   });
 
-  it('sidebar: views, projects with their tallies, Sans projet, machines, settings', async () => {
+  it('the explorer: projects with their tallies, Sans projet', async () => {
     const { side } = await boot({ projects: TWO_PROJECTS });
-    expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent('3');          // active main agents
     const ledge = side.getByRole('button', { name: /^Ledge/ }).closest('[role="treeitem"]')!;
     expect(ledge.querySelectorAll('.st-tally .t-need')).toHaveLength(1);
     expect(ledge.querySelector('.st-tally .t-need')).toHaveAttribute('title', '1 to decide');
@@ -43,62 +45,45 @@ describe('the Atelier shell', () => {
     const none = side.getByRole('button', { name: /^No project/ }).closest('[role="treeitem"]')!;
     expect(none.querySelector('.st-tally .t-need')).toHaveTextContent('1');
     expect(side.getByRole('button', { name: /^Kit/ }).closest('[role="treeitem"]')!.querySelector('.st-time')).toHaveClass('t-question');
-    const local = side.getByRole('button', { name: /^Local/ });
-    expect(local.closest('.st-foot')).not.toBeNull();
-    expect(local.querySelector('small')).toHaveTextContent('3');
-    expect(local).toHaveAttribute('title', 'Local · 3 agents');
-    expect(side.getByRole('button', { name: /Settings/ })).toBeVisible();
   });
 
-  it('a project row filters the overview; the crumb shows it and clears it', async () => {
+  it('a project row filters the Atelier tab; its bar shows the filter and clears it', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS });
     await user.click(side.getByRole('button', { name: /^Ledge/ }));
-    const top = within(screen.getByRole('banner'));
-    expect(top.getByText('Ledge')).toBeVisible();
-    await user.click(top.getByRole('button', { name: 'Remove the filter: show every project' }));
-    expect(top.getByText('Atelier')).toBeVisible();
+    await waitFor(() => expect(abar().getByText('Ledge')).toBeVisible());
+    await user.click(abar().getByRole('button', { name: 'Remove the filter: show every project' }));
+    expect(abar().queryByText('Ledge')).toBeNull();
   });
 
   it('there is no List tab; booting on a stored list shows the atelier', async () => {
     const { view, client } = await boot({ projects: TWO_PROJECTS, list: true });
     expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
-    expect(screen.queryByRole('tab', { name: 'Atelier' })).toBeNull();
     expect(screen.getByRole('region', { name: 'Ledge table' })).toBeVisible();
     expect(JSON.parse(localStorage.getItem('desktop.overview')!)).toMatchObject({ view: 'atelier' });
     view.unmount();
     localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
     render(<App client={client} />);
-    // The app opens on Ledge's home view; the atelier is one click away, never a list.
-    expect(await screen.findByRole('region', { name: 'Home: Ledge, the operator' })).toBeVisible();
-    fireEvent.click(within(screen.getByRole('complementary', { name: 'Sidebar' })).getByRole('button', { name: /Atelier/ }));
+    // The IDE opens on its Atelier tab again, never a list.
     expect(await screen.findByRole('region', { name: 'Ledge table' })).toBeVisible();
     expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
   });
 
   it('helpers and animation toggles are pressed buttons, remembered', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
+    // The Atelier tab's bar (IDE): the subagents' button says what it does next; the animations' one is pressed while frozen.
     await user.click(screen.getByRole('button', { name: 'Hide subagents' }));
-    expect(screen.getByRole('button', { name: 'Show subagents' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Show subagents' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Freeze animations' }));
     expect(screen.getByRole('button', { name: 'Animate' })).toHaveAttribute('aria-pressed', 'true');
     expect(JSON.parse(localStorage.getItem('desktop.overview')!)).toMatchObject({ helpers: false, paused: true });
   });
 
-  it('a machine row opens Settings › Machines with its crumb', async () => {
-    const { side, user } = await boot({ projects: TWO_PROJECTS });
-    await user.click(side.getByRole('button', { name: /Dev SSH/ }));
-    const top = within(screen.getByRole('banner'));
-    expect(top.getByText('Machines')).toBeVisible();
-    expect(screen.getByRole('region', { name: 'Machines' })).toBeVisible();
-    expect(top.queryByRole('tab')).toBeNull();                               // view controls only on the overview
-  });
-
   it('a filter naming a project the daemon removed falls back to every project', async () => {
     const { d, side, user } = await boot({ projects: TWO_PROJECTS });
     await user.click(side.getByRole('button', { name: /^Ledge/ }));
+    await waitFor(() => expect(abar().getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible());
     d.projects({ projects: [], rules: [] });
-    await waitFor(() => expect(within(screen.getByRole('banner')).queryByRole('button', { name: 'Remove the filter: show every project' })).toBeNull());
-    expect(within(screen.getByRole('banner')).getByText('Atelier')).toBeVisible();
+    await waitFor(() => expect(abar().queryByRole('button', { name: 'Remove the filter: show every project' })).toBeNull());
   });
 
   it('the footer says local and SSH sessions, and has no island state', async () => {
@@ -120,7 +105,7 @@ describe('the Atelier shell', () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.keyboard('n');
     const dialog = screen.getByRole('dialog', { name: 'New session' });
-    expect(within(dialog).getByRole('textbox', { name: 'Instruction' })).toBeVisible();
+    expect(await within(dialog).findByRole('textbox', { name: 'First message' })).toBeVisible();
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     await openProjectEditor(user);
@@ -129,19 +114,13 @@ describe('the Atelier shell', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('Ask Ledge opens a side panel that closes', async () => {
-    const { side, user } = await boot({ projects: TWO_PROJECTS });
-    await user.keyboard('{Control>}/{/Control}');
-    const chat = screen.getByRole('complementary', { name: 'Chat Ledge' });
-    await user.click(within(chat).getByRole('button', { name: 'Close' }));
-    expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull();
-  });
-
-  it('full screen hides the sidebar', async () => {
+  it('Ledge\'s chat is the right panel: Ctrl+/ hides it, and shows it again', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
-    await user.click(screen.getByRole('button', { name: 'Full screen' }));
-    expect(document.querySelector('.application')).toHaveClass('immersive');
-    expect(screen.getByRole('button', { name: 'Exit full screen' })).toBeVisible();
+    expect(await screen.findByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
+    await user.keyboard('{Control>}/{/Control}');
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull());
+    await user.keyboard('{Control>}/{/Control}');
+    expect(await screen.findByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
   });
 
   it('an agent in error has its own mark in its project row', async () => {
@@ -183,13 +162,6 @@ describe('the Atelier shell', () => {
     const rule = declarations('shell.css', '.breadcrumb .crumb-link');
     for (const d of ['white-space:nowrap', 'overflow:hidden', 'text-overflow:ellipsis', 'min-width:0', 'max-width:180px']) expect(rule).toContain(d);
     expect(within(screen.getByRole('banner')).getByText('Migrate the ledger')).toHaveAttribute('title', 'Migrate the ledger');
-  });
-  it('leaving full screen from outside (the browser, the OS) leaves the immersive layout', async () => {
-    const { user } = await boot({ projects: TWO_PROJECTS });
-    await user.click(screen.getByRole('button', { name: 'Full screen' }));
-    expect(document.querySelector('.application')).toHaveClass('immersive');
-    document.dispatchEvent(new Event('fullscreenchange'));
-    await waitFor(() => expect(document.querySelector('.application')).not.toHaveClass('immersive'));
   });
   it('the rules lot 3 ported for nothing are gone', () => {
     const css = readFileSync(resolve(__dirname, '../src/styles/shell.css'), 'utf8');

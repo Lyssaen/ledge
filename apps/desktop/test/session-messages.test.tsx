@@ -5,10 +5,11 @@ import WebSocket from 'ws';
 import type { ThreadItem } from '@ledge/protocol';
 import { createMockDaemon } from '@ledge/fleet/test/mockDaemon';
 import { App } from '../src/App';
-import { activeCount } from '../src/nav/agents';
+import { loadIde } from '../src/ide/lazy';
+import { loadChat } from '../src/chat/lazy';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { loadWorkspace } from '../src/session/lazy';
-import { listSessions, PROJECTS, type MockDaemon, unfoldPast } from './helpers';
+import { listSessions, PROJECTS, seedAtelier, type MockDaemon, unfoldPast } from './helpers';
 
 const daemons: MockDaemon[] = [];
 afterEach(async () => { delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView; cleanup(); localStorage.clear(); for (const d of daemons.splice(0)) await d.close(); });
@@ -24,7 +25,8 @@ const received = (id: string, s: number, turn: number, extra: Partial<Extract<Th
 
 /** Otto's page in French, its thread `items`. */
 async function openOtto(items: ThreadItem[]) {
-  await loadWorkspace();
+  await Promise.all([loadWorkspace(), loadIde(), loadChat()]);
+  seedAtelier();
   localStorage.setItem('desktop.lang', 'fr');
   localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
   const d = await createMockDaemon(); daemons.push(d);
@@ -33,14 +35,10 @@ async function openOtto(items: ThreadItem[]) {
   for (const s of listSessions()) d.upsert(s);
   d.thread('otto', items);
   render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
-  // Ready as `boot` is: the Atelier counter shows the active sessions, a project with sessions is in the sidebar.
+  // Ready as `boot` is: the IDE's explorer lists the project's sessions.
   const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
-  await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(listSessions()))));
-  await side.findByRole('button', { name: /^Ledge/ });
-  expect(within(screen.getByRole('banner')).getByText('Atelier')).toBeVisible();
-  expect(screen.queryByRole('tab', { name: 'Liste' })).toBeNull();
   const user = userEvent.setup();
-  await user.click(within(side.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
+  await user.click(await within(await side.findByRole('tree')).findByRole('button', { name: /^Otto/ }, { timeout: 5000 }));
   await screen.findByRole('tabpanel', { name: 'Fil de la session' });
   return { d, user };
 }
@@ -173,13 +171,14 @@ describe('messages between agents in the thread', () => {
   it('« Nouveau » marks a received message or a sent one that arrived while away', async () => {
     const { d, user } = await openOtto([prompt('p1', 0, 1, 'Préviens Nova')]);
     await thread().findByText('Préviens Nova');
-    await user.keyboard('{Escape}');
+    // Away: Otto's tab closed (an IDE tab keeps its page while it is open, so a visit is a tab's life).
+    await user.click(screen.getByRole('button', { name: 'Fermer Otto' }));
     d.threadItem('otto', sent('s1', 5, 1, { summary: 'Envoyé pendant ton absence' }));
     await user.click(within(screen.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
     await screen.findByRole('tabpanel', { name: 'Fil de la session' });
     const marker = await thread().findByRole('separator', { name: 'Nouveau depuis votre dernière visite' });
     expect(marker.nextElementSibling!.querySelector('[data-message]')).toHaveAttribute('data-message', 's1');
-    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Fermer Otto' }));
     d.threadItem('otto', received('r1', 10, 2, { text: 'Reçu pendant ton absence' }));
     await user.click(within(screen.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
     await screen.findByRole('tabpanel', { name: 'Fil de la session' });

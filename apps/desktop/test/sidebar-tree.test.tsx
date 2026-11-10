@@ -6,7 +6,9 @@ import { boot, closeDaemons, listSessions, PROJECTS } from './helpers';
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
-const banner = () => within(screen.getByRole('banner'));
+/** The IDE's tab in front of its group (the old top bar named the place: the IDE's tabs do). */
+const activeTab = () => screen.queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container')).find(t => t.getAttribute('aria-selected') === 'true');
+const abar = () => within(screen.getByRole('toolbar', { name: 'Atelier' }));
 
 describe('the sidebar tree', () => {
   it('lists projects, folds a single branch, and hides Bix behind +1 finished', async () => {
@@ -38,9 +40,11 @@ describe('the sidebar tree', () => {
   it('opens a session from its row and filters the atelier from the project row', async () => {
     const { side, user } = await boot({ projects: PROJECTS, sessions: listSessions() });
     await user.click(side.getByRole('button', { name: /^Otto/ }));
-    expect(banner().getByText('Otto')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
+    // The project row: the Atelier tab, filtered on that project (its bar names it).
     await user.click(side.getByRole('button', { name: /^Payment/ }));
-    expect(banner().getByText('Payment Service Platform Migration Europe')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Atelier'));
+    expect(abar().getByText('Payment Service Platform Migration Europe')).toBeVisible();
   });
 
   it('unfolds two branches of the same project', async () => {
@@ -55,7 +59,7 @@ describe('the sidebar tree', () => {
   it('a right click on Otto opens the session menu', async () => {
     const { side } = await boot({ projects: PROJECTS, sessions: listSessions() });
     fireEvent.contextMenu(side.getByRole('button', { name: /^Otto/ }));
-    expect(await screen.findByRole('menuitem', { name: /^Open/ })).toBeVisible();
+    expect((await screen.findAllByRole('menuitem', { name: /^Open/ }))[0]).toBeVisible();
   });
 
   it('the tree tab stop is the open session, or the first row when none is open', async () => {

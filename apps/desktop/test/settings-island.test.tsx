@@ -41,7 +41,7 @@ async function open(prefs: IslandPrefs | null | 'unknown' = null) {
 describe('Settings › Notch', () => {
   it('sits between Appearance and Notifications; the banner, then the mockup’s rows in order, the defaults while none was set', async () => {
     await open();
-    expect(nav().getAllByRole('button').map(b => b.textContent).slice(1, 5)).toEqual(['General', 'Appearance', 'Notch', 'Notifications']);
+    expect(nav().getAllByRole('button').map(b => b.textContent).slice(0, 5)).toEqual(['General', 'Workspace', 'Appearance', 'Notch', 'Notifications']);
     expect(screen.getByRole('region', { name: 'Notch' })).toHaveTextContent('The notch at the top of the screen: where it sits and what it signals.');
     expect(screen.getByRole('note')).toHaveTextContent('The notch has no settings of its own any more.');
     expect([...document.querySelectorAll('.set-card .set-label')].map(l => l.textContent)).toEqual([
@@ -159,7 +159,8 @@ describe('Settings › Notch', () => {
     const { d, user } = await open('unknown');
     expect(document.querySelector('.set-well[role=status]')).toHaveTextContent('The local daemon is too old for the notch’s settings: update it.');
     await user.click(sw('Agents’ words'));
-    expect(screen.getByRole('alert')).toHaveTextContent('The local daemon is too old for the notch’s settings: update it.');
+    // The IDE has an alert of its own elsewhere (the layouts' hint): the one of the Settings page.
+    expect(within(document.querySelector<HTMLElement>('.settings-scroll')!).getByRole('alert')).toHaveTextContent('The local daemon is too old for the notch’s settings: update it.');
     expect(sw('Agents’ words')).toHaveAttribute('aria-checked', 'true');
     expect(setsOf(d)).toHaveLength(0);
     expect(saved()).toEqual([]);

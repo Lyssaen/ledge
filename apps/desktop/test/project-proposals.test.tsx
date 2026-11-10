@@ -12,6 +12,8 @@ import { ProjectDialog } from '../src/projects/ProjectDialog';
 import { rememberProposal, proposalOf } from '../src/projects/proposals';
 import { loadEditor } from '../src/projects/lazy';
 import { useLedgeScan } from '../src/projects/useLedgeScan';
+/** The app's notice (the IDE has another status region, its editor's « … opened »). */
+const notice = () => document.querySelector<HTMLElement>('.toast-region')!;
 
 // The editor's chunk is there before the dialog renders alone (boot does it for the app).
 beforeAll(async () => { await loadEditor(); });
@@ -101,7 +103,7 @@ describe('« Let Ledge do it » in the project editor', () => {
     expect(sent.projects.slice(0, 3)).toEqual(PROJECTS.projects);
     expect(sent.projects[3]).toEqual({ id: 'paper', name: 'Paper', color: 'violet', description: '', repos: [{ machine: 'local', path: '/home/me/dev/paper-fonts' }] });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Project Paper created.');
+    expect(notice()).toHaveTextContent('Project Paper created.');
   });
 
   it('a proposal that overlaps a project is « Add to » it: the title says so, and the send keeps its repositories and adds the checked ones', async () => {
@@ -128,7 +130,7 @@ describe('« Let Ledge do it » in the project editor', () => {
     expect(sent.projects[0]).toEqual({ ...PROJECTS.projects[0], repos: [{ machine: 'local', path: '/w/ledge' }, { machine: 'local', path: '/home/me/site' }] });
     expect(sent.projects.slice(1)).toEqual(PROJECTS.projects.slice(1));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Ledge saved.');
+    expect(notice()).toHaveTextContent('Ledge saved.');
   });
 
   it('a proposed repository another project took meanwhile: « already in » is said and the save refused while it is checked; unchecking it unblocks', async () => {

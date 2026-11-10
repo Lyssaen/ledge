@@ -10,7 +10,6 @@ import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { loadComposer } from '../../src/launch/lazy';
-import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { saveOpenSession } from '../../src/workspace/openPrefs';
 import { PROJECTS } from '../helpers';
 import { empty, focusGroup, open, serialize, type Workspace } from '../../src/workspace/model';
@@ -20,11 +19,10 @@ import { WORKSPACE_KEY } from '../../src/workspace/store';
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
-afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
 
-async function mount({ ide = true, layout }: { ide?: boolean; layout?: Workspace } = {}) {
+async function mount({ layout }: { layout?: Workspace } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde(), loadComposer()]);
-  if (ide) saveIdeEnabled(true);
   if (layout) localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(layout)));
   const d = await createMockDaemon(); daemons.push(d);
   d.options.autoLaunch = true;
@@ -109,20 +107,6 @@ describe('the IDE’s New session', () => {
     expect(launches(d)).toHaveLength(0);
   });
 
-  it('the right panel\'s chat field does not take the focus by itself, at start or when the IDE is turned on: N opens the modal', async () => {
-    const { user } = await mount({ ide: false, layout: open(empty(), { kind: 'session', ref: 'local:otto' }) });
-    // The current interface, the machine online: turning the IDE on mounts its right panel with a live field.
-    act(() => saveIdeEnabled(true));
-    const chat = await screen.findByRole('complementary', { name: 'Chat Ledge' });
-    const field = await within(chat).findByRole('textbox');
-    await waitFor(() => expect(field).toBeEnabled());
-    await waitFor(() => expect(groups()).toHaveLength(1));
-    expect(chat.contains(document.activeElement)).toBe(false);
-    await user.keyboard('n');
-    expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
-    expect(field).toHaveValue('');
-  });
-
   it('at start, the IDE on: the chat field is not focused, N opens the modal', async () => {
     const { user } = await mount({ layout: open(empty(), { kind: 'session', ref: 'local:otto' }) });
     const chat = await screen.findByRole('complementary', { name: 'Chat Ledge' });
@@ -153,15 +137,4 @@ describe('the IDE’s New session', () => {
     await waitFor(() => expect(allTabs()).toContain('Mila'));
   });
 
-  it('switch off: N on the overview still opens the old form (« Consigne », no « Premier message »)', async () => {
-    const { side, user } = await mount({ ide: false });
-    // The old interface opens on Ledge's home: N belongs to the overview (the atelier).
-    await user.click(side.getByRole('button', { name: /Atelier/ }));
-    (document.activeElement as HTMLElement | null)?.blur();
-    await user.keyboard('n');
-    const form = within(await screen.findByRole('dialog', { name: 'Nouvelle session' }));
-    expect(form.getByRole('textbox', { name: 'Consigne' })).toBeVisible();
-    expect(form.queryByRole('textbox', { name: 'Premier message' })).toBeNull();
-    expect(document.querySelector('.modal')).toHaveClass('composer-modal');
-  });
 });

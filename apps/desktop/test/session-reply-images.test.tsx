@@ -17,7 +17,9 @@ afterEach(async () => { setCodecForTests(null); cleanup(); localStorage.clear();
 const field = () => screen.getByRole('textbox', { name: 'Reply to the agent' });
 const sent = (d: MockDaemon, type: string) => d.received.filter(m => m.type === type);
 const chips = () => [...document.querySelectorAll('[data-chip]')];
-const send = () => screen.getByRole('button', { name: 'Send' });
+/** The IDE's reply has no send button (lot 12b): Enter in the field sends, or sends nothing while it cannot. */
+const enter = async (user: { click(e: Element): Promise<void>; keyboard(k: string): Promise<void> }) => { await user.click(field()); await user.keyboard('{Enter}'); };
+const pause = () => new Promise(r => setTimeout(r, 100));
 const png = () => new File([new Uint8Array(8)], 'shot.png', { type: 'image/png' });
 const paste = (files: File[]) => fireEvent.paste(field(), { clipboardData: { files, items: [], types: ['Files'], getData: () => '' } });
 
@@ -44,7 +46,7 @@ describe('images in the session reply', () => {
     await waitFor(() => expect(chips()).toHaveLength(1));
     await waitFor(() => expect(chips()[0]).toHaveAttribute('data-chip', 'ready'));
     expect(sent(d, 'attachment.put')).toEqual([{ type: 'attachment.put', requestId: expect.any(String), id: 'bix', image: expect.objectContaining({ mime: 'image/webp' }) }]);
-    await user.click(send());
+    await enter(user);
     await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'bix', text: '', attachments: [ID] }]));
     expect(chips()).toHaveLength(0);
   });
@@ -76,25 +78,28 @@ describe('images in the session reply', () => {
     expect(sent(d, 'attachment.put')).toEqual([]);
   });
 
-  it('Send is disabled while the put is unanswered', async () => {
-    const { d } = await open('Bix');
+  it('Enter sends nothing while the put is unanswered', async () => {
+    const { d, user } = await open('Bix');
     answerPuts(d, { hold: true });
     paste([png()]);
     await waitFor(() => expect(chips()[0]).toHaveAttribute('data-chip', 'uploading'));
-    expect(send()).toBeDisabled();
+    await enter(user); await pause();
+    expect(sent(d, 'session.reply')).toEqual([]);
   });
 
-  it('a put refused as too large shows a red chip with the reason, and Send stays disabled until it is removed', async () => {
+  it('a put refused as too large shows a red chip with the reason, and Enter sends nothing until it is removed', async () => {
     const { d, user } = await open('Bix');
     answerPuts(d, { reason: 'too_large' });
     await user.type(field(), 'look');
     paste([png()]);
     await waitFor(() => expect(chips()[0]).toHaveAttribute('data-chip', 'refused'));
     expect(screen.getAllByText('Image too large, even reduced').length).toBeGreaterThan(0);
-    expect(send()).toBeDisabled();
+    await enter(user); await pause();
+    expect(sent(d, 'session.reply')).toEqual([]);
     await user.click(screen.getByRole('button', { name: 'Remove image' }));
     expect(chips()).toHaveLength(0);
-    expect(send()).toBeEnabled();
+    await enter(user);
+    await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'bix', text: 'look' }]));
   });
 
   it('a sixth image is ignored with the 5-image message', async () => {
@@ -107,12 +112,13 @@ describe('images in the session reply', () => {
     expect(chips()).toHaveLength(5);
   });
 
-  it('with a question pending, a chip disables Send and says to answer the question first', async () => {
-    const { d } = await open('Kit');
+  it('with a question pending, a chip holds the reply back and says to answer the question first', async () => {
+    const { d, user } = await open('Kit');
     answerPuts(d);
     paste([png()]);
     await waitFor(() => expect(chips()[0]).toHaveAttribute('data-chip', 'ready'));
-    expect(send()).toBeDisabled();
+    await enter(user); await pause();
+    expect(sent(d, 'session.reply')).toEqual([]);
     expect(screen.getByText('Answer the question first, the image will go after')).toBeVisible();
   });
 
@@ -121,7 +127,7 @@ describe('images in the session reply', () => {
     answerPuts(d);
     paste([png()]);
     await waitFor(() => expect(chips()[0]).toHaveAttribute('data-chip', 'ready'));
-    await user.click(send());
+    await enter(user);
     await waitFor(() => expect(sent(d, 'session.reply')).toHaveLength(1));
     d.push({ type: 'error', id: 'bix', message: 'not taken', request: 'session.reply' });
     await waitFor(() => expect(chips()).toHaveLength(1));
@@ -138,7 +144,7 @@ describe('images in the session reply', () => {
       await waitFor(() => expect(chips()).toHaveLength(1));
       expect(sent(d, 'attachment.get')).toEqual([expect.objectContaining({ attachment: ID, id: 'omp1' })]);
       await waitFor(() => expect(chips()[0]).toHaveAttribute('data-chip', 'ready'));
-      await user.click(screen.getByRole('button', { name: 'Send after this turn' }));
+      await enter(user);
       await waitFor(() => expect(sent(d, 'session.reply')).toEqual([{ type: 'session.reply', id: 'omp1', text: 'hurry', attachments: [ID] }]));
     });
     it('says the images were lost when the daemon could not put them back', async () => {

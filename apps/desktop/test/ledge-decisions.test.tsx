@@ -9,45 +9,49 @@ const T0 = new Date().toISOString();
 /** A decision Otto put to the user (`ledge task give ledge …`): giver the session, owner Ledge. */
 const decision = (extra: Partial<Task> = {}): Task => ({ id: 't00000d', title: 'Fusionner feat/roles ?', text: '- Oui, fusionne\n- Non, attends la revue', giver: 'otto', giverName: 'Otto', owner: 'ledge', ownerName: 'Ledge', state: 'open', at: T0, updatedAt: T0, log: [{ at: T0, by: 'Otto', what: 'confiée à Ledge' }], ...extra });
 const given = (id: string, extra: Partial<Task> = {}): Task => ({ id, title: `Tâche ${id}`, giver: 'ledge', giverName: 'Ledge', owner: 'otto', ownerName: 'Otto', state: 'open', at: T0, updatedAt: T0, log: [], ...extra });
-const home = () => within(screen.getByRole('region', { name: 'Home: Ledge, the operator' }));
-const point = () => within(screen.getByRole('region', { name: 'The point' }));
+/** The page « À toi » (lot 12: what « Le point » showed), its Decisions block. */
+const page = () => within(screen.getByRole('tabpanel', { name: /^For you/ }));
+const decisions = () => within(document.querySelector<HTMLElement>('[data-block="decisions"]')!);
+/** The IDE's « À toi » sidebar view (the Attention cards). */
 const side = () => within(screen.getByRole('complementary', { name: 'Sidebar' }));
+const chat = () => within(screen.getByRole('complementary', { name: 'Chat Ledge' }));
 /** What « Répondre » may send: the registry action, never a task command. */
 const answers = (received: readonly ClientMessage[]) => received.filter(m => m.type === 'action.run' || (m.type === 'task.cmd' && m.op !== 'list'));
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
-async function openHome() {
-  const env = await boot({ home: true, machines: [{ id: 'local', label: 'Local' }], projects: PROJECTS, sessions: [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' })] });
-  await screen.findByRole('region', { name: 'The point' });
+/** The IDE with Otto's decision: the « À toi » view in the sidebar, and its page in a tab. */
+async function openAtoi() {
+  const env = await boot({ machines: [{ id: 'local', label: 'Local' }], projects: PROJECTS, sessions: [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' })] });
   env.d.push({ type: 'task.updated', task: decision() });
-  await point().findByText('Fusionner feat/roles ?');
+  await env.user.click(within(screen.getByRole('navigation', { name: 'Activity bar' })).getByRole('button', { name: /^For you/ }));
+  await side().findByText('Fusionner feat/roles ?');
+  await env.user.click(side().getByRole('button', { name: 'Page' }));
+  await page().findByText('Fusionner feat/roles ?');
   return env;
 }
 
 describe('a decision a session puts to the user', () => {
-  it('is in « Yours » of the point and of the sidebar, who asks, its title and options, and counts in their badges', async () => {
-    await openHome();
-    const yours = within(point().getByLabelText('Yours'));
-    const row = yours.getByText('Fusionner feat/roles ?').closest('.lp-decision') as HTMLElement;
+  it('is in « À toi », the page and the sidebar: who asks, its title and options, and counts there', async () => {
+    await openAtoi();
+    const row = decisions().getByText('Fusionner feat/roles ?').closest('.atoi-dec') as HTMLElement;
     expect(within(row).getByText('Otto')).toBeVisible();
-    expect(row.querySelector('.lp-detail')?.textContent).toBe('- Oui, fusionne\n- Non, attends la revue');
     expect(within(row).getByRole('button', { name: 'Answer' })).toBeVisible();
-    expect(yours.getByText('1')).toBeVisible();
+    expect(document.querySelector('[data-block="decisions"] .fg-blk-h')).toHaveTextContent('1 · what sessions ask you through Ledge');
     const bar = within(side().getByRole('region', { name: 'Your turn' }));
     const card = bar.getByText('Fusionner feat/roles ?').closest('.st-card') as HTMLElement;
     expect(within(card).getByText('Otto')).toBeVisible();
+    expect(card.querySelector('.st-where')?.textContent).toBe('- Oui, fusionne\n- Non, attends la revue');
     expect(within(card).getByRole('button', { name: 'Answer' })).toBeVisible();
     expect(bar.getByText('1')).toBeVisible();
-    expect(side().getByText(/^1 yours$/)).toBeVisible();
-    // Not a task Ledge gave.
-    expect(within(point().getByLabelText('Given by Ledge')).queryByText('Fusionner feat/roles ?')).toBeNull();
+    // Not a task Ledge gave: nothing in « Finished since your last visit ».
+    expect(page().getByText('Finished since your last visit').closest('.fg-blk')).not.toHaveTextContent('Fusionner feat/roles ?');
   });
 
   it('« Answer » shows the answer whole, asks for a confirmation, then sends task.answer and nothing else', async () => {
-    const { d, user } = await openHome();
-    const row = point().getByText('Fusionner feat/roles ?').closest('.lp-decision') as HTMLElement;
+    const { d, user } = await openAtoi();
+    const row = decisions().getByText('Fusionner feat/roles ?').closest('.atoi-dec') as HTMLElement;
     await user.click(within(row).getByRole('button', { name: 'Answer' }));
     const form = within(within(row).getByRole('form', { name: 'Answer to “Fusionner feat/roles ?”' }));
     const field = form.getByRole('textbox', { name: 'Your answer' });
@@ -68,7 +72,7 @@ describe('a decision a session puts to the user', () => {
   });
 
   it('the sidebar answers in place; once done, the form closes', async () => {
-    const { d, user } = await openHome();
+    const { d, user } = await openAtoi();
     const card = side().getByText('Fusionner feat/roles ?').closest('.st-card') as HTMLElement;
     await user.click(within(card).getByRole('button', { name: 'Answer' }));
     await user.type(within(card).getByRole('textbox', { name: 'Your answer' }), 'Non');
@@ -77,19 +81,19 @@ describe('a decision a session puts to the user', () => {
     await user.click(within(card).getByRole('button', { name: 'Confirm and send' }));
     await waitFor(() => expect(within(card).queryByRole('form')).toBeNull());
     expect(answers(d.received)).toEqual([{ type: 'action.run', rid: expect.any(String), action: 'task.answer', args: { task: 't00000d', answer: 'Non' }, confirmed: true }]);
-    // Answered, the daemon closes it: it leaves « Yours ».
+    // Answered, the daemon closes it: it leaves « À toi », the sidebar and the page.
     d.push({ type: 'task.updated', task: decision({ state: 'done', result: 'Non' }) });
     await waitFor(() => expect(side().queryByText('Fusionner feat/roles ?')).toBeNull());
-    expect(point().queryByText('Fusionner feat/roles ?')).toBeNull();
+    expect(document.querySelector('[data-block="decisions"]')).toBeNull();
   });
 
-  it('« Tasks »: « Decisions » keeps the decisions alone, « The sessions » no longer has them; an open one offers « Answer »', async () => {
-    const { d, user } = await openHome();
+  it('« Tasks » of the right panel: « Decisions » keeps the decisions alone, « The sessions » no longer has them; an open one offers « Answer »', async () => {
+    const { d, user } = await openAtoi();
     d.push({ type: 'task.updated', task: given('t000001') });
     d.push({ type: 'task.updated', task: given('t000002', { giver: 'pim', giverName: 'Pim' }) });
-    await user.click(home().getByRole('tab', { name: /Tasks/ }));
-    const giver = home().getByRole('combobox', { name: 'Giver' });
-    const titles = () => home().getAllByRole('button').filter(b => b.classList.contains('lp-task')).map(b => b.querySelector('strong')?.textContent);
+    await user.click(chat().getByRole('tab', { name: /^Tasks/ }));
+    const giver = chat().getByRole('combobox', { name: 'Giver' });
+    const titles = () => [...document.querySelectorAll('.rt-trow b')].map(b => b.textContent);
     await waitFor(() => expect(titles()).toHaveLength(3));
     await user.selectOptions(giver, 'decisions');
     expect(titles()).toEqual(['Fusionner feat/roles ?']);
@@ -98,8 +102,8 @@ describe('a decision a session puts to the user', () => {
     await user.selectOptions(giver, 'ledge');
     expect(titles()).toEqual(['Tâche t000001']);
     await user.selectOptions(giver, 'decisions');
-    await user.click(home().getByText('Fusionner feat/roles ?'));
-    const detail = within(await screen.findByRole('region', { name: 'Fusionner feat/roles ?' }));
+    await user.click(chat().getByText('Fusionner feat/roles ?'));
+    const detail = within(await chat().findByRole('region', { name: 'Fusionner feat/roles ?' }));
     await user.click(detail.getByRole('button', { name: 'Answer' }));
     expect(detail.getByRole('textbox', { name: 'Your answer' })).toHaveValue('');
   });

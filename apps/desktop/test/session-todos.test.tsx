@@ -40,7 +40,7 @@ async function openOtto(extra: ThreadItem[]) {
   return env;
 }
 
-it('Escape folds the work plan before it closes the pane tab, and only then leaves the page', async () => {
+it('Escape folds the work plan before it closes the pane tab; the page stays (an IDE tab is closed, never left)', async () => {
   const { user } = await openOtto([{ ...v1, at: new Date().toISOString(), turn: 2 }]);
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="t3"]')!).getByRole('button', { name: 'View the change' }));
   const head = screen.getByRole('button', { name: /^Work plan/ });
@@ -53,7 +53,7 @@ it('Escape folds the work plan before it closes the pane tab, and only then leav
   expect(screen.queryByRole('complementary', { name: 'Reading pane' })).toBeNull();
   expect(document.querySelector('.session-page')).not.toBeNull();
   await user.keyboard('{Escape}');
-  expect(document.querySelector('.session-page')).toBeNull();
+  expect(document.querySelector('.session-page')).not.toBeNull();
 });
 it('an update is no action: a run shows its last update as a row of its own, a run of updates alone too', async () => {
   const now = new Date().toISOString();

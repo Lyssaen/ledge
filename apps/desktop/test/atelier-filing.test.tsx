@@ -173,6 +173,11 @@ describe('the filing styles', () => {
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
+/** The toast's notice (the IDE has other live regions). */
+const toast = () => document.querySelector('.toast');
+/** The Atelier tab's bar, which carries the project filter (the old top bar did). */
+const abar = () => within(screen.getByRole('toolbar', { name: 'Atelier' }));
+
 describe('putting an agent away', () => {
   it('the cards of No project are draggable, with their grip; so are the seats, to another table (atelier rooms spec §3.3)', async () => {
     await boot();
@@ -182,7 +187,8 @@ describe('putting an agent away', () => {
     expect(card.querySelector('.drag-grip')).not.toBeNull();
     const seats = [...document.querySelectorAll('.agent-seat[draggable="true"]')];
     expect(seats.length).toBeGreaterThan(0);
-    expect(document.querySelectorAll('[draggable="true"]')).toHaveLength(1 + seats.length);
+    // Within the atelier: the IDE's tabs are draggable too.
+    expect(document.querySelector('.ide-atelier')!.querySelectorAll('[draggable="true"]')).toHaveLength(1 + seats.length);
   });
 
   it('dropping Kit on a table writes the rule; Kit sits there once the daemon broadcasts, once only', async () => {
@@ -192,18 +198,18 @@ describe('putting an agent away', () => {
     const dt = transfer();
     fireEvent.dragStart(card, { dataTransfer: dt });
     expect(card).toHaveClass('is-dragged');
-    expect(document.querySelector('.application')).toHaveClass('is-dragging');
+    expect(document.querySelector('.ide')).toHaveClass('is-dragging');
     expect(within(table).getByText('Drop here')).toBeVisible();
     fireEvent.dragOver(table, { dataTransfer: dt });
     expect(table).toHaveClass('drop-over');
     expect(within(table).getByText('Release to seat Kit')).toBeVisible();
     fireEvent.drop(table, { dataTransfer: dt });
-    expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
+    expect(document.querySelector('.ide')).not.toHaveClass('is-dragging');
     await waitFor(() => expect(d.received).toContainEqual({ type: 'projects.set', projects: { projects: PROJECTS.projects, rules: [{ machine: 'local', path: '/tmp', project: 'ledge' }] } }));
     await waitFor(() => expect(within(table).getByRole('button', { name: /^Kit,/ })).toHaveClass('just-seated'));
     expect(screen.getAllByRole('button', { name: /^Kit,/ })).toHaveLength(1);
     expect(screen.queryByRole('region', { name: 'No project' })).toBeNull();
-    expect(screen.getByRole('status')).toHaveTextContent('Kit joins the Ledge table. Ledge will remember this folder.');
+    expect(toast()).toHaveTextContent('Kit joins the Ledge table. Ledge will remember this folder.');
   });
 
   it('a project of the sidebar is a target too, and says so while dragging', async () => {
@@ -230,7 +236,7 @@ describe('putting an agent away', () => {
     fireEvent.dragStart(card, { dataTransfer: dt });
     fireEvent.dragEnd(card, { dataTransfer: dt });
     expect(card).not.toHaveClass('is-dragged');
-    expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
+    expect(document.querySelector('.ide')).not.toHaveClass('is-dragging');
     expect(d.received.some(m => m.type === 'projects.set')).toBe(false);
   });
 
@@ -239,9 +245,9 @@ describe('putting an agent away', () => {
     const card = document.querySelector('.unassigned-card')!;
     const dt = transfer();
     fireEvent.dragStart(card, { dataTransfer: dt });
-    expect(document.querySelector('.application')).toHaveClass('is-dragging');
+    expect(document.querySelector('.ide')).toHaveClass('is-dragging');
     d.remove('kit');
-    await waitFor(() => expect(document.querySelector('.application')).not.toHaveClass('is-dragging'));
+    await waitFor(() => expect(document.querySelector('.ide')).not.toHaveClass('is-dragging'));
     expect(screen.queryByText('Drop here')).toBeNull();
     expect(screen.queryByText('Drop on a project to file Kit.')).toBeNull();
     const table = screen.getByRole('region', { name: 'Ledge table' });
@@ -257,15 +263,15 @@ describe('putting an agent away', () => {
     fireEvent.dragStart(document.querySelector('.unassigned-card')!, { dataTransfer: transfer() });
     d.projects({ ...PROJECTS, projects: PROJECTS.projects.map(p => (p.id === 'docs' ? { ...p, repos: [...p.repos, { machine: 'local', path: '/tmp' }] } : p)) });
     await waitFor(() => expect(within(screen.getByRole('region', { name: 'Docs table' })).getByRole('button', { name: /^Kit,/ })).toBeVisible());
-    expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
+    expect(document.querySelector('.ide')).not.toHaveClass('is-dragging');
   });
 
   it('a dragend the card never hears (caught on the window) stops the drag; a drop from outside the app files nothing', async () => {
     const { d } = await boot();
     fireEvent.dragStart(document.querySelector('.unassigned-card')!, { dataTransfer: transfer() });
-    expect(document.querySelector('.application')).toHaveClass('is-dragging');
+    expect(document.querySelector('.ide')).toHaveClass('is-dragging');
     fireEvent.dragEnd(window);
-    expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
+    expect(document.querySelector('.ide')).not.toHaveClass('is-dragging');
     const table = screen.getByRole('region', { name: 'Ledge table' });
     fireEvent.dragOver(table, { dataTransfer: transfer() });
     fireEvent.drop(table, { dataTransfer: transfer() });
@@ -281,7 +287,7 @@ describe('putting an agent away', () => {
     fireEvent.dragOver(table, { dataTransfer: dt });
     fireEvent.drop(table, { dataTransfer: dt });
     await waitFor(() => expect(d.received).toContainEqual({ type: 'projects.set', projects: { projects: PROJECTS.projects, rules: [{ machine: 'local', path: '/tmp', project: 'ledge' }] } }));
-    expect(document.querySelector('.application')).not.toHaveClass('is-dragging');
+    expect(document.querySelector('.ide')).not.toHaveClass('is-dragging');
   });
 
   it('Move to… files Kit; New project… opens the project dialog; Escape closes only the menu', async () => {
@@ -293,7 +299,7 @@ describe('putting an agent away', () => {
     expect(screen.getByRole('menuitem', { name: /New project…/ })).toHaveTextContent('From /tmp');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).toBeNull();
-    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible();
+    expect(abar().getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible();
     await user.click(zone.getByRole('button', { name: 'Move to…' }));
     await user.click(document.body);
     expect(screen.queryByRole('menu')).toBeNull();
@@ -304,23 +310,23 @@ describe('putting an agent away', () => {
     await user.click(zone.getByRole('button', { name: 'Move to…' }));
     await user.click(screen.getByRole('menuitem', { name: /^Ledge/ }));
     await waitFor(() => expect(screen.queryByRole('region', { name: 'No project' })).toBeNull());      // the filter stays, the zone empties
-    expect(within(screen.getByRole('banner')).getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible();
+    expect(abar().getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible();
     // An emptied « Sans projet » filter: Ledge's desk and the legend, no table, no crash.
     expect(screen.getByRole('button', { name: 'Talk to Ledge' })).toBeVisible();
     expect(document.querySelector('.workspace-legend')).not.toBeNull();
     expect(screen.queryAllByRole('region', { name: / table$/ })).toHaveLength(0);
-    expect(screen.getByRole('status')).toHaveTextContent('Kit joins the Ledge table.');
+    expect(toast()).toHaveTextContent('Kit joins the Ledge table.');
   });
 
   it('with the local daemon down, Move to… says so in plain words and Kit stays', async () => {
     const { d, side, user } = await boot();
     await d.close();
-    await waitFor(() => expect(side.getByRole('button', { name: /^Local/ }).getAttribute('title')).toMatch(/offline/));
-    expect(side.getByRole('button', { name: /^Local/ }).querySelector('.machine-dot')).toHaveClass('off');
+    // The IDE reads only once the local daemon is gone (no machine chips in its sidebar).
+    await waitFor(() => expect(document.querySelector('.ide')).toHaveAttribute('data-readonly', 'true'));
     const zone = within(screen.getByRole('region', { name: 'No project' }));
     await user.click(zone.getByRole('button', { name: 'Move to…' }));
     await user.click(screen.getByRole('menuitem', { name: /^Ledge/ }));
-    expect(screen.getByRole('status')).toHaveTextContent('Kit could not be moved: the local Ledge daemon is not reachable.');
+    expect(toast()).toHaveTextContent('Kit could not be moved: the local Ledge daemon is not reachable.');
     expect(zone.getByRole('button', { name: /^Kit,/ })).toBeVisible();
   });
 });

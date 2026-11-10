@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DEFAULT_RELAY_URL, type MobileClientMessage, type MobilePairing, type MobileState } from '@ledge/protocol';
 import { LangProvider } from '../src/i18n/lang';
@@ -224,7 +224,8 @@ describe('the focus goes back where it was when the dialog goes away (the applic
   it('in the app: the dialog opens over the atelier, and Escape or the daemon\'s refusal gives the focus back', async () => {
     refuseFocusUnderInert();
     const { d, user } = await boot();
-    const behind = screen.getAllByRole('button', { name: /^Local/ })[0]!;
+    // A button of the IDE behind the dialog: the activity bar's Projects.
+    const behind = within(screen.getByRole('navigation', { name: 'Activity bar' })).getByRole('button', { name: 'Projects' });
     act(() => behind.focus());
     d.push({ type: 'mobile', state: { ...ONLINE, pairings: [pairing('p1')] } });
     expect(await screen.findByRole('dialog', { name: 'Link a device' })).toBeVisible();

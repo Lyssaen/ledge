@@ -12,7 +12,6 @@ import type { DaemonUpdates } from '../update/daemon';
 import { updateReady, useUpdate } from '../update/store';
 import { General } from './General';
 import { WorkspaceSection } from './WorkspaceSection';
-import { useIdeEnabled } from '../workspace/prefs';
 import { Appearance } from './Appearance';
 import { Island } from './Island';
 import { Notifications } from './Notifications';
@@ -98,8 +97,7 @@ export function SettingsPage({ section: asked, ctx, noBack = false }: { section:
   const scroller = useRef<HTMLDivElement>(null);
   const titleId = useId();
   // Espace de travail is the IDE's: switched off, the nav is today's, and a page left on it (the switch turned off there) shows General.
-  const [ide] = useIdeEnabled();
-  const section: SectionId = !ide && asked === 'workspace' ? 'general' : asked;
+  const section: SectionId = asked;
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = 0; }, [section]);
   const { dispatch } = ctx;
   // As the sidebar's gear inside Settings: the chat closes, then Escape takes the place back.
@@ -120,7 +118,7 @@ export function SettingsPage({ section: asked, ctx, noBack = false }: { section:
     <div className="settings-page">
       <nav className="settings-nav" aria-label={s.nav}>
         {!noBack && <Button variant="ghost" size="sm" className="settings-back" onClick={back}><Icon d={ICONS.chevronLeft.d} size={14} />{s.back}<Kbd>{t.crumb.escape}</Kbd></Button>}
-        {SECTIONS.filter(id => ide || id !== 'workspace').map(id => {
+        {SECTIONS.map(id => {
           const note = alert(id);
           return (
             <button key={id} type="button" className={id === section ? 'settings-tab active' : 'settings-tab'} aria-current={id === section ? 'page' : undefined}

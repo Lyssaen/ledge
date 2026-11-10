@@ -14,12 +14,16 @@ vi.mock('../src/tauri/bridge', async importOriginal => ({
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
 import { resetDndForTests } from '../src/notify/prefs';
+import { loadIde } from '../src/ide/lazy';
+import { seedAtelier } from './helpers';
 
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); });
 async function boot() {
   localStorage.clear(); resetDndForTests(); tray.labels = [];
+  // The IDE (lot 12b: the only interface), on its Atelier tab, its chunk there before the first render.
+  seedAtelier(); await loadIde();
   const d = await createMockDaemon(); daemons.push(d);
   d.machines([{ id: 'local', label: 'Local' }]);
   const view = render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);

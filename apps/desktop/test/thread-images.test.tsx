@@ -78,7 +78,8 @@ describe('images in a chat turn', () => {
     answerGets(d);
     // What the app hands the fleet. The fleet stamps each turn with the machine its daemon is (here the one fake daemon, `local`) and routes by it.
     const send = vi.spyOn(client, 'send');
-    await user.keyboard('{Control>}/{/Control}');
+    // The IDE's right panel is the chat; Ctrl+/ shows it if hidden (shown, it would hide it).
+    if (!screen.queryByRole('complementary', { name: 'Chat Ledge' })) await user.keyboard('{Control>}/{/Control}');
     await screen.findByRole('complementary', { name: 'Chat Ledge' });
     // Asked now: the fleet keeps only the day's chat turns, so a fixed date would only pass on that day.
     d.push({ type: 'chat.history', turns: [{ qid: 'q-img', question: 'What do you see?', askedAt: new Date().toISOString(), steps: [], attachments: [C], machineId: 'elsewhere' }] });

@@ -7,8 +7,13 @@ import { boot, closeDaemons, listSessions } from './helpers';
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
 
-const banner = () => within(screen.getByRole('banner'));
-const yours = (side: ReturnType<typeof within>) => within(side.getByRole('region', { name: 'Your turn' }));
+/** The IDE's tab in front of its group (the old top bar named the place: the IDE's tabs do). */
+const activeTab = () => screen.queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container')).find(t => t.getAttribute('aria-selected') === 'true');
+/** « Your turn » is the IDE's « For you » side view: the activity bar shows it. */
+async function yours(side: ReturnType<typeof within>) {
+  if (!side.queryByRole('region', { name: 'Your turn' })) fireEvent.click(within(screen.getByRole('navigation', { name: 'Activity bar' })).getByRole('button', { name: /^For you/ }));
+  return within(await side.findByRole('region', { name: 'Your turn' }));
+}
 const cards = (region: ReturnType<typeof within>) => region.getAllByRole('button', { name: /^Open / });
 
 describe('Your turn', () => {
@@ -16,7 +21,7 @@ describe('Your turn', () => {
     const sessions = listSessions();
     const otto = sessions[0]!;
     const { d, side, user } = await boot({ sessions });
-    const region = yours(side);
+    const region = await yours(side);
     expect(region.getByText('2')).toBeVisible();
     expect(cards(region).map((b: HTMLElement) => b.textContent)).toEqual(['Otto', 'Kit']);
     await user.click(region.getByRole('button', { name: 'Yes' }));
@@ -32,7 +37,7 @@ describe('Your turn', () => {
     const sessions = listSessions();
     const otto = sessions[0]!;
     const { d, side, user } = await boot({ sessions });
-    await user.click(yours(side).getByRole('button', { name: 'No' }));
+    await user.click((await yours(side)).getByRole('button', { name: 'No' }));
     await waitFor(() => expect(d.received).toContainEqual({
       type: 'session.decide', id: otto.id, decision: 'deny',
       expect: { kind: 'permission', text: 'npm test', key: pendingKey(otto.pending!) }
@@ -42,10 +47,10 @@ describe('Your turn', () => {
   it('Alt ↓ cycles the waiting sessions', async () => {
     const { side, user } = await boot({ sessions: listSessions() });
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
-    expect(banner().getByText('Otto')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
-    expect(banner().getByText('Kit')).toBeVisible();
-    expect(banner().queryByText('Otto')).toBeNull();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Kit'));
+    expect(activeTab()).not.toHaveAccessibleName('Otto');
   });
 
   it('a helper-routed request shows ↳ parent', async () => {
@@ -55,7 +60,7 @@ describe('Your turn', () => {
       helpers: [{ id: 'h1', kind: 'Explore', task: 'Lire', state: 'waiting_permission' }]
     });
     const { side } = await boot({ sessions: [otto] });
-    const region = yours(side);
+    const region = await yours(side);
     expect(region.getByRole('button', { name: /^Open Explore/ })).toHaveTextContent('Explore');
     expect(region.getByText('↳ Otto')).toBeVisible();
     fireEvent.contextMenu(region.getByText('↳ Otto'));
@@ -68,11 +73,11 @@ describe('Your turn', () => {
       pending: { kind: 'plan', text: '# Plan', source: 'hook' }
     });
     const { d, side, user } = await boot({ sessions: [plan] });
-    const region = yours(side);
+    const region = await yours(side);
     expect(region.queryByRole('button', { name: 'Yes' })).toBeNull();
     expect(region.queryByRole('button', { name: 'No' })).toBeNull();
     await user.click(region.getByRole('button', { name: 'View' }));
-    expect(banner().getByText('Pia')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Pia'));
     expect(d.received.filter(m => m.type === 'session.decide')).toEqual([]);
   });
 
@@ -82,19 +87,19 @@ describe('Your turn', () => {
       pending: { kind: 'permission', text: 'npm test', source: 'hook' }
     });
     const { d, side, user } = await boot({ sessions: [ro] });
-    const region = yours(side);
+    const region = await yours(side);
     expect(region.queryByRole('button', { name: 'Yes' })).toBeNull();
     expect(region.queryByRole('button', { name: 'No' })).toBeNull();
     await user.click(region.getByRole('button', { name: 'View' }));
-    expect(banner().getByText('Ro')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Ro'));
     expect(d.received.filter(m => m.type === 'session.decide')).toEqual([]);
   });
 
   it('View opens an error', async () => {
     const err = fakeSession('err', { name: 'Err', cwd: '/tmp', state: 'error' });
     const { side, user } = await boot({ sessions: [err] });
-    await user.click(yours(side).getByRole('button', { name: 'View' }));
-    expect(banner().getByText('Err')).toBeVisible();
+    await user.click((await yours(side)).getByRole('button', { name: 'View' }));
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Err'));
   });
 
   it('shows four cards and the rest behind See the other N', async () => {
@@ -105,7 +110,7 @@ describe('Your turn', () => {
       lastActivityAt: ago(min)
     }));
     const { side, user } = await boot({ sessions: five });
-    const region = yours(side);
+    const region = await yours(side);
     expect(region.getByText('5')).toBeVisible();
     expect(cards(region).map((b: HTMLElement) => b.textContent)).toEqual(['Q0', 'Q1', 'Q2', 'Q3']);
     expect(region.queryByRole('button', { name: /^Open Q4/ })).toBeNull();
@@ -124,8 +129,7 @@ describe('Your turn', () => {
     expect(await screen.findByRole('alertdialog', { name: 'Delete Otto?' })).toBeVisible();
     await user.keyboard('{Alt>}{ArrowDown}{/Alt}');
     expect(screen.getByRole('alertdialog', { name: 'Delete Otto?' })).toBeVisible();
-    expect(banner().queryByText('Otto')).toBeNull();
-    expect(banner().queryByText('Kit')).toBeNull();
+    expect(activeTab()).toHaveAccessibleName('Atelier');
   });
 
   it('Ctrl ⇧ E focuses the open session in the tree, else the first row', async () => {

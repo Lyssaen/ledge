@@ -4,14 +4,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { boot, closeDaemons, TWO_PROJECTS } from './helpers';
 import { DEFAULT_ISLAND_PREFS } from '@ledge/protocol';
-import { act } from 'react';
-import { saveIdeEnabled } from '../src/workspace/prefs';
-import { loadIde } from '../src/ide/lazy';
 
 beforeEach(() => localStorage.clear());
-afterEach(async () => { cleanup(); saveIdeEnabled(false); await closeDaemons(); });
+afterEach(async () => { cleanup(); await closeDaemons(); });
 
-const banner = () => within(screen.getByRole('banner'));
 const nav = () => within(screen.getByRole('navigation', { name: 'Settings sections' }));
 const tab = (name: string) => nav().getByRole('button', { name: new RegExp(`^${name}`) });
 const title = () => screen.getByRole('heading', { level: 1 });
@@ -25,32 +21,11 @@ describe('the Settings page', () => {
     expect(tab('General')).toHaveAttribute('aria-current', 'page');
     expect(nav().getAllByRole('button', { current: 'page' })).toHaveLength(1);
     expect(nav().getAllByRole('button').map(b => b.textContent)).toEqual([
-      'Back to the atelierEsc', 'General', 'Appearance', 'Notch', 'Notifications', 'Sounds', 'Machines', 'Mobile access', 'Projects', 'Notes', 'Keyboard shortcuts', 'About'
+      'General', 'Workspace', 'Appearance', 'Notch', 'Notifications', 'Sounds', 'Machines', 'Mobile access', 'Projects', 'Notes', 'Keyboard shortcuts', 'About'
     ]);
   });
 
-  it('the IDE switched off: no Workspace section, and none named in the nav', async () => {
-    const { user } = await boot({ projects: TWO_PROJECTS });
-    await user.keyboard('{Control>},{/Control}');
-    await screen.findByRole('heading', { level: 1, name: 'General' });
-    expect(nav().queryByRole('button', { name: 'Workspace' })).toBeNull();
-  });
-
-  it('the IDE switched off on Workspace: General shows, its tab current, not a section the nav no longer has', async () => {
-    await loadIde();
-    const { user } = await boot({ projects: TWO_PROJECTS });
-    act(() => saveIdeEnabled(true));
-    await user.keyboard('{Control>},{/Control}');
-    await user.click(await waitFor(() => tab('Workspace')));
-    expect(title()).toHaveTextContent('Workspace');
-    act(() => saveIdeEnabled(false));
-    await waitFor(() => expect(title()).toHaveTextContent('General'));
-    expect(tab('General')).toHaveAttribute('aria-current', 'page');
-    expect(nav().queryByRole('button', { name: 'Workspace' })).toBeNull();
-    expect(screen.getByRole('region', { name: 'General' })).toBeInTheDocument();
-  });
-
-  it('a tab changes the section: its title, aria-current, the crumb, and the scroll back at the top', async () => {
+  it('a tab changes the section: its title, aria-current, and the scroll back at the top', async () => {
     const { user } = await boot({ projects: TWO_PROJECTS });
     await user.keyboard('{Control>},{/Control}');
     await screen.findByRole('heading', { level: 1, name: 'General' });
@@ -60,7 +35,6 @@ describe('the Settings page', () => {
     expect(title()).toHaveTextContent('Machines');
     expect(tab('Machines')).toHaveAttribute('aria-current', 'page');
     expect(tab('General')).not.toHaveAttribute('aria-current');
-    expect(banner().getByText('Machines')).toBeVisible();
     expect(document.querySelector('.settings-scroll')!.scrollTop).toBe(0);
   });
 
@@ -73,26 +47,6 @@ describe('the Settings page', () => {
     await user.keyboard('{Control>},{/Control}');
     expect(title()).toHaveTextContent('Machines');
     expect(tab('Machines')).toHaveAttribute('aria-current', 'page');
-  });
-
-  it('Escape goes back to the atelier, whichever section was open', async () => {
-    const { user } = await boot({ projects: TWO_PROJECTS, list: true });
-    await user.keyboard('{Control>},{/Control}');
-    await user.click(tab('Sounds'));
-    expect(title()).toHaveTextContent('Sounds');
-    await user.keyboard('{Escape}');
-    expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
-    expect(banner().getByText('Atelier')).toBeVisible();
-    expect(screen.getByRole('button', { name: /^Otto,/ })).toBeVisible();
-  });
-
-  it('« Back to the atelier » does as Escape', async () => {
-    const { user } = await boot({ projects: TWO_PROJECTS, list: true });
-    await user.keyboard('{Control>},{/Control}');
-    await user.click(tab('About'));
-    await user.click(nav().getByRole('button', { name: /^Back to the atelier/ }));
-    expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
-    expect(banner().getByText('Atelier')).toBeVisible();
   });
 
   it('a dot on Machines while a machine is offline, none while every machine is online', async () => {
@@ -126,7 +80,7 @@ describe('the Settings page', () => {
     d.push({ type: 'island', prefs: { ...DEFAULT_ISLAND_PREFS, shortcut: 'Ctrl Shift K' } });
     await user.keyboard('{Control>},{/Control}');
     await user.click(tab('Keyboard shortcuts'));
-    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['Anywhere in Windows', 'In Ledge Desktop']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)).toEqual(['Anywhere in Windows', 'In Ledge Desktop', 'Tabs and groups']);
     const rowsOf = (name: string) => [...screen.getByRole('region', { name }).querySelectorAll('.set-row')].map(r => [r.querySelector('.set-label')!.textContent, r.querySelector('kbd')!.textContent]);
     await waitFor(() => expect(rowsOf('Anywhere in Windows')[0]).toEqual(['Open the notch’s list', 'Ctrl Shift K']));
     expect(rowsOf('Anywhere in Windows').slice(1)).toEqual([['New session', 'Ctrl Alt N'], ['Switch the theme', 'Ctrl Alt T'], ['Do not disturb, from the notch', 'D']]);

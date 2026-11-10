@@ -32,7 +32,10 @@ const closed = (id: string, extra: Partial<BrowserLive> = {}): Omit<BrowserLive,
 const omp = (id: string, name: string, extra: Partial<Session> = {}): Session =>
   fakeSession(id, { name, tool: 'omp', cwd: '/w/dev-omp', state: 'working', source: 'rig', tmuxSession: 'design-maquettiste@dev-omp', rig: { seat: 'design-maquettiste@dev-omp', name: 'dev-omp', role: 'design.maquettiste' }, ...extra });
 
-const pill = () => document.querySelector<HTMLElement>('.pane-heading .browser-pill');
+/** The browser's pill: in the IDE, on the session tab's bottom bar (SessionBar). */
+const pill = () => document.querySelector<HTMLElement>('.ide-bar-browser');
+/** The session tab's page: what its front tab shows. */
+const page = () => document.querySelector<HTMLElement>('.session-page');
 const pane = () => within(screen.getByRole('complementary', { name: 'Reading pane' }));
 const watches = (d: Awaited<ReturnType<typeof boot>>['d']) => d.received.filter(m => m.type === 'browser.watch' || m.type === 'browser.unwatch').map(m => `${m.type}:${(m as { id: string }).id}`);
 
@@ -41,7 +44,7 @@ async function openOtto(b: Omit<BrowserLive, 'type'> | null, thread: ThreadItem[
   booted.d.thread('otto', thread);
   if (b) booted.d.browser(b);
   await booted.user.click(booted.side.getByRole('button', { name: /^Otto/ }));
-  await screen.findByRole('tab', { name: /^Thread/ });
+  await waitFor(() => expect(page()).toHaveAttribute('data-session', 'local:otto'));
   return booted;
 }
 
@@ -49,8 +52,8 @@ describe('a Claude session’s browser', () => {
   it('live: « Browser · live », its Direct side filmed while it shows, the last action read in the thread; Captures unwatches it', async () => {
     const { d, user } = await openOtto(live('otto', { image: { at: SHOT, url: URL } }));
     d.lastImage({ id: 'otto', data: 'TEFTVA==', at: SHOT });
-    await waitFor(() => expect(pill()).toHaveClass('browser-pill-live'));
-    expect(pill()).toHaveTextContent('Browser· live1');
+    await waitFor(() => expect(pill()).toHaveClass('ide-bar-browser-live'));
+    expect(pill()).toHaveTextContent(/^Browser1$/);
     expect(pill()).toHaveAttribute('title', 'Otto’s browser, live · 1 capture');
     expect(pill()!.querySelector('.live-dot')).not.toBeNull();
     await user.click(pill()!);
@@ -77,8 +80,8 @@ describe('a Claude session’s browser', () => {
   it('closed: « Browser · closed », its last image grey and dated, the last address, « Open in my browser »; back: Live again and a notice', async () => {
     const { d, user } = await openOtto(closed('otto'));
     d.lastImage({ id: 'otto', data: 'TEFTVA==', at: SHOT });
-    await waitFor(() => expect(pill()).toHaveClass('browser-pill-closed'));
-    expect(pill()).toHaveTextContent('Browser· closed1');
+    await waitFor(() => expect(pill()).toHaveClass('ide-bar-browser-closed'));
+    expect(pill()).toHaveTextContent('Browser · closed1');
     await user.click(pill()!);
     const p = pane();
     expect(p.getByRole('tab', { name: /^Closed/ })).toHaveAttribute('aria-selected', 'true');
@@ -95,14 +98,14 @@ describe('a Claude session’s browser', () => {
     act(() => d.browser(live('otto')));
     await waitFor(() => expect(p.getByRole('tab', { name: /^Live/ })).toHaveAttribute('aria-selected', 'true'));
     expect(p.getByRole('status')).toHaveTextContent('Otto reopened the browser');
-    expect(pill()).toHaveClass('browser-pill-live');
+    expect(pill()).toHaveClass('ide-bar-browser-live');
     await waitFor(() => expect(watches(d).filter(w => w === 'browser.watch:otto')).toHaveLength(2));
   });
 
   it('reopened on another page with no image yet: « Waiting for the first image… », never the closed page’s image under its address (review)', async () => {
     const { d, user } = await openOtto(live('otto'));
     act(() => d.frame({ id: 'otto', data: 'T0xE', at: new Date().toISOString() }));
-    await waitFor(() => expect(pill()).toHaveClass('browser-pill-live'));
+    await waitFor(() => expect(pill()).toHaveClass('ide-bar-browser-live'));
     await user.click(pill()!);
     act(() => d.frame({ id: 'otto', data: 'T0xE', at: new Date().toISOString() }));
     await waitFor(() => expect(screen.getByTestId('browser-screen').querySelector('img')).toHaveAttribute('src', 'data:image/jpeg;base64,T0xE'));
@@ -124,7 +127,7 @@ describe('a Claude session’s browser', () => {
   it('another page while live (an address, a tab): page A’s image never shows under B, nor the kept image of A a watch sends (review)', async () => {
     const { d, user } = await openOtto(live('otto', { image: { at: SHOT, url: URL } }));
     d.lastImage({ id: 'otto', data: 'QUFB', at: SHOT });
-    await waitFor(() => expect(pill()).toHaveClass('browser-pill-live'));
+    await waitFor(() => expect(pill()).toHaveClass('ide-bar-browser-live'));
     await user.click(pill()!);
     await waitFor(() => expect(screen.getByTestId('browser-screen').querySelector('img')).toHaveAttribute('src', 'data:image/jpeg;base64,QUFB'));
     // B: same live period, another address, no image of it yet.
@@ -149,7 +152,7 @@ describe('a Claude session’s browser', () => {
   it('with `page`: only an image of the tab followed shows — another tab on the same address, a late frame of the page before (review, pilot-lead)', async () => {
     const { d, user } = await openOtto(live('otto', { page: '1.1', image: { at: SHOT, url: URL, page: '1.1' } }));
     d.lastImage({ id: 'otto', data: 'QUFB', at: SHOT, page: '1.1' });
-    await waitFor(() => expect(pill()).toHaveClass('browser-pill-live'));
+    await waitFor(() => expect(pill()).toHaveClass('ide-bar-browser-live'));
     await user.click(pill()!);
     const img = () => screen.getByTestId('browser-screen').querySelector('img');
     await waitFor(() => expect(img()).toHaveAttribute('src', 'data:image/jpeg;base64,QUFB'));
@@ -174,7 +177,7 @@ describe('a Claude session’s browser', () => {
   it('closed with `page`: the kept image of its page only', async () => {
     const { d, user } = await openOtto(closed('otto', { page: '1.3', image: { at: SHOT, url: URL, page: '1.3' } }));
     d.lastImage({ id: 'otto', data: 'S0VQVA==', at: SHOT, page: '1.2' });
-    await waitFor(() => expect(pill()).toHaveClass('browser-pill-closed'));
+    await waitFor(() => expect(pill()).toHaveClass('ide-bar-browser-closed'));
     await user.click(pill()!);
     await waitFor(() => expect(watches(d)).toContain('browser.watch:otto'));
     await new Promise(r => setTimeout(r, 100));
@@ -184,8 +187,8 @@ describe('a Claude session’s browser', () => {
 
   it('closed without an image: its title and address only; an address that is not http has no « Open in my browser »', async () => {
     const { user } = await openOtto(closed('otto', { image: undefined, url: 'file:///home/gch/m.html' }), []);
-    await waitFor(() => expect(pill()).toHaveClass('browser-pill-closed'));
-    expect(pill()).toHaveTextContent('Browser· closed');
+    await waitFor(() => expect(pill()).toHaveClass('ide-bar-browser-closed'));
+    expect(pill()).toHaveTextContent('Browser · closed');
     await user.click(pill()!);
     expect(pane().getByText('No image was taken of this tab.')).toBeVisible();
     expect(document.querySelector('.browser-address')).toHaveTextContent('/home/gch/m.html· Sièges OMP dans Ledge');
@@ -198,7 +201,7 @@ describe('a Claude session’s browser', () => {
     const { d, user } = await openOtto({ id: 'otto', state: 'off', tabs: 1, since: SINCE });
     await waitFor(() => expect(pill()).not.toBeNull());
     expect(pill()).toHaveTextContent('Browser1');
-    expect(pill()).not.toHaveClass('browser-pill-live');
+    expect(pill()).not.toHaveClass('ide-bar-browser-live');
     await user.click(pill()!);
     const p = pane();
     expect(p.getByRole('tab', { name: /^Live/ })).toHaveAttribute('aria-selected', 'true');
@@ -266,14 +269,13 @@ describe('a Claude session’s browser', () => {
 describe('an OMP seat’s browser', () => {
   it('live: the page stays on Terminal, the pane beside it, « The agent’s browser », « Mia is using the browser », no Captures', async () => {
     const MIA = omp('rig-mia', 'Mia');
-    const { d, side, user } = await boot({ sessions: [MIA], daemon: { version: '0.41.0', install: 'npm', systemd: true, browserLive: true } });
+    const { d, user } = await boot({ sessions: [MIA], daemon: { version: '0.41.0', install: 'npm', systemd: true, browserLive: true } });
     d.browser(live('rig-mia', { url: 'about:blank' }));
-    await user.click(side.getByRole('button', { name: /^Mia/ }));
-    await waitFor(() => expect(screen.getByRole('tab', { name: /^Terminal/ })).toHaveAttribute('aria-selected', 'true'));
-    await waitFor(() => expect(pill()).toHaveClass('browser-pill-live'));
-    expect(pill()).toHaveTextContent(/^Browser· live$/);
+    await user.click(screen.getByRole('button', { name: /^Mia,/ }));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Terminal' })).toBeVisible());
+    await waitFor(() => expect(pill()).toHaveClass('ide-bar-browser-live'));
+    expect(pill()).toHaveTextContent(/^Browser$/);
     await user.click(pill()!);
-    expect(screen.getByRole('tab', { name: /^Terminal/ })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('region', { name: 'Terminal' })).toBeVisible();
     const p = pane();
     expect(p.queryByRole('tab', { name: /^Captures/ })).toBeNull();
@@ -286,19 +288,19 @@ describe('an OMP seat’s browser', () => {
     expect(document.querySelector('.browser-address')).toHaveTextContent('The agent’s browser· last page: Sièges OMP dans Ledge');
     expect(p.getByText(/Mia’s browser stays ready, with no tab\..*The injected mockup has no address/)).toBeVisible();
     expect(p.queryByRole('button', { name: 'Open in my browser' })).toBeNull();
-    expect(pill()).toHaveClass('browser-pill-closed');
+    expect(pill()).toHaveClass('ide-bar-browser-closed');
   });
 
   it('stopped: its page on « Thread », the pane keeps the last image, « Seat stopped at … »', async () => {
     const MIA = omp('rig-mia', 'Mia', { state: 'exited', exitedAt: CLOSED });
     // A stopped seat shows under its rig beside a live one (the eye of « Projets » folds it).
-    const { d, side, user } = await boot({ sessions: [omp('rig-ana', 'Ana', { tmuxSession: 'analysis-analyst@dev-omp', rig: { seat: 'analysis-analyst@dev-omp', name: 'dev-omp', role: 'analysis.analyst' } }), MIA], daemon: { version: '0.41.0', install: 'npm', systemd: true, browserLive: true } });
+    const { d, user } = await boot({ sessions: [omp('rig-ana', 'Ana', { tmuxSession: 'analysis-analyst@dev-omp', rig: { seat: 'analysis-analyst@dev-omp', name: 'dev-omp', role: 'analysis.analyst' } }), MIA], daemon: { version: '0.41.0', install: 'npm', systemd: true, browserLive: true } });
     d.browser(closed('rig-mia', { url: 'about:blank', closed: 'stopped' }));
     d.lastImage({ id: 'rig-mia', data: 'TEFTVA==', at: SHOT });
-    await user.click(side.getByRole('button', { name: /^Mia/ }));
-    await waitFor(() => expect(pill()).toHaveClass('browser-pill-closed'));
+    await user.click(screen.getByRole('button', { name: /^Mia,/ }));
+    await waitFor(() => expect(pill()).toHaveClass('ide-bar-browser-closed'));
     await user.click(pill()!);
-    expect(screen.getByRole('tab', { name: /^Thread/ })).toHaveAttribute('aria-selected', 'true');
+    expect(page()!.querySelector('.session-thread')).not.toHaveAttribute('hidden');
     expect(pane().getByText(`Seat stopped at ${clock(CLOSED)}`)).toBeVisible();
     await waitFor(() => expect(screen.getByTestId('browser-screen').querySelector('img')).not.toBeNull());
     expect(pane().getByText(/The browser stopped with the seat\./)).toBeVisible();
@@ -306,9 +308,9 @@ describe('an OMP seat’s browser', () => {
 
   it('none (an OMP browser open with no tab): no button', async () => {
     const MIA = omp('rig-mia', 'Mia');
-    const { d, side, user } = await boot({ sessions: [MIA], daemon: { version: '0.41.0', install: 'npm', systemd: true, browserLive: true } });
+    const { d, user } = await boot({ sessions: [MIA], daemon: { version: '0.41.0', install: 'npm', systemd: true, browserLive: true } });
     d.browser({ id: 'rig-mia', state: 'none', tabs: 0 });
-    await user.click(side.getByRole('button', { name: /^Mia/ }));
+    await user.click(screen.getByRole('button', { name: /^Mia,/ }));
     await screen.findByRole('region', { name: 'Terminal' });
     expect(pill()).toBeNull();
   });

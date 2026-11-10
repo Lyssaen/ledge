@@ -16,7 +16,6 @@ import { Toast, useToast } from '../../src/shell/Toast';
 import { WorkspaceSection } from '../../src/settings/WorkspaceSection';
 import type { SettingsContext } from '../../src/settings/SettingsPage';
 import { editorTarget, loadEditor, noticeFor, openSessionInEditor, resetEditorsForTests } from '../../src/ide/openIn';
-import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { PROJECTS, seedAtelier } from '../helpers';
 import type { EditorOutcome, EditorsInstalled } from '../../src/tauri/bridge';
 
@@ -149,11 +148,11 @@ describe('the toast\'s « Réglages » button', () => {
 
 describe('in the app: the explorer\'s menu opens the session in the editor', () => {
   const daemons: Awaited<ReturnType<typeof createMockDaemon>>[] = [];
-  afterEach(async () => { for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+  afterEach(async () => { for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
   async function mount() {
     await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
     seedAtelier();
-    saveIdeEnabled(true);
+   
     const d = await createMockDaemon(); daemons.push(d);
     d.machines([{ id: 'local', label: 'Local' }]);
     d.projects(PROJECTS);

@@ -42,7 +42,8 @@ describe('the menu of a project row', () => {
     fireEvent.contextMenu(rowOf(tree.getByRole('button', { name: /^Payment Service/ })));
     await user.click(screen.getByRole('menuitem', { name: 'New session here' }));
     const form = within(await screen.findByRole('dialog', { name: 'New session' }));
-    expect(form.getByRole('radio', { name: 'Payment Service Platform Migration Europe' })).toBeChecked();
+    // The IDE's launch modal names its project on the « Project » row.
+    expect(form.getByRole('button', { name: /^Project Payment Service Platform Migration Europe/ })).toBeVisible();
   });
 
   it('Add a folder… opens the editor of that project on its folder browser', async () => {

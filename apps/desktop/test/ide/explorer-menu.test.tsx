@@ -9,7 +9,6 @@ import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
-import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { loadOpenSession, saveOpenSession } from '../../src/workspace/openPrefs';
 import { PROJECTS, seedAtelier } from '../helpers';
 import type { Workspace } from '../../src/workspace/model';
@@ -18,13 +17,12 @@ import type { Session } from '@ledge/protocol';
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
-afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); saveOpenSession('active'); localStorage.clear(); });
+afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveOpenSession('active'); localStorage.clear(); });
 
 /** `seat`: Pim, a seat of the rig ledge-dev (the rigs view lists it, not the tree). */
-async function mount({ ide = true, seat = false, broadcast = false, extra = [] }: { ide?: boolean; seat?: boolean; broadcast?: boolean; extra?: Session[] } = {}) {
+async function mount({ seat = false, broadcast = false, extra = [] }: { seat?: boolean; broadcast?: boolean; extra?: Session[] } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   seedAtelier();
-  if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
   d.machines([{ id: 'local', label: 'Local' }]);
   if (broadcast) d.extras.daemon = { version: '0.35.0', install: 'npm', systemd: true, broadcast: true };
@@ -141,15 +139,6 @@ describe('the explorer\'s session menu in the IDE', () => {
     expect(document.activeElement?.tagName).toBe('TEXTAREA');
   });
 
-  it('switched off, the menu is today\'s: « Ouvrir la session », no IDE entries', async () => {
-    const { side } = await mount({ ide: false });
-    fireEvent.contextMenu(side.getByRole('button', { name: /^Otto/ }));
-    const items = labels();
-    expect(items[0]).toBe('Ouvrir la session');
-    expect(items).not.toContain('Ouvrir');
-    expect(items).not.toContain('Ouvrir à droite');
-    expect(items).not.toContain('Son terminal');
-  });
 });
 
 describe('Ctrl+click and « Ouvrir une session »', () => {
@@ -221,12 +210,4 @@ describe('Ctrl+click and « Ouvrir une session »', () => {
     await waitFor(() => expect(refs(stored())).toEqual([['atelier:main'], ['session:nova']]));
   });
 
-  it('switched off, Settings has no Espace de travail section', async () => {
-    const { user } = await mount({ ide: false });
-    await user.keyboard('{Control>},{/Control}');
-    const nav = within(await screen.findByRole('navigation', { name: 'Sections des réglages' }));
-    expect(nav.queryByRole('button', { name: 'Espace de travail' })).toBeNull();
-    act(() => saveIdeEnabled(true));
-    await waitFor(() => expect(within(screen.getByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: 'Espace de travail' })).toBeVisible());
-  });
 });

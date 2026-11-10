@@ -10,7 +10,6 @@ import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
 import { loadComposer } from '../../src/launch/lazy';
-import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { BOOT_KEY, capture, loadCurrent, loadDispositions, saveDispositions } from '../../src/workspace/dispositions';
 import { empty, open as openTab } from '../../src/workspace/model';
 import { WORKSPACE_KEY } from '../../src/workspace/store';
@@ -20,11 +19,11 @@ import { PROJECTS } from '../helpers';
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
-afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
 
 async function mount() {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde(), loadComposer()]);
-  saveIdeEnabled(true);
+ 
   const d = await createMockDaemon(); daemons.push(d);
   d.machines([{ id: 'local', label: 'Local' }]);
   d.projects(PROJECTS);

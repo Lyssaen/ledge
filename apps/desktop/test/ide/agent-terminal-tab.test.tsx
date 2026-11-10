@@ -8,7 +8,6 @@ import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
-import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { TermStore } from '../../src/term/store';
 import { PROJECTS } from '../helpers';
 import { agentTerminalTab, empty, open, serialize, type Tab } from '../../src/workspace/model';
@@ -32,12 +31,12 @@ beforeEach(() => {
   const show = TermStore.prototype.showAgent;
   vi.spyOn(TermStore.prototype, 'showAgent').mockImplementation(function (this: TermStore, ...a: Parameters<TermStore['showAgent']>) { store = this; return show.apply(this, a); });
 });
-afterEach(async () => { env.backend = null; cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+afterEach(async () => { env.backend = null; cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
 
 async function mount(tabs: Tab[], rig = false, pty = true, side = true, terminalStream = true) {
   localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(tabs.reduce((w, t, i) => open(w, t, i && side ? 'right' : undefined), empty()))));
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
-  saveIdeEnabled(true);
+ 
   const d = await createMockDaemon(); daemons.push(d);
   d.extras.daemon = { version: '0.49.0', install: 'npm', systemd: true, terminalStream }; d.extras.launcher = ['ledge']; env.backend = pty ? fakeBackend() : null;
   d.machines([{ id: 'local', label: 'Local' }]);

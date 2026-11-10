@@ -26,7 +26,8 @@ beforeAll(async () => {
   keepNotes('0.9.0', '- Detachable Atelier');
   await updater.start();
 });
-afterEach(async () => { await closeDaemons(); opened.length = 0; });
+// Each test starts on the IDE's Atelier tab (boot seeds it only on an empty workspace): the Settings tab one test left goes.
+afterEach(async () => { await closeDaemons(); opened.length = 0; localStorage.removeItem('ledge.ide.workspace'); });
 
 const dialog = (name: string | RegExp) => within(screen.getByRole('dialog', { name }));
 

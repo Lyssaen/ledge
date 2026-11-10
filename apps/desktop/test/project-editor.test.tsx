@@ -9,6 +9,8 @@ import { MESSAGES } from '../src/i18n/messages';
 import { ProjectDialog } from '../src/projects/ProjectDialog';
 import { ProjectSwatch } from '../src/projects/ProjectSwatch';
 import { useProjectSave } from '../src/projects/useProjectSave';
+/** The app's notice (the IDE has another status region, its editor's « … opened »). */
+const notice = () => document.querySelector<HTMLElement>('.toast-region')!;
 
 afterEach(async () => {
   vi.useRealTimers();
@@ -102,7 +104,7 @@ describe('the project editor: a new project from the sidebar', () => {
     await user.type(name, 'Paper Rendering');
     await user.click(dialog.getByRole('button', { name: /^Create the project/ }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Project Paper Rendering created. It appears in the sidebar and the atelier with its first session.');
+    expect(notice()).toHaveTextContent('Project Paper Rendering created. It appears in the sidebar and the atelier with its first session.');
     // No session yet: the sidebar shows it with its first one.
     expect(side.queryByRole('button', { name: /^Paper Rendering/ })).toBeNull();
   });
@@ -142,7 +144,7 @@ describe('the project editor: a new project from the sidebar', () => {
     await waitFor(() => expect(setsOf(d)).toHaveLength(1));
     d.releaseProjects();
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Project Paper Rendering created. It appears in the sidebar and the atelier with its first session.');
+    expect(notice()).toHaveTextContent('Project Paper Rendering created. It appears in the sidebar and the atelier with its first session.');
     // No session yet: the sidebar shows it with its first one.
     expect(side.queryByRole('button', { name: /^Paper Rendering/ })).toBeNull();
   });
@@ -172,7 +174,7 @@ describe('the project editor: a new project from the sidebar', () => {
     expect(setsOf(d)).toHaveLength(2);
     expect(setsOf(d)[1]!.projects.projects).toHaveLength(4);
     expect(setsOf(d)[1]!.projects.projects[3]).toEqual({ id: 'paper-rendering', name: 'Paper Rendering', color: 'violet', description: 'Fonts and pages', repos: [] });
-    expect(screen.getByRole('status')).toHaveTextContent('Paper Rendering saved.');
+    expect(notice()).toHaveTextContent('Paper Rendering saved.');
   });
 
   it('a successful create never shows a problem, not even on the render of the broadcast that holds it (its own name and repository)', async () => {
@@ -197,8 +199,8 @@ describe('the project editor: a new project from the sidebar', () => {
     const { d, side, user, client } = await boot();
     const setProjects = vi.spyOn(client.fleet!, 'setProjects');
     await d.close();
-    await waitFor(() => expect(side.getByRole('button', { name: /^Local/ }).getAttribute('title')).toMatch(/offline/));
-    expect(side.getByRole('button', { name: /^Local/ }).querySelector('.machine-dot')).toHaveClass('off');
+    // The IDE has no machine list in its sidebar: the fleet says the local daemon is gone.
+    await waitFor(() => expect(client.fleet!.machines().find(m => m.id === 'local')?.ready).toBe(false));
     await openProjectEditor(user);
     const dialog = within(screen.getByRole('dialog', { name: 'New project' }));
     await user.type(dialog.getByRole('textbox', { name: 'Name' }), 'Paper Rendering');
@@ -268,7 +270,7 @@ describe('the project editor: editing a project', () => {
     expect(setsOf(d)).toHaveLength(1);
     expect(setsOf(d)[0]!.projects.projects[0]).toEqual({ ...EDITED.projects[0]!, name: 'Ledge Desktop' });
     expect(setsOf(d)[0]!.projects.projects[1]).toEqual(EDITED.projects[1]);
-    expect(screen.getByRole('status')).toHaveTextContent('Ledge Desktop saved.');
+    expect(notice()).toHaveTextContent('Ledge Desktop saved.');
     expect(side.getByRole('button', { name: /^Ledge Desktop/ })).toBeVisible();
     expect(screen.getByRole('region', { name: 'Ledge Desktop table' })).toBeVisible();
   });
@@ -387,7 +389,7 @@ describe('the project editor: « Move to › New project… »', () => {
     const sent = setsOf(d)[0]!.projects;
     expect(sent.projects.at(-1)).toEqual({ id: 'scratch', name: 'Scratch', color: 'violet', description: '', repos: [{ machine: 'local', path: '/tmp' }] });
     expect(sent.rules).toEqual([{ machine: 'local', path: '/tmp', project: 'scratch' }]);
-    expect(screen.getByRole('status')).toHaveTextContent('Project Scratch created. Kit joins its table.');
+    expect(notice()).toHaveTextContent('Project Scratch created. Kit joins its table.');
     expect(within(screen.getByRole('region', { name: 'Scratch table' })).getByRole('button', { name: /^Kit,/ })).toBeVisible();
   });
 
@@ -413,12 +415,11 @@ describe('ProjectSwatch', () => {
     expect(document.querySelector('i.filter-none')).not.toBeNull();
   });
 
-  it('in the app: the sidebar\'s project swatch, and the top bar\'s « No project » filter', async () => {
-    const { side, user } = await boot();
+  // The top bar's « No project » filter went with the old interface (lot 12b): the sidebar's swatch stays.
+  it('in the app: the sidebar\'s project swatch', async () => {
+    const { side } = await boot();
     const swatch = side.getByRole('button', { name: /^Ledge/ }).closest('[role="treeitem"]')!.querySelector('.side-swatch') as HTMLElement;
     expect(swatch.style.background).toBe('rgb(59, 130, 246)');
-    await user.click(side.getByRole('button', { name: /^No project/ }));
-    expect(within(screen.getByRole('banner')).getByText('No project').closest('.project-filter')!.querySelector('i.filter-none')).not.toBeNull();
   });
 });
 

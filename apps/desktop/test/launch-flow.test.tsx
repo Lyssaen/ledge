@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { daemonStore, type DaemonError } from '@ledge/fleet';
-import { closeDaemons, LAUNCH_PROJECTS, openLaunch, pickAgent, type MockDaemon } from './helpers';
+import { closeDaemons, LAUNCH_PROJECTS, openLaunch, type MockDaemon } from './helpers';
 import { LAUNCH_TIMEOUT_MS, type LaunchMessage } from '../src/launch/model';
 import { useLaunch } from '../src/launch/useLaunch';
 
@@ -15,47 +15,31 @@ const dialog = () => screen.queryByRole('dialog', { name: 'New session' });
 const launchButton = (form: ReturnType<typeof within>) => form.getByRole('button', { name: /Launch/ });
 
 describe('launching', () => {
-  it('the agent’s name is typed in the form: the preview shows it, its case kept, and the launch carries it', async () => {
+  it('one launch at a time; launched: the form closes, the session opens in its tab, the notice names agent and table', async () => {
     const { d, user, form } = await openLaunch({ list: false });
-    const name = form.getByRole('textbox', { name: 'Agent name' });
-    expect(name).toHaveAttribute('placeholder', expect.stringMatching(/^\w+ \(random\)$/));
-    await user.type(name, 'prixMat');
-    expect(document.querySelector('.preview-line')!.textContent).toBe('PrixMat will join the Ledge table');
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await user.keyboard('{Control>}{Enter}{/Control}');
-    await waitFor(() => expect(launches(d)).toHaveLength(1));
-    expect(launches(d)[0]).toMatchObject({ type: 'session.launch', name: 'PrixMat' });
-  });
-  it('one launch at a time; launched: the form closes, the seat lights, the notice names agent and table', async () => {
-    const { d, user, form } = await openLaunch({ list: false });
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await pickAgent(user, form, /Codex/);
+    await user.type(form.getByRole('textbox', { name: 'First message' }), 'Relis la PR');
+    await user.click(within(form.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Codex/ }));
     d.holdLaunch();                                                    // the fake daemon answers only when released
     await user.keyboard('{Control>}{Enter}{/Control}');
     await user.keyboard('{Control>}{Enter}{/Control}');
     expect(form.getByRole('button', { name: /Launching…/ })).toHaveAttribute('aria-disabled', 'true');
     await user.click(form.getByRole('button', { name: /Launching…/ }));
     await waitFor(() => expect(launches(d)).toHaveLength(1));
-    expect(launches(d)).toEqual([{ type: 'session.launch', tool: 'codex', cwd: '/w/ledge/app', name: expect.any(String), prompt: 'Relis la PR' }]);
+    // The IDE's modal sends more (its model, where it opens): what the launch is made of.
+    expect(launches(d)).toEqual([expect.objectContaining({ type: 'session.launch', tool: 'codex', cwd: '/w/ledge/app', name: expect.any(String), prompt: 'Relis la PR' })]);
     const name = launches(d)[0]!.name!;
-    // jsdom does not scroll: the seat brought into view is a call.
-    const scroll = vi.fn(function (this: HTMLElement) { return this; });
-    Element.prototype.scrollIntoView = scroll;
     d.releaseLaunch();
     await waitFor(() => expect(dialog()).toBeNull());
     expect(screen.getByText(`${name} is starting at the Ledge table.`)).toBeVisible();
-    expect(screen.getByText(/ is starting at the Ledge table\.$/)).toBeVisible();
-    expect(document.querySelector('.agent-seat.just-seated')).not.toBeNull();
-    expect(document.querySelector('.agent-seat.just-seated')!.getAttribute('aria-label')).toMatch(new RegExp(`^${name},`));
-    await waitFor(() => expect(scroll).toHaveBeenCalledWith(expect.objectContaining({ block: 'center' })));
-    expect(scroll.mock.contexts.at(-1)).toBe(document.querySelector('.agent-seat.just-seated'));
+    // The IDE opens the launched session in its tab (where the modal said: the active group).
+    await waitFor(() => expect(screen.queryAllByRole('tab').find(t => t.closest('.dv-tabs-container') && t.getAttribute('aria-selected') === 'true')).toHaveAccessibleName(name));
     expect(launches(d)).toHaveLength(1);
-  });
+  }, 30_000);
 
   it('an agent that lands with no table (its folder left the project meanwhile) is said to start with no project, never at the form’s table', async () => {
     const { d, user, form } = await openLaunch({ list: false });
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await pickAgent(user, form, /Codex/);
+    await user.type(form.getByRole('textbox', { name: 'First message' }), 'Relis la PR');
+    await user.click(within(form.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Codex/ }));
     d.holdLaunch();
     await user.keyboard('{Control>}{Enter}{/Control}');
     await waitFor(() => expect(launches(d)).toHaveLength(1));
@@ -70,15 +54,14 @@ describe('launching', () => {
 
   it('a refusal stays in the form with its message and values; a retry is possible', async () => {
     const { d, user, form } = await openLaunch();
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await pickAgent(user, form, /Codex/);
+    await user.type(form.getByRole('textbox', { name: 'First message' }), 'Relis la PR');
+    await user.click(within(form.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Codex/ }));
     d.refuseLaunch('codex: command not found');
     await user.click(launchButton(form));
     // With several machines the fleet names the one that refused.
     await waitFor(() => expect(form.getByRole('alert')).toHaveTextContent('Launch refused: Local: codex: command not found'));
-    expect(document.querySelector('p.composer-missing[role=alert]')).not.toBeNull();
-    expect(form.getByRole('textbox', { name: 'Instruction' })).toHaveValue('Relis la PR');
-    expect(form.getByRole('radio', { name: /Codex/ })).toBeChecked();
+    expect(form.getByRole('textbox', { name: 'First message' })).toHaveValue('Relis la PR');
+    expect(within(form.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Codex/ })).toHaveAttribute('aria-pressed', 'true');
     expect(launchButton(form)).toHaveTextContent(/^Launch/);
     expect(launchButton(form)).toHaveAttribute('aria-disabled', 'false');
     expect(dialog()).not.toBeNull();
@@ -93,8 +76,8 @@ describe('launching', () => {
 
   it('another command refused by the machine during a launch does not end it: the machine dropping later is the launch\'s refusal', async () => {
     const { d, user, form } = await openLaunch();
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await pickAgent(user, form, /Codex/);
+    await user.type(form.getByRole('textbox', { name: 'First message' }), 'Relis la PR');
+    await user.click(within(form.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Codex/ }));
     d.holdLaunch();
     await user.click(launchButton(form));
     await waitFor(() => expect(launches(d)).toHaveLength(1));
@@ -110,8 +93,8 @@ describe('launching', () => {
     const { d, form } = await openLaunch();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await pickAgent(user, form, /Codex/);
+    await user.type(form.getByRole('textbox', { name: 'First message' }), 'Relis la PR');
+    await user.click(within(form.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Codex/ }));
     d.holdLaunch();
     await user.click(launchButton(form));
     await waitFor(() => expect(launches(d)).toHaveLength(1));
@@ -135,8 +118,8 @@ describe('launching', () => {
 
   it('Cancel while launching closes the form; the late answer is not announced', async () => {
     const { d, user, form } = await openLaunch();
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await pickAgent(user, form, /Codex/);
+    await user.type(form.getByRole('textbox', { name: 'First message' }), 'Relis la PR');
+    await user.click(within(form.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Codex/ }));
     d.holdLaunch();
     await user.click(launchButton(form));
     await waitFor(() => expect(launches(d)).toHaveLength(1));
@@ -155,17 +138,19 @@ describe('launching', () => {
 
   it('a late answer for an earlier launch is not taken for the current one; the notice names the launched session and its own table', async () => {
     const { d, user, form } = await openLaunch();
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'A');
-    await pickAgent(user, form, /Codex/);
+    await user.type(form.getByRole('textbox', { name: 'First message' }), 'A');
+    await user.click(within(form.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Codex/ }));
     d.holdLaunch();
     await user.click(launchButton(form));
     await waitFor(() => expect(launches(d)).toHaveLength(1));
     await user.click(form.getByRole('button', { name: 'Cancel' }));
     await user.keyboard('n');
     const b = within(await screen.findByRole('dialog', { name: 'New session' }));
-    await user.type(b.getByRole('textbox', { name: 'Instruction' }), 'B');
-    await pickAgent(user, b, /Claude Code/);
-    await user.click(b.getByRole('radio', { name: /^Payment Service/ }));
+    await user.type(b.getByRole('textbox', { name: 'First message' }), 'B');
+    await user.click(within(b.getByRole('group', { name: 'Agent' })).getByRole('button', { name: /^Claude Code/ }));
+    // The IDE's modal: the project is a menu of « project · folder · machine » rows.
+    await user.click(b.getByRole('button', { name: /^Project / }));
+    await user.click(within(screen.getByRole('menu')).getAllByRole('menuitem', { name: /^Payment Service/ })[0]!);
     await user.click(launchButton(b));
     await waitFor(() => expect(launches(d)).toHaveLength(2));
     expect(launches(d)[1]).toMatchObject({ tool: 'claude', cwd: '/w/pay' });
@@ -182,60 +167,6 @@ describe('launching', () => {
     expect(screen.getByText(`${launches(d)[1]!.name} is starting at the Payment Service Platform Migration Europe table.`)).toBeVisible();
   });
 
-  it('a launch from a session page stays on the page, whatever the filter', async () => {
-    const { d, user, side } = await openLaunch();
-    await user.keyboard('{Escape}');
-    await user.click(side.getByRole('button', { name: /^Payment Service/ }));
-    await user.click(screen.getByRole('button', { name: /^Nova,/ }));
-    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Nova')).toBeVisible());
-    await user.click(side.getByRole('button', { name: 'New session in Payment Service Platform Migration Europe' }));
-    const form = within(await screen.findByRole('dialog', { name: 'New session' }));
-    await user.click(form.getByRole('radio', { name: 'Ledge' }));
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await pickAgent(user, form, /Codex/);
-    d.options.autoLaunch = true;
-    await user.click(launchButton(form));
-    await waitFor(() => expect(dialog()).toBeNull());
-    expect(screen.getByText(/ is starting at the Ledge table\.$/)).toBeVisible();
-    expect(within(screen.getByRole('banner')).getByText('Nova')).toBeVisible();
-    expect(screen.queryByRole('button', { name: /^Otto,/ })).toBeNull();       // the session page stays open
-  });
-
-  it('a launch from another project filter switches the filter to All, keeping the view', async () => {
-    const { d, user, side } = await openLaunch();
-    await user.keyboard('{Escape}');
-    await user.click(side.getByRole('button', { name: /^Payment Service/ }));
-    const banner = within(screen.getByRole('banner'));
-    expect(banner.getByRole('button', { name: 'Remove the filter: show every project' })).toBeVisible();
-    await user.keyboard('n');
-    const form = within(await screen.findByRole('dialog', { name: 'New session' }));
-    expect(form.getByRole('radio', { name: /^Payment Service/ })).toBeChecked();
-    await user.click(form.getByRole('radio', { name: 'Ledge' }));
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await pickAgent(user, form, /Codex/);
-    d.options.autoLaunch = true;
-    await user.click(launchButton(form));
-    await waitFor(() => expect(dialog()).toBeNull());
-    expect(banner.queryByRole('button', { name: 'Remove the filter: show every project' })).toBeNull();
-    expect(side.getByRole('button', { name: /^Payment Service/ }).closest('[role="treeitem"]')).not.toHaveClass('sel');
-    expect(document.querySelector('.agent-seat')).not.toBeNull();
-    const name = launches(d)[0]!.name!;
-    expect(await screen.findByRole('button', { name: new RegExp(`^${name},`) })).toBeVisible();
-  });
-
-  it('a launch into the filtered project keeps the filter', async () => {
-    const { d, user, side } = await openLaunch();
-    await user.keyboard('{Escape}');
-    await user.click(side.getByRole('button', { name: /^Ledge/ }));
-    await user.keyboard('n');
-    const form = within(await screen.findByRole('dialog', { name: 'New session' }));
-    await user.type(form.getByRole('textbox', { name: 'Instruction' }), 'Relis la PR');
-    await pickAgent(user, form, /Codex/);
-    d.options.autoLaunch = true;
-    await user.click(launchButton(form));
-    await waitFor(() => expect(dialog()).toBeNull());
-    expect(side.getByRole('button', { name: /^Ledge/ }).closest('[role="treeitem"]')).toHaveClass('sel');
-  });
 });
 
 describe('useLaunch', () => {

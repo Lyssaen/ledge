@@ -10,11 +10,11 @@ import type { DaemonInfo, Machines, Projects, RepoInfo, Session, ThreadItem } fr
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
-import { activeCount } from '../src/nav/agents';
 import { loadWorkspace } from '../src/session/lazy';
 import { loadComposer } from '../src/launch/lazy';
 import { loadEditor } from '../src/projects/lazy';
-import { loadHome } from '../src/chat/lazy';
+import { loadChat, loadHome } from '../src/chat/lazy';
+import { loadIde } from '../src/ide/lazy';
 import { loadSettings } from '../src/settings/lazy';
 import { empty, open, serialize } from '../src/workspace/model';
 import { ATELIER_TAB, WORKSPACE_KEY } from '../src/workspace/store';
@@ -141,13 +141,18 @@ export async function closeDaemons(): Promise<void> {
  *  `list` is ignored: the atelier is the only overview (a stored `view: 'list'` is read as the atelier).
  *  Ready once the Atelier counter shows the active sessions, the last project's row is in the sidebar and, with sessions,
  *  the first one is shown on its atelier seat. */
-export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo, daemon, home = false }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo>; daemon?: DaemonInfo; /** Stay on Ledge's home view, where the app opens; otherwise the test starts on the atelier. */ home?: boolean } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
+export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo, daemon, home = false }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo>; daemon?: DaemonInfo; /** Kept for the tests written before lot 12b: the IDE always opens on its Atelier tab. */ home?: boolean } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
   // The session page's, the New session form's, the project editor's and the Settings page's own chunks are there before a test opens them: they come in the same render, as once preloaded in the app.
   await loadWorkspace();
   await loadComposer();
   await loadEditor();
   await loadSettings();
   await loadHome();
+  // The IDE (lot 12b: the only interface): its chunk and the right panel's chat are there before the first render, and the
+  // workspace starts on the Atelier tab, as a first run has it.
+  await loadIde();
+  await loadChat();
+  seedAtelier();
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(machines);
   d.projects(projects);
@@ -157,15 +162,15 @@ export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, l
   void list;
   const client = createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket });
   const view = render(createElement(App as ComponentType<{ client?: DaemonClient }>, { client }));
-  const side = within(await screen.findByRole('complementary', { name: /sidebar/i }));
-  await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions))));
-  // The projects are in once the last one with a session is listed (a project without one is not: the sidebar hides it).
-  const last = projects.projects.filter(p => sessions.some(s => !s.archivedAt && p.repos.some(r => s.cwd === r.path || s.cwd.startsWith(`${r.path}/`)))).at(-1);
-  if (last) await side.findByRole('button', { name: new RegExp(`^${last.name}`) });
-  // The app opens on Ledge's home view (ledge home spec §2.1); most tests are about the atelier, reached from the sidebar.
-  await screen.findByRole('region', { name: /^(Home|Accueil) ?: Ledge, (the operator|l’opérateur)$/ });
-  if (!home) fireEvent.click(side.getByRole('button', { name: /Atelier/ }));
-  if (sessions.length > 0 && !home) await screen.findByRole('button', { name: new RegExp(`^${sessions[0]!.name},`) });
+  // The IDE's sidebar (its explorer): `side` for the tests that open a session from its tree.
+  const side = within(await screen.findByRole('complementary', { name: /^(Sidebar|Barre latérale)$/ }));
+  // The projects are in once the last one with a session is listed (a project without one is not: the explorer hides it).
+  const last = projects.projects.filter(p => sessions.some(s => !s.archivedAt && !s.rig && p.repos.some(r => s.cwd === r.path || s.cwd.startsWith(`${r.path}/`)))).at(-1);
+  if (last) await side.findByRole('button', { name: new RegExp(`^${last.name}`) }, { timeout: 5000 });
+  void home;
+  // The Atelier tab seats the agents.
+  const seated = sessions.find(s => !s.archivedAt);
+  if (seated) await screen.findByRole('button', { name: new RegExp(`^${seated.name},`) }, { timeout: 5000 });
   return { d, side, view, client, user: userEvent.setup() };
 }
 

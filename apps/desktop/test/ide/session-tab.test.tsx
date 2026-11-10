@@ -10,7 +10,6 @@ import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
 import { loadHome, loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
-import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { TermStore } from '../../src/term/store';
 import { PROJECTS, seedAtelier } from '../helpers';
 import { empty, open, serialize } from '../../src/workspace/model';
@@ -35,17 +34,16 @@ beforeEach(() => {
   const show = TermStore.prototype.showAgent;
   vi.spyOn(TermStore.prototype, 'showAgent').mockImplementation(function (this: TermStore, ...a: Parameters<TermStore['showAgent']>) { store = this; return show.apply(this, a); });
 });
-afterEach(async () => { env.backend = null; cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+afterEach(async () => { env.backend = null; cleanup(); vi.restoreAllMocks(); for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
 /** Which tab holds the session's agent screen (R2), null while none shows it. */
 const holder = (name: string) => store?.viewerOf(`local:${name}`) ?? null;
 
 const PERMISSION = { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', source: 'hook' } } as const satisfies Partial<Session>;
 
 /** `stream`: the machine streams the agents' panes (their xterm a fake one), so their screens attach in the test. */
-async function mount({ ide = true, stream = false }: { ide?: boolean; stream?: boolean } = {}) {
+async function mount({ stream = false }: { stream?: boolean } = {}) {
   await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
   seedAtelier();
-  if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
   if (stream) { d.extras.daemon = { version: '0.49.0', install: 'npm', systemd: true, terminalStream: true }; env.backend = fakeBackend(); }
   d.machines([{ id: 'local', label: 'Local' }]);
@@ -114,7 +112,7 @@ describe('the session page in an IDE tab', () => {
     expect([...document.querySelectorAll('.session-menu-head small')].map(x => x.textContent)).toEqual(['relève : bilan demandé', 'Story : ST7-123', 'Objectif : Analyse']);
   });
 
-  it('has no « Vue de la session » switch nor the heading\'s meta; switched off, today\'s page has the switch', async () => {
+  it('has no « Vue de la session » switch nor the heading\'s meta', async () => {
     const { tree, user } = await mount();
     await user.click(tree.getByRole('button', { name: /^Otto/ }));
     await waitFor(() => expect(page()?.dataset.session).toMatch(/otto/));
@@ -122,8 +120,6 @@ describe('the session page in an IDE tab', () => {
     expect(page()!.querySelector('.pane-meta')).toBeNull();
     // Nothing left for the heading: it is not drawn at all.
     expect(page()!.querySelector('.pane-heading')).toBeNull();
-    act(() => saveIdeEnabled(false));
-    expect(await screen.findByRole('tablist', { name: 'Vue de la session' })).toBeVisible();
   });
 
   it('each tab keeps its own view; the stored preference is left alone', async () => {

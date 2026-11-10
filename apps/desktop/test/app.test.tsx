@@ -6,44 +6,46 @@ import WebSocket from 'ws';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { App } from '../src/App';
+import { loadIde } from '../src/ide/lazy';
+import { seedAtelier } from './helpers';
 
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
-beforeEach(() => localStorage.clear());
+// The IDE (lot 12b: the only interface): its chunk is there before the first render, and the workspace starts on the Atelier tab.
+beforeEach(async () => { localStorage.clear(); seedAtelier(); await loadIde(); });
 afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); });
 async function daemon() { const d = await createMockDaemon(); daemons.push(d); d.machines([{ id: 'local', label: 'Local' }]); return d; }
+
+/** The status bar's machines, each with its dot and agent count (Footer's `footer-narrow` spans; the IDE has no machine list in its sidebar). */
+const machine = (label: string) => [...screen.getByRole('contentinfo').querySelectorAll<HTMLElement>('.footer-narrow')].find(e => e.textContent?.startsWith(label));
 
 /** A local daemon that refuses at once: the fleet settles on `unreachable` after its first attempt. */
 class DeadSocket { onopen = null; onmessage: unknown = null; onclose: ((e: unknown) => void) | null = null; onerror: ((e: unknown) => void) | null = null; readyState = 3; constructor(public url: string) { setTimeout(() => { this.onerror?.({}); this.onclose?.({ code: 1006 }); }, 0); } send() {} close() {} }
 
 describe('the shell on the real fleet', () => {
-  it('boots on the real fleet: the crumb says Atelier and the sidebar lists the local machine', async () => {
+  it('boots on the real fleet: the Atelier tab, and the status bar lists the local machine with its agents', async () => {
     const d = await daemon(); d.upsert(fakeSession('otto')); d.upsert(fakeSession('nova', { name: 'Nova' }));
     render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
-    expect(within(screen.getByRole('banner')).getByText('Atelier')).toBeVisible();
-    const side = within(screen.getByRole('complementary', { name: 'Sidebar' }));
+    await waitFor(() => expect([...document.querySelectorAll('.dv-tab')].map(e => e.textContent)).toContain('Atelier'));
+    expect(screen.getByRole('complementary', { name: 'Sidebar' })).toBeVisible();
     await waitFor(() => {
-      const local = side.getByRole('button', { name: /^Local/ });
-      expect(local.querySelector('small')).toHaveTextContent('2');
-      expect(local).toHaveAttribute('title', 'Local · 2 agents');
+      expect(machine('Local')).toHaveTextContent('Local 2');
+      expect(machine('Local')!.querySelector('.connection-dot')).not.toHaveClass('off');
     });
-    expect(side.getByRole('button', { name: /^Local/ }).closest('.st-foot')).not.toBeNull();
   });
 
   it('shows the local machine offline once the first attempt fails, without throwing', async () => {
     render(<App client={createDesktopFleet({ WebSocketImpl: DeadSocket })} />);
-    const side = within(screen.getByRole('complementary', { name: 'Sidebar' }));
-    await waitFor(() => expect(side.getByRole('button', { name: /^Local/ }).getAttribute('title')).toMatch(/offline/), { timeout: 6000 });
-    expect(side.getByRole('button', { name: /^Local/ }).querySelector('.machine-dot')).toHaveClass('off');
+    await waitFor(() => expect(machine('Local')!.querySelector('.connection-dot')).toHaveClass('off'), { timeout: 6000 });
+    expect(machine('Local')).toHaveTextContent(/^Local$/);
   });
 
   it('the footer connection dot is off when the local daemon is down, on when connected', async () => {
     const d = await daemon();
     const ok = render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
     await waitFor(() => {
-      const local = within(screen.getByRole('complementary', { name: 'Sidebar' })).getByRole('button', { name: /^Local/ });
-      expect(local.querySelector('.machine-dot')).not.toHaveClass('off');
-      expect(local.querySelector('small')).toHaveTextContent('0');
+      expect(machine('Local')!.querySelector('.connection-dot')).not.toHaveClass('off');
+      expect(machine('Local')).toHaveTextContent('Local 0');
     });
     expect(within(screen.getByRole('contentinfo')).getByText('Local and SSH sessions').querySelector('.connection-dot')).not.toHaveClass('off');
     ok.unmount();
