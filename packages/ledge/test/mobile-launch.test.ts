@@ -135,6 +135,17 @@ describe('phone « Nouvelle session »', () => {
     expect(await send(g, { type: 'session.launch', launch, assertion: await prove(g, auth, launch, 2) })).toEqual(expect.objectContaining({ status: 'failed' }));
   });
 
+  it('the snapshot says daemon.launch when the PC can launch for the phone, and not otherwise', async () => {
+    const flag = async (g: G) => {
+      g.send('dev1', { type: 'snapshot.request' });
+      await flush();
+      const snap = g.got('dev1').find(m => m.type === 'snapshot');
+      return snap?.type === 'snapshot' ? snap.daemon.launch : 'no snapshot';
+    };
+    expect(await flag(make().g)).toBe(true);
+    expect(await flag(make({ noLaunch: true }).g)).toBeUndefined();
+  });
+
   it('a PC that cannot launch for the phone says unavailable', async () => {
     const { g, api } = make({ noLaunch: true });
     expect(await send(g, { type: 'session.launch', launch: { project: 'shop', tool: 'claude', folders: [api], prompt: 'Go' } })).toMatchObject({ status: 'rejected', reason: 'unavailable' });

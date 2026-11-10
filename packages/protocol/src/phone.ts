@@ -565,7 +565,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The Atelier: the snapshot carries `projects`, each session its `projectId` and `rig`, and `projects` follows each change. Absent (an older PC): no Atelier. */
     atelier: z.literal(true).optional(),
     /** Rigs and the kernel: the daemon answers the `rigs.*` reads and takes `rigs.act`, `rigs.seats`, `rigs.goal.send` and `.reply`. Absent (an older PC): the Rigs tab says « rien à afficher ». */
-    rigs: z.literal(true).optional() }),
+    rigs: z.literal(true).optional(),
+    /** « Nouvelle session »: the daemon takes `session.launch` and `project.folders` carries this PC's folders' branch. Absent (an older PC): « Nouvelle » cannot start. */
+    launch: z.literal(true).optional() }),
   /** The user's projects (`daemon.atelier`), whole, in their order: absent from an older PC's snapshot. */
   projects: z.array(PhoneProjectSchema).max(PHONE_PROJECTS_MAX).optional(), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
     /** This device's id (its fingerprint, as decisions name it in `by`), its kind, and the name the user gave it (absent: none given). */
