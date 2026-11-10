@@ -41,7 +41,9 @@ export function fingerprint(m: PhoneOperation): string {
     ...(m.type === 'project.folder.add' ? [m.id, m.path] : []),
     ...(m.type === 'project.folder.remove' ? [m.id, m.machine, m.path] : []),
     // A launch is what it starts (never its assertion): the same id for another launch is another operation.
-    ...(m.type === 'session.launch' ? [m.launch] : [])]);
+    ...(m.type === 'session.launch' ? [m.launch] : []),
+    // A forge action is its request and action (never its assertion).
+    ...(m.type === 'forge.act' ? [m.prId, m.action] : [])]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */

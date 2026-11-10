@@ -438,9 +438,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const usage = opts.usage;
   const usageMsg = (): ServerMessage | null => (usage ? { type: 'usage.state', ...usage.state() } : null);
   const unsubscribeUsage = usage?.onChange(st => broadcast({ type: 'usage.state', ...st }));
-  // The pull and merge requests, after every snapshot and on each change; never to the phone (R8): the local clients only.
+  // The pull and merge requests, after every snapshot and on each change: to the local clients, and to the phones that asked (B5), which
+  // the gateway gives no CLI message.
   const forge = opts.forge;
-  const unsubscribeForge = forge?.onChange(() => { const m = forge.state(); for (const c of localClients) send(c, m); });
+  const unsubscribeForge = forge?.onChange(() => { const m = forge.state(); for (const c of localClients) send(c, m); gateway?.forward(m); });
   /** A forge request that failed: a refusal keeps its code; an error of gh or glab its (redacted) message. */
   const forgeFailure = (e: unknown): { message: string; code?: RefusalCode } =>
     e instanceof ForgeRefusal ? { code: e.code, message: e.message } : e instanceof ForgeError ? { message: e.message } : { message: redact(e instanceof Error ? e.message : String(e)).slice(0, 400) };
@@ -1777,6 +1778,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       inspect: paths => inspectRepos(paths, { home: opts.home }) },
     // « Nouvelle session » on the phone (M2 §9): the PC's own launch, its folders checked first so a refusal says why.
     launch: phoneLaunch(launch, opts.home),
+    ...(forge ? { forge: { state: () => forge.state() } } : {}),
     // The phone's model switch (#58): `session.model` answers with a code, and `models.list` asks this machine's agents.
     models: true,
     // A session's « Fermer » on the phone: the cards' close, so a close under way (a card's, another phone's) is shared.

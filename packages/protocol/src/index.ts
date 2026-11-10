@@ -38,3 +38,4 @@ export * from './media.js';
 export * from './activity.js';
 export * from './usage.js';
 export * from './forge.js';
+export * from './phoneForge.js';
