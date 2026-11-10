@@ -68,8 +68,10 @@
 .table-top{position:absolute;inset:0;pointer-events:none}
 .task-sheet{--sheet:color-mix(in srgb,var(--card) 86%,var(--foreground));position:absolute;width:84px;min-height:46px;padding:7px 8px 8px;border-radius:2px;background:linear-gradient(transparent 0 16px,transparent 16px),var(--sheet);border:1px solid var(--input);box-shadow:2px 3px 0 color-mix(in srgb,var(--foreground) 12%,transparent)}
 :root[data-theme=light] .task-sheet{--sheet:var(--card)}
-/* A word longer than the sheet breaks with a hyphen, in the language the note carries (`lang`); never mid-word without one. */
-.task-sheet p{margin:0;font-size:9px;line-height:12px;color:var(--card-foreground);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;hyphens:auto;-webkit-hyphens:auto}
+/* A word longer than the sheet breaks with a hyphen, in the language the note carries (`lang`); a word no dictionary knows (a
+   path, an identifier, a branch) then wraps without one, as a last resort, rather than running out of the sheet (design-ux,
+   2026-11-10). */
+.task-sheet p{margin:0;font-size:9px;line-height:12px;color:var(--card-foreground);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;hyphens:auto;-webkit-hyphens:auto;overflow-wrap:break-word}
 .task-sheet:after{content:'';position:absolute;left:8px;right:16px;bottom:7px;height:1px;background:var(--input)}
 .sheet-flag{position:absolute;top:-5px;right:7px;width:14px;height:13px;border-radius:1px;background:var(--sidebar-primary);box-shadow:1px 1px 0 color-mix(in srgb,var(--foreground) 15%,transparent)}
 .sheet-question .sheet-flag{background:var(--warning)}

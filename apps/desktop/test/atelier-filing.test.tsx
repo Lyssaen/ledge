@@ -162,9 +162,10 @@ describe('the filing styles', () => {
     // its flex parent is capped by the rug, and the label's names shrink too
     expect(declarations('atelier.css', '.office-shell .rug-labels .room-heading')).toContain('max-width:calc(100%-28px)');
     expect(declarations('atelier.css', '.heading-names')).toContain('min-width:0');
-    // A long word breaks with a hyphen, never mid-word without one (design-ux, 2026-11-10).
+    // A long word breaks with a hyphen where the dictionary knows; a path or an identifier then wraps without one rather than
+    // running out of the sheet (design-ux, 2026-11-10).
     expect(declarations('atelier.css', '.task-sheet p')).toContain('hyphens:auto');
-    expect(declarations('atelier.css', '.task-sheet p')).not.toContain('overflow-wrap:anywhere');
+    expect(declarations('atelier.css', '.task-sheet p')).toContain('overflow-wrap:break-word');
     // The message bubble keeps its card: under its layer, app.css's `button:not(.ledge-btn)` reset (no border, no background) loses.
     const bubble = declarations('atelier.css', '.exchange-layer .exchange-bubble');
     for (const decl of ['background:var(--popover)', 'border:1pxsolidvar(--input)']) expect(bubble).toContain(decl);
