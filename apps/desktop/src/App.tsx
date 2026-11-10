@@ -101,7 +101,7 @@ import { AtoiTabLabel } from './ide/atoi/AtoiTabLabel';
 import { forgeLines, noForgeReadable, reachOf } from './forge/states';
 import type { PaletteCommand, PaletteSession } from './ide/palette/model';
 import { tileToDock } from './ide/termDrag';
-import { addTerm, besideTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
+import { addTerm, besideTerm, joinTerm, createPanelStore, isTerminalRef, openTerm, panelViewer, removeTerm, stackTerm, usePanel } from './workspace/panel';
 
 const NO_PROJECTS: readonly Project[] = [];
 const NO_SHELLS: ShellsAvailable = { wsl: null, powershell: false, cmd: false, gitBash: false };
@@ -684,12 +684,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   }, [termStore, panelStore, wsStore, onLayout]);
   // A dock tab dropped on the panel: a terminal leaves the model by `update`, not the store's `close` (no kill, R9; not
   // remembered for Ctrl+Shift+T), and comes back as a tile (BottomPanel refuses any other tab).
-  const dockToPanel = useCallback((key: string, onto?: string, where?: 'beside') => {
+  const dockToPanel = useCallback((key: string, onto?: string, where?: 'beside' | 'end') => {
     if (!isTerminalRef(key)) return;
     const ref = key.slice('terminal:'.length);
     if (ref.startsWith('agent:')) termStore.handOver(ref.slice('agent:'.length), key, panelViewer(ref));
     wsStore.update(w => dropTab(w, key));
-    panelStore.update(p => onto ? (where === 'beside' ? besideTerm(p, ref, onto) : stackTerm(p, ref, onto)) : addTerm(p, ref));
+    panelStore.update(p => onto ? (where === 'beside' ? besideTerm(p, ref, onto) : where === 'end' ? joinTerm(p, ref, onto) : stackTerm(p, ref, onto)) : addTerm(p, ref));
     shellsNow.current.notify(t.ide.panel.broughtBack);
   }, [termStore, wsStore, panelStore, t]);
   // The pairing dialog, like a confirmation, owns the keyboard while it shows (it takes Escape itself, before this listener).
