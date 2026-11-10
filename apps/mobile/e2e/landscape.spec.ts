@@ -21,6 +21,8 @@ async function shot(page: Page, name: string, browser: string) {
 test('in landscape the app spans the whole width with its tabs on the left', async ({ page, browserName }) => {
   await page.goto(h.url);
   await page.getByRole('link', { name: copy.login.github }).click();
+  // The app without a key opens on the choice (passkey-reinstall.html, 1 a): the code.
+  await page.getByRole('button', { name: copy.recover.code }).click();
   await h.pc.code();
   await page.getByRole('button', { name: copy.compare.same }).click();
   h.pc.ok();

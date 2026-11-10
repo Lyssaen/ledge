@@ -67,6 +67,12 @@ export interface FakePc {
   errors: unknown[];
   /** Resolves with the next frame of kind `k` from the phone, once handled; rejects after `ms` (default 4 s). */
   waitFor<K extends SealedFrame['k']>(k: K, ms?: number): Promise<Extract<SealedFrame, { k: K }>>;
+  /** The last `recover_start` from the phone: an app that lost its key, back with its passkey. */
+  readonly recoverStart: Extract<SealedFrame, { k: 'recover_start' }> | null;
+  /** Answers it with `recover_offer`: this PC's key, a new nonce, and `name`. */
+  recoverOffer(name?: string): void;
+  /** Takes the device back under the start's key, as the daemon after a proof that verifies: `recover_ok`, then its hellos are answered. */
+  recoverOk(name?: string): void;
   /** Raw escape hatch: sends any frame to the phone. */
   sendFrame(frame: SealedFrame): void;
   /** Answers the phone's next hellos as `identity` (a reinstalled PC, or a relay in the middle). */
@@ -108,6 +114,7 @@ export async function startFakePc(opts: {
   let helloIdentity = identity;
   let badHellosLeft = 0;
   let commitment: { c: string; pcNonce: string } | null = null;
+  let recoverStart: Extract<SealedFrame, { k: 'recover_start' }> | null = null;
   let channel: Channel | null = null;
   let ready = false;
   let resolveCode!: (code: string) => void;
@@ -182,6 +189,8 @@ export async function startFakePc(opts: {
       devicePublicKey = frame.d;
       codeSettled = true;
       resolveCode(await pairingCode({ pcPublicKey: identity.publicKey, devicePublicKey: frame.d, deviceNonce: frame.n, pcNonce: cm.pcNonce }));
+    } else if (frame.k === 'recover_start') {
+      recoverStart = frame;
     } else if (frame.k === 'hello') {
       await onHello(frame);
     } else if (frame.k === 'msg') {
@@ -250,6 +259,15 @@ export async function startFakePc(opts: {
     get devicePublicKey() { return devicePublicKey; },
     get ready() { return ready; },
     code: () => codeP,
+    get recoverStart() { return recoverStart; },
+    recoverOffer(name) {
+      sendFrame({ k: 'recover_offer', pc: identity.publicKey, n: randomNonce(), ...(name ? { name } : {}) });
+    },
+    recoverOk(name) {
+      if (!recoverStart) throw new Error('fake PC: no recover_start to take back');
+      devicePublicKey = recoverStart.d;
+      sendFrame({ k: 'recover_ok', ...(name ? { name } : {}) });
+    },
     offer,
     ok: () => sendFrame({ k: 'pair_ok' }),
     no: () => sendFrame({ k: 'pair_no' }),

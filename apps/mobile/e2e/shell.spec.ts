@@ -26,6 +26,8 @@ async function pair(page: Page, theme: 'dark' | 'light') {
   await page.addInitScript(t => { try { localStorage.setItem('ledge.theme', t); } catch { /* ignore */ } }, theme);
   await page.goto(h.url);
   await page.getByRole('link', { name: copy.login.github }).click();
+  // The app without a key opens on the choice (passkey-reinstall.html, 1 a): the code.
+  await page.getByRole('button', { name: copy.recover.code }).click();
   await h.pc.code();
   await page.getByRole('button', { name: copy.compare.same }).click();
   h.pc.ok();

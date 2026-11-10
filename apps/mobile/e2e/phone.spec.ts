@@ -58,6 +58,8 @@ test('a phone signs in, pairs, decides, survives a relay restart and a session r
   await test.step('sign in with GitHub and pair: compare the code, confirm on the phone, approve on the PC', async () => {
     await page.goto(h.url);
     await page.getByRole('link', { name: copy.login.github }).click();
+    // The app without a key opens on the choice (passkey-reinstall.html, 1 a): the code.
+    await page.getByRole('button', { name: copy.recover.code }).click();
     const code = await h.pc.code();
     await expect(page.getByLabel(copy.compare.codeLabel(code))).toBeVisible();
     expected = null;

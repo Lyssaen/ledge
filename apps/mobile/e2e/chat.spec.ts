@@ -45,6 +45,8 @@ test('the phone chat: a question, its steps and answer, the instruction sent, th
   await test.step('pair and protect the accepts: the launch needs a passkey', async () => {
     await page.goto(h.url);
     await page.getByRole('link', { name: copy.login.github }).click();
+    // The app without a key opens on the choice (passkey-reinstall.html, 1 a): the code.
+    await page.getByRole('button', { name: copy.recover.code }).click();
     const code = await h.pc.code();
     await expect(page.getByLabel(copy.compare.codeLabel(code))).toBeVisible();
     signedIn = true;

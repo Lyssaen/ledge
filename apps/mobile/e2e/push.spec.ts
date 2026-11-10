@@ -80,6 +80,8 @@ test('notifications: turned on while pairing, a push shows a notification, an un
   await test.step('pair, then turn the notifications on: the PC receives the subscription', async () => {
     await page.goto(h.url);
     await page.getByRole('link', { name: copy.login.github }).click();
+    // The app without a key opens on the choice (passkey-reinstall.html, 1 a): the code.
+    await page.getByRole('button', { name: copy.recover.code }).click();
     const code = await h.pc.code();
     await expect(page.getByLabel(copy.compare.codeLabel(code))).toBeVisible();
     signedIn = true;
