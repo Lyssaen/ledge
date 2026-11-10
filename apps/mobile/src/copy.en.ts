@@ -5,8 +5,8 @@ import type { Copy } from './copy';
 
 /** English counts only 1 as singular. */
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
-/** The first tab's name: the mockups' English column keeps « À toi » (m0-socle.html); Ledge Desktop says « Your turn ». */
-const ATOI = 'À toi';
+/** The first tab's name in English, as on Desktop (`ide.atoi`): design-ux, 2026-11-10 19:53Z. */
+const ATOI = 'For you';
 
 /** The phone app's strings in English, key for key with the French table of copy.ts. The words come first from the
  *  mockups' English column (docs/mockups/ledge-mobile-refonte), then from Ledge Desktop's en.ts. */

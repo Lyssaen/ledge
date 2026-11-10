@@ -34,12 +34,13 @@ describe('the languages (question Q2: French and English)', () => {
 
   it('says the MR/PR pane as the owner validated it', () => {
     expect(copyFor('fr').prs.pane).toEqual({ title: 'Rien à afficher', body: 'Une MR ou une PR et son pipeline s’ouvrent ici.' });
+    // « À toi » is "For you" in English, as on Desktop (design-ux, 2026-11-10 19:53Z).
+    expect(copyFor('en').nav.atoi).toBe('For you');
     expect(copyFor('en').prs.pane).toEqual({ title: 'Nothing to show', body: 'An MR or PR and its pipeline open here.' });
   });
 
-  // « À toi » is the tab's name in both languages: the mockups' English column keeps it (« See “À toi” »).
-  it('leaves no French in the English table, but the tab « À toi »', () => {
-    const french = strings(copyFor('en')).map(([k, s]) => [k, s.replaceAll('À toi', '')] as const).filter(([, s]) => /[éèêàùçôîœ«»]|\b(le|la|les|des|une|est|pas|sur|avec)\b/i.test(s));
+  it('leaves no French in the English table', () => {
+    const french = strings(copyFor('en')).filter(([, s]) => /[éèêàùçôîœ«»]|\b(le|la|les|des|une|est|pas|sur|avec)\b/i.test(s));
     expect(french).toEqual([]);
   });
 
