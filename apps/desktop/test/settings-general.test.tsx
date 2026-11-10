@@ -44,7 +44,8 @@ import { applyUiScale, resetAppliedUiScaleForTests } from '../src/settings/scale
 import { saveReduced } from '../src/motionPreferences';
 import { resetAppearanceForTests } from '../src/shell/theme';
 import { AVATAR_MAX_BYTES, resetAvatarForTests, setAvatarShrinkForTests } from '../src/shell/avatar';
-import { boot, closeDaemons, recordToasts, savedNotices, TWO_PROJECTS, type MockDaemon } from './helpers';
+import { loadIde } from '../src/ide/lazy';
+import { boot, closeDaemons, recordToasts, savedNotices, seedAtelier, TWO_PROJECTS, type MockDaemon } from './helpers';
 
 let log: string[] = [];
 beforeEach(async () => {
@@ -66,11 +67,15 @@ const nav = (name: string) => within(screen.getByRole('navigation', { name }));
 /** Every « Setting saved » said since the test began (the screen keeps only the last one, which cannot count them). */
 const saved = () => savedNotices(log);
 const sw = (name: string) => screen.getByRole('switch', { name });
+/** The Settings page: the IDE keeps an alert of its own elsewhere (the layouts' hint), so a page's alert is looked for here. */
+const inPage = () => within(document.querySelector<HTMLElement>('.settings-scroll') ?? document.body);
 const asks = (d: MockDaemon) => d.received.filter((m): m is Extract<ClientMessage, { type: 'chat.ask' }> => m.type === 'chat.ask');
 
 /** The app in French (`desktop.lang` = 'fr'), on one local machine, opened on Settings › Général. */
 async function bootFrench() {
   await loadSettings();
+  await loadIde();
+  seedAtelier();
   localStorage.setItem('desktop.lang', 'fr');
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(LOCAL);
@@ -117,7 +122,7 @@ describe('Settings › General: the language', () => {
     const { user } = await bootFrench();
     strings.fail = true;
     await user.click(screen.getByRole('radio', { name: 'English' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Le français reste affiché : l’anglais n’a pas pu être chargé.');
+    expect(await inPage().findByRole('alert')).toHaveTextContent('Le français reste affiché : l’anglais n’a pas pu être chargé.');
     expect(screen.getByRole('heading', { level: 1, name: 'Général' })).toBeVisible();
     expect(screen.getByRole('radio', { name: 'Français' })).toBeChecked();
     expect(screen.getByRole('radio', { name: 'English' })).not.toBeChecked();
@@ -140,7 +145,7 @@ describe('Settings › General: what assistive technologies hear', () => {
     const { user } = await bootFrench();
     strings.fail = true;
     await user.click(screen.getByRole('radio', { name: 'English' }));
-    await screen.findByRole('alert');
+    await inPage().findByRole('alert');
     expect(screen.getByRole('radiogroup', { name: 'Langue' })).toHaveAccessibleDescription(expect.stringContaining('Le français reste affiché : l’anglais n’a pas pu être chargé.'));
   });
 
@@ -150,7 +155,7 @@ describe('Settings › General: what assistive technologies hear', () => {
     expect(sw('Start with Windows')).not.toHaveAccessibleDescription(expect.stringContaining('Windows did not take this setting.'));
     bridge.setAutostart = () => Promise.resolve(null);
     await user.click(sw('Start with Windows'));
-    await screen.findByRole('alert');
+    await inPage().findByRole('alert');
     expect(sw('Start with Windows')).toHaveAccessibleDescription(expect.stringContaining('Windows did not take this setting.'));
   });
 });
@@ -172,7 +177,7 @@ describe('Settings › General: start with Windows', () => {
     await waitFor(() => expect(sw('Start with Windows')).toBeEnabled());
     bridge.setAutostart = () => Promise.resolve(null);
     await user.click(sw('Start with Windows'));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Windows did not take this setting.');
+    expect(await inPage().findByRole('alert')).toHaveTextContent('Windows did not take this setting.');
     expect(sw('Start with Windows')).toHaveAttribute('aria-checked', 'false');
     expect(sw('Start with Windows')).toBeEnabled();
     expect(saved()).toEqual([]);
@@ -181,7 +186,7 @@ describe('Settings › General: start with Windows', () => {
     await user.click(sw('Start with Windows'));
     await waitFor(() => expect(sw('Start with Windows')).toHaveAttribute('aria-checked', 'true'));
     expect(calls).toEqual([true]);
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(inPage().queryByRole('alert')).toBeNull();
     expect(saved()).toEqual(['Setting saved · Start with Windows']);
   });
 });
@@ -194,7 +199,9 @@ describe('Settings › General: the default agent', () => {
     await user.click(within(group).getByRole('radio', { name: 'Codex' }));
     expect(localStorage.getItem('desktop.tool')).toBe('"codex"');
     expect(saved()).toEqual(['Setting saved · Default agent: Codex']);
-    await user.keyboard('{Control>}/{/Control}');
+    // The IDE's right panel: shown from the start (Ctrl+/ would hide it); asked for only when the window's width folded it.
+    if (!screen.queryByRole('complementary', { name: 'Chat Ledge' })) await user.keyboard('{Control>}/{/Control}');
+    await screen.findByRole('complementary', { name: 'Chat Ledge' });
     const field = () => within(screen.getByRole('complementary', { name: 'Chat Ledge' })).getByRole('textbox', { name: 'Ask Ledge' });
     await user.type(field(), 'Who reviews?{Enter}');
     await waitFor(() => expect(asks(d)).toHaveLength(1));
@@ -271,15 +278,15 @@ describe('Settings › Appearance › Profile photo (#50)', () => {
     // The file dialog can show « All files »: what it hands over is not always an image.
     const user = userEvent.setup({ applyAccept: false });
     await user.upload(input(), image('application/pdf'));
-    expect(await screen.findByRole('alert')).toHaveTextContent('This file is not an image.');
+    expect(await inPage().findByRole('alert')).toHaveTextContent('This file is not an image.');
     await user.upload(input(), image('image/png', AVATAR_MAX_BYTES + 1));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('This image is too large: 8 MB at most.'));
+    await waitFor(() => expect(inPage().getByRole('alert')).toHaveTextContent('This image is too large: 8 MB at most.'));
     expect(localStorage.getItem('desktop.avatar')).toBeNull();
     expect(preview().querySelector('img')).toBeNull();
     expect(saved()).toEqual([]);
     // A good one clears the message.
     await user.upload(input(), image());
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    await waitFor(() => expect(inPage().queryByRole('alert')).toBeNull());
   });
 
   it('speaks French', async () => {
@@ -290,7 +297,7 @@ describe('Settings › Appearance › Profile photo (#50)', () => {
     expect(screen.getByRole('button', { name: 'Choisir une image…' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Retirer la photo' })).toBeDisabled();
     await user.upload(screen.getByLabelText('Fichier de la photo de profil'), image('text/plain'));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Ce fichier n’est pas une image.');
+    expect(await inPage().findByRole('alert')).toHaveTextContent('Ce fichier n’est pas une image.');
   });
 });
 
@@ -313,16 +320,16 @@ describe('Settings › Appearance', () => {
     expect(screen.getByRole('button', { name: 'Coral' })).toBeDisabled();
     await user.clear(hex);
     await user.type(hex, '#12');
-    expect(screen.queryByRole('alert')).toBeNull();                          // checked when the field is left
+    expect(inPage().queryByRole('alert')).toBeNull();                          // checked when the field is left
     await user.tab();
-    expect(screen.getByRole('alert')).toHaveTextContent('Invalid color: use # and six hexadecimal characters.');
+    expect(inPage().getByRole('alert')).toHaveTextContent('Invalid color: use # and six hexadecimal characters.');
     expect(hex).toHaveAttribute('aria-invalid', 'true');
     expect(localStorage.getItem('desktop.accent')).toBeNull();
     expect(saved()).toEqual([]);
     await user.clear(hex);
     await user.type(hex, '#12AB34');
     await user.tab();
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(inPage().queryByRole('alert')).toBeNull();
     expect(localStorage.getItem('desktop.accent')).toBe('#12ab34');
     expect(screen.getByLabelText('Custom color')).toHaveValue('#12ab34');
     expect(saved()).toEqual(['Setting saved · Ledge’s color #12ab34']);
@@ -342,7 +349,7 @@ describe('Settings › Appearance', () => {
     expect(hex).toHaveAccessibleDescription(expect.stringContaining('Invalid color: use # and six hexadecimal characters.'));
   });
 
-  it('Escape in the hex field puts the stored color back and stays in Settings; the next Escape leaves', async () => {
+  it('Escape in the hex field puts the stored color back and stays in Settings; the next Escape too (the IDE\'s tab)', async () => {
     const { user } = await openSettings('Appearance');
     const hex = screen.getByRole('textbox', { name: 'Hex code' });
     await user.clear(hex);
@@ -351,20 +358,21 @@ describe('Settings › Appearance', () => {
     expect(hex).toHaveValue('#e85d4a');
     expect(screen.getByRole('heading', { level: 1, name: 'Appearance' })).toBeVisible();
     await user.tab();                                                        // leaving the field keeps nothing
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(inPage().queryByRole('alert')).toBeNull();
     expect(localStorage.getItem('desktop.accent')).toBeNull();
     // An invalid value already said (the field left): Escape takes it back too.
     await user.clear(hex);
     await user.type(hex, '#zz');
     await user.tab();
-    expect(screen.getByRole('alert')).toHaveTextContent('Invalid color');
+    expect(inPage().getByRole('alert')).toHaveTextContent('Invalid color');
     await user.keyboard('{Escape}');
     expect(hex).toHaveValue('#e85d4a');
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(inPage().queryByRole('alert')).toBeNull();
     expect(screen.getByRole('heading', { level: 1, name: 'Appearance' })).toBeVisible();
     expect(saved()).toEqual([]);
+    // The IDE's Settings tab has no way back: the next Escape leaves it where it is.
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
+    expect(screen.getByRole('navigation', { name: 'Settings sections' })).toBeVisible();
   });
 
   it('the picker keeps the color it lands on, not each one it passes over: one change, one notice', async () => {
@@ -397,12 +405,12 @@ describe('Settings › Appearance', () => {
     const { user } = await openSettings('Appearance');
     const group = () => within(screen.getByRole('radiogroup', { name: 'Interface scale' }));
     await user.click(group().getByRole('radio', { name: '150%' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('The scale could not be applied.');
+    expect(await inPage().findByRole('alert')).toHaveTextContent('The scale could not be applied.');
     expect(saved()).toEqual([]);
     zoom.resolved = 2;
     await user.click(group().getByRole('radio', { name: '200%' }));
     await waitFor(() => expect(saved()).toEqual(['Setting saved · Interface scale 200%']));
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(inPage().queryByRole('alert')).toBeNull();
   });
 
   it('in the browser (no WebView zoom), the scale is kept and said saved as before', async () => {
@@ -410,7 +418,7 @@ describe('Settings › Appearance', () => {
     const { user } = await openSettings('Appearance');
     await user.click(within(screen.getByRole('radiogroup', { name: 'Interface scale' })).getByRole('radio', { name: '150%' }));
     await waitFor(() => expect(saved()).toEqual(['Setting saved · Interface scale 150%']));
-    expect(screen.queryByRole('alert')).toBeNull();
+    expect(inPage().queryByRole('alert')).toBeNull();
   });
 
   it('a late answer to an earlier choice is ignored: the notice and « Auto (…) » follow the last click', async () => {

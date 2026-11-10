@@ -10,16 +10,15 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
-import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { PROJECTS, seedAtelier } from '../helpers';
 
 // The IDE's Atelier tab (docs/ide-workspace.md « Atelier », mockup atelierPage() `.abar`): the bar the old top bar gave it.
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
-afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); setGrouping('rigs'); localStorage.clear(); });
+afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); setGrouping('rigs'); localStorage.clear(); });
 
 type BarProps = Parameters<typeof AtelierBar>[0];
 function bar(o: Partial<BarProps> = {}) {
@@ -92,9 +91,9 @@ describe('offersRigs', () => {
 
 describe('the Atelier tab in the IDE', () => {
   it('shows the bar above the atelier; « Projets » regroups', async () => {
-    await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+    await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
     seedAtelier();
-    saveIdeEnabled(true);
+   
     const d = await createMockDaemon(); daemons.push(d);
     d.machines([{ id: 'local', label: 'Local' }]);
     d.projects(PROJECTS);

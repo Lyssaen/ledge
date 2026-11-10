@@ -6,10 +6,7 @@
 .application { display: flex; flex: 1; min-height: 0; height: 100%; }
 .sidebar { width: 288px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid var(--sidebar-border); background: var(--sidebar); }
 .workspace { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--background); }
-.app-header { height: 56px; flex-shrink: 0; padding: 0 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.breadcrumb { display: flex; align-items: center; gap: 11px; font-size: 12px; color: var(--muted-foreground); }
-.breadcrumb strong { font-weight: 500; color: var(--foreground); }
-.header-actions { display: flex; align-items: center; gap: 8px; }
+
 .connection-dot { width: 5px; height: 5px; background: var(--success); border-radius: 50%; display: inline-block; }
 .connection-dot.off { background: none; border: 1px solid var(--muted-foreground); box-sizing: border-box; }
 .overview-scroll { overflow: auto; flex: 1; min-height: 0; padding: 6px 26px 24px; }
@@ -26,24 +23,11 @@
    as a Windows title bar now that the search field is gone (#33); the detached Atelier's bar (#30) is the same. */
 :root { --titlebar-h: 32px; --close-hover: #c42b1c; --close-fg: #fff; }
 .titlebar { height: var(--titlebar-h); flex-shrink: 0; display: flex; align-items: stretch; background: var(--sidebar); border-bottom: 1px solid var(--sidebar-border); user-select: none; }
-.titlebar-left, .titlebar-right { display: flex; align-items: center; flex-shrink: 0; }
-.titlebar-left { padding-left: 14px; }
-.titlebar-right { gap: 2px; padding-left: 8px; }
-.titlebar-tools { display: flex; align-items: center; gap: 2px; }
-.titlebar-mid { flex: 1; min-width: 16px; }
-.titlebar-mark { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
-/* The mark lets a press through to the word mark, the drag region (Tauri drags only from the element that carries it). */
-.titlebar-mark [data-ledge-mark] { flex-shrink: 0; pointer-events: none; }
-.brand-dot { color: var(--sidebar-primary); }
+
 .titlebar-place { margin-left: 10px; padding-left: 10px; border-left: 1px solid var(--sidebar-border); font-size: 12px; font-weight: 600; color: var(--muted-foreground); white-space: nowrap; }
 .titlebar-text { height: 24px; padding: 0 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; color: var(--muted-foreground); white-space: nowrap; }
 .titlebar-text:hover { background: var(--accent); color: var(--foreground); }
-.titlebar-wait { display: inline-flex; align-items: center; gap: 6px; height: 22px; margin-right: 6px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 500; color: var(--sidebar-primary); background: color-mix(in srgb, var(--sidebar-primary) 12%, transparent); white-space: nowrap; }
-.titlebar-wait:hover { background: color-mix(in srgb, var(--sidebar-primary) 20%, transparent); }
-.titlebar-wait i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.titlebar-ib { width: 30px; height: 26px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--muted-foreground); }
-.titlebar-ib:hover { background: var(--accent); color: var(--foreground); }
-.titlebar-ib[aria-pressed=true] { color: var(--sidebar-primary); }
+
 .titlebar-caps { display: flex; align-self: stretch; margin-left: 6px; }
 .titlebar-caps button { width: 46px; height: 100%; display: grid; place-items: center; color: var(--foreground); }
 .titlebar-caps button:hover { background: color-mix(in srgb, var(--foreground) 8%, transparent); }
@@ -54,25 +38,20 @@
 body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 @media (max-width: 850px) { .titlebar-caps button { width: 38px; } }
 
-/* observatory.css: full screen. `.sidebar.st` sets display:flex and outranks `.sidebar`, so the aside is named too. */
-.immersive .sidebar,
-.immersive aside.sidebar.st { display: none; }
-.immersive .app-header { height: 48px; }
-
 @media (min-width: 1700px) { .overview-scroll { padding-left: 40px; padding-right: 40px; } }
 @media (max-width: 1250px) { .sidebar { width: 256px; } }
 @media (max-width: 850px) {
   .sidebar { width: 64px; }
   .overview-scroll { padding: 6px 20px 20px; }
-  .app-header { padding: 0 16px; }
-  .breadcrumb { gap: 7px; }
+  
+  
 }
 @media (max-width: 540px) {
   .sidebar,
   aside.sidebar.st { display: none; }
-  .app-header { padding: 0 12px; }
-  .breadcrumb > span:first-of-type { display: none; }
-  .breadcrumb > .muted { display: none; }
+  
+  
+  
   .overview-scroll { padding: 6px 12px 16px; }
   .modal-backdrop { padding: 12px; }
   .modal { width: 100%; }
@@ -80,36 +59,16 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 
 /* office.css: breadcrumb, project filter and view controls. */
 .workspace { position: relative; }
-.view-actions-sep { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
-.project-filter { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 4px 0 10px; border: 1px solid var(--input); border-radius: 999px; background: var(--secondary); font-size: 13px; font-weight: 500; }
-.project-filter .side-swatch { margin: 0; }
-.project-filter .filter-none { width: 9px; height: 9px; border-radius: 3px; border: 1.5px dashed var(--muted-foreground); }
-.project-filter button { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 999px; color: var(--muted-foreground); }
-.project-filter button:hover { background: var(--accent); color: var(--foreground); }
-.project-filter button:focus-visible { outline: 2px solid var(--ring); }
-.crumb-link { color: var(--muted-foreground); }
-.crumb-link:hover { color: var(--foreground); text-decoration: underline; text-underline-offset: 3px; }
-.app-header { gap: 12px; }
-.app-header .breadcrumb { min-width: 0; flex-shrink: 1; }
-.header-view { display: flex; align-items: center; gap: 2px; margin-left: auto; flex-shrink: 0; }
-.header-view + .header-actions { margin-left: 8px; }
-.app-header .project-filter { height: 26px; font-size: 12px; }
-@media (max-width: 1250px) { .header-view > .ledge-btn { padding-inline: 8px; } }
-.app-header .project-filter > span, .app-header .ledge-btn, .side-actions .ledge-btn { white-space: nowrap; }
+
+ .side-actions .ledge-btn { white-space: nowrap; }
 @media (max-width: 1250px) { .side-actions .ledge-btn kbd { display: none; } }
-.app-header .breadcrumb { overflow: hidden; }
-.app-header .project-filter { min-width: 0; }
-.app-header .project-filter > span { overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-.header-view { gap: 4px; }
+
 .icon-tabs { display: flex; padding: 2px; gap: 2px; border-radius: var(--radius-md); background: var(--muted); border: 1px solid var(--input); }
 .icon-tabs button { width: 32px; height: 28px; display: grid; place-items: center; border-radius: calc(var(--radius-md) - 2px); color: var(--muted-foreground); }
 .icon-tabs button:hover { color: var(--foreground); }
 .icon-tabs button[aria-selected=true] { background: var(--background); color: var(--foreground); box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 12%, transparent); }
 .icon-tabs button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
-.header-view .ledge-btn[aria-pressed=true] { color: var(--foreground); }
-.header-view .ledge-btn[aria-pressed=false] { color: var(--muted-foreground); }
-.header-actions { display: flex; align-items: center; gap: 2px; }
-.header-actions .view-actions-sep { margin: 0 6px; }
+
 .footer-status { display: flex; align-items: center; gap: 16px; }
 .footer-status > span { display: flex; align-items: center; gap: 6px; }
 /* The island's state (mockup office.css and settings.css): its dot, hollow while it is hidden; it opens Settings › Island. */
@@ -117,22 +76,6 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .overlay-state i { width: 5px; height: 5px; background: var(--success); border-radius: 50%; display: inline-block; }
 .overlay-state:hover { background: var(--sidebar-accent); color: var(--foreground); }
 .overlay-state.off i { background: none; border: 1px solid var(--muted-foreground); box-sizing: border-box; }
-.crumb-session { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
-.crumb-session > strong { flex-shrink: 0; }
-.crumb-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 13px; }
-.crumb-task:before { content: '·'; margin-right: 7px; color: var(--muted-foreground); }
-.header-session { gap: 6px; }
-.header-session .ledge-btn[aria-pressed=true] { background: var(--accent); color: var(--foreground); }
-.app-header .breadcrumb { flex: 1 1 auto; }
-
-/* settings.css: the crumb link's size and corners. */
-.crumb-link { font-size: 12px; color: var(--muted-foreground); border-radius: 4px; }
-.crumb-link:hover { color: var(--foreground); }
-/* Not in the mockup (spec: long names end with « … », the top bar never wraps): a crumb link keeps one line up to 180 px,
-   with its full name in `title`, and does not shrink, so the session's task gives way first. */
-.breadcrumb .crumb-link { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 180px; flex-shrink: 0; }
-/* office.css: on a subagent's page, its parent (bot and name) before it. */
-.breadcrumb .crumb-parent { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 /* launch.css: the chat panel (lot 9); the composer's rules are in launch.css. */
 .ledge-chat-panel { width: 400px; flex-shrink: 0; position: relative; display: flex; flex-direction: column; border-left: 1px solid var(--sidebar-border); background: var(--sidebar); }
@@ -150,26 +93,12 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .pending h2 { margin: 0; font-size: 16px; font-weight: 500; color: var(--foreground); }
 .pending p { margin: 0; font-size: 13px; color: var(--muted-foreground); }
 
-/* Session search and shortcuts help (the mockup's palette) */
-.command-palette{width:650px}
-.palette-search{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);color:var(--muted-foreground)}
-.palette-search input{width:100%;border:0;background:transparent;padding:4px 0;font-size:14px}
-.palette-results{max-height:440px;overflow:auto;padding:6px}
-.palette-results button{display:flex;align-items:center;width:100%;padding:12px 10px;gap:12px;border-radius:var(--radius-md)}
-.palette-results button[aria-selected=true]{background:var(--sidebar-accent);outline:1px solid var(--input)}
-.palette-results button>span:not([data-badge]){flex:1;min-width:0}
-.palette-results button>span.palette-new-icon{flex:none;display:grid;place-items:center;width:32px;height:32px;color:var(--muted-foreground)}
-.palette-results strong{font-size:13px;font-weight:500}
-.palette-results small{display:block;font-size:11px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.palette-results strong small{display:inline}
-.palette-results kbd{font-size:10px!important}
-.palette-footer{display:flex;align-items:center;gap:8px;padding:12px 20px;border-top:1px solid var(--border);font-size:10px;color:var(--muted-foreground)}
 .shortcut-list{padding:8px 20px 20px}
 .shortcut-list>p{font-size:11px;line-height:18px;color:var(--muted-foreground);margin:12px 0}
 .shortcut-list>div{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:10px 0;border-bottom:1px solid var(--border);font-size:12px}
 .shortcut-list kbd{font-size:10px!important;flex-shrink:0}
 .shortcut-list>h3{font-size:11px;font-weight:600;color:var(--muted-foreground);margin:18px 0 0}
-.palette-results .empty-attention{padding:16px 10px;font-size:12px;color:var(--muted-foreground)}
+
 /* observatory.css line 3: the toast (filing's outcome, task 6). */
 /* The toast's live region, always there: it takes no room (the toast inside it is fixed to the window). */
 .toast-region{position:fixed;width:0;height:0;z-index:10}
@@ -209,30 +138,13 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .approval-badge.yolo{border-color:transparent;background:color-mix(in srgb,var(--destructive) 16%,transparent);color:var(--destructive)}
 .auto-mark{display:inline-flex;vertical-align:-1px;margin-left:5px;color:var(--destructive)}
 
-/* Ledge's home view (ledge home spec §2.2): the conversation column, 920 px at most, centred; « Le point » pinned over it. */
-.ledge-home { flex: 1; min-width: 0; min-height: 0; display: flex; justify-content: center; background: var(--sidebar); overflow: hidden; }
-.ledge-home .home-column { width: 100%; max-width: 920px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--sidebar-border); border-right: 1px solid var(--sidebar-border); }
-.ledge-home a[href^="ledge://session/"] { color: var(--sidebar-primary); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
-.home-head { display: flex; align-items: center; gap: 10px; height: 60px; flex: none; padding: 0 12px; border-bottom: 1px solid var(--sidebar-border); }
-.home-title { display: flex; flex-direction: column; min-width: 0; }
-.home-brand { font-size: 16px; line-height: 20px; font-weight: 650; }
-.home-sub { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.home-tabs { display: flex; gap: 2px; padding: 6px 10px 0; flex: none; border-bottom: 1px solid var(--sidebar-border); }
-.home-tabs button { padding: 7px 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted-foreground); font-size: 12.5px; cursor: pointer; }
-.home-tabs button.on { color: var(--sidebar-foreground); border-bottom-color: var(--sidebar-primary); font-weight: 600; }
-.home-body { flex: 1; min-height: 0; display: flex; flex-direction: column; container-type: size; }
-.home-body > [data-layer="chat"] { flex: 1; }
 /* « Le point » takes half the zone at most and scrolls inside (lot 1 À toi, design-ux): its head and the asks' section titles stay up,
    a 16 px fade says there is more below; the conversation keeps the rest, its field always in view. */
 .le-point { --lp-head: 34px; position: relative; max-height: 50cqh; overflow-y: auto; padding: 0 16px 12px; font-size: 12.5px; }
-.le-point .lp-head { display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 3; height: var(--lp-head); margin-bottom: 0; background: var(--sidebar); }
+
 .le-point .ask-sec-title { position: sticky; top: var(--lp-head); z-index: 2; margin: 0; padding: 2px 0 4px; background: var(--sidebar); }
 .le-point.lp-more::after { content: ''; position: sticky; bottom: -12px; display: block; height: 16px; margin: -16px -16px -12px; background: linear-gradient(transparent, var(--sidebar)); pointer-events: none; }
-.le-point .lp-head strong { font-size: 13px; }
-.lp-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-@media (max-width: 1100px) { .lp-cols { grid-template-columns: 1fr; gap: 8px; } }
-.lp-col h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); font-weight: 600; }
-.lp-none { margin: 2px 0; color: var(--muted-foreground); font-size: 12px; }
+
 .lp-row { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 26px; padding: 2px 0; border: 0; background: none; color: inherit; text-align: left; font-size: 12.5px; }
 button.lp-row { cursor: pointer; border-radius: var(--radius-sm); }
 button.lp-row:hover, .lp-row.sel { background: var(--sidebar-accent); }
@@ -242,7 +154,7 @@ button.lp-row:hover, .lp-row.sel { background: var(--sidebar-accent); }
 .lp-mark.lp-refused, .lp-mark.lp-dropped { color: var(--warning, #d97706); }
 .lp-mark.lp-near-mark { color: var(--warning, #d97706); }
 .lp-mark.lp-asked { color: var(--sidebar-primary); font-weight: 700; }
-.lp-decision .lp-detail { margin: 0 0 2px 14px; color: var(--muted-foreground); font-size: 12px; white-space: pre-wrap; }
+
 /* « Répondre » to a decision (tasks/DecisionAnswer), in « Le point », « Tâches » and the sidebar's « À toi ». */
 .decision-answer { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 6px; }
 .decision-options { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -252,27 +164,6 @@ button.lp-row:hover, .lp-row.sel { background: var(--sidebar-accent); }
 .decision-review { margin: 0; color: var(--muted-foreground); font-size: 12px; }
 .decision-text { margin: 0; padding: 6px 10px; border-left: 3px solid var(--sidebar-primary); background: var(--well); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12.5px; }
 .decision-error { margin: 0; color: var(--destructive, #dc2626); font-size: 12px; }
-.ledge-home .st-qa { height: 22px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 11px; font-weight: 500; border: 1px solid var(--input); background: none; color: var(--sidebar-foreground); cursor: pointer; flex: none; }
-.ledge-home .st-qa:hover { background: var(--sidebar-accent); }
-.ledge-home .st-qa.pri { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
-.ledge-home .st-badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: inline-grid; place-items: center; font: 600 10px 'Geist Mono', monospace; background: var(--sidebar-primary); color: var(--primary-foreground); }
-.ledge-home .st-fill { flex: 1; }
-.home-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
-.home-suggestions button { height: 26px; padding: 0 10px; border: 1px solid var(--sidebar-border); border-radius: 999px; background: var(--well); color: var(--sidebar-foreground); font-size: 12px; cursor: pointer; }
-.home-suggestions button:hover { border-color: var(--ring); }
-.home-mentions { display: flex; flex-direction: column; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--sidebar); overflow: hidden; }
-.home-mentions button { padding: 5px 10px; border: 0; background: none; color: inherit; text-align: left; font-size: 12.5px; cursor: pointer; }
-.home-mentions button.sel { background: var(--sidebar-accent); }
-.home-readonly { font-size: 11px; color: var(--muted-foreground); }
-.home-list { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
-.home-filters { display: flex; gap: 8px; margin-bottom: 6px; }
-.home-filters select { height: 26px; border: 1px solid var(--input); border-radius: var(--radius-sm); background: var(--well); color: inherit; font-size: 12px; }
-.home-task ul { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
-.home-task { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--sidebar-border); border-radius: var(--radius-md); background: var(--well); font-size: 12.5px; }
-.home-task h3 { margin: 0 0 4px; font-size: 13px; }
-.home-task h4 { margin: 10px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); }
-.home-task-text { white-space: pre-wrap; }
-
 
 /* A proposal about the notes in « À toi » (docs/mockups/ledge-brain-notes.html, part 1). */
 .note-decision { display: flex; flex-direction: column; gap: 6px; }

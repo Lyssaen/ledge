@@ -6,7 +6,6 @@ import { fleet, ottoThread, tool } from './thread';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 // Fil | Terminal in the IDE (inventory B6): a session tab shows its thread or the agent's own screen (Ctrl+², the tab menu), the

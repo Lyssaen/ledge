@@ -26,14 +26,13 @@ const WIDE: RigGraph = {
   links: [{ from: 'a.one', to: 'b.one', kind: 'delegates_to' }, { from: 'b.one', to: 'c.one', kind: 'delegates_to' }, { from: 'c.one', to: 'd.one', kind: 'escalates_to' }]
 };
 
-async function boot(page: Page, opts: { ide?: boolean; layout?: object; graph?: RigGraph; state?: object; permissions?: { policy?: string; seats: RigSeatPermission[] }; sessions?: ReturnType<typeof session>[] } = {}) {
+async function boot(page: Page, opts: { layout?: object; graph?: RigGraph; state?: object; permissions?: { policy?: string; seats: RigSeatPermission[] }; sessions?: ReturnType<typeof session>[] } = {}) {
   await seedAtelier(page);
-  await page.addInitScript(({ ide, layout }) => {
+  await page.addInitScript(({ layout }) => {
     try {
-      if (ide) localStorage.setItem('ledge.ide.enabled', 'true');
       if (layout && !localStorage.getItem('ledge.ide.layout')) localStorage.setItem('ledge.ide.layout', JSON.stringify(layout));
     } catch { /* ignore */ }
-  }, { ide: opts.ide !== false, layout: opts.layout ?? null });
+  }, { layout: opts.layout ?? null });
   const daemon = await fakeDaemon(page, opts.sessions ?? sessions, {
     projects: twoProjects, openrig: (opts.state ?? state) as unknown as OpenRigState, rigCommands: ['rig down ledge-survey --snapshot'], ...RIG_7A,
     ...(opts.graph ? { rigGraphs: { 'ledge-survey': opts.graph } } : {}),
@@ -154,11 +153,4 @@ test('the tab is restored after a reload', async ({ page }) => {
   await expect(tab(page)).toBeVisible();
   await expect(page$(page).getByRole('heading', { name: 'ledge-survey' })).toBeVisible();
   await expect(page$(page).locator('.ide-rig-node')).toHaveCount(2);
-});
-
-test('with the switch off nothing new shows', async ({ page }) => {
-  await boot(page, { ide: false });
-  await expect(page.locator('.ide')).toHaveCount(0);
-  await expect(page.locator('.ide-rig')).toHaveCount(0);
-  await expect(page.getByText('Rig · ledge-survey')).toHaveCount(0);
 });

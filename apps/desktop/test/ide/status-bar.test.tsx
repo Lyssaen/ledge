@@ -8,9 +8,9 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
-import { saveIdeEnabled, saveShowUsage } from '../../src/workspace/prefs';
+import { saveShowUsage } from '../../src/workspace/prefs';
 import { PROJECTS } from '../helpers';
 
 // The IDE's status bar (mockup `statusbar()`): the footer's status, the waiting requests, a spacer, the usage limits at the
@@ -18,7 +18,7 @@ import { PROJECTS } from '../helpers';
 type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
-afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); saveShowUsage(true); localStorage.clear(); });
+afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveShowUsage(true); localStorage.clear(); });
 
 const usage = {
   type: 'usage.state',
@@ -30,8 +30,8 @@ const usage = {
 } as unknown as ServerMessage;
 
 async function mount({ waitUsage = true } = {}) {
-  await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
-  saveIdeEnabled(true);
+  await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
+ 
   const d = await createMockDaemon(); daemons.push(d);
   d.machines([{ id: 'local', label: 'Local' }]);
   d.projects(PROJECTS);

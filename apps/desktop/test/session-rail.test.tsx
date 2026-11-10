@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { act, cleanup, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { Session, ThreadItem } from '@ledge/protocol';
 import { boot, closeDaemons, listSessions, ottoFolded, ottoThread, unfoldPast } from './helpers';
 import { resetAvatarForTests, setAvatar } from '../src/shell/avatar';
@@ -92,7 +92,9 @@ describe('the rail (issue #34)', () => {
     expect(prompt).not.toHaveTextContent('synapse-obs');
     expect([...prompt.querySelectorAll('.tag')].map(t => t.textContent)).toEqual(['Story ST7-123', 'Objective Analysis']);
     expect(document.querySelector('.objective-row .objective')).toHaveTextContent('Session objectiveAnalysisImplementation· noted by Nova');
-    expect([...document.querySelectorAll('.pane-heading .tag')].map(t => t.textContent)).toEqual(['Story ST7-123', 'Objective Implementation']);
+    // The IDE has no page heading (lot 12b): the tab's menu says the tags.
+    fireEvent.contextMenu(screen.getAllByRole('tab').find(t => t.closest('.dv-tabs-container') && t.getAttribute('aria-label') === 'Nova')!);
+    await waitFor(() => expect([...document.querySelectorAll('.session-menu-head small')].map(x => x.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('ST7-123'), expect.stringContaining('Implementation')])));
     expect(thread().getByText('Je m’y mets.')).toBeVisible();
   });
 });

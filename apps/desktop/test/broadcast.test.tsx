@@ -3,6 +3,8 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { MESSAGE_MAX, type ClientMessage, type DaemonInfo } from '@ledge/protocol';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import { boot, closeDaemons, PROJECTS, type MockDaemon } from './helpers';
+/** The app's notice (the IDE has another status region, its editor's « … opened »). */
+const notice = () => document.querySelector<HTMLElement>('.toast-region')!;
 
 beforeEach(() => localStorage.clear());
 afterEach(async () => { cleanup(); await closeDaemons(); });
@@ -17,7 +19,8 @@ const NEW: DaemonInfo = { version: '0.35.0', install: 'npm', systemd: true, broa
 const OLD: DaemonInfo = { version: '0.34.0', install: 'npm', systemd: true };
 type Broadcast = Extract<ClientMessage, { type: 'session.broadcast' }>;
 const broadcasts = (d: MockDaemon) => d.received.filter((m): m is Broadcast => m.type === 'session.broadcast');
-const banner = () => within(screen.getByRole('banner'));
+/** The front tab of the IDE's editor, when it is a session's (Lot 12b: the IDE has no top bar naming the page). */
+const activeTab = () => screen.queryAllByRole('tab').find(t => t.closest('.dv-tabs-container') && t.getAttribute('aria-selected') === 'true' && t.getAttribute('aria-label') !== 'Atelier');
 const tree = (side: ReturnType<typeof within>) => within(side.getByRole('tree', { name: 'Projects, branches and sessions' }));
 
 /** The local daemon answers each broadcast: Otto and Bix got it, Zed refused. */
@@ -41,8 +44,8 @@ describe('writing to a whole project', () => {
     await user.click(send);
     await waitFor(() => expect(broadcasts(d)).toEqual([{ type: 'session.broadcast', rid: expect.any(String), to: { project: 'ledge' }, text: 'Pause the deploys' }]));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Write to Ledge' })).toBeNull());
-    expect(screen.getByRole('status')).toHaveTextContent('Delivered to 2 sessions: Otto, Bix');
-    expect(screen.getByRole('status')).toHaveTextContent('Refused: Zed n’a pas été lancée par Ledge');
+    expect(notice()).toHaveTextContent('Delivered to 2 sessions: Otto, Bix');
+    expect(notice()).toHaveTextContent('Refused: Zed n’a pas été lancée par Ledge');
   });
 
   it('the sidebar’s project row has a ✉ beside +, which opens the same dialog', async () => {
@@ -70,9 +73,9 @@ describe('writing to the sessions selected in the sidebar', () => {
     let reach = false;
     d.onMessage(m => { if (m.type === 'session.broadcast') d.reply({ type: 'session.broadcast.result', rid: m.rid, sent: reach ? [{ id: 'otto', name: 'Otto' }] : [], refused: [], reason: reach ? undefined : 'personne à qui écrire' }); });
     const rows = tree(side);
-    await user.keyboard('{Control>}');
+    await user.keyboard('{Shift>}');
     await user.click(rows.getByRole('button', { name: /^Otto/ })); await user.click(rows.getByRole('button', { name: /^Bix/ }));
-    await user.keyboard('{/Control}');
+    await user.keyboard('{/Shift}');
     await user.click(within(side.getByRole('region', { name: 'Selected sessions' })).getByRole('button', { name: 'Write to the 2 sessions…' }));
     let dialog = within(await screen.findByRole('dialog', { name: 'Write to Otto, Bix' }));
     await user.type(dialog.getByRole('textbox'), 'Hello');
@@ -93,9 +96,9 @@ describe('writing to the sessions selected in the sidebar', () => {
   it('Escape with a session’s menu open closes the menu and keeps the selection', async () => {
     const { side, user } = await boot({ sessions: SESSIONS, projects: PROJECTS, daemon: NEW });
     const rows = tree(side);
-    await user.keyboard('{Control>}');
+    await user.keyboard('{Shift>}');
     await user.click(rows.getByRole('button', { name: /^Otto/ })); await user.click(rows.getByRole('button', { name: /^Bix/ }));
-    await user.keyboard('{/Control}');
+    await user.keyboard('{/Shift}');
     fireEvent.contextMenu(rows.getByRole('button', { name: /^Otto/ }));
     await screen.findByRole('menu', { name: 'Manage Otto' });
     await user.keyboard('{Escape}');
@@ -105,17 +108,17 @@ describe('writing to the sessions selected in the sidebar', () => {
     expect(side.queryByRole('region', { name: 'Selected sessions' })).toBeNull();
   });
 
-  it('Ctrl + click picks sessions; from two, the bar writes to them', async () => {
+  it('Shift + click picks sessions (Ctrl + click opens to the right in the IDE); from two, the bar writes to them', async () => {
     const { d, side, user } = await boot({ sessions: SESSIONS, projects: PROJECTS, daemon: NEW });
     answering(d);
     const rows = tree(side);
-    await user.keyboard('{Control>}');
+    await user.keyboard('{Shift>}');
     await user.click(rows.getByRole('button', { name: /^Otto/ }));
     expect(side.queryByRole('region', { name: 'Selected sessions' })).toBeNull();
     await user.click(rows.getByRole('button', { name: /^Bix/ }));
-    await user.keyboard('{/Control}');
-    // A Ctrl + click opens nothing.
-    expect(banner().queryByText('Otto')).toBeNull();
+    await user.keyboard('{/Shift}');
+    // A Shift + click opens nothing.
+    expect(activeTab()).toBeUndefined();
     expect(rows.getByRole('button', { name: /^Otto/ }).closest('[role="treeitem"]')).toHaveClass('picked');
     const bar = within(side.getByRole('region', { name: 'Selected sessions' }));
     await user.click(bar.getByRole('button', { name: 'Write to the 2 sessions…' }));
@@ -123,13 +126,13 @@ describe('writing to the sessions selected in the sidebar', () => {
     await user.type(dialog.getByRole('textbox'), 'Rebase on main');
     await user.click(dialog.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(broadcasts(d)).toEqual([{ type: 'session.broadcast', rid: expect.any(String), to: { sessions: ['otto', 'bix'] }, text: 'Rebase on main' }]));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Delivered to 2 sessions: Otto, Bix'));
+    await waitFor(() => expect(notice()).toHaveTextContent('Delivered to 2 sessions: Otto, Bix'));
   });
 
-  it('a second Ctrl + click takes a session out; Escape and Cancel empty the selection', async () => {
+  it('a second Shift + click takes a session out; Escape and Cancel empty the selection', async () => {
     const { side, user } = await boot({ sessions: SESSIONS, projects: PROJECTS, daemon: NEW });
     const rows = tree(side);
-    const pick = async (name: RegExp) => { await user.keyboard('{Control>}'); await user.click(rows.getByRole('button', { name })); await user.keyboard('{/Control}'); };
+    const pick = async (name: RegExp) => { await user.keyboard('{Shift>}'); await user.click(rows.getByRole('button', { name })); await user.keyboard('{/Shift}'); };
     await pick(/^Otto/); await pick(/^Bix/); await pick(/^Nova/);
     expect(within(side.getByRole('region', { name: 'Selected sessions' })).getByRole('button', { name: 'Write to the 3 sessions…' })).toBeVisible();
     await pick(/^Nova/);
@@ -145,7 +148,7 @@ describe('writing to the sessions selected in the sidebar', () => {
   it('a plain click still opens the session', async () => {
     const { side, user } = await boot({ sessions: SESSIONS, projects: PROJECTS, daemon: NEW });
     await user.click(tree(side).getByRole('button', { name: /^Otto/ }));
-    expect(banner().getByText('Otto')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
     expect(side.queryByRole('region', { name: 'Selected sessions' })).toBeNull();
   });
 });
@@ -159,9 +162,9 @@ describe('a local daemon that does not take a broadcast', () => {
     expect(screen.queryByRole('menuitem', { name: 'Write to the whole project…' })).toBeNull();
     await user.keyboard('{Escape}');
     const rows = tree(side);
-    await user.keyboard('{Control>}');
+    await user.keyboard('{Shift>}');
     await user.click(rows.getByRole('button', { name: /^Otto/ })); await user.click(rows.getByRole('button', { name: /^Bix/ }));
-    await user.keyboard('{/Control}');
+    await user.keyboard('{/Shift}');
     expect(side.queryByRole('region', { name: 'Selected sessions' })).toBeNull();
   });
 });

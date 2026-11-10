@@ -46,7 +46,6 @@ describe('the session page', () => {
     // The agent is its bot on the rail, named for screen readers.
     expect(document.querySelector('.say-row .botn')).toHaveTextContent('Otto');
     expect(thread().getByText('Deux tests échouent.').closest('.ledge-thread-md')).not.toBeNull();
-    expect(document.querySelector('.pane-meta')).toHaveTextContent('Local · ledge');
     expect(document.querySelector('.session-page')).toHaveAttribute('data-session', 'local:otto'); // the fleet qualifies ids with the machine
     expect(document.querySelector('.session-page')).not.toHaveAttribute('data-helper');
   });
@@ -149,7 +148,6 @@ describe('the session page', () => {
     // Gone from the session, it is named by its thread row, which has no name.
     d.upsert({ ...listSessions()[0]!, helpers: [] });
     await waitFor(() => expect(document.querySelector('.say-row .botn')).toHaveTextContent('Subagent'));
-    expect(within(screen.getByRole('banner')).getByText('Subagent')).toBeVisible();
   });
 
   it('a subagent page before its thread came: it waits, without crashing', async () => {
@@ -206,7 +204,8 @@ describe('the session page', () => {
     const { d, user } = await openOtto();
     await thread().findByText('Corrige-les');
     expect(thread().queryByRole('separator', { name: 'New since your last visit' })).toBeNull(); // a first visit marks nothing
-    await user.keyboard('{Escape}');
+    // Away from the page: its tab closed (an IDE tab keeps its page while it is open, so a visit is a tab's life).
+    await user.click(screen.getByRole('button', { name: 'Close Otto' }));
     d.threadItem('otto', { kind: 'message', id: 'msg-new', at: new Date().toISOString(), turn: 2, text: 'J’ai corrigé le premier test.' });
     await user.click(screen.getByRole('button', { name: /^Otto,/ }));
     const marker = await thread().findByRole('separator', { name: 'New since your last visit' });

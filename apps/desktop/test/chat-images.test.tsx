@@ -13,11 +13,12 @@ afterEach(async () => { setCodecForTests(null); cleanup(); await closeDaemons();
 
 const asks = (d: { received: ClientMessage[] }) => d.received.filter((m): m is Extract<ClientMessage, { type: 'chat.ask' }> => m.type === 'chat.ask');
 const chips = () => [...document.querySelectorAll('[data-chip]')];
-const home = () => within(screen.getByRole('region', { name: 'Home: Ledge, the operator' }));
+/** The IDE's right panel: Ledge's chat. */
+const home = () => within(screen.getByRole('complementary', { name: 'Chat Ledge' }));
 async function openHome() {
-  const env = await boot({ home: true, machines: [{ id: 'local', label: 'Local' }], projects: PROJECTS, sessions: [fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working' })] });
-  await screen.findByRole('region', { name: 'The point' });
-  const field = home().getByRole('textbox', { name: 'Ask Ledge' });
+  const env = await boot({ machines: [{ id: 'local', label: 'Local' }], projects: PROJECTS, sessions: [fakeSession('pim', { name: 'Pim', cwd: '/w/ledge', state: 'working' })] });
+  const field = await home().findByRole('textbox', { name: 'Ask Ledge' });
+  await waitFor(() => expect(field).toBeEnabled());
   fireEvent.paste(field, { clipboardData: { files: [new File([new Uint8Array(8)], 's.png', { type: 'image/png' })], items: [], types: ['Files'], getData: () => '' } });
   await waitFor(() => expect(chips()).toHaveLength(1));
   return env;
@@ -33,7 +34,10 @@ describe('images in Ledge’s chat', () => {
   });
   it('« Summarise the day » sends no image and leaves the chip', async () => {
     const { d, user } = await openHome();
-    await user.click(screen.getByRole('button', { name: 'Summarise the day' }));
+    // « Summarise the day » is on the page « For you » (lot 12): its question goes to the right panel's chat.
+    await user.click(within(screen.getByRole('navigation', { name: 'Activity bar' })).getByRole('button', { name: /^For you/ }));
+    await user.click(await screen.findByRole('button', { name: 'Page' }));
+    await user.click(await screen.findByRole('button', { name: 'Summarise the day' }));
     await waitFor(() => expect(asks(d)).toHaveLength(1));
     expect(asks(d)[0]).not.toHaveProperty('images');
     expect(chips()).toHaveLength(1);

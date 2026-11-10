@@ -6,7 +6,6 @@ import { fleet } from './thread';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 // The agent's screen is the session tab's Terminal view, the shells are the IDE's bottom panel (inventory B6: it replaces the old

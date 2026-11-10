@@ -9,9 +9,8 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
-import { saveIdeEnabled } from '../../src/workspace/prefs';
 import { saveOpenSession } from '../../src/workspace/openPrefs';
 import type { DaemonInfo, Machines } from '@ledge/protocol';
 import { PROJECTS, seedAtelier } from '../helpers';
@@ -22,12 +21,11 @@ type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const daemons: Daemon[] = [];
 // jsdom has no ResizeObserver: setup.ts poses a silent one, which is all dockview needs to mount here.
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
-afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
 
-async function mount({ ide = true, machines = [{ id: 'local', label: 'Local' }], daemon }: { ide?: boolean; machines?: Machines; daemon?: DaemonInfo } = {}) {
-  await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
+async function mount({ machines = [{ id: 'local', label: 'Local' }], daemon }: { machines?: Machines; daemon?: DaemonInfo } = {}) {
+  await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
   seedAtelier();
-  if (ide) saveIdeEnabled(true);
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(machines);
   if (daemon) d.extras.daemon = daemon;
@@ -44,7 +42,16 @@ async function mount({ ide = true, machines = [{ id: 'local', label: 'Local' }],
 const tabs = () => screen.queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container'));
 const activeTab = () => tabs().find(t => t.getAttribute('aria-selected') === 'true');
 
-describe('the IDE shell (switch on)', () => {
+describe('the IDE shell', () => {
+  // Lot 12b: the IDE is the only interface; the old switch's value, left in the storage, is never read.
+  it.each(['false', 'true', 'not json'])('a « ledge.ide.enabled » %s left in the storage changes nothing: the IDE, no error', async stored => {
+    localStorage.setItem('ledge.ide.enabled', stored);
+    await mount();
+    expect(screen.getByRole('navigation', { name: 'Barre d’activité' })).toBeVisible();
+    expect(document.querySelector('.titlebar')).toBeNull();
+    expect(document.querySelector('.application')).toBeNull();
+  });
+
   it('renders its title bar, activity bar and status bar, not the « Commande » bar', async () => {
     await mount();
     const bars = screen.getAllByRole('group', { name: 'Barre de fenêtre' });
@@ -114,34 +121,22 @@ describe('the IDE shell (switch on)', () => {
     expect(screen.queryByRole('region', { name: 'Panneau du bas' })).toBeNull();
   });
 
-  it("the place sync is not a user open: with « Ouvrir une session » on 'right', switching the IDE on keeps one group", async () => {
-    saveOpenSession('right');
-    try {
-      const { side, user } = await mount({ ide: false });
-      await user.click(side.getByRole('button', { name: /^Otto/ }));
-      await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible());
-      act(() => saveIdeEnabled(true));
-      await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
-      expect(JSON.parse(JSON.parse(localStorage.getItem('ledge.ide.workspace')!)).groups).toHaveLength(1);
-    } finally { saveOpenSession('active'); }
-  });
-
-  it('Review Focus 3: a session open with the IDE off is its active tab once on; off again, its page as today', async () => {
-    const { side, user } = await mount({ ide: false });
-    await user.click(side.getByRole('button', { name: /^Otto/ }));
-    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible());
-    act(() => saveIdeEnabled(true));
-    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
-    expect(document.querySelector('.titlebar')).toBeNull();
-    act(() => saveIdeEnabled(false));
-    await waitFor(() => expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible());
-    expect(document.querySelector('.ide')).toBeNull();
-    // Turning it off closes no tab.
-    expect(JSON.parse(JSON.parse(localStorage.getItem('ledge.ide.workspace')!)).groups[0].tabs.map((t: { ref: string }) => t.ref)).toEqual(['main', 'local:otto']);
-  });
 });
 
 describe('the IDE keyboard: the chat never holds the single keys', () => {
+  // design-ux (qitem-20261110065243): Ctrl+/ shows the right panel with the focus in its field, and hides it with the focus back on the front tab.
+  it('Ctrl+/ hides the right panel and gives the focus back to the front tab; again, it shows with the focus in the chat\'s field', async () => {
+    const { user } = await mount();
+    expect(await screen.findByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
+    await user.keyboard('{Control>}/{/Control}');
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Chat Ledge' })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(activeTab()));
+    await user.keyboard('{Control>}/{/Control}');
+    const chat = await screen.findByRole('complementary', { name: 'Chat Ledge' });
+    const field = await within(chat).findByRole('textbox');
+    await waitFor(() => expect(field).toHaveFocus());
+  });
+
   it('/ focuses the chat; Escape leaves it; then Alt+1 opens the first agent\'s tab and ? the shortcuts', async () => {
     const { user } = await mount();
     await user.keyboard('/');
@@ -159,16 +154,6 @@ describe('the IDE keyboard: the chat never holds the single keys', () => {
     expect(await screen.findByRole('dialog', { name: /Raccourcis clavier/ })).toBeVisible();
   });
 
-  it('a chat left open by the current interface does not hold the keys once the IDE is on', async () => {
-    const { user } = await mount({ ide: false });
-    await user.keyboard('{Control>}/{/Control}');   // the current interface: the docked chat opens (nav.chat)
-    await screen.findByRole('complementary', { name: 'Chat Ledge' });
-    act(() => saveIdeEnabled(true));
-    await waitFor(() => expect(document.querySelector('.ide')).not.toBeNull());
-    (document.activeElement as HTMLElement | null)?.blur();
-    await user.keyboard('?');
-    expect(await screen.findByRole('dialog', { name: /Raccourcis clavier/ })).toBeVisible();
-  });
 });
 
 describe('the IDE tabs follow the fleet (Review Focus 1)', () => {
@@ -203,14 +188,12 @@ describe('the IDE tabs follow the fleet (Review Focus 1)', () => {
 describe('the IDE tabs carry the place (whole-branch review)', () => {
   const pointer = (name: string) => act(() => { tabs().find(t => t.getAttribute('aria-label') === name)!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })); });
 
-  it('the Settings tab has no « Retour »; switched off, today\'s Settings page has it', async () => {
+  it('the Settings tab has no « Retour »', async () => {
     const { user } = await mount();
     await user.keyboard('{Control>},{/Control}');
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Réglages'));
     expect(await screen.findByRole('heading', { level: 1, name: 'Général' })).toBeVisible();
     expect(screen.queryByRole('button', { name: /Retour à l’atelier/ })).toBeNull();
-    act(() => saveIdeEnabled(false));
-    expect(await screen.findByRole('button', { name: /Retour à l’atelier/ })).toBeVisible();
   });
 
   it('N on the Atelier tab after a session tab opens New session (the place is the overview again)', async () => {
@@ -231,7 +214,7 @@ describe('the IDE tabs carry the place (whole-branch review)', () => {
     expect(await screen.findByRole('dialog', { name: 'Nouvelle session' })).toBeVisible();
   });
 
-  it('Settings comes back on the section it was left on, after a session tab; switched off there, today\'s Settings page', async () => {
+  it('Settings comes back on the section it was left on, after a session tab', async () => {
     const { tree, user } = await mount();
     await user.keyboard('{Control>},{/Control}');
     await user.click(within(await screen.findByRole('navigation', { name: 'Sections des réglages' })).getByRole('button', { name: 'Apparence' }));
@@ -244,10 +227,6 @@ describe('the IDE tabs carry the place (whole-branch review)', () => {
     await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
     pointer('Réglages');
     expect(await screen.findByRole('heading', { level: 1, name: 'Apparence' })).toBeVisible();
-    act(() => saveIdeEnabled(false));
-    await waitFor(() => expect(document.querySelector('.ide')).toBeNull());
-    expect(screen.getByRole('heading', { level: 1, name: 'Apparence' })).toBeVisible();
-    expect(screen.getByRole('button', { name: /Retour à l’atelier/ })).toBeVisible();
   });
 });
 

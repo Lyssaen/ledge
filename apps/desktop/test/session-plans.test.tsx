@@ -73,7 +73,8 @@ it('the keys are not offered where the plan cannot be answered: read only, offli
   await screen.findByText('Proposed plan');
   await env.user.click(card('p1').getByRole('button', { name: /Read the plan/ }));
   expect(status()).toBe('Awaiting your approval');
-  cleanup(); await closeDaemons();
+  // A new mount starts on the Atelier tab again, not on the first one's tabs kept in the stored workspace.
+  cleanup(); await closeDaemons(); localStorage.removeItem('ledge.ide.workspace');
 
   // Offline: the keys go with the connection.
   const online = { ...pia, source: 'launcher' as const };
@@ -85,7 +86,8 @@ it('the keys are not offered where the plan cannot be answered: read only, offli
   expect(status()).toBe(HINT);
   d.upsert({ ...online, offline: true });
   await waitFor(() => expect(status()).toBe('Awaiting your approval'));
-  cleanup(); await closeDaemons();
+  // A new mount starts on the Atelier tab again, not on the first one's tabs kept in the stored workspace.
+  cleanup(); await closeDaemons(); localStorage.removeItem('ledge.ide.workspace');
 
   // A subagent's page: its parent answers for it.
   const otto = { ...listSessions()[0]!, pending: { kind: 'plan' as const, text: '# Plan : version 0.6.0', body: md, source: 'hook' as const, helperId: 'h1' } };
@@ -206,7 +208,8 @@ it('a waiting card no request holds any more is « Proposed », its fate untold,
   d.upsert({ ...pia, pending: { kind: 'plan', text: '# Plan : version 0.6.0 (révisé)', body: v2, source: 'hook' }, lastActivityAt: new Date().toISOString() });
   await waitFor(() => expect([...document.querySelectorAll('.plan-card')].map(c => c.querySelector('.plan-status')!.textContent)).toEqual(['Revised afterwards', 'Awaiting your approval']));
   expect(status()).toBe('Revised afterwards');
-  cleanup(); await closeDaemons();
+  // A new mount starts on the Atelier tab again, not on the first one's tabs kept in the stored workspace.
+  cleanup(); await closeDaemons(); localStorage.removeItem('ledge.ide.workspace');
 
   // Offline: lot 6a's frozen thread, no live status.
   const off = await boot({ sessions: [...listSessions(), { ...pia, pending: undefined, state: 'working' }], list: true });

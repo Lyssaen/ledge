@@ -4,7 +4,6 @@ import { test, expect, openNewProject, seedAtelier } from './fixtures';
 import { eight, fakeDaemon, twoProjects, type ChatReply } from './daemon';
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   await seedAtelier(page);
 });
 

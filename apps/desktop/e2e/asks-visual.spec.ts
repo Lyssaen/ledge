@@ -5,7 +5,6 @@ import { fakeDaemon, session } from './daemon';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 // Visual review of the rigs' requests, lot 1 (docs/mockups/ledge-human-operator-ab-lot1.html), in the IDE: the old home's column is

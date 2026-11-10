@@ -6,7 +6,6 @@ import { fleet } from './thread';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 const COMMANDS: SlashCommand[] = [

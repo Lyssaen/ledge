@@ -4,7 +4,6 @@ import type { Session } from '@ledge/protocol';
 import { fakeDaemon, session, twoProjects } from './daemon';
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   await seedAtelier(page);
 });
 

@@ -18,6 +18,8 @@ const kit = fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input
 const SESSIONS = [otto, bix, cleo, nova, kit];
 
 // The sidebar's OpenRig reads (openrig.status) are background polling, not an action.
+/** The IDE's tab in front of its group (the old top bar named the place: the IDE's tabs do). */
+const activeTab = () => screen.queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container')).find(t => t.getAttribute('aria-selected') === 'true');
 const sent = (d: MockDaemon) => d.received.filter(m => m.type !== 'snapshot.request' && m.type !== 'openrig.status');
 /** J walks the agents; stops on the one named. */
 async function walkTo(user: { keyboard(k: string): Promise<void> }, name: string) {
@@ -33,7 +35,7 @@ describe('the session menu in the atelier', () => {
     const menu = await screen.findByRole('menu', { name: 'Manage Bix' });
     expect(menu).toHaveStyle({ position: 'fixed' });
     expect(within(menu).getAllByRole('menuitem').map(i => i.getAttribute('aria-label'))).toEqual([
-      'Open session', 'Terminal', 'Rename…', 'Move to…', 'Resume session', 'Archive', 'Delete…'
+      'Open', 'Open to the right', 'Its terminal', 'Open in Cursor', 'Rename…', 'Move to…', 'Resume session', 'Archive', 'Delete…'
     ]);
     await user.click(within(menu).getByRole('menuitem', { name: 'Archive' }));
     await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.archive', id: 'bix' }));
@@ -45,7 +47,7 @@ describe('the session menu in the atelier', () => {
     fireEvent.contextMenu(seat('Otto'));
     const menu = await screen.findByRole('menu', { name: 'Manage Otto' });
     expect(within(menu).getAllByRole('menuitem').map(i => i.getAttribute('aria-label'))).toEqual([
-      'Open session', 'Terminal', 'Rename…', 'Move to…', 'Hand over', 'End session', 'End and archive…', 'Delete…'
+      'Open', 'Open to the right', 'Its terminal', 'Open in Cursor', 'Rename…', 'Move to…', 'Hand over', 'End session', 'End and archive…', 'Delete…'
     ]);
     expect(within(menu).getByText('1 subagent leaves with Otto.')).toBeVisible();
     await user.click(within(menu).getByRole('menuitem', { name: /^End and archive/ }));
@@ -59,7 +61,7 @@ describe('the session menu in the atelier', () => {
     await user.click(more);
     const menu = await screen.findByRole('menu', { name: 'Manage Bix' });
     expect(more).toHaveAttribute('aria-expanded', 'true');
-    expect(within(menu).getByRole('menuitem', { name: 'Open session' })).toHaveFocus();
+    expect(within(menu).getByRole('menuitem', { name: 'Open' })).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).toBeNull();
     expect(more).toHaveFocus();
@@ -98,7 +100,7 @@ describe('the session menu in the atelier', () => {
     // T shows the agent in Ledge with its terminal pane; nothing goes to an external terminal.
     await walkTo(user, 'Cleo');
     await user.keyboard('t');
-    expect(within(screen.getByRole('banner')).getByText('Cleo')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Cleo'));
     expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
     expect(sent(d).some(m => m.type === 'session.focus')).toBe(false);
   });
@@ -157,7 +159,7 @@ describe('the session menu in the atelier', () => {
       expect(item).toBeDisabled();
       expect(item).toHaveAttribute('title', 'Update Ledge on Local');
     }
-    expect(within(menu).getByRole('menuitem', { name: 'Open session' })).toBeEnabled();
+    expect(within(menu).getByRole('menuitem', { name: 'Open' })).toBeEnabled();
     expect(sent(d)).toEqual([]);
   });
 
@@ -166,7 +168,7 @@ describe('the session menu in the atelier', () => {
     const { d, user } = await boot({ sessions: [...SESSIONS, lost], daemon: CAN });
     fireEvent.contextMenu(seat('Lost'));
     const menu = await screen.findByRole('menu', { name: 'Manage Lost' });
-    expect(within(menu).getByRole('menuitem', { name: 'Terminal' })).toBeEnabled();
+    expect(within(menu).getByRole('menuitem', { name: 'Its terminal' })).toBeEnabled();
     expect(within(menu).getByRole('menuitem', { name: 'Rename…' })).toBeDisabled();
     expect(within(menu).getByRole('menuitem', { name: 'Delete…' })).toHaveTextContent('Del');
     await user.keyboard('{Escape}');
@@ -177,7 +179,7 @@ describe('the session menu in the atelier', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     // The pane says the machine is out of reach: it opens all the same.
     await user.keyboard('t');
-    expect(within(screen.getByRole('banner')).getByText('Lost')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Lost'));
     expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
     expect(sent(d).some(m => m.type === 'session.focus')).toBe(false);
   });

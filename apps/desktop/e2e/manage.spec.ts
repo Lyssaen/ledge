@@ -4,7 +4,6 @@ import { ideReady, pane, tabOf } from './ide';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 const rex = session('rex', { name: 'Rex', project: 'ledge', cwd: '/w/ledge', state: 'exited', topic: 'Old task' });

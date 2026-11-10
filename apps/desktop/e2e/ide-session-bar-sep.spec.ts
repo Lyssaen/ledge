@@ -7,9 +7,6 @@ import { fakeDaemon, session, twoProjects } from './daemon';
 // it, the branch, the terminal, the project or the MR/PR chip. Under 560 px the project goes (v27).
 test.use({ viewport: { width: 1920, height: 1080 } });
 test.setTimeout(90_000);
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
-});
 
 const sessions = [
   // No model, no context: nothing before the separator.

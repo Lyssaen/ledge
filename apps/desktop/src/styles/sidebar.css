@@ -1,6 +1,5 @@
-/* The sidebar as an IDE explorer, from docs/mockups/session-management/sidebar-tree.css: ask field, views,
-   « À toi », the project › branch › session tree. No search row, no auto-hide, no word mark (the titlebar owns the brand).
-   `.side-swatch` and `.machine-dot` stay: they are used across the app; `.side-footer` is an alias of `.st-foot`. */
+/* The sidebar as the IDE's explorer for « Projets » and « À toi » (docs/mockups/session-management/sidebar-tree.css): the
+   project › branch › session tree and what waits for the user. `.side-swatch` and `.machine-dot` are used across the app. */
 .sidebar.st{position:relative;width:288px;display:flex;flex-direction:column;padding:0;gap:0;background:var(--sidebar);border-right:1px solid var(--sidebar-border)}
 .st button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;text-align:left}
 .st button:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;border-radius:var(--radius-sm)}
@@ -8,13 +7,7 @@
 .st-fill{flex:1}
 .st-ask{margin:10px 10px 0;height:36px;flex:none;display:flex;align-items:center;gap:8px;padding:0 8px 0 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--well);cursor:text}
 .st-ask:focus-within,.st-ask.on{border-color:var(--ring)}
-.st .st-mascot{display:inline-flex;flex:none}
-.st-views{display:flex;flex-direction:column;gap:2px;margin:10px 10px 8px;padding:4px;flex:none;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
-.st .st-views button{flex:1;height:30px;display:flex;align-items:center;gap:9px;padding:0 10px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
-.st .st-views button:hover{color:var(--sidebar-foreground)}
-.st .st-views button.on{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
-.st .st-views button.on svg{color:var(--sidebar-primary)}
-.st-views small{font:10px 'Geist Mono',monospace;color:var(--muted-foreground)}
+
 /* The scrollbar's gutter is kept (thin: 10 px) and stands for the right padding, so the kernel box keeps the views' edges whether the list scrolls or not. */
 .st-scroll{flex:1;min-height:0;overflow:auto;scrollbar-gutter:stable;padding:2px 0 8px 8px;display:flex;flex-direction:column;gap:10px}
 .st-label{display:flex;align-items:center;gap:4px;height:26px;padding:0 2px 0 8px;font-size:11px;color:var(--muted-foreground)}
@@ -123,19 +116,7 @@
 .st .st-picked-write:hover{background:var(--primary-hover)}
 .st .st-picked-cancel{height:28px;padding:0 8px;border-radius:var(--radius-sm);color:var(--muted-foreground)}
 .st .st-picked-cancel:hover{background:var(--sidebar-accent);color:var(--sidebar-foreground)}
-/* Machines and Settings at the foot. */
-.st-foot{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 6px 0 14px;border-top:1px solid var(--sidebar-border);font-size:11px;color:var(--muted-foreground);overflow:hidden}
-.st .st-mach{display:flex;align-items:center;gap:5px;white-space:nowrap}
-.st .st-mach:hover{color:var(--sidebar-foreground)}
-.st-mach small{font:10px 'Geist Mono',monospace}
-.st-mach .machine-dot{margin:0}
-/* The ? beside Settings: its tooltip lists the shortcuts (t.shortcuts.rows), on hover and on keyboard focus. It hangs from the
-   aside (position:relative), above the foot, so the foot's overflow:hidden does not clip it. */
-.st-keys-tip{position:absolute;left:8px;bottom:48px;z-index:30;width:max-content;max-width:320px;display:none;flex-direction:column;gap:5px;padding:10px 12px;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:var(--radius-md);box-shadow:var(--shadow-overlay);font-size:11px;line-height:15px;pointer-events:none}
-.st-keys:hover .st-keys-tip,.st-keys:focus-within .st-keys-tip{display:flex}
-.st-keys-tip>span{display:flex;align-items:center;justify-content:space-between;gap:14px}
-.st-keys-tip kbd{flex:none;font-size:10px!important}
-.side-footer{padding:0;border:0} /* alias: Settings' test reads this selector; the foot is .st-foot */
+
 .side-swatch{width:9px;height:9px;border-radius:3px;margin:0 3px;flex-shrink:0;background:var(--info)}
 /* « Sans projet » has no colour: its place stays, empty, so its name lines up with the projects' names. */
 .st-project>.filter-none{width:9px;height:9px;margin:0 3px;flex-shrink:0}
@@ -148,49 +129,21 @@
 @media(max-width:850px){
  .sidebar.st{width:64px}
  .st kbd{display:none!important}
- .st .st-keys-tip kbd{display:inline-flex!important}
- .st-keys-tip{left:calc(100% + 6px);bottom:8px} /* the rail's foot is a column: the tooltip opens beside it */
  .st-ask{margin:10px 8px 0;padding:0;justify-content:center;border:0;background:none}.st-ask kbd{display:none}
- .st-views{flex-direction:column;margin:10px 8px 6px}.st .st-views button{font-size:0;gap:0}.st-views small{display:none}
- .st-attn,.st-label,.st-help,.st-empty,.st-kernel-box,.st-agent,.st-branch,.st-more,.st-archives{display:none}
- .st .st-views button{justify-content:center;padding:0}.st-views .st-fill{display:none}
+ .st-attn,.st-label,.st-help,.st-empty,.st-agent,.st-branch,.st-more,.st-archives{display:none}
  .st-project{justify-content:center;padding:0;min-height:36px}.st-project>.st-chev,.st-project>.st-gap,.st-project .st-main,.st-project .st-acts{display:none}
  .st-project .side-swatch{width:16px;height:16px;border-radius:5px}
  .st-tally{position:absolute;top:2px;right:6px}.st-tally span:not(.t-need){display:none}
- .st-foot{flex-direction:column;height:auto;padding:8px 0;gap:8px}.st .st-mach{font-size:0}.st-mach small{display:none}.st-foot .st-fill{display:none}
+ 
 }
 
-/* Ledge's entry (ledge home spec §2.1): the resident, « Ledge. », the live line and /, the question field under it; lit while the home view shows. */
-.st-ask.st-ledge{height:auto;flex-direction:column;align-items:stretch;gap:0;padding:8px 14px;cursor:default}
-.st-ledge .st-ledge-entry{display:flex;align-items:center;gap:8px;width:100%;padding:2px 0;border:0;background:none;color:var(--sidebar-foreground);text-align:left;cursor:pointer}
-.st-ledge .st-ledge-names{display:flex;flex-direction:column;flex:1;min-width:0;line-height:14px}
-.st-ledge .st-ledge-brand{font-size:13px;font-weight:650}
-.st-ledge .st-ledge-line{font-size:11px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st-ledge.on{background:color-mix(in srgb,var(--sidebar-primary) 8%,var(--well))}
-@media(max-width:850px){.st-ask.st-ledge{padding:0}.st-ledge .st-ledge-names{display:none}.st-ledge .st-ledge-entry{justify-content:center}}
 .st-card.st-task .st-task-mark{display:grid;place-items:center;width:18px;height:18px;font-size:12px;color:var(--success,#16a34a)}
 .st-card.st-near .st-task-mark{color:var(--warning,#e5b85c)}
 .st-card.st-decision .st-task-mark{color:var(--sidebar-primary);font-weight:700}
 
 /* OpenRig's groups (docs/mockups/ledge-openrig-groups.html): a rig's hexagon, the kernel's. */
 .st-rig-hex{display:inline-grid;place-items:center;color:var(--info);flex:none}
-.st-kernel-hex{display:inline-grid;place-items:center;color:#8b5cf6;margin-right:4px}
-.st-grouping{display:flex;flex:none;gap:2px;margin:0 10px 8px;padding:4px;border-radius:var(--radius-md);background:var(--well);border:1px solid var(--border)}
-.st .st-grouping button{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:0 8px;height:26px;border-radius:var(--radius-sm);font-size:12px;color:var(--muted-foreground)}
-.st .st-grouping button[aria-checked=true]{background:var(--card);color:var(--foreground);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.18),0 0 0 1px var(--border)}
 
-/* docs/mockups/ledge-sidebar-tidy.html, point 7 · Kernel, the operational layer: a tinted box in the kernel's violet, the
-   same outer edges as the views and the toggle (the list's 8 px + 2 px = 10 px). Its header says the kernel's real state. */
-.st-kernel-box{--kv:#8b5cf6;margin:0 0 0 2px;padding:2px 4px 4px;border:1px solid color-mix(in srgb,var(--kv) 34%,var(--border));border-radius:var(--radius-md);background:color-mix(in srgb,var(--kv) 7%,var(--sidebar))}
-:root[data-theme="dark"] .st-kernel-box{--kv:#a78bfa;background:color-mix(in srgb,var(--kv) 9%,var(--sidebar))}
-.st-kernel-box .st-label{padding:0 6px}
-.st-kernel-box .st-kernel-name{color:var(--sidebar-foreground);font-weight:600}
-.st-kernel-tag{display:flex;align-items:center;gap:5px;font:500 10px 'Geist Mono',monospace;color:color-mix(in srgb,var(--kv) 75%,var(--muted-foreground))}
-.st-kernel-tag i{width:6px;height:6px;border-radius:50%;background:var(--muted-foreground)}
-.st-kernel-tag[data-state="ready"] i{background:var(--success)}
-.st-kernel-tag[data-state="starting"] i{background:var(--warning)}
-.st-kernel-box .st-row{padding-left:6px}
-.st-kernel-box .st-row:hover,.st-kernel-box .st-row.sel{background:color-mix(in srgb,var(--kv) 14%,var(--sidebar))}
 /* Point 3 · Empty states: a quiet box in the list, its one action as an outline button. */
 .st-empty{margin:2px 0 0 2px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:3px}
 .st-empty strong{font-size:13px;font-weight:500;color:var(--sidebar-foreground);line-height:18px}
@@ -200,11 +153,9 @@
 .st .st-empty-btn:hover{background:var(--sidebar-accent)}
 .st .st-empty-btn[disabled]{opacity:1;color:var(--muted-foreground);cursor:default}
 .st .st-empty-btn[disabled]:hover{background:none}
-.st .st-empty-link{margin-top:4px;align-self:center;font-size:11px;color:var(--muted-foreground);text-decoration:underline;text-underline-offset:2px}
-.st .st-empty-link:hover{color:var(--sidebar-foreground)}
-.st-spin{width:12px;height:12px;border-radius:50%;border:1.5px solid currentColor;border-right-color:transparent;animation:st-spin .9s linear infinite}
+
 @keyframes st-spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.st-spin{animation:none}}
+
 /* The agent's branch on its row, when the tree does not group by branch: the default branch quiet, the others in the info colour. */
 .st-btag{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:0 5px 0 4px;border-radius:4px;border:1px solid color-mix(in oklab,var(--info) 45%,transparent);background:color-mix(in oklab,var(--info) 10%,transparent);color:var(--info);font:500 10px/15px 'Geist Mono',monospace;vertical-align:middle;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;flex:none}
 .st-btag.default{border-color:var(--input);background:none;color:var(--muted-foreground)}

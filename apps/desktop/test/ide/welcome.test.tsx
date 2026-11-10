@@ -8,9 +8,9 @@ import { createDesktopFleet } from '../../src/fleet/useFleet';
 import { App } from '../../src/App';
 import { loadWorkspace } from '../../src/session/lazy';
 import { loadSettings } from '../../src/settings/lazy';
-import { loadHome, loadChat } from '../../src/chat/lazy';
+import { loadChat } from '../../src/chat/lazy';
 import { loadIde } from '../../src/ide/lazy';
-import { saveIdeEnabled, saveResumeOnStart } from '../../src/workspace/prefs';
+import { saveResumeOnStart } from '../../src/workspace/prefs';
 import { empty, open, serialize } from '../../src/workspace/model';
 import { WORKSPACE_KEY } from '../../src/workspace/store';
 import { LIVE_TABS_KEY, loadLiveTabs } from '../../src/workspace/resume';
@@ -21,14 +21,14 @@ type Daemon = Awaited<ReturnType<typeof createMockDaemon>>;
 const CAN: DaemonInfo = { version: '0.7.0', install: 'npm', systemd: true, archive: true };
 const daemons: Daemon[] = [];
 beforeEach(() => { localStorage.clear(); localStorage.setItem('desktop.lang', 'fr'); });
-afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); saveIdeEnabled(false); localStorage.clear(); });
+afterEach(async () => { cleanup(); for (const d of daemons.splice(0)) await d.close(); localStorage.clear(); });
 
 async function mount(sessions: Session[] = [
   fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working', branch: 'feat/ide', lastActivityAt: '2026-11-07T10:00:00.000Z' }),
   fakeSession('nova', { name: 'Nova', tool: 'codex', cwd: '/w/ledge', state: 'idle', lastActivityAt: '2026-11-07T09:00:00.000Z' })
 ]) {
-  await Promise.all([loadWorkspace(), loadSettings(), loadHome(), loadChat(), loadIde()]);
-  saveIdeEnabled(true);
+  await Promise.all([loadWorkspace(), loadSettings(), loadChat(), loadIde()]);
+ 
   const d = await createMockDaemon(); daemons.push(d);
   d.extras.daemon = CAN;
   d.machines([{ id: 'local', label: 'Local' }]);

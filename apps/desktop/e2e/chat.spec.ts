@@ -6,7 +6,6 @@ import { ideReady } from './ide';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 /** Three agents: two at the Ledge table, one at Website, so a new one has a free seat. */

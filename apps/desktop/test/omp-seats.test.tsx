@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
 import type { Session } from '@ledge/protocol';
-import { LangProvider } from '../src/i18n/lang';
-import { RigGroups } from '../src/shell/sidebar/RigGroups';
-import type { SidebarOpenRig } from '../src/openrig/sidebarState';
 import { SESSION_KEY, viewShown } from '../src/session/prefs';
 import { boot, closeDaemons } from './helpers';
 
@@ -19,46 +16,7 @@ const IVO = omp('rig-ivo', 'Ivo', 'dev-omp', 'dev.agent', { state: 'working' });
 const PIA = omp('rig-pia', 'Pia', 'dev-omp', 'review.reviewer');
 const TOM = omp('rig-tom', 'Tom', 'split-omp', 'split.splitter', { state: 'exited', exitedAt: '2026-11-03T09:00:00.000Z' });
 const ANA = omp('rig-ana', 'Ana', 'split-omp', 'analysis.analyst');
-const LU = fakeSession('rig-lu', { name: 'Lu', cwd: '/w/ledge', state: 'exited', source: 'rig', rig: { seat: 'pilot-lead@ledge-dev', name: 'ledge-dev', role: 'pilot.lead' } });
 
-const openrig = (): SidebarOpenRig => ({ installed: true, daemonUp: true, kernelState: () => 'ready', labelOf: m => m, canStart: true, installedOn: null, starting: false, failed: null, start: vi.fn() });
-function mount(sessions: readonly Session[], lang: 'fr' | 'en' = 'fr') {
-  render(<LangProvider lang={lang}><aside className="st"><RigGroups sessions={sessions} current={null} paused dispatch={vi.fn()} openrig={openrig()} dense={false} onToggleDense={vi.fn()} /></aside></LangProvider>);
-}
-const rowOf = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) }).closest('[role="treeitem"]') as HTMLElement;
-
-describe('OMP seats in the sidebar', () => {
-  it('a running OMP seat is a seat row like the others: the omp logo, its name, « rôle · omp », counted while it works', () => {
-    mount([IVO, PIA]);
-    expect(rowOf('Ivo')).toHaveTextContent('dev · omp');
-    expect(rowOf('Pia')).toHaveTextContent('review.reviewer · omp');
-    // Sidebar rows wear their provider's logo, not a mascot (d036a563).
-    expect(rowOf('Ivo').querySelector('.st-bot .logo')).toHaveAttribute('title', 'omp');
-    expect(rowOf('Ivo')).not.toHaveClass('off');
-    const head = screen.getByRole('button', { name: /^dev-omp/ }).closest('[role="treeitem"]')!;
-    expect(head.querySelector('.t-work')).toHaveTextContent('1');
-  });
-
-  it('a stopped OMP seat stays under its rig, greyed « arrêté », with its omp logo, out of the rig’s count', () => {
-    mount([ANA, TOM, { ...ANA, id: 'rig-sol', name: 'Sol', state: 'working', rig: { ...ANA.rig!, seat: 'review-reviewer@split-omp', role: 'review.reviewer' } }]);
-    const tom = rowOf('Tom');
-    expect(tom).toHaveClass('off');
-    expect(tom.querySelector('.st-time')).toHaveTextContent('arrêté');
-    expect(tom.querySelector('.st-bot .logo')).toHaveAttribute('title', 'omp');
-    const head = screen.getByRole('button', { name: /^split-omp/ }).closest('[role="treeitem"]')!;
-    expect(head.querySelector('.t-work')).toHaveTextContent('1');
-    cleanup();
-    mount([ANA, TOM], 'en');
-    expect(rowOf('Tom').querySelector('.st-time')).toHaveTextContent('stopped');
-  });
-
-  it('a stopped Claude seat still leaves the list, and so does an archived OMP seat', () => {
-    mount([ANA, LU, { ...TOM, archivedAt: '2026-11-03T09:30:00.000Z' }]);
-    expect(screen.queryByRole('button', { name: /^Lu/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Tom/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^ledge-dev/ })).toBeNull();
-  });
-});
 
 describe('the view an OMP seat’s page shows (Fil | Terminal, design-ux 2026-11-03 12:23Z)', () => {
   it('the preference, for any session but an OMP seat of OpenRig', () => {
@@ -80,71 +38,73 @@ describe('the view an OMP seat’s page shows (Fil | Terminal, design-ux 2026-11
 });
 
 describe('an OMP seat’s page', () => {
-  const tab = (name: 'Thread' | 'Terminal') => screen.getByRole('tab', { name: new RegExp(`^${name}`) });
+  // The IDE (lot 12b): a seat opens in a tab from its seat in the Atelier; the tab's own view, flipped from its menu.
+  const dvTab = (name: string) => screen.getAllByRole('tab').find(t => t.closest('.dv-tabs-container') && t.getAttribute('aria-label') === name)!;
+  const onTerminal = () => !!document.querySelector('.ide-pane .session-thread[hidden]') || !!screen.queryByRole('region', { name: 'Terminal' });
+  const openSeat = (user: Awaited<ReturnType<typeof boot>>['user'], name: string) => user.click(screen.getByRole('button', { name: new RegExp(`^${name},`) }));
+  async function flip(user: Awaited<ReturnType<typeof boot>>['user'], name: string, to: RegExp) {
+    fireEvent.contextMenu(dvTab(name));
+    await user.click(within(await screen.findByRole('menu', { name: new RegExp(name) })).getByRole('menuitem', { name: to }));
+  }
 
   it('running: it opens on its Terminal view; « Fil » says why there is no thread, with no reply; the preference stays', async () => {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ view: 'thread', terminal: false, split: 0.5, termWidth: 0.46 }));
-    const { d, side, user } = await boot({ sessions: [IVO, PIA], projects: { projects: [] } as never });
+    const { d, user } = await boot({ sessions: [IVO, PIA], projects: { projects: [] } as never });
     d.preview('rig-ivo', ['you > Story ST7-412']);
-    await user.click(side.getByRole('button', { name: /^Ivo/ }));
-    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
+    await openSeat(user, 'Ivo');
     expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
-    expect(screen.getByRole('banner').querySelector('.crumb-task')).toHaveTextContent(/^dev\.agent$/);
-    expect(screen.getByRole('banner').querySelector('[data-badge]')).toHaveAttribute('data-badge', 'working');
-    await user.click(tab('Thread'));
-    expect(document.querySelector('.seat-note')).toHaveTextContent('No thread for this seat. Ledge does not read the conversation of an OMP seat launched by OpenRig. Its Terminal view shows its screen: what you type there is sent to it.');
-    expect(screen.queryByRole('textbox')).toBeNull();
+    await flip(user, 'Ivo', /Back to the thread/);
+    await waitFor(() => expect(document.querySelector('.seat-note')).toHaveTextContent('No thread for this seat. Ledge does not read the conversation of an OMP seat launched by OpenRig. Its Terminal view shows its screen: what you type there is sent to it.'));
+    expect(screen.queryByRole('textbox', { name: 'Reply to the agent' })).toBeNull();
     expect(JSON.parse(localStorage.getItem(SESSION_KEY)!).view).toBe('thread');
-    // « Fil » held for this visit only: another seat opens on its Terminal, and Ivo again too.
-    await user.click(side.getByRole('button', { name: /^Pia/ }));
-    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
-    await user.click(side.getByRole('button', { name: /^Ivo/ }));
-    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
+    // Another seat opens on its Terminal too; the preference is never written.
+    await user.click(screen.getByRole('button', { name: 'Atelier (tab)' }));
+    await openSeat(user, 'Pia');
+    await waitFor(() => expect(dvTab('Pia')).toHaveAttribute('aria-selected', 'true'));
+    await waitFor(() => expect(onTerminal()).toBe(true));
     expect(JSON.parse(localStorage.getItem(SESSION_KEY)!).view).toBe('thread');
   });
 
   it('a seat’s view never writes the preference: a Claude session keeps its own', async () => {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ view: 'thread', terminal: false, split: 0.5, termWidth: 0.46 }));
     const LUC = fakeSession('rig-lu', { name: 'Lu', cwd: '/w/ledge', state: 'idle', source: 'rig', tmuxSession: 'pilot-lead@ledge-dev', rig: { seat: 'pilot-lead@ledge-dev', name: 'ledge-dev', role: 'pilot.lead' } });
-    const { side, user } = await boot({ sessions: [IVO, LUC], projects: { projects: [] } as never });
-    await user.click(side.getByRole('button', { name: /^Ivo/ }));
-    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
-    await user.click(tab('Thread'));
-    await user.click(tab('Terminal'));
-    await user.click(side.getByRole('button', { name: /^Lu/ }));
-    await waitFor(() => expect(screen.getByRole('banner')).toHaveTextContent('Lu'));
-    expect(tab('Thread')).toHaveAttribute('aria-selected', 'true');
+    const { user } = await boot({ sessions: [IVO, LUC], projects: { projects: [] } as never });
+    await openSeat(user, 'Ivo');
+    await screen.findByRole('region', { name: 'Terminal' });
+    await flip(user, 'Ivo', /Back to the thread/);
+    await flip(user, 'Ivo', /Switch to the terminal/);
+    await user.click(screen.getByRole('button', { name: 'Atelier (tab)' }));
+    await openSeat(user, 'Lu');
+    await waitFor(() => expect(document.querySelector<HTMLElement>('.session-page')?.dataset.session).toBe('local:rig-lu'));
+    expect(document.querySelector('.session-page .session-thread')).not.toHaveAttribute('hidden');
     expect(JSON.parse(localStorage.getItem(SESSION_KEY)!).view).toBe('thread');
   });
 
-  it('stopped: « Fil » says its terminal is gone, « Terminal » is disabled, the OpenRig page one click away; >_ is the panel as anywhere', async () => {
+  it('stopped: « Fil » says its terminal is gone, no Terminal view to switch to, the OpenRig page one click away', async () => {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ view: 'terminal', terminal: false, split: 0.5, termWidth: 0.46 }));
-    const { side, user } = await boot({ sessions: [ANA, TOM], projects: { projects: [] } as never });
-    await user.click(side.getByRole('button', { name: /^Tom/ }));
+    const { user } = await boot({ sessions: [ANA, TOM], projects: { projects: [] } as never });
+    await openSeat(user, 'Tom');
     await waitFor(() => expect(document.querySelector('.seat-note')).toHaveTextContent('Seat stopped. Its terminal is gone: the OpenRig page shows its rig.'));
-    expect(tab('Thread')).toHaveAttribute('aria-selected', 'true');
-    const terminal = tab('Terminal');
-    expect(terminal).toHaveAttribute('aria-disabled', 'true');
-    expect(terminal).toHaveAttribute('title', 'Seat stopped: no terminal');
-    await user.click(terminal);
-    expect(tab('Thread')).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByRole('region', { name: 'Terminal' })).toBeNull();
-    expect(screen.getByRole('banner').querySelector('[data-badge]')).toHaveTextContent('Stopped');
-    expect(screen.getByRole('banner').querySelector('.crumb-task')).toHaveTextContent(/^split\.splitter$/);
-    expect(within(screen.getByRole('banner')).getByRole('button', { name: /Show the panel/ })).not.toHaveAttribute('aria-disabled');
+    fireEvent.contextMenu(dvTab('Tom'));
+    const menu = await screen.findByRole('menu', { name: /Tom/ });
+    expect(within(menu).queryByRole('menuitem', { name: /Switch to the terminal/ })).toBeNull();
+    await user.keyboard('{Escape}');
+    // The IDE opens the machine's OpenRig tab.
     await user.click(screen.getByRole('button', { name: 'Open the OpenRig page' }));
-    await waitFor(() => expect(document.querySelector('.or-page')).not.toBeNull());
+    await waitFor(() => expect(screen.getAllByRole('tab').some(t => t.closest('.dv-tabs-container') && /^OpenRig · /.test(t.getAttribute('aria-label') ?? ''))).toBe(true));
   });
 
   it('a session that turns OMP under the same id comes to its Terminal view, its « Fil » to the note (review)', async () => {
     const seatOf = { seat: 'dev-agent@dev-omp', name: 'dev-omp', role: 'dev.agent' };
     const CLAUDE = fakeSession('rig-dev', { name: 'Ivo', cwd: '/w/dev-omp', state: 'idle', source: 'rig', tmuxSession: 'dev-agent@dev-omp', rig: seatOf });
-    const { d, side, user } = await boot({ sessions: [CLAUDE], projects: { projects: [] } as never });
-    await user.click(side.getByRole('button', { name: /^Ivo/ }));
-    await waitFor(() => expect(tab('Thread')).toHaveAttribute('aria-selected', 'true'));
+    const { d, user } = await boot({ sessions: [CLAUDE], projects: { projects: [] } as never });
+    await openSeat(user, 'Ivo');
+    await waitFor(() => expect(document.querySelector('.session-page .session-thread')).not.toHaveAttribute('hidden'));
     d.upsert({ ...CLAUDE, tool: 'omp' });
-    await waitFor(() => expect(tab('Terminal')).toHaveAttribute('aria-selected', 'true'));
-    await user.click(tab('Thread'));
-    expect(document.querySelector('.seat-note')).toHaveTextContent('No thread for this seat.');
+    expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
+    await flip(user, 'Ivo', /Back to the thread/);
+    await waitFor(() => expect(document.querySelector('.seat-note')).toHaveTextContent('No thread for this seat.'));
   });
 });
+

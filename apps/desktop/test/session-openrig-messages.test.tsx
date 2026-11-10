@@ -5,11 +5,12 @@ import WebSocket from 'ws';
 import type { DaemonInfo, RigInfo, ThreadItem } from '@ledge/protocol';
 import { createMockDaemon } from '@ledge/fleet/test/mockDaemon';
 import { App } from '../src/App';
-import { activeCount } from '../src/nav/agents';
+import { loadIde } from '../src/ide/lazy';
+import { loadChat } from '../src/chat/lazy';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { loadWorkspace } from '../src/session/lazy';
 import { aboutLine } from '../src/session/RigItems';
-import { listSessions, PROJECTS, type MockDaemon } from './helpers';
+import { listSessions, PROJECTS, seedAtelier, type MockDaemon } from './helpers';
 
 /* OpenRig's messages in a seat's thread (docs/mockups/ledge-openrig-messages.html, validated 2026-11-02): the daemon's
    interpreted items (`rig`) render as bubbles, task cards and notices, never as « Vous ». */
@@ -25,7 +26,8 @@ const received = (id: string, s: number, text: string, extra: Partial<RigInfo> =
 const notice = (id: string, s: number, text: string, r: RigInfo, extra: Partial<Extract<ThreadItem, { kind: 'notice' }>> = {}): ThreadItem => ({ kind: 'notice', id, at: at(s), turn: 1, notice: 'other', text, rig: r, ...extra });
 
 async function openOtto(items: ThreadItem[], daemon: DaemonInfo | null = ROWS) {
-  await loadWorkspace();
+  await Promise.all([loadWorkspace(), loadIde(), loadChat()]);
+  seedAtelier();
   localStorage.setItem('desktop.lang', 'fr');
   localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
   const d = await createMockDaemon(); daemons.push(d);
@@ -36,10 +38,9 @@ async function openOtto(items: ThreadItem[], daemon: DaemonInfo | null = ROWS) {
   for (const s of sessions) d.upsert(s);
   d.thread('otto', items);
   render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
-  const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
-  await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(sessions))));
+  // Otto is a seat: the IDE's project tree does not list it; its seat in the Atelier tab opens it.
   const user = userEvent.setup();
-  await user.click(within(side.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
+  await user.click(await screen.findByRole('button', { name: /^Otto,/ }, { timeout: 5000 }));
   await screen.findByRole('tabpanel', { name: 'Fil de la session' });
   return { d, user };
 }

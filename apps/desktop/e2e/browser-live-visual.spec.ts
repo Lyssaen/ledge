@@ -6,7 +6,6 @@ import { ideReady, pane } from './ide';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 // Visual review of docs/mockups/ledge-browser-live.html (design/html-viewer 44811d1e), not an assertion suite: a Claude

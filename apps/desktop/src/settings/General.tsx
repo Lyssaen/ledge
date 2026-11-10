@@ -16,7 +16,7 @@ import { TOOLS, useDefaultTool } from './tool';
 import { useContextNear, useUsage } from '@ledge/fleet';
 import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN, USAGE_ALERT_MAX, USAGE_ALERT_MIN } from '@ledge/protocol';
 import { usageThreshold } from '../usage/model';
-import { useIdeEnabled, useResumeOnStart } from '../workspace/prefs';
+import { useResumeOnStart } from '../workspace/prefs';
 
 /** « Contexte max »: 50 % to 95 %, by 5. */
 const ALERTS = Array.from({ length: Math.round((USAGE_ALERT_MAX - USAGE_ALERT_MIN) * 20) + 1 }, (_, i) => Math.round((USAGE_ALERT_MIN + i * 0.05) * 100));
@@ -59,7 +59,6 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
     });
   };
 
-  const [ide, setIde] = useIdeEnabled();
   const [resumeOnStart, setResumeOnStart] = useResumeOnStart();
 
   // Start with Windows (DisplayPanel's pattern on origin/feat/desktop): undefined while Windows is asked, null when it is not
@@ -84,8 +83,7 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
         <Row label={g.lang} hint={g.langHint} error={langFailed ? g.langFailed : null}>
           {describedBy => <Segmented label={g.lang} value={ctx.lang} disabled={switching} describedBy={describedBy} onChange={chooseLang} options={LANGS.map(l => ({ value: l, label: g.langs[l], lang: l }))} />}
         </Row>
-        <SwitchRow label={t.ide.setting} hint={t.ide.settingHint} checked={ide} onChange={on => { setIde(on); ctx.saved(on ? t.ide.setting : t.ide.settingOff); }} />
-        {ide && <SwitchRow label={t.ide.resumeSetting} hint={t.ide.resumeHint} checked={resumeOnStart} onChange={on => { setResumeOnStart(on); ctx.saved(on ? t.ide.resumeSetting : t.ide.resumeOff); }} />}
+        <SwitchRow label={t.ide.resumeSetting} hint={t.ide.resumeHint} checked={resumeOnStart} onChange={on => { setResumeOnStart(on); ctx.saved(on ? t.ide.resumeSetting : t.ide.resumeOff); }} />
         <SwitchRow label={g.autostart} hint={autostart === null ? g.autostartMissing : g.autostartHint} error={autostartFailed ? g.autostartFailed : null}
           checked={autostart === true} disabled={autostart == null || writing} onChange={chooseAutostart} />
         <Row label={g.tool} hint={g.toolHint} stack>

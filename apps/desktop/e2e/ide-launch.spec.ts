@@ -8,9 +8,6 @@ import { eight, fakeDaemon, twoProjects } from './daemon';
 // and gives the focus back. The zoomed captures (dark, light) are compared by eye with the mockup's own modal.
 test.use({ viewport: { width: 1920, height: 1080 } });
 test.setTimeout(90_000);
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
-});
 
 type Launch = Extract<ClientMessage, { type: 'session.launch' }>;
 const launchesOf = (received: ClientMessage[]) => received.filter((m): m is Launch => m.type === 'session.launch');

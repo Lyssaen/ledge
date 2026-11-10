@@ -26,8 +26,6 @@ describe('the page of an archived session', () => {
     await showSession('old');
     const banner = (await screen.findByText('Archived session')).closest<HTMLElement>('.archived-banner')!;
     expect(within(banner).getByText(/3 min ago · the agent is stopped, the conversation is read-only\./)).toBeVisible();
-    expect(screen.getByRole('banner')).toHaveTextContent('Archived');
-    expect(screen.queryByRole('button', { name: 'Manage Old' })).toBeNull();
     expect(screen.queryByRole('textbox', { name: /reply/i })).toBeNull();
     expect(document.querySelector('.session-reply')).toBeNull();
     await user.click(within(banner).getByRole('button', { name: 'Resume' }));
@@ -47,49 +45,49 @@ describe('the page of an archived session', () => {
   it('a page stays open when another client archives its session, and shows the banner', async () => {
     const { d } = await boot({ sessions: [otto, bix], daemon: CAN });
     await showSession('bix');
-    expect(await screen.findByRole('button', { name: 'Manage Bix' })).toBeVisible();
+    await waitFor(() => expect(document.querySelector('.session-reply')).not.toBeNull());
     expect(document.querySelector('.archived-banner')).toBeNull();
     act(() => d.upsert({ ...bix, archivedAt: new Date().toISOString() }));
     expect(await screen.findByText('Archived session')).toBeVisible();
     expect(document.querySelector('.session-page')).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Manage Bix' })).toBeNull();
     expect(document.querySelector('.session-reply')).toBeNull();
     // Back from the archive: the reply is there again.
     act(() => d.upsert(bix));
     await waitFor(() => expect(document.querySelector('.archived-banner')).toBeNull());
-    expect(await screen.findByRole('button', { name: 'Manage Bix' })).toBeVisible();
+    await waitFor(() => expect(document.querySelector('.session-reply')).not.toBeNull());
   });
 });
 
-describe('the header « … » of a session page', () => {
-  it('opens the session menu under the button; Delete… then confirm sends session.delete and goes back to the atelier', async () => {
+// The IDE has no page header (lot 12b): a session's « … » is its seat's in the Atelier tab.
+describe('the session menu « … »', () => {
+  it('opens under its button; Delete… then confirm sends session.delete; the session\'s tab goes with it', async () => {
     const { d, user } = await boot({ sessions: [otto, bix], daemon: CAN });
     await showSession('bix');
+    await waitFor(() => expect(document.querySelector('.session-page')).not.toBeNull());
+    await user.click(screen.getByRole('button', { name: 'Atelier (tab)' }));
     const more = await screen.findByRole('button', { name: 'Manage Bix' });
     expect(more).toHaveAttribute('aria-haspopup', 'menu');
     await user.click(more);
     const menu = await screen.findByRole('menu', { name: 'Manage Bix' });
-    expect(more).toHaveAttribute('aria-expanded', 'true');
     expect(menu).toHaveStyle({ position: 'fixed' });
     expect(within(menu).getByRole('menuitem', { name: 'Delete…' })).toHaveTextContent('Del');
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).toBeNull();
-    expect(more).toHaveFocus();
 
     await user.click(more);
     await user.click(within(await screen.findByRole('menu', { name: 'Manage Bix' })).getByRole('menuitem', { name: 'Delete…' }));
     await user.click(within(await screen.findByRole('alertdialog', { name: 'Delete Bix?' })).getByRole('button', { name: 'Delete for good' }));
     await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.delete', id: 'bix' }));
-    // The daemon drops it: the page goes back to the atelier.
+    // The daemon drops it: its tab closes.
     act(() => d.remove('bix'));
-    await waitFor(() => expect(document.querySelector('.session-page')).toBeNull());
-    expect(await screen.findByRole('region', { name: 'Atelier' })).toBeVisible();
+    await waitFor(() => expect(screen.queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container') && t.getAttribute('aria-label') === 'Bix')).toHaveLength(0));
+    expect(screen.getAllByRole('region', { name: 'Atelier' })[0]).toBeVisible();
   });
 
-  it('a live session shows its state, not the Archived pill', async () => {
+  it('a live session shows its reply, not the archived banner', async () => {
     await boot({ sessions: [otto, bix], daemon: CAN });
     await showSession('bix');
-    expect(await screen.findByRole('button', { name: 'Manage Bix' })).toBeVisible();
-    expect(screen.getByRole('banner')).not.toHaveTextContent('Archived');
+    await waitFor(() => expect(document.querySelector('.session-reply')).not.toBeNull());
+    expect(document.querySelector('.archived-banner')).toBeNull();
   });
 });

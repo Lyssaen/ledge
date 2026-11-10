@@ -52,9 +52,7 @@ export const fr = {
     rigs: 'Rigs', kernel: 'Kernel', rigOf: (name: string) => `Le rig ${name} sur la page OpenRig`, rigAsks: (n: number) => `${n} ${n > 1 ? 'demandes' : 'demande'}`, 
     label: 'Barre latérale', newSession: 'Nouvelle session', searchLabel: 'Rechercher une session',
     views: 'Vues', atelier: 'Atelier', chat: 'Chat Ledge', projects: 'Projets', newProject: 'Nouveau projet', unassigned: 'Sans projet',
-    machines: 'Machines', manageMachines: 'Gérer les machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', seatStopped: 'arrêté', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
-    ledgeHome: 'Accueil : Ledge, l’opérateur', ledgeLine: (yours: number) => `${yours} à toi`,
-    kernelTag: { ready: 'opérationnel', starting: 'démarrage', stopped: 'arrêté' } as Record<'ready' | 'starting' | 'stopped', string>,
+    machines: 'Machines', agents: (n: number) => plural(n, `${n} agent`, `${n} agents`), offline: 'hors ligne', seatStopped: 'arrêté', daemonUpdating: 'mise à jour du daemon', settings: 'Réglages', shortcuts: 'Raccourcis clavier',
     empty: {
       sessions: 'Aucune session pour l’instant.', sessionsBody: 'Une session lance un agent dans un dossier ou un projet.', newSession: 'Créer une session',
       stopped: 'OpenRig est arrêté.', stoppedBody: 'Le démarrer lance aussi le kernel : l’opérateur, l’advisor et la file.', start: 'Démarrer OpenRig', starting: 'Démarrage d’OpenRig…',
@@ -63,7 +61,6 @@ export const fr = {
       installedOn: (machine: string) => `Il est installé sur ${machine} : démarre-le depuis sa page.`, offlineOf: (n: number, m: number) => `hors ligne · ${n}/${m}`,
       noRig: 'Aucun rig pour l’instant.', noRigBody: 'Un rig est une équipe d’agents.', noRigOperator: (name: string) => `${name}, l’opérateur du kernel, peut t’aider à en composer un.`
     },
-    openChat: 'Ouvrir la conversation avec Ledge',
     active: (n: number) => plural(n, `${n} actif`, `${n} actifs`),
     yours: 'À toi', yoursMore: (n: number) => `Voir les ${n} autres`, yoursLess: 'Réduire',
     allow: 'Oui', deny: 'Non', reply: 'Répondre', see: 'Voir',
@@ -288,12 +285,12 @@ export const fr = {
       ok: (stop: boolean, what: string) => `${stop ? 'Arrêter' : 'Redémarrer'} ${what}`
     }
   },
-  crumb: { atelier: 'Atelier', list: 'Liste', settings: 'Réglages', clearFilter: 'Retirer le filtre : voir tous les projets', clearFilterTitle: 'Tous les projets (Échap)', escape: 'Échap', openParent: (n: string) => `Ouvrir la conversation de ${n}` },
+  crumb: { atelier: 'Atelier', list: 'Liste', settings: 'Réglages', clearFilter: 'Retirer le filtre : voir tous les projets', escape: 'Échap', openParent: (n: string) => `Ouvrir la conversation de ${n}` },
   top: {
     grouping: 'Regrouper les sièges OpenRig', groupingBy: { projects: 'Projets', rigs: 'Rigs' }, groupingHint: { projects: 'Les sessions de tes projets, sans les sièges OpenRig', rigs: 'Les sièges OpenRig : chaque rig, le kernel à part' }, 
-    viewTabs: 'Vue des agents', helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents', pause: 'Figer les animations', play: 'Animer',
-    chat: 'Chat Ledge', shortcuts: 'Raccourcis clavier (?)', fullscreen: 'Plein écran', fullscreenExit: 'Quitter le plein écran',
-    panelShow: 'Afficher le panneau : shells et modifications', panelHide: 'Masquer le panneau', panelShowTitle: 'Afficher le panneau : shells et modifications (O)', panelHideTitle: 'Masquer le panneau (O)', terminalGone: 'Siège arrêté : plus de terminal'
+    helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents', pause: 'Figer les animations', play: 'Animer',
+    chat: 'Chat Ledge', shortcuts: 'Raccourcis clavier (?)',
+    panelHide: 'Masquer le panneau', panelHideTitle: 'Masquer le panneau (O)', terminalGone: 'Siège arrêté : plus de terminal'
   },
   usage: {
     harness: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' } as Record<string, string>,
@@ -368,7 +365,7 @@ export const fr = {
       autostartFailed: 'Windows n’a pas pris ce réglage.', autostartOff: 'Pas de lancement au démarrage',
       tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`,
       context: 'Contexte max', contextHint: 'Au-delà, une session est proche de sa limite : « À toi » propose de passer le relais, et Ledge relève de lui-même une session qui travaille sans demander.',
-      usageAlert: 'Alerte de limite d’usage', usageAlertHint: 'Au-delà, « À toi » prévient qu’une fenêtre d’usage d’un harnais (5 h, semaine, par modèle) approche de sa limite. Les limites sont celles du compte, lues sur chaque machine.',
+      usageAlert: 'Alerte de limite d’usage', usageAlertHint: 'Au-delà, Ledge Desktop vous prévient une seule fois qu’une fenêtre d’usage d’un harnais (5 h, semaine, par modèle) approche de sa limite. Les limites sont celles du compte, lues sur chaque machine.',
       usageAlertSaved: (pct: number) => `Alerte de limite d’usage : ${pct} %`, usageAlertUnknown: 'Aucune machine ne donne encore les limites de ses harnais : mettez à jour Ledge, ou connectez Claude Code.',
       contextSaved: (pct: number) => `Contexte max : ${pct} %`, contextUnknown: 'Mettez à jour le daemon Ledge local pour régler ce seuil.'
     },
@@ -642,15 +639,15 @@ export const fr = {
   },
   search: {
     title: 'Aller à une session', placeholder: 'Agent, tâche, projet ou machine…', empty: 'Aucune session ne correspond à cette recherche.', results: 'Sessions',
-    browse: 'Parcourir', open: 'Ouvrir', closeKey: 'Fermer', enter: 'Entrée', escape: 'Échap', newSession: 'Nouvelle session'
+    browse: 'Parcourir', open: 'Ouvrir', enter: 'Entrée', escape: 'Échap', newSession: 'Nouvelle session'
   },
   shortcuts: {
     title: 'Raccourcis clavier',
     intro: 'Actifs lorsque la fenêtre a le focus. Les touches de navigation restent disponibles pour la saisie et le terminal lorsqu’ils ont le focus.',
     outro: 'Ctrl / ⌘ K ouvre la recherche depuis n’importe quelle vue. Y et N n’agissent que sur la demande épinglée de la session ouverte, jamais pendant la saisie.',
-    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Afficher / masquer les sessions terminées'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (onglet Modifications)'],['O','Afficher ou masquer le panneau : shells et modifications'],['Ctrl `','Basculer entre le fil et l’écran de l’agent, le clavier suit'],['Maj + glisser, puis Ctrl C','Copier depuis un terminal'],['Échap','Fermer le panneau ou revenir à l’atelier'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>,
+    rows: [['Ctrl / ⌘ K','Rechercher et ouvrir une session'],['Ctrl ,','Ouvrir les réglages'],['Alt 1…9','Accès direct aux sessions principales'],['Alt ← / →','Session précédente / suivante'],['J / K ou ↓ / ↑','Parcourir les sessions (atelier)'],['Entrée','Ouvrir la session sélectionnée'],['← / →','Plier / déplier un projet (barre latérale)'],['E','Archiver la session sélectionnée'],['H','Seulement les projets avec un agent actif, ou tous (barre latérale)'],['Ctrl ⇧ E','Aller à la barre latérale'],['N','Nouvelle session'],['+ / −','Zoomer / dézoomer l’atelier'],['0','Ajuster l’atelier à l’écran'],['Ctrl + molette / pincer','Zoomer sous le pointeur ou les doigts'],['Espace + glisser','Déplacer la vue'],['/','Demander à Ledge'],['R','Écrire une réponse à l’agent'],['Y / N','Autoriser / refuser la demande en attente'],['1…9','Choisir une réponse proposée'],['J / K','Fichier suivant / précédent (onglet Modifications)'],['Ctrl `','Basculer entre le fil et l’écran de l’agent, le clavier suit'],['Maj + glisser, puis Ctrl C','Copier depuis un terminal'],['Échap','Fermer le menu ou la fenêtre, ou revenir en arrière (champ du chat, détail d’une tâche, filtre de l’atelier)'],['?','Afficher ces raccourcis']] as ReadonlyArray<readonly [string, string]>,
     /** Interface IDE only: the tab keys (VS Code's), after the others. */
-    ide: { title: 'Onglets et groupes', rows: [['Ctrl W','Fermer l’onglet, ou le groupe vide'],['Ctrl ⇧ T','Rouvrir le dernier onglet fermé'],['Ctrl Tab / Ctrl ⇧ Tab','Onglet suivant / précédent du groupe'],['Ctrl Pg↓ / Pg↑','Onglet suivant / précédent du groupe'],['Ctrl 1…9','Aller au groupe N, depuis un terminal aussi'],['Ctrl ⇧ `','Sortir du terminal vers son onglet (← / → parcourent les onglets), ou y revenir'],['Ctrl Alt ← / →','Déplacer l’onglet vers le groupe de gauche / de droite'],['Ctrl \\','Diviser à droite']] as ReadonlyArray<readonly [string, string]> }
+    ide: { title: 'Onglets et groupes', rows: [['Ctrl W','Fermer l’onglet, ou le groupe vide'],['Ctrl ⇧ T','Rouvrir le dernier onglet fermé'],['Ctrl Tab / Ctrl ⇧ Tab','Onglet suivant / précédent du groupe'],['Ctrl Pg↓ / Pg↑','Onglet suivant / précédent du groupe'],['Ctrl 1…9','Aller au groupe N, depuis un terminal aussi'],['Ctrl ⇧ `','Sortir du terminal vers son onglet (← / → parcourent les onglets), ou y revenir'],['Ctrl Alt ← / →','Déplacer l’onglet vers le groupe de gauche / de droite'],['Ctrl \\','Diviser à droite'],['Ctrl B','Afficher / masquer la barre latérale'],['Ctrl J','Afficher / masquer le panneau du bas (terminaux)'],['Ctrl /','Afficher / masquer le chat de Ledge']] as ReadonlyArray<readonly [string, string]> }
   },
   tray: { open: 'Ouvrir Ledge Desktop', newSession: 'Nouvelle session', dnd: 'Ne pas déranger', dndOff: 'Réactiver les alertes', quit: 'Quitter Ledge Desktop' },
   notify: {
@@ -729,7 +726,6 @@ export const fr = {
     operator: (sessions: number, machines: number) => `Opérateur · voit ${plural(sessions, `${sessions} session`, `${sessions} sessions`)}, ${plural(machines, `${machines} machine`, `${machines} machines`)} · lecture seule`,
     tabsLabel: 'Vues de Ledge',
     tabs: { conversation: 'Conversation', tasks: (n: number) => `Tâches · ${n}`, history: 'Historique' },
-    toAtelier: 'Retour à l’atelier',
     point: {
       title: 'Le point', yours: 'À toi', given: 'Confiées par Ledge',
       summarize: 'Résumer la journée', summarizeQuestion: 'Résume la journée : ce qui a avancé, ce qui attend ma décision, ce qui bloque.',
@@ -740,7 +736,6 @@ export const fr = {
     },
     suggestions: ['Confie une tâche à…', 'Qui a besoin de moi ?'],
     readOnly: 'lecture seule · rien sans ton clic',
-    mentions: 'Mentionner', mentionSession: (name: string) => `session ${name}`,
     tasks: {
       filters: 'Filtres', all: 'Toutes', open: 'Ouvertes', closed: 'Closes', giver: 'Donneur', anyGiver: 'Tous', ledge: 'Ledge', sessions: 'Les sessions', decisions: 'Décisions',
       none: 'Aucune tâche.', result: 'Résultat', reason: 'Raison', log: 'Historique', from: (giver: string, owner: string) => `de ${giver} à ${owner}`, close: 'Fermer',

@@ -1,7 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
-import type { MachineState } from '@ledge/fleet';
-import { BROADCAST_SESSIONS_MAX, type HumanAsk, type Project, type Projects, type Session, type UsageAlert } from '@ledge/protocol';
-import { ResidentMascot } from '@ledge/ui/bots/ResidentMascot';
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { BROADCAST_SESSIONS_MAX, type HumanAsk, type Project, type Projects, type Session } from '@ledge/protocol';
 import { Kbd } from '@ledge/ui/ui/Kbd';
 import { Icon } from '@ledge/ui/ui/icons';
 import type { SideView } from '../../workspace/layout';
@@ -11,31 +9,24 @@ import { useI18n } from '../../i18n/lang';
 import type { Wait } from '../../list/time';
 import type { ContextMenuState } from '../../manage/useContextMenu';
 import type { SessionActions } from '../../manage/useSessionActions';
-import { useMotionPreferences } from '../../motionPreferences';
-import { activeCount } from '../../nav/agents';
 import type { NavAction, NavState } from '../../nav/state';
 import { useStored } from '../../state/useStored';
 import { cls } from '../cls';
 import { SHELL_ICONS } from '../icons';
-import { useTheme } from '../theme';
 import { Archives } from './Archives';
 import { Attention } from './Attention';
 import { attentionOf, eyeGroups, treeModel } from './model';
 import { loadSidebarPrefs, saveSidebarPrefs } from './prefs';
 import { Tree } from './Tree';
-import { RigGroups } from './RigGroups';
 import { SidebarMenuHost } from './SidebarMenus';
-import { offersRigs, setGrouping, useGrouping } from '../../openrig/grouping';
-import type { SidebarOpenRig } from '../../openrig/sidebarState';
 import { closedLedgeTasks, nearLimit, openDecisions, type TasksApi } from '../../tasks/useTasksApi';
 
-/** The explorer shell: Ledge's entry, Atelier / OpenRig, Projets / Rigs, Your turn, the project tree or the rigs, then Archives pinned above the foot. */
+/** The IDE's explorer for two of its views (lot 12c): « Projets » (the project tree, then Archives pinned at the bottom) and
+ *  « À toi » (what waits for the user, answered in place). */
 export function Sidebar(p: {
   nav: NavState; dispatch: (a: NavAction) => void;
   sessions: readonly Session[]; archived: readonly Session[];
-  machines: readonly MachineState[]; projects: Projects | null;
-  /** The machines whose daemon is updating (#48): their restart is expected. */
-  updating?: ReadonlySet<string>;
+  projects: Projects | null;
   order: readonly Session[]; projectIdOf: (s: Session) => string | null;
   filing: Filing; actions: SessionActions; decisions: Decisions;
   waits: ReadonlyMap<string, Wait>;
@@ -47,29 +38,19 @@ export function Sidebar(p: {
   broadcast?: boolean;
   /** Bumped by each broadcast that reached someone: the selection is kept until then, emptied then. */
   broadcastSent?: number;
-  /** OpenRig across the followed machines: the toggle, the Rigs view's empty states and the kernel's state. */
-  openrig?: SidebarOpenRig;
   onTerminal(s: Session): void;
   revealArchives: number; revealCurrent: number;
-  /** Ledge's entry's live line (ledge home spec §2.1): the closed tasks Ledge gave not put away. */
-  ledge?: { closedTasks: number };
   /** Ledge's tasks: « À toi »'s decisions and closed Ledge tasks (roles spec §3.7), and the sessions near their context limit. */
   tasksApi?: TasksApi;
-  /** « À toi »: what OpenRig's rigs ask the person; « Voir » opens the home on the card. */
+  /** « À toi »: what OpenRig's rigs ask the person; « Voir » opens the page « À toi » on its card. */
   asks?: readonly HumanAsk[];
   onSeeAsk?(id: string): void;
-  /** The harnesses' usage alerts (docs/mockups/ledge-harness-usage.html), first in « À toi »; « Compris » acks one. */
-  usageAlerts?: readonly UsageAlert[];
-  onAckUsage?(id: string): void;
-  /** The IDE's « À toi » view: « Page » opens the page « À toi ». */
+  /** « Page » opens the page « À toi ». */
   onAtoiPage?(): void;
-  /** The IDE's sidebar: only this view's content, without Ledge's entry, the views, the grouping or the foot. */
-  section?: SideView;
+  /** The view shown: « Projets » or « À toi » (the IDE's other views have their own explorers). */
+  section: Extract<SideView, 'projects' | 'atoi'>;
 }): JSX.Element {
   const { t } = useI18n();
-  const theme = useTheme();
-  const { reduced } = useMotionPreferences();
-  const keysTip = useId();
   const [prefs, setPrefs] = useStored(loadSidebarPrefs, saveSidebarPrefs);
   // The sessions picked with Ctrl/⌘ + click, in the order picked: from two, the bar below writes to them (broadcast spec).
   const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
@@ -88,13 +69,7 @@ export function Sidebar(p: {
   const { place } = p.nav;
   const base = place.kind === 'settings' ? place.back : place;
   const current = base.kind === 'session' ? base.id : null;
-  // OpenRig's seats have their own groups (Rigs, Kernel), away from the projects.
-  const grouping = useGrouping();
-  // The toggle shows once OpenRig is installed on a followed machine, even without a seat (its empty states live in « Rigs »).
-  const offerRigs = offersRigs(p.sessions, p.openrig?.installed);
-  // « Projets » or « Rigs »: one or the other (while OpenRig is nowhere, the projects).
   const section = p.section;
-  const byRig = section ? section === 'rigs' : offerRigs && grouping === 'rigs';
   // An OpenRig seat is never in the projects' tree: the « Rigs » view shows it (« À toi » too, when it waits).
   const groups = useMemo(() => treeModel(p.sessions.filter(s => !s.rig), p.projects, p.projectIdOf), [p.sessions, p.projects, p.projectIdOf]);
   // The eye (docs/mockups/ledge-projects-eye.html): pressed, the projects with a live agent; released, every project.
@@ -151,38 +126,10 @@ export function Sidebar(p: {
     return found ? { id: found.id, name: found.name, color: found.color } : null;
   };
   const projectName = (s: Session) => projectOf(s)?.name ?? t.side.unassigned;
-  const atelierOn = place.kind === 'overview' && place.view === 'atelier';
-  const inSettings = place.kind === 'settings';
-  const active = activeCount(p.sessions);
-  const homeOn = place.kind === 'home';
   return (
     // No webview menu anywhere in the sidebar: a row with a menu opens it, elsewhere a right click does nothing; a text field keeps its own (copy, paste).
     <aside ref={root} className={cls('sidebar st', prefs.dense && 'st-dense')} aria-label={t.side.label}
       onContextMenu={e => { if (!(e.target instanceof Element && e.target.closest('input, textarea, [contenteditable="true"]'))) e.preventDefault(); }}>
-      {!section && <div className={cls('st-ask', 'st-ledge', (homeOn || p.nav.chat) && 'on')}>
-        <button type="button" className="st-ledge-entry" aria-current={homeOn ? 'page' : undefined} aria-label={t.side.ledgeHome} title={t.side.ledgeHome} onClick={() => p.dispatch({ type: 'ledge' })}>
-          <span className="st-mascot"><ResidentMascot size={22} theme={theme} paused={p.nav.paused} reducedMotion={reduced} /></span>
-          <span className="st-ledge-names">
-            <span className="st-ledge-brand">Ledge<span className="brand-dot">.</span></span>
-            <small className="st-ledge-line">{t.side.ledgeLine((p.usageAlerts?.length ?? 0) + attn.length + decisions.length + (p.ledge?.closedTasks ?? 0) + near.length + (p.asks?.length ?? 0))}</small>
-          </span>
-          <Kbd>/</Kbd>
-        </button>
-      </div>}
-      {!section && <nav className="st-views" aria-label={t.side.views}>
-        <button type="button" className={atelierOn ? 'on' : undefined} aria-current={atelierOn ? 'page' : undefined} onClick={() => p.dispatch({ type: 'home' })}>
-          <Icon d={SHELL_ICONS.grid} size={13} /><span>{t.side.atelier}</span><span className="st-fill" /><small>{t.side.active(active)}</small>
-        </button>
-        <button type="button" className={place.kind === 'openrig' ? 'on' : undefined} aria-current={place.kind === 'openrig' ? 'page' : undefined} onClick={() => p.dispatch({ type: 'openrig' })}>
-          <Icon d={SHELL_ICONS.rig} size={13} /><span>{t.openrig.side}</span>
-        </button>
-      </nav>}
-      {/* Out of the scrolling list, so it keeps the views' width (docs/mockups/ledge-sidebar-tidy.html, point 4). */}
-      {!section && offerRigs && (
-        <div className="st-grouping" role="radiogroup" aria-label={t.top.grouping}>
-          {(['projects', 'rigs'] as const).map(g => <button key={g} type="button" role="radio" aria-checked={grouping === g} title={t.top.groupingHint[g]} onClick={() => setGrouping(g)}>{t.top.groupingBy[g]}</button>)}
-        </div>
-      )}
       {section === 'projects' && (
         <div className="ide-ex-h">
           {/* No « + N » beside it (the user, 2026-11-09): N still opens Nouvelle session. */}
@@ -198,9 +145,8 @@ export function Sidebar(p: {
         </div>
       )}
       <div className={cls('st-scroll', section === 'atoi' && 'st-scroll-atoi')}>
-        {(!section || section === 'atoi') && <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
-          rigAsks={p.asks ?? []} sessions={p.sessions} {...(p.onSeeAsk ? { onSeeAsk: p.onSeeAsk } : {})}
-          {...(section ? { empty: t.ide.atoiNone } : { usageAlerts: p.usageAlerts ?? [], ...(p.onAckUsage ? { onAckUsage: p.onAckUsage } : {}) })}
+        {section === 'atoi' && <Attention items={attn} current={current} projectOf={projectOf} paused={p.nav.paused}
+          rigAsks={p.asks ?? []} sessions={p.sessions} {...(p.onSeeAsk ? { onSeeAsk: p.onSeeAsk } : {})} empty={t.ide.atoiNone}
           onOpen={(id, helper, focus) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}), ...(focus !== undefined ? { focus } : {}) })}
           onDecide={(s, ok) => { p.decisions.decide(s, ok ? 'accept' : 'deny'); }}
           decisions={decisions} answer={p.tasksApi?.answer} answerNote={p.tasksApi?.answerNote}
@@ -211,26 +157,23 @@ export function Sidebar(p: {
             const host = e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined;
             p.menu.open(id, { x: e.clientX, y: e.clientY }, host ?? null);
           }} />}
-        {(!section || section === 'projects') && !byRig && <section aria-label={t.side.projects}>
+        {section === 'projects' && <section aria-label={t.side.projects}>
           <Tree near={p.tasksApi?.near} groups={shownGroups} closed={closed} onClosed={setClosed} sessions={p.sessions} projects={p.projects} current={current} filter={base.project}
             hideDone={prefs.hideDone} hiddenProjects={hiddenProjects} anySession={groups.some(g => g.branches.some(b => b.sessions.length > 0))} dense={prefs.dense} byBranch={prefs.byBranch} filing={p.filing} revealCurrent={p.revealCurrent} paused={p.nav.paused}
             onHome={project => p.dispatch({ type: 'home', ...(project !== undefined ? { project } : {}) })}
             onOpen={(id, helper) => p.dispatch({ type: 'open', id, ...(helper !== undefined ? { helper } : {}) })}
             onLaunch={project => p.dispatch({ type: 'modal', modal: { kind: 'launch', ...(project !== undefined ? { project } : {}) } })}
             onBroadcast={p.broadcast ? project => p.dispatch({ type: 'modal', modal: { kind: 'broadcast', to: { project } } }) : undefined}
-            picked={picked} onPick={p.broadcast ? pick : undefined} {...(section ? { onOpenRight: (id: string) => p.dispatch({ type: 'open', id, where: 'right' }) } : {})}
+            picked={picked} onPick={p.broadcast ? pick : undefined} onOpenRight={id => p.dispatch({ type: 'open', id, where: 'right' })}
             onMenu={(target, at, opener) => p.menu.openOn(target, at, opener)}
             onArchive={ids => p.actions.request('archive', ids)} onDelete={ids => p.actions.request('delete', ids)} onTerminal={p.onTerminal}
             onToggleHide={() => setPrefs(v => ({ ...v, hideDone: !v.hideDone }))} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))}
             onToggleBranches={() => setPrefs(v => ({ ...v, byBranch: !v.byBranch }))}
-            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} ide={section !== undefined} />
+            onNewProject={() => p.dispatch({ type: 'modal', modal: { kind: 'project' } })} ide />
           {p.filing.dragging && <p className="st-help">{t.side.dropHelp(p.filing.dragging.name)}</p>}
         </section>}
-        {(!section || section === 'rigs') && byRig && <RigGroups sessions={p.sessions} current={current} paused={p.nav.paused} dispatch={p.dispatch} openrig={p.openrig}
-          dense={prefs.dense} onToggleDense={() => setPrefs(v => ({ ...v, dense: !v.dense }))} asks={p.asks ?? []}
-          onMenu={(id, at, opener) => p.menu.open(id, at, opener)} />}
       </div>
-      {(!section || section === 'projects') && <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives} open={archivesOpen} onOpenChange={setArchivesOpen}
+      {section === 'projects' && <Archives archived={p.archived} current={current} projectName={projectName} reveal={p.revealArchives} open={archivesOpen} onOpenChange={setArchivesOpen}
         project={s => { const found = projectOf(s); return found ? { color: found.color } : null; }}
         onRead={id => p.dispatch({ type: 'open', id })} onRestore={id => p.actions.restore(id)} onResume={id => p.actions.resume(id)}
         onDelete={ids => p.actions.request('delete', ids)} allowed={p.actions.allowed} paused={p.nav.paused}
@@ -246,34 +189,6 @@ export function Sidebar(p: {
           <button type="button" className="st-picked-cancel" onClick={() => setPicked(new Set())}>{t.broadcast.cancel}</button>
         </div>
       )}
-      {!section && <div className="st-foot">
-        {p.machines.map(m => {
-          // A daemon restarting for its update (#48) is said as such, not offline.
-          const updating = p.updating?.has(m.id) === true;
-          const offline = m.status === 'unreachable' && !updating;
-          const count = p.sessions.filter(s => (s.machineId ?? 'local') === m.id).length;
-          return (
-            <button key={m.id} type="button" className="st-mach" title={updating ? `${m.label} · ${t.side.daemonUpdating}` : offline ? `${m.label} · ${t.side.offline}` : `${m.label} · ${t.side.agents(count)}`}
-              onClick={() => p.dispatch({ type: 'settings', section: 'machines' })}>
-              <i className={`machine-dot${offline ? ' off' : updating ? ' updating' : ''}`} />{m.label}{!offline && <small>{count}</small>}
-            </button>
-          );
-        })}
-        <span className="st-fill" />
-        <span className="st-keys">
-          <button type="button" className="st-icon" aria-label={t.side.shortcuts} aria-describedby={keysTip}
-            onClick={() => p.dispatch({ type: 'modal', modal: { kind: 'shortcuts' } })}>
-            <Icon d={SHELL_ICONS.help} size={15} />
-          </button>
-          <span className="st-keys-tip" role="tooltip" id={keysTip}>
-            {t.shortcuts.rows.map(([keys, action]) => <span key={keys}>{action}<Kbd>{keys}</Kbd></span>)}
-          </span>
-        </span>
-        <button type="button" className={cls('st-icon', inSettings && 'on')} aria-label={t.side.settings} title={`${t.side.settings} · Ctrl ,`} aria-current={inSettings ? 'page' : undefined}
-          onClick={() => p.dispatch({ type: 'settings' })}>
-          <Icon d={SHELL_ICONS.gear} size={15} />
-        </button>
-      </div>}
     </aside>
   );
 }

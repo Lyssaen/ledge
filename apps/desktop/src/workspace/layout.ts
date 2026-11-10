@@ -2,6 +2,9 @@ import { isRecord, readJson, writeJson } from '../state/storage';
 
 /** The IDE shell's panel layout: pure state, plus its persisted form (`ledge.ide.layout`). */
 export type SideView = 'projects' | 'rigs' | 'atoi' | 'prs';
+/** Every sidebar view, as the Ledge guide (docs/ledge-guide.md) describes them: a Record, so a new view fails to compile until it is listed. */
+const SIDE_VIEW: Record<SideView, true> = { projects: true, rigs: true, atoi: true, prs: true };
+export const SIDE_VIEWS = Object.keys(SIDE_VIEW) as SideView[];
 export interface IdeLayout { sideOpen: boolean; sideWidth: number; sideView: SideView; bottom: boolean; bottomHeight: number; right: boolean }
 
 export const SIDE_DEFAULT = 248, SIDE_MIN = 120, SIDE_MAX = 440, SIDE_FOLD = 150, RIGHT_WIDTH = 300, EDITOR_MIN = 360;

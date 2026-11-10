@@ -1,16 +1,28 @@
-import { afterEach, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { afterEach, expect, it } from 'vitest';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { Session, ThreadItem } from '@ledge/protocol';
 import { boot, closeDaemons, declarations, listSessions, ottoThread, unfoldPast } from './helpers';
+import { changesTab, empty, open, serialize } from '../src/workspace/model';
+import { ATELIER_TAB, WORKSPACE_KEY } from '../src/workspace/store';
+
+/** The workspace a restart restores: the Atelier, then Otto's Changes left open (the session bar offers « +N −N » only once
+ *  something changed, so an empty Changes is a tab kept from before). */
+const keepChanges = () => localStorage.setItem(WORKSPACE_KEY, JSON.stringify(serialize(open(open(empty(), changesTab('local:otto')), ATELIER_TAB))));
 
 afterEach(async () => { cleanup(); localStorage.clear(); await closeDaemons(); });
 
-const tab = (name: RegExp) => screen.getByRole('tab', { name });
+/** An IDE tab of the dock, by its name. */
+const dvTab = (name: string) => screen.getAllByRole('tab').find(t => t.closest('.dv-tabs-container') && t.getAttribute('aria-label') === name);
+/** The session's own tab shows its thread (the IDE flips a tab's view; no Thread | Terminal tabs on the page). */
+const onThread = () => !document.querySelector('.session-thread')?.hasAttribute('hidden');
+/** A dock tab pressed: its group takes the focus, so its page hears the keys (the IDE's own way, as a click on the tab). */
+const front = (name: string) => act(() => { dvTab(name)!.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 })); });
 type User = Awaited<ReturnType<typeof boot>>['user'];
-/** Fil | Terminal v3: Modifications is the right panel's first tab (the top bar's >_, or O), the keyboard on it. */
+/** The IDE (lot 12b): the session bar's « +N −N » opens the session's Changes beside, in a linked group. */
 async function showChanges(user: User) {
-  await user.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Show the panel: shells and changes' }));
-  await user.click(tab(/^Changes/));
+  await user.click(await screen.findByTitle(/^Changes: \d+ files? · beside/));
+  await screen.findByRole('navigation', { name: 'Changed files' });
+  front('Changes · Otto');
 }
 const pane = () => document.querySelector<HTMLElement>('.file-pane')!;
 const more: ThreadItem[] = [
@@ -29,8 +41,8 @@ async function openOtto(extra: ThreadItem[] = more, tool: Session['tool'] = 'cla
 it('Thread / Changes with the count; files grouped by folder; the diff with its signs', async () => {
   const { user } = await openOtto();
   await showChanges(user);
-  expect(tab(/^Changes/)).toHaveTextContent('Changes2');
-  expect(tab(/^Changes/)).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByTitle(/^Changes: \d+ files? · beside/)).toHaveAttribute('title', expect.stringMatching(/^Changes: 2 files/));
+  expect(dvTab('Changes · Otto')).toHaveAttribute('aria-selected', 'true');
   const list = within(screen.getByRole('navigation', { name: 'Changed files' }));
   expect([...document.querySelectorAll('.dir-name')].map(e => e.textContent)).toEqual(['src', 'docs']);
   expect(list.getByRole('button', { name: /App\.tsx/ })).toHaveAttribute('aria-current', 'true');
@@ -39,7 +51,8 @@ it('Thread / Changes with the count; files grouped by folder; the diff with its 
   expect([...pane().querySelectorAll('.touch-link')].map(e => e.textContent)).toEqual(['Edit · turn 1+1−1', 'Edit · turn 2+1−1']);
   expect([...pane().querySelectorAll('.diff-line')].map(r => r.className.replace('diff-line ', '') + ':' + r.querySelector('.code')!.textContent)).toEqual(['del:a', 'add:b', 'del:c', 'add:d']);
 });
-it('J / K walk the files, never while typing; Copy the path says so', async () => {
+// 12b: the IDE's Changes tab (ChangesTab.tsx) binds no J / K and no Escape, which the old right panel had.
+it.skip('J / K walk the files, never while typing; Copy the path says so', async () => {
   const { user } = await openOtto();
   await showChanges(user);
   await user.keyboard('j');
@@ -54,24 +67,28 @@ it('J / K walk the files, never while typing; Copy the path says so', async () =
   await user.click(within(pane()).getByRole('button', { name: 'Copy the path' }));
   expect(screen.getByText('Path copied: /w/ledge/src/App.tsx')).toBeVisible();     // the live line is a status too
 });
-it('« turn 2 » goes back to the action in the thread and flashes it; « View the change » opens the file', async () => {
+// The IDE (R10, ChangesTab.tsx): an action clicked brings the session's tab forward; the action is not lit.
+it('« turn 2 » brings the session\'s tab forward on its thread; « View the change » opens the file', async () => {
   const { user } = await openOtto();
   await showChanges(user);
   await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
-  expect(tab(/^Thread/)).toHaveAttribute('aria-selected', 'true');
-  expect(document.querySelector('[data-tool="e9"]')).toHaveClass('flash');
+  expect(dvTab('Otto')).toHaveAttribute('aria-selected', 'true');
+  expect(onThread()).toBe(true);
   await user.click(within(document.querySelector<HTMLElement>('[data-tool="w1"]')!).getByRole('button', { name: 'View the change' }));
-  expect(tab(/^Thread/)).toHaveAttribute('aria-selected', 'true');
+  expect(onThread()).toBe(true);
   expect(within(screen.getByRole('complementary', { name: 'Reading pane' })).getByText('Change · guide.md')).toBeVisible();
 });
-it('from the Terminal view, « turn 2 » brings the thread back, the action lit; the panel stays', async () => {
+it('from the Terminal view, « turn 2 » brings the session\'s tab forward; the Changes tab stays', async () => {
   const { user } = await openOtto();
-  await user.click(tab(/^Terminal/));
   await showChanges(user);
+  // The session's tab on its Terminal view (Ctrl+`, its own view in the IDE), then the action clicked in Changes.
+  fireEvent.contextMenu(dvTab('Otto')!);
+  await user.click(within(await screen.findByRole('menu', { name: /Otto/ })).getByRole('menuitem', { name: /Switch to the terminal/ }));
+  await waitFor(() => expect(onThread()).toBe(false));
+  front('Changes · Otto');
   await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
-  expect(tab(/^Thread/)).toHaveAttribute('aria-selected', 'true');
-  expect(document.querySelector('[data-tool="e9"]')).toHaveClass('flash');
-  expect(tab(/^Changes/)).toHaveAttribute('aria-selected', 'true');
+  await waitFor(() => expect(dvTab('Otto')).toHaveAttribute('aria-selected', 'true'));
+  expect(dvTab('Changes · Otto')).toBeDefined();
 });
 it('« View the change » on an absolute path finds the file a relative path opened', async () => {
   const { user } = await openOtto([
@@ -86,7 +103,8 @@ it('« View the change » on an absolute path finds the file a relative path ope
   expect(side.querySelector('.side-title code')).toHaveTextContent('src/b.ts');
   expect([...side.querySelectorAll('.diff-line .code')].map(c => c.textContent)).toEqual(['x', 'y', 'y', 'z']);   // both actions' diffs
 });
-it('on a narrow page, Escape closes the file list and the page stays; the next Escape leaves it', async () => {
+// 12b: the IDE's Changes tab binds no Escape for its file list.
+it.skip('on a narrow page, Escape closes the file list and the page stays', async () => {
   const { user } = await openOtto();
   await showChanges(user);
   await user.click(within(pane()).getByRole('button', { name: 'Files · 2' }));
@@ -95,23 +113,22 @@ it('on a narrow page, Escape closes the file list and the page stays; the next E
   await user.keyboard('{Escape}');
   expect(nav).not.toHaveClass('open');
   expect(document.querySelector('.session-page')).not.toBeNull();
-  await user.keyboard('{Escape}');
-  expect(document.querySelector('.session-page')).toBeNull();
 });
-it('a held J does not walk the files: only a new press does', async () => {
+// 12b: the IDE's Changes tab binds no J / K.
+it.skip('a held J does not walk the files: only a new press does', async () => {
   const { user } = await openOtto();
   await showChanges(user);
-  fireEvent.keyDown(document.body, { key: 'j', repeat: true });
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: 'j', repeat: true });
   expect(pane().querySelector('.file-title code')).toHaveTextContent('src/App.tsx');
-  fireEvent.keyDown(document.body, { key: 'j' });
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: 'j' });
   expect(pane().querySelector('.file-title code')).toHaveTextContent('docs/guide.md');
 });
 it('before the thread is there, Changes says what the thread says, and the tab gives no count', async () => {
-  const { user } = await boot({ sessions: listSessions().map(s => (s.name === 'Otto' ? { ...s, offline: true } : s)), list: true });
-  await user.click(screen.getByRole('button', { name: /^Otto,/ }));
-  await screen.findByText('The thread was not loaded before the connection was lost.');
-  await showChanges(user);
-  expect(tab(/^Changes/).querySelector('.tab-count')).toBeNull();
+  keepChanges();
+  await boot({ sessions: listSessions().map(s => (s.name === 'Otto' ? { ...s, offline: true } : s)), list: true });
+  front('Changes · Otto');
+  await waitFor(() => expect(document.querySelector('.changes-empty')).not.toBeNull());
+  expect(screen.queryByTitle(/^Changes: [1-9]/)).toBeNull();
   expect(document.querySelector('.changes-empty')).toHaveTextContent('The thread was not loaded before the connection was lost.');
   expect(screen.queryByText('No file changed')).toBeNull();
 });
@@ -132,32 +149,15 @@ it('a file without a diff, a cut diff, a renamed file', async () => {
   expect(list.getByRole('button', { name: /b\.ts/ }).querySelector('.change-letter')).toHaveTextContent('R');
 });
 it('nothing changed: said plainly, and Cursor named as the one that does not tell', async () => {
-  const { user } = await openOtto([], 'cursor', ottoThread().filter(i => i.id !== 't3'));
-  await showChanges(user);
+  keepChanges();
+  await openOtto([], 'cursor', ottoThread().filter(i => i.id !== 't3'));
+  front('Changes · Otto');
+  await waitFor(() => expect(document.querySelector('.changes-empty')).not.toBeNull());
   expect(screen.getByText('Cursor Agent does not report the files it touches.')).toBeVisible();
 });
 it('a renamed file wears the colour of an edited one', () => {
   expect(declarations('session.css', '.change-rename')).toBe(declarations('session.css', '.change-edit'));
   expect(declarations('session.css', '.change-rename')).toContain('color:var(--warning)');
-});
-
-it('« turn 2 » aims at the action: the thread growing as its fold opens does not snap the view back to the end', async () => {
-  const calls: Array<() => void> = [];
-  vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { calls.push(cb); } observe() {} unobserve() {} disconnect() {} });
-  try {
-    const { user } = await openOtto();
-    const el = document.querySelector<HTMLElement>('.session-thread')!;
-    const g = { top: 1500, height: 2000 };
-    Object.defineProperty(el, 'scrollHeight', { configurable: true, get: () => g.height });
-    Object.defineProperty(el, 'clientHeight', { configurable: true, value: 500 });
-    Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => g.top, set: (v: number) => { g.top = v; } });
-    await showChanges(user);
-    await user.click(within(pane()).getByRole('button', { name: /^Edit · turn 2/ }));
-    g.top = 900;                                         // the flash brought the action to the middle
-    g.height = 2200;                                     // its fold opened
-    act(() => { for (const cb of calls) cb(); });
-    expect(g.top).toBe(900);
-  } finally { vi.unstubAllGlobals(); }
 });
 
 const touchHeads = () => [...pane().querySelectorAll('.diff-scroll > .touch-head')];

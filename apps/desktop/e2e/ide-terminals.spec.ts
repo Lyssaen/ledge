@@ -36,7 +36,7 @@ const box = async (l: Locator) => (await l.boundingBox())!;
 async function boot(page: Page, theme: 'light' | 'dark' = 'light') {
   await seedAtelier(page);
   await page.addInitScript(t => {
-    try { localStorage.setItem('ledge.ide.enabled', 'true'); localStorage.setItem('desktop.lang', 'en'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ }
+    try { localStorage.setItem('desktop.lang', 'en'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ }
     (window as unknown as { __ledgeShells: unknown }).__ledgeShells = { wsl: 'Ubuntu', powershell: true, cmd: false, gitBash: false };
   }, theme);
   const daemon = await fakeDaemon(page, sessions, { projects: twoProjects, openrig: STATE, rigCommands: ['rig down starter --snapshot'] });

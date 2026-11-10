@@ -8,6 +8,9 @@ import { boot, closeDaemons, declarations, DEFAULT_SESSIONS } from './helpers';
 import { saveReduced } from '../src/motionPreferences';
 import { fr } from '../src/i18n/fr';
 
+/** The IDE's tab in front of its group (the old top bar named the place: the IDE's tabs do). */
+const activeTab = () => screen.queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container')).find(t => t.getAttribute('aria-selected') === 'true');
+
 beforeEach(() => localStorage.clear());
 afterEach(async () => { vi.useRealTimers(); delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView; cleanup(); vi.unstubAllEnvs(); saveReduced(false); await closeDaemons(); });
 
@@ -21,11 +24,13 @@ describe('the atelier', () => {
     expect(within(screen.getByRole('region', { name: 'No project' })).getByRole('button', { name: /^Kit,/ })).toBeVisible();
     expect(screen.queryByText('This screen is coming soon.')).toBeNull();
   });
-  it("Ledge's desk toggles the chat", async () => {
+  // In the IDE the chat is the right panel, there from the start: Ledge's desk asks for it, its field takes the focus.
+  it("Ledge's desk asks for the chat: its field takes the focus", async () => {
     const { user } = await boot();
     await user.click(screen.getByRole('button', { name: 'Talk to Ledge' }));
-    expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Talk to Ledge' })).toHaveTextContent("I'm listening.");
+    const chat = screen.getByRole('complementary', { name: 'Chat Ledge' });
+    expect(chat).toBeVisible();
+    await waitFor(() => expect(within(chat).getByRole('textbox')).toHaveFocus());
   });
   it("no agent at all: only Ledge's desk", async () => {
     await boot({ sessions: [] });
@@ -58,7 +63,7 @@ describe('the atelier', () => {
     await user.keyboard('{ArrowUp}'); expect(screen.getByRole('button', { name: /^Otto,/ })).toHaveClass('keyboard-selected');
     await user.keyboard('k'); expect(screen.getByRole('button', { name: /^Kit,/ })).toHaveFocus();       // wraps
     await user.keyboard('{Enter}');
-    expect(within(screen.getByRole('banner')).getByText('Kit')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Kit'));
   });
   it("an offline machine's agent is greyed, its bot frozen, and it still opens", async () => {
     const { d, user } = await boot();
@@ -67,7 +72,7 @@ describe('the atelier', () => {
     expect(rio).toHaveClass('seat-offline');
     expect(within(rio).getByText('Offline')).toBeVisible();
     await user.click(rio);
-    expect(within(screen.getByRole('banner')).getByText('Rio')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Rio'));
   });
   it('freezing the animations pauses the atelier', async () => {
     const { user } = await boot();
@@ -82,8 +87,9 @@ describe('the atelier', () => {
     expect(shell).not.toBeNull();
     for (const name of ['Ledge table', 'Payment Service Platform Migration Europe table', 'No project']) expect(shell).toContainElement(screen.getByRole('region', { name }));
     expect(shell).toContainElement(screen.getByRole('button', { name: 'Talk to Ledge' }));
-    const panel = screen.getByRole('region', { name: 'Atelier' });
-    expect(panel).toHaveAttribute('id', 'view-panel-atelier');
+    // In the IDE the editor's group is a region named after its tab too: the atelier's own panel is the one with its id.
+    const panel = screen.getAllByRole('region', { name: 'Atelier' }).find(r => r.id === 'view-panel-atelier')!;
+    expect(panel).toBeDefined();
     const legend = document.querySelector<HTMLElement>('.workspace-legend')!;
     expect(panel).toContainElement(legend);
     expect(shell).not.toContainElement(legend);
@@ -133,14 +139,14 @@ describe('the atelier', () => {
     screen.getByRole('button', { name: 'Talk to Ledge' }).focus();
     await user.keyboard('{Enter}');
     expect(screen.getByRole('complementary', { name: 'Chat Ledge' })).toBeVisible();
-    expect(within(screen.getByRole('banner')).queryByText('Otto')).toBeNull();
+    expect(activeTab()).toHaveAccessibleName('Atelier');
   });
   it('Enter with the focus on the floor opens the chosen agent', async () => {
     const { user } = await boot();
     await user.keyboard('j');
     (document.activeElement as HTMLElement).blur();
     await user.keyboard('{Enter}');
-    expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
   });
   it('J / K leave an open menu alone', async () => {
     const { user } = await boot();
@@ -156,8 +162,9 @@ describe('the atelier', () => {
     await user.keyboard('j');
     expect(screen.getByRole('button', { name: /^Otto,/ })).toHaveClass('keyboard-selected');
     await user.click(side.getByRole('button', { name: /^Payment Service Platform/ }));     // Otto is no longer shown
-    await user.click(side.getByRole('button', { name: /Atelier/ }));
-    expect(screen.getByRole('button', { name: /^Otto,/ })).not.toHaveClass('keyboard-selected');
+    // The Atelier tab's bar clears the project filter (the old sidebar's « Atelier » did).
+    await user.click(within(screen.getByRole('toolbar', { name: 'Atelier' })).getByRole('button', { name: /filter/i }));
+    expect(await screen.findByRole('button', { name: /^Otto,/ })).not.toHaveClass('keyboard-selected');
     expect(document.querySelector('.keyboard-selected')).toBeNull();
   });
   it('Sans projet: a card per agent with its task, machine and folder, its badge, and a click opens it', async () => {
@@ -171,7 +178,7 @@ describe('the atelier', () => {
     expect(kit.querySelector('code')).toHaveTextContent(/ · \/tmp$/);
     expect(within(zone).getByText('Question')).toHaveAttribute('data-badge', 'question');
     await user.click(kit);
-    expect(within(screen.getByRole('banner')).getByText('Kit')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Kit'));
   });
   it('the empty table names the folders of its repositories', async () => {
     const { d, side, user } = await boot();

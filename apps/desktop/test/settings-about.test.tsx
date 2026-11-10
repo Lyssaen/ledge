@@ -77,7 +77,8 @@ describe('Settings › About', () => {
     const live = document.querySelector('[aria-live="polite"].update-live');
     expect(live).not.toBeNull();
     expect(live).toBeEmptyDOMElement();
-    cleanup(); await closeDaemons();
+    // The IDE kept its tabs (Settings in front): a second start begins again from a first run's.
+    cleanup(); await closeDaemons(); localStorage.clear();
     await open(NPM_BEHIND);
     await waitFor(() => expect(document.querySelector('[aria-live="polite"].update-live')).toContainElement(log_()));
   });
@@ -108,16 +109,17 @@ describe('Settings › About', () => {
     await waitFor(() => expect(versions()[1]).toEqual(['Daemon · Local', '0.6.0· npm']));
   });
 
-  it('a daemon away for its update is said updating in the sidebar, never offline, and Machines has no offline dot', async () => {
+  // The IDE has no machine list in its sidebar: Settings › Machines says it (lot 12b).
+  it('a daemon away for its update is never said offline: Machines has no offline dot, and says it « Connecting… »', async () => {
     const { d } = await open(NPM_BEHIND, [{ id: 'local', label: 'Local' }]);
     await waitFor(() => expect(steps()).toHaveLength(1));
     await d.close();
-    const local = () => document.querySelector<HTMLElement>('.st-mach .machine-dot.updating')?.closest('button');
-    await waitFor(() => expect(local()).toHaveAttribute('title', 'Local · daemon updating'), { timeout: 8000 });
-    expect([...document.querySelectorAll<HTMLElement>('.st-mach')].map(b => b.title)).toEqual(['Local · daemon updating']);
-    expect(tab('Machines').querySelector('.side-alert')).toBeNull();
+    // « Connecting… » only while the daemon away is the one updating; an offline one would say « Offline » and light the dot.
     await userEvent.click(tab('Machines'));
-    expect(within(await screen.findByRole('article', { name: 'Local' })).getByText('Connecting…')).toBeVisible();
+    const local = within(await screen.findByRole('article', { name: 'Local' }));
+    await waitFor(() => expect(local.getByText('Connecting…')).toBeVisible(), { timeout: 8000 });
+    expect(local.queryByText('Offline')).toBeNull();
+    expect(tab('Machines').querySelector('.side-alert')).toBeNull();
   });
 
   it('a daemon from a git clone: the note and its command, no button', async () => {

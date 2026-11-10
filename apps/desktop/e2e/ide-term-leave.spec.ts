@@ -8,7 +8,7 @@ import { fleet, ottoThread } from './thread';
 test.use({ viewport: { width: 1920, height: 1080 } });
 test.setTimeout(90_000);
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); localStorage.setItem('desktop.lang', 'en'); } catch { /* ignore */ } });
+  await page.addInitScript(() => { try { localStorage.setItem('desktop.lang', 'en'); } catch { /* ignore */ } });
 });
 
 const tabOf = (page: Page, name: string) => page.locator('.ide-dockview .dv-tab').filter({ has: page.locator('.tab-name', { hasText: new RegExp(`^${name}`) }) });

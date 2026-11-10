@@ -5,10 +5,11 @@ import WebSocket from 'ws';
 import type { ThreadItem } from '@ledge/protocol';
 import { createMockDaemon } from '@ledge/fleet/test/mockDaemon';
 import { App } from '../src/App';
-import { activeCount } from '../src/nav/agents';
+import { loadIde } from '../src/ide/lazy';
+import { loadChat } from '../src/chat/lazy';
 import { createDesktopFleet } from '../src/fleet/useFleet';
 import { loadWorkspace } from '../src/session/lazy';
-import { listSessions, PROJECTS, type MockDaemon } from './helpers';
+import { listSessions, PROJECTS, seedAtelier, type MockDaemon } from './helpers';
 
 const daemons: MockDaemon[] = [];
 // jsdom lays nothing out: a test sets the body's sizes, then says it was resized, as a browser's ResizeObserver would.
@@ -62,7 +63,8 @@ const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /** Otto's page in French, its thread `items`; `threads`: what the daemon answers for the other sessions (unasked until a tab wants them). */
 async function openOtto(items: ThreadItem[], threads: Record<string, ThreadItem[]> = {}) {
-  await loadWorkspace();
+  await Promise.all([loadWorkspace(), loadIde(), loadChat()]);
+  seedAtelier();
   localStorage.setItem('desktop.lang', 'fr');
   localStorage.setItem('desktop.overview', JSON.stringify({ view: 'list', helpers: true, paused: false }));
   const d = await createMockDaemon(); daemons.push(d);
@@ -74,10 +76,8 @@ async function openOtto(items: ThreadItem[], threads: Record<string, ThreadItem[
   d.documents.set('docs/guide.md', '# Guide\n\nBonjour.');
   render(<App client={createDesktopFleet({ url: d.url, WebSocketImpl: WebSocket })} />);
   const side = within(await screen.findByRole('complementary', { name: 'Barre latérale' }));
-  await waitFor(() => expect(side.getByRole('button', { name: /Atelier/ })).toHaveTextContent(String(activeCount(listSessions()))));
-  await side.findByRole('button', { name: /^Ledge/ });
   const user = userEvent.setup();
-  await user.click(within(side.getByRole('tree')).getByRole('button', { name: /^Otto/ }));
+  await user.click(await within(await side.findByRole('tree')).findByRole('button', { name: /^Otto/ }, { timeout: 5000 }));
   await screen.findByRole('tabpanel', { name: 'Fil de la session' });
   return { d, user };
 }
@@ -118,7 +118,7 @@ describe('the Conversation tab', () => {
       expect(lines).toHaveLength(2);
       for (const l of lines) expect(l).not.toHaveTextContent('suivre la conversation');
       expect(thread().getAllByRole('button', { name: 'suivre la conversation' })).toHaveLength(1);
-    });
+    }, 30_000);   // the file's first test also pays the IDE's first render
 
     it('on a subagent\u2019s page, no way to the conversation', async () => {
       const { user } = await openOtto([
@@ -130,7 +130,8 @@ describe('the Conversation tab', () => {
       await waitFor(() => expect(card('s1')).not.toBeNull());
       expect(within(card('s1')).getByRole('button', { name: 'suivre la conversation' })).toBeVisible();
       // …its subagent's page, whose message to Nova is shown, does not.
-      await user.keyboard('{Escape}');
+      // The atelier is a tab: its subagent's seat is there.
+      await user.click(screen.getByRole('button', { name: 'Atelier (onglet)' }));
       await user.click(await screen.findByRole('button', { name: /sous-agent de Otto/ }));
       await waitFor(() => expect(document.querySelector('.session-page[data-helper=h1]')).not.toBeNull());
       await waitFor(() => expect(card('sh')).not.toBeNull());

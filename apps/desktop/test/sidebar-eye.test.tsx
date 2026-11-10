@@ -18,7 +18,8 @@ const projectsBox = (side: ReturnType<typeof within>) => within(side.getByRole('
 const heads = () => [...document.querySelectorAll('.st-tree .st-project .st-main strong')].map(e => e.textContent);
 
 describe('the eye of « Projets »', () => {
-  it('pressed: the projects with a live agent (an idle one counts), their ended sessions folded, « +N projects » that releases it', async () => {
+  // The IDE's explorer has no « +N projects » row (Tree.tsx, `!p.ide`): the eye itself releases it.
+  it('pressed: the projects with a live agent (an idle one counts), their ended sessions folded; the eye releases it', async () => {
     const { side, user } = await boot({ projects: PROJECTS, sessions: [PIM, MAX, REX, ZOE] });
     const box = projectsBox(side);
     const eye = box.getByRole('button', { name: EYE });
@@ -29,12 +30,8 @@ describe('the eye of « Projets »', () => {
     expect(box.getByRole('button', { name: /^Max/ })).toBeVisible();
     expect(box.queryByRole('button', { name: /^Rex/ })).toBeNull();
     expect(box.getByRole('button', { name: '+1 finished' })).toBeVisible();
-    const more = box.getByRole('button', { name: '+1 project with no live agent' });
-    expect(more.closest('.st-row')).toHaveClass('st-more-projects');
-    // It is the tree's last row, which the arrows reach.
-    const rows = [...document.querySelectorAll<HTMLElement>('.st-tree [data-tree-key]')];
-    expect(rows.at(-1)).toBe(more);
-    await user.click(more);
+    expect(box.queryByRole('button', { name: /with no live agent/ })).toBeNull();
+    await user.click(eye);
     // Released: every project, the empty one with no chevron, every session open, the ended ones counted on their project.
     expect(eye).toHaveAttribute('aria-pressed', 'false');
     expect(heads()).toEqual(['Ledge', 'Payment Service Platform Migration Europe', 'Docs']);
@@ -49,7 +46,6 @@ describe('the eye of « Projets »', () => {
     await waitFor(() => expect(heads()).toEqual(['Ledge', 'Payment Service Platform Migration Europe']));
     d.upsert({ ...ZOE, state: 'exited', exitedAt: ago(0) });
     await waitFor(() => expect(heads()).toEqual(['Ledge']));
-    expect(box.getByRole('button', { name: '+2 projects with no live agent' })).toBeVisible();
     d.upsert({ ...ZOE, state: 'working' });
     await waitFor(() => expect(heads()).toEqual(['Ledge', 'Payment Service Platform Migration Europe']));
     d.upsert({ ...ZOE, archivedAt: ago(0) });
@@ -86,16 +82,16 @@ describe('the eye of « Projets »', () => {
     expect(box.getByRole('status')).toHaveTextContent('No live agent.');
   });
 
-  it('projects but no session: the header whole, « Create a session », « +2 projects » under it; released, every project (design-ux, 11:42Z)', async () => {
+  it('projects but no session: the header whole, « Create a session »; released, every project (design-ux, 11:42Z)', async () => {
     const { side, user } = await boot({ projects: TWO_PROJECTS, sessions: [] });
     const box = projectsBox(side);
     // The projects come after the snapshot: until then the tree knows none.
-    const more = await box.findByRole('button', { name: '+2 projects with no live agent' });
+    // The projects come after the snapshot: the header is whole (its eye there) once they are in.
+    await box.findByRole('button', { name: EYE });
     const empty = box.getByRole('status');
     expect(empty).toHaveTextContent('No session yet.A session runs an agent in a folder or a project.Create a session');
     const header = empty.previousElementSibling as HTMLElement;
     expect(within(header).getAllByRole('button').map(b => b.getAttribute('aria-label'))).toEqual([EYE, 'Group by branch (B)', 'Compact mode (D)', 'Fold all', 'New project']);
-    expect(more).toHaveAttribute('tabindex', '0');
     // H from the box releases the eye, as its row would.
     within(empty).getByRole('button', { name: 'Create a session' }).focus();
     await user.keyboard('h');
@@ -104,8 +100,7 @@ describe('the eye of « Projets »', () => {
     expect(document.querySelectorAll('.st-tree .st-project .st-chev')).toHaveLength(0);
     expect(box.queryByRole('status')).toBeNull();
     await user.click(box.getByRole('button', { name: EYE }));
-    await user.click(box.getByRole('button', { name: '+2 projects with no live agent' }));
-    expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'false');
+    expect(box.getByRole('button', { name: EYE })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('its texts in French and English', async () => {

@@ -483,7 +483,7 @@ button.tg:disabled{cursor:default}
 .archived-banner>svg{color:var(--muted-foreground)}
 .archived-banner .ledge-btn{height:28px!important;font-size:12px!important;padding:0 10px!important;white-space:nowrap}
 .archived-banner .danger-outline{color:var(--danger-text)!important}
-.archived-pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;border:1px solid var(--border);font-size:11px;color:var(--muted-foreground)}
+
 /* Messages between agents (MessageCard, the mockup's bubbles): neutral on purpose, the state colours stay for what the agents
    need from you. Received on the left, its tail at the bottom left; sent on the right, filled, its tail at the bottom right. */
 .message-head-row{padding:10px 0 2px}

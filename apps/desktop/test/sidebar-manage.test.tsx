@@ -12,6 +12,11 @@ const archives = (d: MockDaemon) => sent(d).filter(m => m.type === 'session.arch
 
 const treeOf = (side: ReturnType<typeof within>) => within(side.getByRole('tree', { name: 'Projects, branches and sessions' }));
 
+/** What the live regions say: the IDE has several (the toast's among them). */
+const said = () => screen.getAllByRole('status').map(x => x.textContent ?? '').join(' | ');
+/** The IDE's tab in front of its group (the old top bar named the place: the IDE's tabs do). */
+const activeTab = () => screen.queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container')).find(t => t.getAttribute('aria-selected') === 'true');
+
 const menuLabels = (menu: HTMLElement) => within(menu).getAllByRole('menuitem').map(i => i.getAttribute('aria-label'));
 
 describe('archive and delete from the sidebar tree', () => {
@@ -41,13 +46,14 @@ describe('archive and delete from the sidebar tree', () => {
     tree.getByRole('button', { name: /^Bix/ }).focus();
     await user.keyboard('e');
     await waitFor(() => expect(archives(d)).toEqual([{ type: 'session.archive', id: 'bix' }]));
-    expect(screen.getByRole('status')).toHaveTextContent('Bix is archived.');
+    await waitFor(() => expect(said()).toContain('Bix is archived.'));
     expect(screen.getByRole('button', { name: /Undo/ })).toBeInTheDocument();
 
     fireEvent.contextMenu(tree.getByRole('button', { name: /^Otto/ }));
     const fromPointer = await screen.findByRole('menu', { name: 'Manage Otto' });
     const labels = menuLabels(fromPointer);
-    expect(labels).toEqual(['Open session', 'Terminal', 'Rename…', 'Move to…', 'Hand over', 'End session', 'End and archive…', 'Delete…']);
+    // The IDE's session menu (ideSessionMenu): open here or to the right, its terminal, the editor, then the old entries.
+    expect(labels).toEqual(['Open', 'Open to the right', 'Its terminal', 'Open in Cursor', 'Rename…', 'Move to…', 'Hand over', 'End session', 'End and archive…', 'Delete…']);
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).toBeNull();
 
@@ -63,7 +69,7 @@ describe('archive and delete from the sidebar tree', () => {
     const tree = treeOf(side);
     tree.getByRole('button', { name: /^Otto/ }).focus();
     await user.click(tree.getByRole('button', { name: /Open Otto.s terminal/ }));
-    expect(within(screen.getByRole('banner')).getByText('Otto')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Otto'));
     expect(await screen.findByRole('region', { name: 'Terminal' })).toBeVisible();
     expect(sent(d).some(m => m.type === 'session.focus')).toBe(false);
   });
@@ -93,6 +99,6 @@ describe('archive and delete from the sidebar tree', () => {
     await user.keyboard('e');
     expect(archives(d)).toEqual([]);
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(screen.getByRole('status')).not.toHaveTextContent(/archived/);
+    expect(said()).not.toMatch(/archived/);
   });
 });

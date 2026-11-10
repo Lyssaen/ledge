@@ -16,7 +16,8 @@ const archived = (id: string, name: string, extra: { topic?: string; agentSessio
   fakeSession(id, { name, cwd: '/w/pay', state: 'exited', archivedAt: ARCHIVED_AT, topic: extra.topic ?? 'Prepare the migration', agentSessionId: extra.agentSessionId ?? 'u-1' });
 
 const sent = (d: MockDaemon) => d.received.filter(m => m.type !== 'snapshot.request');
-const banner = () => within(screen.getByRole('banner'));
+/** The IDE's tab in front of its group (the old top bar named the place: the IDE's tabs do). */
+const activeTab = () => screen.queryAllByRole('tab').filter(t => t.closest('.dv-tabs-container')).find(t => t.getAttribute('aria-selected') === 'true');
 const archivesOf = (side: ReturnType<typeof within>) => within(side.getByRole('region', { name: 'Archives' }));
 
 describe('archives in the sidebar', () => {
@@ -25,7 +26,6 @@ describe('archives in the sidebar', () => {
     act(() => d.upsert(archived('old', 'Nova')));
     const region = side.getByRole('region', { name: 'Archives' });
     expect(region.closest('.st-scroll')).toBeNull();
-    expect(region.compareDocumentPosition(side.getByRole('button', { name: /^Settings/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(region.lastElementChild).toContainElement(archivesOf(side).getByRole('button', { name: /Archives/ }));
     await waitFor(() => expect(archivesOf(side).getByRole('button', { name: /Archives/ })).toHaveTextContent('1'));
     const toggle = archivesOf(side).getByRole('button', { name: /Archives/ });
@@ -35,7 +35,7 @@ describe('archives in the sidebar', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     await user.click(archivesOf(side).getByRole('button', { name: /Reread Nova/ }));
     expect(await screen.findByText('Archived session')).toBeVisible();
-    expect(banner().getByText('Nova')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Nova'));
   });
 
   it('Restore, Resume and Delete go through SessionActions', async () => {
@@ -48,19 +48,6 @@ describe('archives in the sidebar', () => {
     await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.resume', id: 'old' }));
     await user.click(archives.getByRole('button', { name: 'Delete Nova' }));
     expect(await screen.findByRole('alertdialog', { name: 'Delete Nova?' })).toBeVisible();
-  });
-
-  it('the Archived crumb unfolds the section', async () => {
-    const { side, user } = await boot({ sessions: [otto, archived('old', 'Nova')], daemon: CAN });
-    const archives = archivesOf(side);
-    await user.click(archives.getByRole('button', { name: /Archives/ }));
-    await user.click(archives.getByRole('button', { name: /Reread Nova/ }));
-    expect(await screen.findByText('Archived session')).toBeVisible();
-    const toggle = archives.getByRole('button', { name: /Archives/ });
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await user.click(banner().getByRole('button', { name: 'Archived' }));
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('a filter appears past four archives', async () => {
@@ -78,14 +65,14 @@ describe('archives in the sidebar', () => {
     expect(archives.queryByRole('button', { name: /Reread Nia/ })).toBeNull();
   });
 
-  it('archiving the session being read leaves the section folded; the Archived crumb still unfolds it', async () => {
+  it('archiving the session being read leaves the section folded', async () => {
     const sessions = listSessions();
     const bix = sessions.find(s => s.id === 'bix')!;
     const { d, side, user } = await boot({ projects: PROJECTS, sessions, daemon: CAN });
     const tree = within(side.getByRole('tree', { name: 'Projects, branches and sessions' }));
     await user.click(tree.getByRole('button', { name: '+1 finished' }));
     await user.click(tree.getByRole('button', { name: /^Bix/ }));
-    expect(banner().getByText('Bix')).toBeVisible();
+    await waitFor(() => expect(activeTab()).toHaveAccessibleName('Bix'));
     tree.getByRole('button', { name: /^Bix/ }).focus();
     await user.keyboard('e');
     await waitFor(() => expect(sent(d)).toContainEqual({ type: 'session.archive', id: 'bix' }));
@@ -94,8 +81,6 @@ describe('archives in the sidebar', () => {
     await waitFor(() => expect(toggle).toHaveTextContent('1'));
     expect(await screen.findByText('Archived session')).toBeVisible();
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await user.click(banner().getByRole('button', { name: 'Archived' }));
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    expect(archivesOf(side).getByRole('button', { name: /Reread Bix/ })).toHaveAttribute('aria-current', 'page');
+    // The old top bar's « Archived » crumb, which unfolded the section, has no IDE equivalent (lot 12b).
   });
 });
