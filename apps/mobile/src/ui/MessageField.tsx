@@ -51,7 +51,7 @@ export function MessageField({ id, label, sendLabel, value, onChange, onSend, ca
           }}
           className="max-h-[120px] min-h-11 min-w-0 flex-1 resize-none rounded-[22px] border border-input bg-surface px-3.5 py-[11px] text-base leading-5 text-fg placeholder:text-muted disabled:opacity-60"
         />
-        <button type="button" disabled={!canSend} onClick={onSend} aria-label={sendLabel} title={sendLabel} className={iconButtonClass({ variant: 'brand', round: true })}>
+        <button type="button" disabled={!canSend} onClick={onSend} aria-label={sendLabel} title={sendLabel} className={iconButtonClass({ variant: 'primary', round: true })}>
           <Icon name="arrowUp" />
         </button>
       </div>

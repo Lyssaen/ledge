@@ -1,19 +1,19 @@
 import type { ComponentPropsWithRef } from 'react';
 
 /**
- * The phone's buttons, one vocabulary for every screen. `primary` is the one action a screen leads to (the text colour
- * as a fill), `outline` the other ways, `ghost` a way that stays quiet, `brand` the chat's own red (the desktop's
- * --primary). `lg` closes a board, `md` a footer or a card, `sm` sits in a row. A tap darkens the button: no hover on a phone.
+ * The phone's buttons, one vocabulary for every screen. `primary` is the one action a screen leads to, in the red the
+ * desktop shares (--primary, as every mockup of the redesign draws `.btn.primary`), `outline` the other ways, `ghost` a
+ * way that stays quiet. `lg` closes a board, `md` a footer or a card, `sm` sits in a row. A tap darkens the button: no
+ * hover on a phone.
  */
-export type ButtonVariant = 'primary' | 'outline' | 'ghost' | 'brand';
+export type ButtonVariant = 'primary' | 'outline' | 'ghost';
 export type ButtonSize = 'lg' | 'md' | 'sm';
 
 const BASE = 'inline-flex items-center justify-center gap-2 rounded-control border text-center transition-[background-color,opacity] duration-100 disabled:opacity-45';
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: 'border-transparent bg-fg text-bg hover:opacity-90 active:opacity-75',
+  primary: 'border-transparent bg-primary text-primary-fg hover:bg-primary-hover active:bg-primary-hover',
   outline: 'border-input bg-transparent text-fg hover:bg-raised/60 active:bg-raised',
-  ghost: 'border-transparent bg-transparent text-muted hover:bg-raised/60 active:bg-raised',
-  brand: 'border-transparent bg-primary text-primary-fg hover:bg-primary-hover active:bg-primary-hover'
+  ghost: 'border-transparent bg-transparent text-muted hover:bg-raised/60 active:bg-raised'
 };
 /** An icon alone is the control's whole name: drawn in the text colour, not muted. */
 const ICON_GHOST = 'border-transparent bg-transparent text-fg hover:bg-raised/60 active:bg-raised';

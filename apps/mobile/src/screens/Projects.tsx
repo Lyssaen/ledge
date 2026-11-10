@@ -123,7 +123,7 @@ function DeleteSheet({ store, project, projects, agents, onClose }: { store: Mob
       {error && <p role="alert" className="text-small text-danger-fg">{error}</p>}
       <div className="flex gap-2">
         <Button variant="ghost" className="flex-1" disabled={busy} onClick={onClose}>{P.cancel}</Button>
-        <Button variant="brand" className="flex-[2]" disabled={busy || !canConfirm} onClick={go}>{P.confirmDelete}</Button>
+        <Button variant="primary" className="flex-[2]" disabled={busy || !canConfirm} onClick={go}>{P.confirmDelete}</Button>
       </div>
     </Sheet>
   );
