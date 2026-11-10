@@ -82,7 +82,7 @@ test('launching a rig: 3 builders and 3 reviewers, then launched', async ({ page
   await expect(dialog).toHaveCount(0);
   await expect(page.locator('.dv-tab').filter({ hasText: 'Rig · ledge-scale' })).toBeVisible();
   await expect.poll(() => daemon.received.filter(m => m.type === 'openrig.launch' && !(m.launch as { plan?: boolean }).plan).map(m => m.type === 'openrig.launch' && m.launch)).toEqual([
-    expect.objectContaining({ spec: 'factory', cwd: '~/Workspace/ledge', name: 'ledge-scale', seats: expect.objectContaining({ 'dev.build': 3, 'dev.qa': 3 }) })
+    { spec: 'factory', cwd: '~/Workspace/ledge', name: 'ledge-scale', seats: { 'dev.build': 3, 'dev.qa': 3 }, delegation: 'pairs' }
   ]);
 });
 
@@ -93,7 +93,8 @@ test('a running rig\'s seats: 3 builders and 3 reviewers, added while it runs', 
   await expect(page.getByText(/Ajoute build-2, build-3|Ajoute .*build-3/)).toBeVisible();
   await page.screenshot({ path: info.outputPath('openrig-seats.png') });
   await page.getByRole('button', { name: 'Appliquer' }).click();
-  await expect.poll(() => daemon.received.filter(m => m.type === 'openrig.seats').map(m => m.type === 'openrig.seats' && { rig: m.rig, seats: m.seats })).toEqual([
-    { rig: 'starter', seats: { 'dev.build': 3, 'dev.review': 3 } }
+  await expect.poll(() => daemon.received.filter(m => m.type === 'openrig.seats').map(m => m.type === 'openrig.seats' && { rig: m.rig, seats: m.seats, delegation: m.delegation, hasDelegation: 'delegation' in m })).toEqual([
+    // The Rig tab sends no delegation: the daemon links the added seats by pairs (openrig.ts, reseat's default).
+    { rig: 'starter', seats: { 'dev.build': 3, 'dev.review': 3 }, delegation: undefined, hasDelegation: false }
   ]);
 });
