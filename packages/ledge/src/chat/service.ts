@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
@@ -117,6 +117,17 @@ export function tooWide(path: string, userHome: string): string | null {
   if (userHome.startsWith(`${path}/`)) return 'a folder holding the home';
   if (/^\/[^/]+$/.test(path)) return 'a top-level folder';
   return null;
+}
+
+/**
+ * `tooWide` for a folder as named and for where it really leads: a link to the home folder or the root starts its agent there, so it is
+ * refused as they are. A folder that cannot be resolved is judged by its name alone; the launch then fails on its own.
+ */
+export async function folderTooWide(path: string, userHome: string): Promise<string | null> {
+  const named = tooWide(path, userHome);
+  if (named) return named;
+  const real = await realpath(path).catch(() => null);
+  return real === null ? null : tooWide(real, await realpath(userHome).catch(() => userHome));
 }
 /** The earlier fence each earlier card's action is read as, so a ledge-action block for it reaches the same validator. */
 const FENCE_OF = new Map(Object.entries(LEGACY_FENCE_ACTION).map(([kind, id]) => [id as string, kind as BlockKind]));
