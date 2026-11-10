@@ -334,7 +334,7 @@ export function createPhoneGateway(deps: {
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, rigRows: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
-      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), ...(deps.usage ? { usage: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}), ...(settings ? { settings: true as const } : {}), ...(projects ? { projectEdit: true as const } : {}), ...(projects && deps.folders ? { projectFolders: true as const } : {}), ...(deps.rigs ? { rigs: true as const } : {}), ...(projects && deps.launch ? { launch: true as const } : {}), ...(deps.forge ? { forge: true as const } : {}) },
+      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), ...(deps.usage ? { usage: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}), ...(settings ? { settings: true as const } : {}), ...(projects ? { projectEdit: true as const } : {}), ...(projects && deps.folders ? { projectFolders: true as const } : {}), ...(deps.rigs ? { rigs: true as const } : {}), ...(projects && deps.launch ? { launch: true as const } : {}), ...(deps.forge ? { forge: true as const } : {}), ...(deps.chats ? { conversations: true as const } : {}) },
     ...(projects ? { projects: toPhoneProjects(projects) } : {}),
     device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}), id: deviceId, ...ownInfo(deviceId), ...(settings ? { prefs: mobile.prefsOf!(deviceId) } : {}) }
     };
@@ -1313,7 +1313,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The phone's own chat. A thread that cannot be reached (an id off the pattern, a thread being dropped) is refused, never thrown. */
-  const chatRead = async (deviceId: string, msg: Extract<PhoneClientMessage, { type: 'chat.ask' | 'chat.cancel' | 'chat.reset' | 'chat.history' }>) => {
+  const chatRead = async (deviceId: string, msg: Extract<PhoneClientMessage, { type: 'chat.ask' | 'chat.cancel' | 'chat.reset' | 'chat.history' | 'chat.conversations' | 'chat.conversation' }>) => {
     const chats = deps.chats;
     if (!chats || !approved(deviceId)) return;
     known.add(deviceId);
@@ -1342,6 +1342,20 @@ export function createPhoneGateway(deps: {
           push(deviceId, { type: 'chat.history', turns: toPhoneHistory(turns) }, 'chat.history');
           const reads = limitsOf(turns);
           return reads.length ? push(deviceId, { type: 'chat.limits', reads }, 'chat.limits') : undefined;
+        }
+        // The kept conversations (M3 Q33): read-only, answered to the asker alone.
+        case 'chat.conversations': {
+          const thread = chats.device(deviceId);
+          if (!thread.conversations) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+          return push(deviceId, { type: 'chat.conversations', ...(await thread.conversations()) }, 'chat.conversations');
+        }
+        case 'chat.conversation': {
+          const thread = chats.device(deviceId);
+          if (!thread.conversation) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
+          const turns = await thread.conversation(msg.id);
+          if (!turns) return push(deviceId, { type: 'chat.conversation', id: msg.id, error: 'unknown' });
+          const limits = limitsOf(turns);
+          return push(deviceId, { type: 'chat.conversation', id: msg.id, turns: toPhoneHistory(turns), ...(limits.length ? { limits } : {}) });
         }
       }
     } catch (e) {
@@ -1380,7 +1394,7 @@ export function createPhoneGateway(deps: {
       case 'attachment.put': case 'attachment.get':
         void attachment(deviceId, msg);
         return;
-      case 'chat.ask': case 'chat.cancel': case 'chat.reset': case 'chat.history':
+      case 'chat.ask': case 'chat.cancel': case 'chat.reset': case 'chat.history': case 'chat.conversations': case 'chat.conversation':
         if (!deps.chats) return push(deviceId, { type: 'error', code: 'invalid', request: msg.type });
         void chatRead(deviceId, msg);
         return;

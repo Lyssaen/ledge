@@ -260,6 +260,12 @@ export type ChatErrorCode = z.infer<typeof ChatErrorCodeSchema>;
 export const ChatLimitsReadSchema = z.object({ qid: OperationIdSchema, at: z.string().datetime() }).strict();
 export type ChatLimitsRead = z.infer<typeof ChatLimitsReadSchema>;
 
+/** A conversation the device keeps (M3 Q33), as « Conversations » lists it: its first question, cut, and how many it holds. */
+export const ChatConversationSummarySchema = z.object({
+  id: z.string().uuid(), startedAt: z.string().datetime(), lastAt: z.string().datetime(), first: z.string().max(200), count: z.number().int().min(1)
+}).strict();
+export type ChatConversationSummary = z.infer<typeof ChatConversationSummarySchema>;
+
 export const PhoneChatTurnSchema = z.object({
   qid: OperationIdSchema, question: z.string().max(MESSAGE_MAX), askedAt: z.string().datetime(),
   steps: z.array(PhoneChatStepSchema).max(50), answer: z.string().max(THREAD_TEXT_MAX).optional(), answeredAt: z.string().datetime().optional(),
@@ -461,6 +467,9 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.cancel'), qid: OperationIdSchema }),
   z.object({ type: z.literal('chat.reset') }),
   z.object({ type: z.literal('chat.history') }),
+  /** The device's conversations, and one of them (`daemon.conversations`): answered to the asker alone. */
+  z.object({ type: z.literal('chat.conversations') }).strict(),
+  z.object({ type: z.literal('chat.conversation'), id: z.string().uuid() }).strict(),
   /** An image to store, sent alone before the message that names it; no `id`, and at most `ATTACHMENT_MAX` bytes. */
   AttachmentPutSchema.pick({ type: true, requestId: true }).extend({ image: ImageUploadSchema.extend({ data: z.string().min(1).max(b64Max(ATTACHMENT_MAX)) }) }),
   AttachmentGetSchema.pick({ type: true, requestId: true, attachment: true, preview: true }),
@@ -584,7 +593,10 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** « Nouvelle session »: the daemon takes `session.launch` and `project.folders` carries this PC's folders' branch. Absent (an older PC): « Nouvelle » cannot start. */
     launch: z.literal(true).optional(),
     /** Pull and merge requests: the daemon answers `forge.state` and `forge.detail`, and takes `forge.act`. Absent (an older PC): the MR/PR tab says « rien à afficher ». */
-    forge: z.literal(true).optional() }),
+    forge: z.literal(true).optional(),
+    /** The device's conversations are kept 7 days (M3 Q33): the daemon answers `chat.conversations` and `chat.conversation`, and
+     *  `chat.reset` puts the conversation away. Absent (an older PC): « Nouvelle conversation » forgets it. */
+    conversations: z.literal(true).optional() }),
   /** The user's projects (`daemon.atelier`), whole, in their order: absent from an older PC's snapshot. */
   projects: z.array(PhoneProjectSchema).max(PHONE_PROJECTS_MAX).optional(), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
     /** This device's id (its fingerprint, as decisions name it in `by`), its kind, and the name the user gave it (absent: none given). */
@@ -633,6 +645,11 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   /** The current conversation's answers that read the account limits, and when (M3 Q31): a phone shows the limits under each. Sent after a
    *  `chat.history` or a `chat.done` that touches one, apart from the turn so that an older phone, whose turn schema is strict, loses nothing. */
   z.object({ type: z.literal('chat.limits'), reads: z.array(ChatLimitsReadSchema).max(50) }),
+  /** The device's conversations (M3 Q33): the current one once it has a question, and the ones put away, the most recent first. */
+  z.object({ type: z.literal('chat.conversations'), current: ChatConversationSummarySchema.optional(), past: z.array(ChatConversationSummarySchema).max(200) }),
+  /** One conversation, read-only, as `chat.history` gives its turns (`limits` as `chat.limits`); `error`: it is no longer kept. */
+  z.object({ type: z.literal('chat.conversation'), id: z.string().uuid(), turns: z.array(PhoneChatTurnSchema).max(50).optional(),
+    limits: z.array(ChatLimitsReadSchema).max(50).optional(), error: z.literal('unknown').optional() }),
   /** The daemon updating or restarting itself, whoever asked: npm runs, then the service restarts (the link drops right after). */
   z.object({ type: z.literal('daemon.progress'), version: z.string().max(40), step: z.enum(['installing', 'restarting']) }),
   /** Nothing was changed. Never npm's output nor a command: both hold the PC's paths. */

@@ -53,7 +53,8 @@ Le téléphone affiche alors, sous cette réponse, les barres de « Limites » t
 
 **Ce que le PC garde.** Chaque appareil a ses conversations, et l'une d'elles est en cours :
 - Le PC enregistre la conversation en cours à chaque changement (question, réponse, carte qui avance). Un daemon qui
-  redémarre la retrouve : elle n'est plus perdue.
+  redémarre la retrouve : elle n'est plus perdue. Ce qui était en cours à l'arrêt ne l'est plus : une instruction en file
+  redevient proposée, une ligne en cours passe `failed`.
 - **« Nouvelle conversation » (`chat.reset`) range la conversation en cours** dans la liste, puis en ouvre une vide. Rien
   n'est effacé. Le fil reçoit `chat.history { turns: [] }` comme avant. Sans question, il n'y a rien à ranger.
 - **Un nouveau jour** range aussi la conversation de la veille. La première question du jour ouvre une nouvelle

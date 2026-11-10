@@ -3,7 +3,7 @@ import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type HarnessUsage, type OpenRigState, type Projects, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
+import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type ChatConversationSummary, type HarnessUsage, type OpenRigState, type Projects, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
@@ -18,6 +18,7 @@ import { runCodex } from './codex.js';
 import { runCursor } from './cursor.js';
 import { runOmp } from './omp.js';
 import { log } from '../log.js';
+import { summaryOf, type Conversations } from './conversations.js';
 
 export type ChatMessage = Extract<ServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
 export interface Chat {
@@ -58,6 +59,10 @@ export interface Chat {
   ignored(qid: string): boolean;
   /** Resolves once no question is running (at once when there is none). */
   idle(): Promise<void>;
+  /** The kept conversations (M3 Q33): the current one once it has a question, and the ones put away, the most recent first. None kept: none. */
+  conversations?(): Promise<{ current?: ChatConversationSummary; past: ChatConversationSummary[] }>;
+  /** A conversation's turns, the current one's included; null when it is no longer kept. A past one is read-only: its cards are not this chat's. */
+  conversation?(id: string): Promise<ChatTurn[] | null>;
 }
 export interface ChatDeps {
   store: Store; tmux: Pick<Tmux, 'capture'>; home: string;
@@ -75,6 +80,8 @@ export interface ChatDeps {
   usage?: () => readonly HarnessUsage[] | undefined;
   /** Reads the projects' GitHub/GitLab (#23) into the context, for a question that asks about issues, PR/MR or CI. */
   forge?: Forge;
+  /** Where the conversations are kept 7 days (a device's chat, M3 Q33); without it the day's conversation lives in memory. */
+  conversations?: Conversations;
   /** A pool shared by several chats: a question takes a place while it runs. */
   slots?: { take(): boolean; give(): void };
   /** Resolves an attached image's id to its file (the daemon's attachment store). */
@@ -137,6 +144,14 @@ export async function folderTooWide(path: string, userHome: string): Promise<str
 const FENCE_OF = new Map(Object.entries(LEGACY_FENCE_ACTION).map(([kind, id]) => [id as string, kind as BlockKind]));
 const sameStep = (a: ChatTurn['steps'][number], b: ChatTurn['steps'][number]) => a.kind === b.kind && a.id === b.id && a.path === b.path;
 
+/** A turn written before the daemon stopped: what was under way then is no longer (a queued instruction is proposed again, a running row failed). */
+function resumed(t: ChatTurn): ChatTurn {
+  const out: ChatTurn = { ...t };
+  if (out.relay?.status === 'queued') { const { status: _s, ...relay } = out.relay; out.relay = relay; }
+  if (out.actions?.some(a => a.state === 'running')) out.actions = out.actions.map(a => (a.state === 'running' ? { ...a, state: 'failed' as const, error: 'interrupted' } : a));
+  return out;
+}
+
 /** One conversation with Ledge per day, run by the chosen harness (spec 2026-10-11 §5). */
 export function createChat(deps: ChatDeps): Chat {
   const now = deps.now ?? (() => new Date().toISOString());
@@ -161,8 +176,20 @@ export function createChat(deps: ChatDeps): Chat {
   const partly = (t: ChatTurn) => !!(proposalRows(t).some(p => p.launchedId) || t.relay?.status === 'sent' || t.relay?.sentAt || t.closes?.some(c => c.closedAt)
     || t.tasks?.some(c => c.taskId) || t.actions?.some(a => a.state === 'done'));
 
-  /** A new day starts an empty history; the day file decides the Claude session separately. */
-  function rollDay(): boolean { const day = today(); if (turnsDay === day) return false; turns = []; turnsDay = day; setAside.clear(); return true; }
+  /** The current conversation's id, for a chat whose conversations are kept (M3 Q33). */
+  let conversationId: string = randomUUID();
+  const kept = deps.conversations;
+  const saved = kept?.loadCurrent();
+  if (saved) { conversationId = saved.id; turnsDay = saved.day; turns = saved.turns.map(resumed); }
+  /** Writes the current conversation, once it has a question. */
+  const persist = () => { if (kept && turns.length > 0) void kept.saveCurrent({ id: conversationId, day: turnsDay, turns }); };
+  /** Every client gets the new history, and the conversation is written. */
+  const publish = (emit: (m: ChatMessage) => void) => { emit({ type: 'chat.history', turns }); persist(); };
+  /** Puts the current conversation away, as it is, and starts a new one: nothing to put away without a question. */
+  const shelve = () => { if (kept && turns.length > 0) { void kept.archive(conversationId, turns); conversationId = randomUUID(); } };
+
+  /** A new day starts an empty history, the day before put away; the day file decides the Claude session separately. */
+  function rollDay(): boolean { const day = today(); if (turnsDay === day) return false; shelve(); turns = []; turnsDay = day; setAside.clear(); return true; }
 
   /** Today's session for this harness: resumed from the day file when it names today and the same tool, else a fresh id. */
   async function daySession(fresh: boolean, tool: Tool): Promise<{ sessionId: string; resume: boolean }> {
@@ -370,30 +397,30 @@ export function createChat(deps: ChatDeps): Chat {
     markLaunched(qid, id, emit, row = 0) {
       const t = turnOf(qid); const p = proposalRows(t)[row]; if (!t || !p) return;
       const next = { ...p, launchedId: id }; delete next.error; setRow(t, row, next);
-      emit({ type: 'chat.history', turns });
+      publish(emit);
     },
     markFailed(qid, message, emit, row = 0) {
       const t = turnOf(qid); const p = proposalRows(t)[row]; if (!t || !p) return;
       setRow(t, row, { ...p, error: message });
-      emit({ type: 'chat.history', turns });
+      publish(emit);
     },
     relay: qid => { rollDay(); return turnOf(qid)?.relay; },
     markRelay(qid, patch, emit) {
       const t = turnOf(qid); if (!t?.relay) return;
       const { id, name, tool, text } = t.relay; t.relay = { id, name, tool, text, ...patch };
-      emit({ type: 'chat.history', turns });
+      publish(emit);
     },
     close: (qid, row) => { rollDay(); return turnOf(qid)?.closes?.[row]; },
     markClosed(qid, row, how, emit) {
       const t = turnOf(qid); const c = t?.closes?.[row]; if (!t || !c) return;
       const next: ChatClose = { ...c, closedAt: now(), how }; delete next.error;
       t.closes = t.closes!.map((r, i) => (i === row ? next : r));
-      emit({ type: 'chat.history', turns });
+      publish(emit);
     },
     markCloseFailed(qid, row, message, emit) {
       const t = turnOf(qid); const c = t?.closes?.[row]; if (!t || !c) return;
       t.closes = t.closes!.map((r, i) => (i === row ? { ...c, error: message } : r));
-      emit({ type: 'chat.history', turns });
+      publish(emit);
     },
     // A roll caught here is silent otherwise: the overlays would keep showing yesterday's queued card.
     queuedRelays(emit) { if (rollDay()) emit?.({ type: 'chat.history', turns }); return turns.flatMap(t => (t.relay?.status === 'queued' ? [{ qid: t.qid, relay: t.relay, askedAt: t.askedAt }] : [])); },
@@ -403,7 +430,7 @@ export function createChat(deps: ChatDeps): Chat {
       const next: ChatTaskProposal = { ...c, ...patch };
       if (patch.taskId) delete next.error;
       t.tasks = t.tasks!.map((r, i) => (i === row ? next : r));
-      emit({ type: 'chat.history', turns });
+      publish(emit);
     },
     followTask(task, emit) {
       let changed = false;
@@ -411,7 +438,7 @@ export function createChat(deps: ChatDeps): Chat {
         if (!t.tasks?.some(c => c.taskId === task.id)) continue;
         t.tasks = t.tasks.map(c => (c.taskId === task.id && (c.state !== task.state || c.ownerName !== task.ownerName) ? (changed = true, { ...c, state: task.state, ownerName: task.ownerName }) : c));
       }
-      if (changed) emit({ type: 'chat.history', turns });
+      if (changed) publish(emit);
     },
     action: (qid, row) => { rollDay(); return turnOf(qid)?.actions?.[row]; },
     markAction(qid, row, patch, emit) {
@@ -420,7 +447,7 @@ export function createChat(deps: ChatDeps): Chat {
       if (patch.state !== 'failed' && patch.state !== 'refused') { delete next.error; delete next.code; }
       if (patch.state !== 'done' && patch.state !== 'denied') delete next.doneAt;
       t.actions = t.actions!.map((r, i) => (i === row ? next : r));
-      emit({ type: 'chat.history', turns });
+      publish(emit);
     },
     ignore(qid, undo, emit) {
       rollDay();
@@ -436,15 +463,26 @@ export function createChat(deps: ChatDeps): Chat {
         if (t.relay?.status === 'queued' || t.actions?.some(a => a.state === 'running')) return 'the card is under way';
         t.ignoredAt = now(); setAside.set(qid, { question: t.question.slice(0, 200), partly: partly(t) });
       }
-      emit({ type: 'chat.history', turns });
+      publish(emit);
       return null;
     },
     ignored: qid => turnOf(qid)?.ignoredAt !== undefined,
+    async conversations() {
+      rollDay();
+      const current = summaryOf(conversationId, turns);
+      return { ...(current ? { current } : {}), past: (await kept?.list()) ?? [] };
+    },
+    async conversation(id) {
+      if (id === conversationId) return turns;
+      return (await kept?.read(id)) ?? null;
+    },
     idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {
       // The overlay only offers it between questions; a reset racing a question is dropped rather than orphaning its turn.
       if (busy) { log('chat reset ignored: a question is running'); return; }
+      // A kept conversation is put away, not forgotten (M3 Q33).
+      rollDay(); shelve();
       freshNext = true; turns = []; turnsDay = today(); setAside.clear();
       emit({ type: 'chat.history', turns });
       // Without a day file a restarted daemon also starts fresh.
@@ -461,7 +499,7 @@ export function createChat(deps: ChatDeps): Chat {
           rollDay();
           turns = [...turns, turn].slice(-HISTORY_MAX);
           // Every client learns the turn before it streams, including one connected before the question (its steps would map over nothing).
-          emit({ type: 'chat.history', turns });
+          publish(emit);
           let r = await attempt(turn, emit, false, mine, tool);
           // A day session whose transcript is gone (or a CLI that forgot it): once more, from a fresh conversation.
           if (!r.ok && r.resumed && !mine.cancelled) { log(`chat ${qid}: resume failed (${r.message}), starting a new day session`); turn.steps.length = 0; r = await attempt(turn, emit, true, mine, tool); }
@@ -472,7 +510,7 @@ export function createChat(deps: ChatDeps): Chat {
           // The context folder or the day file could not be written: the overlay still needs its unlock.
           log(`chat ${qid} failed: ${(e as Error).message}`);
           turn.error = (e as Error).message; emit({ type: 'chat.error', qid, message: turn.error });
-        } finally { busy = false; current = null; }
+        } finally { busy = false; current = null; persist(); }
       } finally {
         deps.slots?.give();
         const waiting = idleWaiters; idleWaiters = []; for (const res of waiting) res();
