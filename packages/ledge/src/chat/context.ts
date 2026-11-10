@@ -1,12 +1,14 @@
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { DEFAULT_PROJECTS, isArchived, projectOf, taskClosed, type ChatStep, type Projects, type Recent, type Session, type Task } from '@ledge/protocol';
+import { DEFAULT_PROJECTS, isArchived, projectOf, seatsByRole, taskClosed, type ChatStep, type OpenRigState, type Projects, type Recent, type Session, type Task } from '@ledge/protocol';
 import { LEDGE_MD, writeLedgeMd, type LedgeInfo } from './guide.js';
 import { writeNotes } from './notes.js';
 
 /** `sessions`: every session the daemon holds, archived ones included (listed apart, for `session.restore`). */
 export interface ContextInput { sessions: Session[]; recents?: Recent[]; projects?: Projects; tasks?: Task[];
+  /** This PC's OpenRig as last read: `rigs.md` (its rigs, their seats by role, the kernel), only where OpenRig is installed. */
+  rigs?: OpenRigState;
   /** What `ledge.md` holds (the guide, the version, the agents installed); no `ledge.md` when left out. */
   ledge?: LedgeInfo;
   /** The user's notes folder (`~/.ledge/context`): copied as `context-<name>.md` with `context-index.md`; none when left out. */
@@ -67,6 +69,7 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   // The projects (build spec §5), only where the daemon holds some; a name or a description is one line, so it forges no heading.
   if (withProjects) await writeFile(join(dir, 'projects.md'), projectsMd(projects));
   if (input.tasks) await writeTasksContext(dir, input.tasks, steps, input.now.slice(0, 10));
+  if (input.rigs?.installed) { await writeFile(join(dir, 'rigs.md'), rigsMd(input.rigs)); steps.set('rigs.md', { kind: 'sessions' }); }
   if (input.ledge) { await writeLedgeMd(dir, input.ledge); steps.set(LEDGE_MD, { kind: 'repo', name: 'Ledge', path: LEDGE_MD }); }
   if (input.notesDir) await writeNotes(dir, input.notesDir, steps);
   // The live sessions' repositories and the projects' ones on this machine: a question with no session can still read a project.
@@ -74,6 +77,18 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   const projectRepos = await existing(projects.projects.flatMap(p => p.repos.filter(r => r.machine === 'local').map(r => r.path)));
   const repoPaths = [...new Set([...live.map(s => s.repoPath ?? s.cwd), ...projectRepos].filter(p => p && !coversHome(p)).map(p => resolve(p)))];
   return { dir, steps, repoPaths };
+}
+
+/** `rigs.md`: OpenRig on this PC as Ledge last read it, what rig.act and rig.seats name (a rig by its name, a role as `pod.member`). */
+export function rigsMd(st: OpenRigState): string {
+  const lines = [`# OpenRig on this PC, read at ${st.at}`, '', `- OpenRig ${st.version ?? '(version unknown)'}, daemon ${st.daemon.state}, kernel ${st.kernel.state}`, ''];
+  for (const r of st.rigs) {
+    lines.push(`## ${oneLine(r.name)} — ${oneLine(r.status)}`, `- seats: ${r.running} of ${r.seats} running${r.attention ? `, ${r.attention} need attention` : ''}`);
+    for (const [role, ids] of seatsByRole(r.nodes)) lines.push(`- role ${role}: ${ids.length} seat${ids.length > 1 ? 's' : ''} (${ids.join(', ')})`);
+    lines.push('');
+  }
+  if (!st.rigs.length) lines.push('- (no rig)', '');
+  return lines.join('\n');
 }
 
 /** `projects.md` (also `ledge brain projects`): each project, its description and repositories per machine, then the filed folders. */

@@ -179,6 +179,8 @@ export interface ActResult { ok: boolean; commands: string[]; output?: string; e
 export interface OpenRig {
   /** This machine's OpenRig, read again unless a read is under `STATE_TTL_MS` old (`fresh` forces it). */
   state(fresh?: boolean): Promise<OpenRigState>;
+  /** The state last read, without reading: what the chat's rows are checked against. Optional only for older tests' doubles. */
+  peek?(): OpenRigState | undefined;
   /** `noPaths`: the result's `commands` without the PC's paths (`showRigCommandWithoutPaths`), for a phone. */
   act(action: OpenRigAction, opts?: { noPaths?: boolean }): Promise<ActResult>;
   /** The machine's rig specs (the kernel's left out). */
@@ -314,6 +316,8 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
   const daemonRecord = deps.daemonRecord ?? (async () => parse(await readFile(join(openrigHome, 'daemon.json'), 'utf8')));
   let version: string | undefined, versionAt = 0, last: { at: number; state: OpenRigState } | undefined;
   let reading: Promise<OpenRigState> | undefined, acting = false;
+  /** The state last read, kept when an action makes `last` stale (the next read replaces it). */
+  let seen: OpenRigState | undefined;
   /** A rig's permissions already read: any action may change them, so each one forgets all. */
   const perms = new Map<string, { at: number; read: Promise<{ policy?: string; seats?: RigSeatPermission[]; error?: string }> }>();
   const absent = (): OpenRigState => ({ installed: false, daemon: { state: 'unknown' }, kernel: { state: 'unknown' }, rigs: [], at: new Date(now()).toISOString() });
@@ -355,7 +359,7 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
   function state(fresh = false): Promise<OpenRigState> {
     if (!fresh && last && now() - last.at < STATE_TTL_MS) return Promise.resolve(last.state);
     if (reading) return reading;
-    reading = read().then(s => { last = { at: now(), state: s }; return s; }).finally(() => { reading = undefined; });
+    reading = read().then(s => { last = { at: now(), state: s }; seen = s; return s; }).finally(() => { reading = undefined; });
     return reading;
   }
 
@@ -794,7 +798,9 @@ export function createOpenRig(deps: OpenRigDeps = {}): OpenRig {
     return live ? { entries: live } : { entries: [], error: 'failed' };
   }
 
-  return { state, act, specs, launch, reseat, roles, role, roleFile, duplicateRole, row, graph, snapshots, permissions, queue, closed, routing };
+  const peek = (): OpenRigState | undefined => seen;
+
+  return { state, peek, act, specs, launch, reseat, roles, role, roleFile, duplicateRole, row, graph, snapshots, permissions, queue, closed, routing };
 }
 
 /** A seat's permissions from `rig seat status <session> --json` (`permissions.effective.{effectiveMode, source, launchPosture}`,

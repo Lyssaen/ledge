@@ -68,7 +68,8 @@ export const ChatTasksSchema = z.array(ChatTaskProposalSchema).min(1).max(MAX_PR
 
 /** A row's display words (action registry spec §5.1), by action, each at most 300 characters: what a front fills its own
  *  copy with, `summary` its fallback. session.* `session` (its name); session.model `model`, `effort`; session.decide
- *  `decision` (accept | deny), `kind` (permission | diff | plan), `note`; task.* `task` (its title), `owner` (who holds it), task.cancel `reason`, task.pass `session` (who gets it), `note`. */
+ *  `decision` (accept | deny), `kind` (permission | diff | plan), `note`; task.* `task` (its title), `owner` (who holds it), task.cancel `reason`, task.pass `session` (who gets it), `note`;
+ *  rig.act `kind`, `rig`; rig.seats `rig`, `role`, `count`, `from` (the count now). */
 export const ActionVarsSchema = z.record(z.string().max(40), z.string().max(300));
 export const DETAIL_MAX = 4000;
 /** Why a row was refused or failed (`cut`: a request the card shows cut, accepted only in the session), for a front's own words (`error` stays the daemon's text, for the log): a string on the
@@ -76,7 +77,7 @@ export const DETAIL_MAX = 4000;
 export const ACTION_ERROR_CODES = [
   'unknown', 'ambiguous', 'read_only', 'exited', 'running', 'archived', 'not_archived', 'no_terminal', 'same_model', 'no_request',
   'in_session', 'no_note', 'closed', 'holder',
-  'changed', 'cut', 'not_decision', 'failed'
+  'changed', 'cut', 'not_decision', 'failed', 'unchanged', 'not_running'
 ] as const;
 export type ActionErrorCode = (typeof ACTION_ERROR_CODES)[number];
 /** A row of the chat's generic card (action registry spec §5.1): an action the daemon resolved, ready to apply. `action` is a

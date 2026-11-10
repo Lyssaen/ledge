@@ -10,6 +10,21 @@ const T0 = '2026-10-11T10:00:00.000Z';
 const mk = (id: string, extra: Partial<Session> = {}): Session => ({ id, name: 'Otto', tool: 'claude', cwd: '/w/ledge', project: 'ledge', title: 'Otto · ledge', tmuxSession: `ledge-${id}`, state: 'working', helpers: [], startedAt: T0, lastActivityAt: T0, source: 'launcher', ...extra });
 
 describe('writeContext', () => {
+  it('writes rigs.md from OpenRig as last read (each rig, its seats by role, the kernel), only where OpenRig is installed', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+    const seat = (logicalId: string) => ({ logicalId, session: `${logicalId}@r`, runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 });
+    await writeContext(dir, { sessions: [], now: T0, capture: async () => null, git: async () => null, rigs: { installed: true, version: '0.7.10', daemon: { state: 'running' }, kernel: { state: 'ready' }, at: T0,
+      rigs: [{ id: 'r1', name: 'ledge-dev', status: 'running', lifecycleState: 'running', seats: 3, running: 3, attention: 1, uptime: null, snapshot: null, nodes: [seat('dev.back'), seat('dev.back-2'), seat('dev.front')] }] } });
+    const md = readFileSync(join(dir, 'rigs.md'), 'utf8');
+    expect(md).toContain('- OpenRig 0.7.10, daemon running, kernel ready');
+    expect(md).toContain('## ledge-dev — running');
+    expect(md).toContain('- role dev.back: 2 seats (dev.back, dev.back-2)');
+    expect(md).toContain('- role dev.front: 1 seat (dev.front)');
+    const none = mkdtempSync(join(tmpdir(), 'ctx-'));
+    await writeContext(none, { sessions: [], now: T0, capture: async () => null, git: async () => null, rigs: { installed: false, daemon: { state: 'unknown' }, kernel: { state: 'unknown' }, rigs: [], at: T0 } });
+    expect(existsSync(join(none, 'rigs.md'))).toBe(false);
+  });
+
   it('writes folders.md from the recent folders, most recent first, and no step for it', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
     const recents = [{ cwd: '/w/ledge', project: 'ledge', lastAt: '2026-10-12T09:00:00.000Z' }, { cwd: '/w/api', project: 'api', lastAt: '2026-10-11T09:00:00.000Z' }];

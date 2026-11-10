@@ -3,7 +3,7 @@ import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type Projects, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
+import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type OpenRigState, type Projects, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
@@ -69,6 +69,8 @@ export interface ChatDeps {
   projects?: () => Projects;
   /** The tasks: the context's tasks.md. */
   tasks?: () => Task[];
+  /** This PC's OpenRig as last read: the context's rigs.md, and what rig.act and rig.seats are checked against. */
+  rigs?: () => OpenRigState | undefined;
   /** Reads the projects' GitHub/GitLab (#23) into the context, for a question that asks about issues, PR/MR or CI. */
   forge?: Forge;
   /** A pool shared by several chats: a question takes a place while it runs. */
@@ -254,7 +256,7 @@ export function createChat(deps: ChatDeps): Chat {
   /** The generic blocks as rows (spec §9.2, one plan): each resolved against the state now, at most `max` per action and 8 in all; a refused,
    *  repeated or capped one is dropped with a log line. */
   function actionsFrom(blocks: Array<{ id: string; args: unknown; max: number }>, qid: string, closing: ReadonlySet<string>): { rows: ChatAction[]; reasons: string[]; counted: number } {
-    const ctx = { sessions: deps.store.all(), tasks: deps.tasks?.() ?? [], closing };
+    const ctx = { sessions: deps.store.all(), tasks: deps.tasks?.() ?? [], closing, rigs: deps.rigs?.() };
     const rows: ChatAction[] = []; const per = new Map<string, number>(); const over = new Map<string, number>(); let beyond = 0;
     const refused: string[] = []; let duplicates = 0;
     for (const b of blocks) {
@@ -293,7 +295,7 @@ export function createChat(deps: ChatDeps): Chat {
     // The chat runs on the CLI's own login: an API key the daemon inherited is never billed (spec §5.2).
     const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
     const ledge = { guide: await readGuide(), version: LEDGE_VERSION, agents: await installedAgents(env.PATH) };
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), tasks: deps.tasks?.(), now: now(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
+    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), tasks: deps.tasks?.(), rigs: deps.rigs?.(), now: now(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
     // Only a question about the forge runs gh/glab: the others never wait on the network, and get what was read before, dated.
     if (deps.forge) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }, { read: asksForge(turn.question) }).catch(e => log(`chat ${turn.qid}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
     if (mine.cancelled) return CANCELLED;

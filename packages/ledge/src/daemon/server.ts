@@ -216,7 +216,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const reducer = new CaptureReducer();
-  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all() });
+  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all(), rigs: () => openrig.peek?.() });
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
@@ -1080,7 +1080,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) {
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
-      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), tasks: tasks.all() }),
+      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.() }),
       apply: async row => { const r = await applyRow(row, rid, by); if (r.failure !== undefined) throw new Error(r.failure); }
     }, qid, rows, confirmed, deny);
   }
@@ -1108,6 +1108,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (m.type === 'error') failure ??= m.message;
       else if (m.type === 'task.result' && m.reason) failure ??= m.reason;
       else if (m.type === 'brain.result' && m.reason) failure ??= m.reason;
+      // An OpenRig row (rig.act, rig.seats) answers with its end: not ok is a failure, in OpenRig's words.
+      else if ((m.type === 'openrig.done' || m.type === 'openrig.reseated') && !m.ok) failure ??= m.error ?? 'failed';
     });
     return failure !== undefined ? { failure } : {};
   }
@@ -1131,7 +1133,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
     const wrong = msg.by === undefined ? undefined : notItsKey(msg.by, msg.key);
     if (wrong) return answer({ reason: wrong, code: 'identity' });
-    const r: Resolved = resolveRun(msg.action, parsed.data, { sessions: store.all(), tasks: tasks.all() });
+    const r: Resolved = resolveRun(msg.action, parsed.data, { sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.() });
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
     const guard = runGuard(r, msg.by);
     if (guard) return answer({ row: r, reason: guard, code: 'agent' });
