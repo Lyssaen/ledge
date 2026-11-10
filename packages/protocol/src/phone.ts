@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ATTACHMENTS_MAX, ATTACHMENT_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentRefSchema, AttachmentStoredSchema, ImageUploadSchema, b64Max } from './attachments.js';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { HarnessUsageSchema, UsagePrefsSchema, dropUnknownHarnesses } from './usage.js';
-import { PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
+import { OmpApprovalSchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS, type CloseHow } from './chat.js';
 import { ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
@@ -19,6 +19,8 @@ import { PHONE_GOALS_MAX, PHONE_RIG_ROWS_MAX, PHONE_RIG_SEATS_MAX, PHONE_RIG_TEX
 import { QitemIdSchema, RigRowSchema } from './rigMessages.js';
 import { FolderPathSchema, ProjectColorSchema, ProjectIdSchema, ProjectNameSchema } from './projects.js';
 import { MachineIdSchema } from './machines.js';
+import { ForgeActionSchema } from './forge.js';
+import { PHONE_FORGE_MESSAGE_MAX, PhoneForgeActErrorSchema, PhoneForgeErrorSchema, PhoneForgeRejectedSchema, PhoneForgeStateSchema, PhonePrDetailSchema } from './phoneForge.js';
 import { BrainChoiceSchema } from './tasks.js';
 import { BrainProposalSchema } from './tasks.js';
 
@@ -190,7 +192,7 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 /** `folder`: adding a folder of this PC to a project, bound to the project and to that folder. */
 /** `rigs`: an OpenRig action that stops something or drops the prompts (`rigs.act`), or a change of seats that removes one (`rigs.seats`),
  *  bound to that very action or change (`daemon.rigs`). */
-export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig', 'note', 'project', 'folder', 'rigs']);
+export const ConfirmPurposeSchema = z.enum(['register', 'decide', 'launch', 'close', 'act', 'pc', 'terminal', 'rig', 'note', 'project', 'folder', 'rigs', 'forge']);
 export type ConfirmPurpose = z.infer<typeof ConfirmPurposeSchema>;
 
 /** The phone's chat: no folder, no path, no machine, no free error text; every object is strict, `pick` included. */
@@ -277,6 +279,22 @@ const CardRowsSchema = z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).m
 
 /** A phone-made change of the PC itself: strict, and backed by a passkey assertion (purpose `pc`). */
 const pcOp = { op: OperationIdSchema, assertion: AssertionSchema.optional() };
+
+/** Agents that work in several folders at once (`--add-dir`): the others take one. */
+export const PHONE_LAUNCH_MULTI: readonly Tool[] = ['claude', 'omp'];
+export const PHONE_LAUNCH_FOLDERS_MAX = 20;
+/**
+ * A session started from the phone's « Nouvelle session » (refonte mobile M2 §9, docs/mobile-launch-contract.md): the fields of the
+ * Desktop's launch form. `folders` are folders of this PC the project declares, the first being where the agent starts; more than one
+ * only for Claude Code and OMP. `approval` is OMP's alone. The PC picks the agent's name.
+ */
+export const PhoneLaunchSchema = z.object({
+  project: ProjectIdSchema, tool: ToolSchema,
+  folders: z.array(FolderPathSchema).min(1).max(PHONE_LAUNCH_FOLDERS_MAX),
+  prompt: z.string().trim().min(1).max(MESSAGE_MAX),
+  model: ModelIdSchema.optional(), effort: EffortSchema.optional(), approval: OmpApprovalSchema.optional()
+}).strict();
+export type PhoneLaunch = z.infer<typeof PhoneLaunchSchema>;
 /** What a `pc` challenge covers: installing a version then restarting, or restarting alone. */
 export const PcActionSchema = z.enum(['update', 'restart']);
 export type PcAction = z.infer<typeof PcActionSchema>;
@@ -296,7 +314,9 @@ export const PHONE_FOLDER_ENTRIES_MAX = 500;
 export const PhoneFolderErrorSchema = z.enum(['not_found', 'not_folder', 'unreadable']);
 export type PhoneFolderError = z.infer<typeof PhoneFolderErrorSchema>;
 /** A project's folder as the phone sees it: its machine (`local` is this PC, else the label the PC gives it) and its path. */
-export const PhoneFolderSchema = z.object({ machine: MachineIdSchema, label: z.string().max(80).optional(), path: FolderPathSchema });
+/** A project's folder. For one of this PC (`local`), `exists` and `branch` say whether it is there and its git branch (null: none), when known. */
+export const PhoneFolderSchema = z.object({ machine: MachineIdSchema, label: z.string().max(80).optional(), path: FolderPathSchema,
+  exists: z.boolean().optional(), branch: z.string().max(200).nullable().optional() });
 export type PhoneFolder = z.infer<typeof PhoneFolderSchema>;
 /** The folders of this PC its agents worked in lately, newest first. */
 export const PHONE_RECENT_FOLDERS_MAX = 20;
@@ -360,7 +380,11 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     /** A `project` challenge: the project deleted and where its agents go (null: no project). */ project: ProjectIdSchema.optional(), moveTo: ProjectIdSchema.nullable().optional(),
     /** A `folder` challenge: the project (`project`) and the folder of this PC added to it. */ path: FolderPathSchema.optional(),
     /** A `rigs` challenge: the action (`rigAct`) or the change of seats (`rigSeats`) it covers, exactly as it will be sent. */
-    rigAct: OpenRigActionSchema.optional(), rigSeats: z.object({ rig: RigNameSchema, seats: RigSeatCountsSchema }).strict().optional() }),
+    rigAct: OpenRigActionSchema.optional(), rigSeats: z.object({ rig: RigNameSchema, seats: RigSeatCountsSchema }).strict().optional(),
+    /** A `launch` challenge without `qid`: the « Nouvelle session » it covers, exactly as it will be sent. */
+    launch: PhoneLaunchSchema.optional(),
+    /** A `forge` challenge: the request and the action it covers, exactly as they will be sent. */
+    forge: z.object({ prId: z.string().min(1).max(500), action: ForgeActionSchema }).strict().optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -440,6 +464,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   /** Takes the card's queued instruction back out of the queue, as the local `session.relay.cancel`. */
   z.object({ type: z.literal('chat.relay.cancel'), op: OperationIdSchema, qid: OperationIdSchema }),
   z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
+  /** « Nouvelle session » (M2 §9): passkey, purpose `launch`, over this very launch. Applied, its result names the new session (`id`). */
+  z.object({ type: z.literal('session.launch'), op: OperationIdSchema, launch: PhoneLaunchSchema, assertion: AssertionSchema.optional() }).strict(),
   z.object({ type: z.literal('chat.close'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
   /** A row of the turn's task card: given by Ledge. */
   z.object({ type: z.literal('chat.task'), op: OperationIdSchema, qid: OperationIdSchema, row: z.number().int().min(0).max(MAX_PROPOSALS - 1) }),
@@ -491,6 +517,13 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('rigs.goals') }).strict(),
   /** An action on OpenRig, every kind the Desktop's `openrig.act` takes. One that `rigActNeedsCheck` names carries a passkey, purpose `rigs`. */
   z.object({ type: z.literal('rigs.act'), op: OperationIdSchema, action: OpenRigActionSchema, assertion: AssertionSchema.optional() }).strict(),
+  // ── Pull and merge requests (`daemon.forge`, docs/mobile-forge-contract.md) ──
+  /** The requests of this PC's sessions and seats; subscribes the device to each change. */
+  z.object({ type: z.literal('forge.state') }).strict(),
+  /** A request's detail; `log`: also that job's last lines. */
+  z.object({ type: z.literal('forge.detail'), prId: z.string().min(1).max(500), log: z.string().min(1).max(40).optional() }).strict(),
+  /** Rerun, merge, comment, reply or resolve: every one writes on the forge, so each needs the device's check over that very action (purpose `forge`). */
+  z.object({ type: z.literal('forge.act'), op: OperationIdSchema, prId: z.string().min(1).max(500), action: ForgeActionSchema, assertion: AssertionSchema.optional() }).strict(),
   /** A running rig's seats per role (the Desktop's `openrig.seats`). One that removes a seat carries a passkey, purpose `rigs`. */
   z.object({ type: z.literal('rigs.seats'), op: OperationIdSchema, rig: RigNameSchema, seats: RigSeatCountsSchema, delegation: z.enum(['pairs', 'all']).optional(), assertion: AssertionSchema.optional() }).strict(),
   /** A goal to the operator (the Desktop's `openrig.goal.send`); `goalId` is the phone's, the same for a retry. */
@@ -543,7 +576,11 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The Atelier: the snapshot carries `projects`, each session its `projectId` and `rig`, and `projects` follows each change. Absent (an older PC): no Atelier. */
     atelier: z.literal(true).optional(),
     /** Rigs and the kernel: the daemon answers the `rigs.*` reads and takes `rigs.act`, `rigs.seats`, `rigs.goal.send` and `.reply`. Absent (an older PC): the Rigs tab says « rien à afficher ». */
-    rigs: z.literal(true).optional() }),
+    rigs: z.literal(true).optional(),
+    /** « Nouvelle session »: the daemon takes `session.launch` and `project.folders` carries this PC's folders' branch. Absent (an older PC): « Nouvelle » cannot start. */
+    launch: z.literal(true).optional(),
+    /** Pull and merge requests: the daemon answers `forge.state` and `forge.detail`, and takes `forge.act`. Absent (an older PC): the MR/PR tab says « rien à afficher ». */
+    forge: z.literal(true).optional() }),
   /** The user's projects (`daemon.atelier`), whole, in their order: absent from an older PC's snapshot. */
   projects: z.array(PhoneProjectSchema).max(PHONE_PROJECTS_MAX).optional(), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
     /** This device's id (its fingerprint, as decisions name it in `by`), its kind, and the name the user gave it (absent: none given). */
@@ -573,6 +610,7 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema, cut: z.literal(true).optional() }),
   z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional(),
     /** How an applied `session.close` ended the agent: `killed` when it had to be forced. */ how: CloseHowSchema.optional(),
+    /** An applied `session.launch`: the new session, whose thread the phone opens. */ id: z.string().max(200).optional(),
     /** An applied `session.broadcast`: the names that got it and those that did not. */ sent: z.array(z.string().max(100)).max(BROADCAST_SESSIONS_MAX).optional(), refused: z.array(z.object({ name: z.string().max(100), reason: z.string().max(200) })).max(BROADCAST_SESSIONS_MAX).optional() }),
   /** The models an agent offers; `error`: it could not be asked, `models` is then what Ledge knows without it. */
   z.object({ type: z.literal('models.listing'), tool: ToolSchema, models: z.array(PhoneModelChoiceSchema).max(40), error: z.literal(true).optional() }),
@@ -620,6 +658,14 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   // ── Rigs and the kernel (`daemon.rigs`) ──
   /** `error`: OpenRig could not be read (`state` absent). */
   z.object({ type: z.literal('rigs.state'), state: PhoneOpenRigStateSchema.optional(), error: PhoneRigErrorSchema.optional() }).strict(),
+  // ── Pull and merge requests (`daemon.forge`) ──
+  /** After `forge.state`, then on each change, whole. */
+  z.object({ type: z.literal('forge.state'), ...PhoneForgeStateSchema.shape }).strict(),
+  /** `cut`: the gateway left out patches, discussions or commits, or shortened texts, to fit the frame. */
+  z.object({ type: z.literal('forge.detail'), prId: z.string(), detail: PhonePrDetailSchema.optional(), cut: z.literal(true).optional(), error: PhoneForgeErrorSchema.optional() }).strict(),
+  /** An action's end, under its `op` (`operation.result` says whether it ran). `command`: what ran; `message`: gh's or glab's line when `failed`. */
+  z.object({ type: z.literal('forge.done'), op: OperationIdSchema, ok: z.boolean(), command: z.string().max(PHONE_FORGE_MESSAGE_MAX).optional(), error: PhoneForgeActErrorSchema.optional(),
+    message: z.string().max(PHONE_FORGE_MESSAGE_MAX).optional(), rejected: PhoneForgeRejectedSchema.optional() }).strict(),
   z.object({ type: z.literal('rigs.graph'), rig: z.string(), graph: RigGraphSchema.optional(), error: PhoneRigErrorSchema.optional() }).strict(),
   /** `rows`: open (pending, in-progress, blocked), newest first; `closed`: closed lately, newest first; `truncated`: older open rows may be missing. */
   z.object({ type: z.literal('rigs.queue'), rig: z.string(), rows: z.array(PhoneRigQueueRowSchema).max(PHONE_RIG_ROWS_MAX), closed: z.array(PhoneRigQueueRowSchema).max(PHONE_RIG_ROWS_MAX),

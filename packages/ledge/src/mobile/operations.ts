@@ -6,12 +6,13 @@ export type PhoneOperation = Extract<PhoneClientMessage, { op: string }>;
 
 /** What an operation came to: the answer the phone gets. `how`: how a `session.close` ended the agent. */
 export type Outcome = { status: Extract<OperationStatus, 'applied' | 'rejected' | 'failed'>; reason?: OperationReason; how?: CloseHow; report?: Report;
-  /** The operation's own detailed end, sent after its result and again on a replay (an OpenRig answer's `openrig.answered`). */ detail?: unknown };
+  /** The operation's own detailed end, sent after its result and again on a replay (an OpenRig answer's `openrig.answered`). */ detail?: unknown;
+  /** An applied `session.launch`: the new session's id. */ launched?: string };
 
 /** An applied `session.broadcast`: the names that got it, and those that did not, with why. */
 export interface Report { sent: string[]; refused: { name: string; reason: string }[] }
 
-export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; how?: CloseHow; report?: Report; detail?: unknown; at: number }
+export interface OperationRecord { op: string; owner: string; fingerprint: string; status: OperationStatus; reason?: OperationReason; how?: CloseHow; report?: Report; detail?: unknown; launched?: string; at: number }
 
 export type BeginResult = { kind: 'fresh' | 'replay'; record: OperationRecord } | { kind: 'conflict' };
 
@@ -38,7 +39,11 @@ export function fingerprint(m: PhoneOperation): string {
     ...(m.type === 'project.create' ? [m.name, m.color] : []),
     ...(m.type === 'project.delete' ? [m.id, m.moveTo] : []),
     ...(m.type === 'project.folder.add' ? [m.id, m.path] : []),
-    ...(m.type === 'project.folder.remove' ? [m.id, m.machine, m.path] : [])]);
+    ...(m.type === 'project.folder.remove' ? [m.id, m.machine, m.path] : []),
+    // A launch is what it starts (never its assertion): the same id for another launch is another operation.
+    ...(m.type === 'session.launch' ? [m.launch] : []),
+    // A forge action is its request and action (never its assertion).
+    ...(m.type === 'forge.act' ? [m.prId, m.action] : [])]);
 }
 
 /** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */
@@ -68,7 +73,7 @@ export class OperationRegistry {
   }
 
   /** An operation already forgotten (expired) is left forgotten. */
-  finish(op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow, report?: Report, detail?: unknown): void {
+  finish(op: string, status: OperationStatus, reason?: OperationReason, how?: CloseHow, report?: Report, detail?: unknown, launched?: string): void {
     const r = this.records.get(op);
     if (!r) return;
     if (report) r.report = report; else delete r.report;
@@ -76,6 +81,7 @@ export class OperationRegistry {
     if (reason) r.reason = reason; else delete r.reason;
     if (how) r.how = how; else delete r.how;
     if (detail !== undefined) r.detail = detail; else delete r.detail;
+    if (launched !== undefined) r.launched = launched; else delete r.launched;
   }
 
   get(op: string): OperationRecord | undefined {

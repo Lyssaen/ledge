@@ -3,6 +3,7 @@ import { pendingKey, type ChatErrorCode, type DecidedBy, type PushPayload, type 
 const TAG_MAX = 32;
 const TITLE_MAX = 80;
 const BODY_MAX = 120;
+const NAME_MAX = 100;
 /** Codex's stock request text says nothing: the notification shows the command instead. */
 const GENERIC_REASONS = new Set(['Allow the requested shell command?']);
 
@@ -37,11 +38,11 @@ export function pushFor(before: Session | undefined, after: Session, all: readon
   const p = after.pending;
   if (p && (!before?.pending || pendingKey(p) !== pendingKey(before.pending))) {
     const url = `/#/request/${encodeURIComponent(after.id)}/${encodeURIComponent(pendingKey(p))}`;
-    if (p.kind === 'question') return { v: 1, kind: 'question', title: cut(`${after.name} a une question`, TITLE_MAX), body: cut(p.text.trim(), BODY_MAX), url, badge, tag };
-    return { v: 1, kind: 'request', title: cut(`${after.name} attend votre accord`, TITLE_MAX), body: cut(requestBody(after), BODY_MAX), url, badge, tag };
+    if (p.kind === 'question') return { v: 1, kind: 'question', title: cut(`${after.name} a une question`, TITLE_MAX), name: cut(after.name, NAME_MAX), body: cut(p.text.trim(), BODY_MAX), url, badge, tag };
+    return { v: 1, kind: 'request', title: cut(`${after.name} attend votre accord`, TITLE_MAX), name: cut(after.name, NAME_MAX), body: cut(requestBody(after), BODY_MAX), url, badge, tag };
   }
   if (before?.state === 'working' && after.state === 'idle' && !p) {
-    return { v: 1, kind: 'finished', title: cut(`${after.name} a terminé`, TITLE_MAX), body: cut((after.lastReply?.text ?? '').trim(), BODY_MAX), url: `/#/thread/${encodeURIComponent(after.id)}`, badge, tag };
+    return { v: 1, kind: 'finished', title: cut(`${after.name} a terminé`, TITLE_MAX), name: cut(after.name, NAME_MAX), body: cut((after.lastReply?.text ?? '').trim(), BODY_MAX), url: `/#/thread/${encodeURIComponent(after.id)}`, badge, tag };
   }
   return null;
 }
@@ -54,7 +55,7 @@ export function resolvedFor(before: Session | undefined, after: Session, all: re
   if (!before?.pending || after.pending) return null;
   const badge = Math.min(999, all.filter(s => s.pending).length);
   const body = !by ? '' : by.kind === 'pc' ? 'sur le PC' : cut(`sur ${by.name}`, BODY_MAX);
-  return { v: 1, kind: 'resolved', title: cut(`${after.name} · traitée`, TITLE_MAX), body, url: `/#/thread/${encodeURIComponent(after.id)}`, badge, tag: safeTag(after.id) };
+  return { v: 1, kind: 'resolved', title: cut(`${after.name} · traitée`, TITLE_MAX), name: cut(after.name, NAME_MAX), body, url: `/#/thread/${encodeURIComponent(after.id)}`, badge, tag: safeTag(after.id) };
 }
 
 /** The phone's own words for a question that ended without an answer (a copy of apps/mobile/src/copy.ts: the daemon never imports the phone). */
@@ -76,7 +77,7 @@ export function chatEndPayload(code: ChatErrorCode | undefined, badge: number): 
 /** A decision a session just put to the user (`ledge task give ledge …`): it opens Ledge's chat, where « À toi » lists it. */
 export function decisionPayload(t: Task, badge: number): PushPayload {
   return {
-    v: 1, kind: 'decision', title: cut(`${t.giverName} attend votre décision`, TITLE_MAX), body: cut(t.title.trim(), BODY_MAX),
+    v: 1, kind: 'decision', title: cut(`${t.giverName} attend votre décision`, TITLE_MAX), name: cut(t.giverName, NAME_MAX), body: cut(t.title.trim(), BODY_MAX),
     url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: safeTag(t.id)
   };
 }
