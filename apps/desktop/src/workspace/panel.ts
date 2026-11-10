@@ -107,6 +107,21 @@ export function stackTerm(p: Panel, ref: string, onto: string): Panel {
   return arranged(p, stacks, 'term');
 }
 
+/** `ref` dropped on the body of the column `column` is in (not on one of its tabs): at the end of that column, and shown, as an
+ *  editor group takes a tab dropped on its content. Already last there and shown: the same object. */
+export function joinTerm(p: Panel, ref: string, column: string): Panel {
+  const stacks = clone(p);
+  const target = stacks.find(s => s.refs.includes(column));
+  if (!target) return p;
+  if (target.refs[target.refs.length - 1] === ref && target.active === target.refs.length - 1) return p;
+  dropRef(stacks, ref);
+  const s = stacks.find(x => x.refs.includes(column))!;
+  if (!s.id) s.id = s.refs[0];
+  s.refs.push(ref);
+  s.active = s.refs.length - 1;
+  return arranged(p, stacks, 'term');
+}
+
 /** `ref` dropped on the right edge of the column `after` is in: its own column just after that one. Already there: the same object. */
 export function besideTerm(p: Panel, ref: string, after: string): Panel {
   const stacks = clone(p);
