@@ -9,10 +9,14 @@ import { Card, Row, SwitchRow } from './controls';
 import { useEscapeLayer } from './escape';
 import { deviceGlyph, PHONE } from './PairingDialog';
 import { requestPairingDialog, usePairingDialogOpen } from './pairingRequest';
+import { clearDeviceViewRequest, deviceWord, useDeviceViewRequest } from './recovery';
 import type { SettingsContext } from './SettingsPage';
 
 export { PHONE };
 const COPY = ['M9 9h11v11H9z', 'M5 15H4V4h11v1'];
+/** The mockup's key (a passkey recovery) and padlock (recovery blocked), drawn with paths for Icon. */
+const KEY = ['M7.5 10a5.5 5.5 0 1 0 0 11a5.5 5.5 0 1 0 0-11', 'm21 2-9.6 9.6', 'M15.5 7.5l3 3L22 7l-3-3'];
+const LOCK = ['M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z', 'M7 11V7a5 5 0 0 1 10 0v4'];
 
 type Send = (msg: MobileClientMessage) => boolean;
 
@@ -221,6 +225,27 @@ function Devices({ m, send }: { m: MobileState; send: Send }): JSX.Element {
   const dialogOpen = usePairingDialogOpen();
   const asking = m.enabled && !dialogOpen ? m.pairings.filter(p => p.state === 'confirm') : [];
   const date = new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short', year: 'numeric' });
+  const time = new Intl.DateTimeFormat(lang, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  // A recovery's moment as the mockup says it: the time alone today, else the day (and its year, when not this one).
+  const moment = (iso: string): { today: boolean; time: string; date: string } | null => {
+    const at = new Date(iso), today = new Date(now);
+    if (Number.isNaN(at.getTime())) return null;
+    const sameYear = at.getFullYear() === today.getFullYear();
+    const day = new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) });
+    return { today: at.toDateString() === today.toDateString(), time: time.format(at), date: day.format(at) };
+  };
+  // « Voir » on a recovery toast: the device's row is brought into view, after the page's own scroll back to the top.
+  const want = useDeviceViewRequest();
+  const rows = useRef(new Map<string, HTMLElement>());
+  useEffect(() => {
+    if (!want) return;
+    const row = rows.current.get(want.id);
+    if (!row) return;
+    const timer = setTimeout(() => { clearDeviceViewRequest(); row.scrollIntoView?.({ block: 'center' }); }, 0);
+    return () => clearTimeout(timer);
+  }, [want, m.devices]);
+  const blocked = m.recovery?.blocked;
+  const blockedAt = blocked ? moment(blocked.since) : null;
   const seen = (iso: string | undefined) => {
     if (!iso) return c.offline;
     const span = spanOf(now - (Date.parse(iso) || 0));
@@ -242,6 +267,13 @@ function Devices({ m, send }: { m: MobileState; send: Send }): JSX.Element {
     <Card title={c.devices} hint={c.devicesHint}>
       {!m.enabled && m.devices.length > 0 && <div role="status" className="set-well devices-off"><Icon d={PHONE} size={14} /><span>{c.devicesOff}</span></div>}
       {revoked && <div role="status" className="set-well ok devices-off"><Icon d={ICONS.check.d} size={14} /><span><strong>{revoked}</strong>{c.revoked}</span></div>}
+      {blocked && (
+        <div role="alert" className="set-well warn recovery-well recovery-blocked">
+          <Icon d={LOCK} size={14} />
+          <span>{c.recoverBlocked.well(blocked.failures, blockedAt === null ? blocked.since : blockedAt.today ? c.when.since(blockedAt.time) : c.when.sinceOn(blockedAt.date, blockedAt.time))}</span>
+          <div className="set-actions"><Button size="sm" variant="outline" onClick={() => send({ type: 'mobile.recovery.unblock' })}>{c.recoverBlocked.unblock}</Button></div>
+        </div>
+      )}
       {asking.map(p => (
         <article key={p.id} className="machine-entry pending-entry" aria-label={c.asksLabel(p.label)}>
           <span className="machine-glyph" aria-hidden="true"><Icon d={PHONE} size={16} /></span>
@@ -261,15 +293,26 @@ function Devices({ m, send }: { m: MobileState; send: Send }): JSX.Element {
         // A name the user gave hides the model: it comes back on the line under it.
         const at = Date.parse(d.approvedAt);
         const on = Number.isNaN(at) ? null : d.name ? c.linkedOnAs(d.label, date.format(at)) : c.linkedOn(date.format(at));
+        // The passkey recovery: its trace stays on the line under the name, its well until « C'était bien moi » (P10); a refused
+        // attempt keeps its well until « Compris ».
+        const word = deviceWord(d)!;
+        const back = d.recovered ? moment(d.recovered.at) : null;
+        const trace = back && c.recovered.hint(back.today ? c.when.today(back.time) : c.when.on(back.date));
+        const pending = d.recovered?.pending === true;
+        const tried = d.refused ? moment(d.refused.at) : null;
+        const askRevoke = () => { setRevoked(null); setRenaming(null); setConfirming(d.id); };
         return (
-          <article key={d.id} className="machine-entry" aria-label={name}>
+          <article key={d.id} className="machine-entry" aria-label={name} ref={el => { if (el) rows.current.set(d.id, el); else rows.current.delete(d.id); }}>
             <span className="machine-glyph" aria-hidden="true"><Icon d={deviceGlyph(d.kind)} size={16} /></span>
             <div className="machine-main">
               <div className="machine-top">
-                <strong>{name}</strong><span className="spacer" />
+                <strong>{name}</strong>
+                {pending && <span className="set-tag info">{c.recovered.tag}</span>}
+                {d.refused && <span className="set-tag warn">{c.recoverRefused.tag}</span>}
+                <span className="spacer" />
                 <span className={online ? 'set-status online' : 'set-status'}><i aria-hidden="true" />{online ? c.online : seen(d.lastSeenAt)}</span>
               </div>
-              {on && <span className="set-hint">{on}</span>}
+              {on && <span className="set-hint">{on}{trace}</span>}
               {confirming === d.id ? (
                 <div role="alert" className="set-well warn">
                   <span>{c.revokeAsk.before}<strong>{name}</strong>{c.revokeAsk.after}</span>
@@ -288,10 +331,32 @@ function Devices({ m, send }: { m: MobileState; send: Send }): JSX.Element {
                   <Button size="sm" variant="primary" type="submit" disabled={!renaming.draft.trim()}>{c.save}</Button>
                   <Button size="sm" variant="ghost" type="button" onClick={() => setRenaming(null)}>{c.cancel}</Button>
                 </form>
+              ) : pending || d.refused ? (
+                <>
+                  {pending && (
+                    <div className="set-well info recovery-well">
+                      <Icon d={KEY} size={14} /><span>{c.recovered.well(word)}</span>
+                      <div className="set-actions">
+                        <Button size="sm" variant="outline" onClick={() => send({ type: 'mobile.device.ack', id: d.id, what: 'recovered' })}>{c.recovered.ack}</Button>
+                        <Button size="sm" variant="ghost" onClick={askRevoke}>{c.revoke}</Button>
+                      </div>
+                    </div>
+                  )}
+                  {d.refused && (
+                    <div className="set-well warn recovery-well">
+                      <Icon d={ICONS.warning.d} size={14} />
+                      <span>{c.recoverRefused.well(tried === null ? c.when.at(d.refused.at) : tried.today ? c.when.at(tried.time) : c.when.atOn(tried.date, tried.time), word)}</span>
+                      <div className="set-actions">
+                        <Button size="sm" variant="outline" onClick={() => send({ type: 'mobile.device.ack', id: d.id, what: 'refused' })}>{c.recoverRefused.ack}</Button>
+                        <Button size="sm" variant="ghost" onClick={askRevoke}>{c.revoke}</Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="set-actions">
                   <Button size="sm" variant="ghost" aria-label={c.renameLabel(name)} onClick={() => { setConfirming(null); setRenaming({ id: d.id, draft: name }); }}>{c.rename}</Button>
-                  <Button size="sm" variant="ghost" onClick={() => { setRevoked(null); setRenaming(null); setConfirming(d.id); }}>{c.revoke}</Button>
+                  <Button size="sm" variant="ghost" onClick={askRevoke}>{c.revoke}</Button>
                 </div>
               )}
             </div>

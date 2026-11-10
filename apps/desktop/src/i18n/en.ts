@@ -1,9 +1,14 @@
 import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import type { Messages } from './messages';
+import type { DeviceWord } from '../settings/recovery';
 
 /** English counts only 1 as singular. */
 const pluralEn = (n: number, one: string, many: string) => (n === 1 ? one : many);
 const andList = (xs: readonly string[]) => new Intl.ListFormat('en', { type: 'conjunction' }).format(xs);
+/** A device in a sentence: a name the user gave is said bare, a model takes « the » or « this ». */
+const theDevice = (d: DeviceWord) => (d.named ? d.text : `the ${d.text}`);
+const thisDevice = (d: DeviceWord) => (d.named ? d.text : `this ${d.text}`);
+const upFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Desktop's copy in English, shaped by the French (see messages.ts, which loads it on demand). */
 export const en: Messages = {
@@ -312,7 +317,7 @@ export const en: Messages = {
       about: 'Versions and updates.'
     },
     machineOffline: 'A machine is offline', updateWaiting: 'An update is available',
-    mobileOffline: 'Mobile access is offline', mobileAsks: 'A device asks for access',
+    mobileOffline: 'Mobile access is offline', mobileAsks: 'A device asks for access', mobileRecovery: 'A passkey reconnection to check',
     workspace: {
       openSession: 'Open a session',
       active: 'In the active group', right: 'To the right', saved: (where: string) => `Open a session: ${where}`,
@@ -489,7 +494,27 @@ export const en: Messages = {
       emptyTitle: 'No linked device.', emptyBefore: ' On your phone or tablet, open ', emptyAfter: ' and sign in with the same GitHub account. A code will show here and on the device.',
       unavailable: (error: string) => `Mobile access did not start on this PC: ${error}`,
       outdated: 'The local daemon is too old for mobile access: update it.',
-      refused: { offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for mobile access: update it.' }
+      refused: { offline: 'The local daemon is offline: nothing changed.', outdated: 'The local daemon is too old for mobile access: update it.' },
+      view: 'View',
+      someDevice: 'device',
+      when: { today: (time) => `today at ${time}`, on: (date) => `on ${date}`, at: (time) => `At ${time}`, atOn: (date, time) => `On ${date} at ${time}`, since: (time) => time, sinceOn: (date, time) => `${date} at ${time}` },
+      recovered: {
+        tag: 'Reconnected',
+        hint: (when) => ` · reconnected with its passkey ${when}`,
+        well: (d) => `${upFirst(thisDevice(d))} reconnected without a code, with its passkey, after the app was reinstalled. If it wasn't you, revoke it: it loses access at once.`,
+        ack: 'It was me',
+        toast: (d) => `${upFirst(theDevice(d))} reconnected with its passkey`
+      },
+      recoverRefused: {
+        tag: 'Attempt refused',
+        well: (at, d) => `${at}, another device tried to take ${thisDevice(d)}'s place with its passkey. Refused: ${theDevice(d)} was connected. A passkey synced by iCloud works on all the account's Apple devices; if it wasn't you, revoke ${thisDevice(d)}.`,
+        ack: 'Got it',
+        toast: (d) => `Passkey reconnection as ${theDevice(d)} refused: it's connected`
+      },
+      recoverBlocked: {
+        well: (failures, since) => `Passkey reconnection blocked: ${failures} ${pluralEn(failures, 'check', 'checks')} failed since ${since}. Linked devices keep working, and so does pairing with a code.`,
+        unblock: 'Unblock'
+      }
     },
     projects: {
       title: 'Projects',

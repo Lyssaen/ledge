@@ -24,6 +24,7 @@ import { Shortcuts } from './Shortcuts';
 import { About } from './About';
 import { shownOf } from './machineDrafts';
 import { usePairingDialogOpen } from './pairingRequest';
+import { mobileRecovery } from './recovery';
 import { EscapeLayersContext, escapeLayers, type EscapeLayers } from './escape';
 
 /** What the sections receive from the shell: the app's toast (`saved` says « Setting saved · … » once a change is accepted,
@@ -125,6 +126,7 @@ export function SettingsPage({ section: asked, ctx, noBack = false }: { section:
               onClick={() => dispatch({ type: 'settings', section: id })}>
               <Icon d={SECTION_ICONS[id]} size={15} /><span>{t.sections[id]}</span>{note && <b className="side-alert" role="img" aria-label={note} />}
               {id === 'mobile' && mobileAsks(ctx.mobile, pairingOpen) && <b className="side-alert mob-ask" role="img" aria-label={s.mobileAsks} />}
+              {id === 'mobile' && mobileRecovery(ctx.mobile) && <b className="side-alert" role="img" aria-label={s.mobileRecovery} />}
             </button>
           );
         })}
