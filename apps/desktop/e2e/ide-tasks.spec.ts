@@ -35,7 +35,7 @@ const ASKS: HumanAsk[] = [{
 const CHAT = { text: 'Nova attend ta décision sur le nom du dossier des captures.' };
 
 async function boot(page: Page, theme: 'dark' | 'light' = 'dark') {
-  await page.addInitScript(t => { try { localStorage.setItem('ledge.ide.enabled', 'true'); localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ } }, theme);
+  await page.addInitScript(t => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ } }, theme);
   await seedAtelier(page);
   const daemon = await fakeDaemon(page, sessions, { projects: twoProjects, daemon: { version: '0.54.1', install: 'npm', systemd: true, openrigAsks: true } as never, tasks: TASKS, asks: { channel: READY, asks: ASKS }, chat: CHAT });
   await page.goto('/');

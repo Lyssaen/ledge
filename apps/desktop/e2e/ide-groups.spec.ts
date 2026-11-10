@@ -13,7 +13,6 @@ test.setTimeout(90_000);
 const startRows = (welcome: Locator) => welcome.getByRole('region', { name: 'Start' }).locator('.ide-wl-label').allTextContents();
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   await seedAtelier(page);
 });
 

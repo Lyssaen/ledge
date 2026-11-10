@@ -9,9 +9,6 @@ import { at, fleet, ottoThread, tool } from './thread';
 test.use({ viewport: { width: 1920, height: 1080 } });
 // Each test opens session pages and xterms more than once: more than the default 30 s under load.
 test.setTimeout(90_000);
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
-});
 
 const CAN = { version: '0.13.0', install: 'npm' as const, systemd: true, archive: true, models: true, modelSwitch: true };
 const claude = [{ id: 'claude-opus-5-5', label: 'Opus 5.5', description: 'Most capable.', efforts: ['low', 'medium', 'high'], defaultEffort: 'high', isDefault: true }];

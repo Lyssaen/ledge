@@ -5,7 +5,6 @@ import { fakeDaemon, twoProjects } from './daemon';
 import { at, fleet } from './thread';
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   await seedAtelier(page);
 });
 

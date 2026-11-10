@@ -6,7 +6,6 @@ import { ideReady, tabOf } from './ide';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 /** Ledge with two repositories on this machine, Website with one. */

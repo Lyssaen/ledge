@@ -5,7 +5,6 @@ import { eight, fakeDaemon, fakeRemote, session, twoProjects } from './daemon';
 import { fleet, ottoThread } from './thread';
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   await seedAtelier(page);
 });
 

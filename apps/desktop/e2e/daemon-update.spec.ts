@@ -3,7 +3,6 @@ import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon, fakeRemote, session } from './daemon';
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   await seedAtelier(page);
 });
 

@@ -6,7 +6,6 @@ import { fleet } from './thread';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 // Copying from a terminal (C1–C3): a program's own OSC 52 copy, and Shift + drag over a program that holds the mouse.

@@ -24,7 +24,6 @@ const orpTab = (page: Page) => page.locator('.dv-tab').filter({ hasText: 'OpenRi
 
 async function boot(page: Page) {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   const daemon = await fakeDaemon(page, sessions, {
     projects: twoProjects, openrig: state as unknown as OpenRigState, rigSpecs: [starter], machines: [{ id: 'local', label: 'WSL' }], ...RIG_7A,
     daemon: { version: '0.53.0', install: 'npm', systemd: true, openrigRig: true, openrigPolicy: true, openrigFresh: true, ping: true }

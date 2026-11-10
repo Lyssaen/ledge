@@ -7,7 +7,6 @@ import { at, fleet, ottoThread, tool } from './thread';
 
 test.beforeEach(async ({ page }) => {
   await seedAtelier(page);
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
 });
 
 // A 400-character line (words, as code reads): the diff scrolls sideways, never the page.

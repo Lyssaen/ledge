@@ -6,7 +6,6 @@ import type { OpenRigState, RoleDetail, RoleSummary } from '@ledge/protocol';
 import { fakeDaemon, session, type FakeRoles } from './daemon';
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => { try { localStorage.setItem('ledge.ide.enabled', 'true'); } catch { /* ignore */ } });
   await seedAtelier(page);
 });
 

@@ -15,7 +15,7 @@ const SHOTS = process.env.SHOTS;
 async function boot(page: Page, o: { lang: 'fr' | 'en'; theme: 'dark' | 'light'; editor?: string; outcome?: Outcome; installed?: Record<string, boolean> }): Promise<void> {
   await page.addInitScript(a => {
     try {
-      localStorage.setItem('ledge.ide.enabled', 'true'); localStorage.setItem('desktop.lang', a.lang); localStorage.setItem('desktop.theme', a.theme);
+      localStorage.setItem('desktop.lang', a.lang); localStorage.setItem('desktop.theme', a.theme);
       if (a.editor) localStorage.setItem('ledge.ide.openIn', JSON.stringify(a.editor));
     } catch { /* ignore */ }
     const w = window as unknown as { __ledgeEditors?: unknown; __ledgeOpenInEditor?: (x: unknown) => unknown; __ledgeOpened?: unknown[] };

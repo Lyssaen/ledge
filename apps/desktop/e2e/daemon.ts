@@ -286,11 +286,11 @@ export const eight = [
   session('rio', { name: 'Rio', project: 'website', cwd: '/w/website', state: 'working', branch: 'feat/WEB-18-accessibility' })
 ];
 
-/** The app opens on Ledge's home view (ledge home spec §2.1); a test about the atelier goes there from the sidebar. */
+/** The Atelier tab in front: the IDE opens on it (lot 12b); a test that moved elsewhere comes back from the activity bar. */
 export async function openAtelier(page: Page): Promise<void> {
-  await page.locator('section.ledge-home').waitFor();
-  // The sidebar's « Atelier »; in a narrow window, where the sidebar is hidden, the home view's own way back.
-  const entry = page.locator('aside.sidebar').getByRole('button', { name: /^Atelier/ });
-  if (await entry.isVisible()) await entry.click();
-  else await page.getByRole('button', { name: /^(Back to the atelier|Retour à l’atelier)$/ }).click();
+  // The IDE's chunk loads on the first visit: under a parallel run it can take more than the default 5 s.
+  await page.locator('.ide').waitFor({ timeout: 20_000 });
+  const atelier = page.locator('.ide-atelier');
+  if (!(await atelier.isVisible())) await page.getByRole('navigation', { name: /^(Activity bar|Barre d’activité)$/ }).getByRole('button', { name: /^(Atelier \(tab\)|Atelier \(onglet\))$/ }).click();
+  await atelier.waitFor();
 }
