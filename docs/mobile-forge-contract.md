@@ -184,7 +184,7 @@ demande ou une autre action est refusé (`conflict`).
   `status: 'error'`, `since` et `retryAt`, mais pas le texte de l'erreur.
 
 **Non vérifié :**
-- **`glab` n'est pas installé sur la machine où j'ai travaillé** (WSL de Legion, pas le PC de l'utilisateur), et je n'ai
+- **`glab` n'est pas installé sur la machine où j'ai travaillé** (Legion, un Ubuntu natif, pas le PC de l'utilisateur), et je n'ai
   pas d'accès au GitLab de l'entreprise. Je n'ai donc pas vérifié que `glab` atteint l'instance derrière le proxy.
 - Ce qu'il faudrait vérifier sur le PC de l'utilisateur :
   - `glab auth status` dans le shell de connexion ;
