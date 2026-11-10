@@ -11,24 +11,24 @@ Ledge Desktop is the main window, a workspace in the manner of VS Code: an activ
 The atelier, a tab, gives each project a table: the agents sit around it, their topics lie on it as sheets, their subagents stand at the ends. When an agent writes to another, a bubble opens over the sender and a dotted line runs to the receiver's seat.
 
 <p>
-  <img src="screens/desktop-atelier-dark.png" alt="The atelier: Ledge and Website tables, eight agents, Otto writing to Nova" width="720">
+  <img src="screens/desktop-atelier-dark.png" alt="The IDE on its Atelier tab: the Projects view on the left, Ledge and Website tables with eight agents, Otto writing to Nova, Ledge's chat on the right" width="720">
   <img src="screens/desktop-atelier-light.png" alt="The same atelier in light theme" width="720">
 </p>
 
 A session opens in a tab, on its thread: each exchange folds into one line, the current one shows its actions, and a request waiting for you is pinned above the reply field, with « Toujours autoriser dans ce projet » beside Autoriser and Refuser.
 
 <p>
-  <img src="screens/desktop-session-dark.png" alt="Otto's thread, npm test waiting for approval" width="720">
+  <img src="screens/desktop-session-dark.png" alt="Otto's session in a tab beside the Atelier, npm test waiting for approval" width="720">
   <img src="screens/desktop-session-light.png" alt="The same session in light theme" width="720">
 </p>
 
 `N` opens « Nouvelle session »: the project, where to work (a new branch in a worktree, or the project's folder), the agent and its model, the permissions, the first message, and where the tab opens.
 
-<img src="screens/desktop-launch-dark.png" alt="New session: instruction, Claude Code, default model, project Ledge, machine Local, repository ledge" width="720">
+<img src="screens/desktop-launch-dark.png" alt="New session: project Ledge on main, Claude Code, Codex, Cursor Agent or OMP, default model, first message, opened in the active group" width="720">
 
 `Ctrl+/` asks Ledge from wherever you are: the chat is the right panel, beside whatever tabs are shown; hovering a bot named in the answer lights its seat, and a proposal comes as a card you launch with one click.
 
-<img src="screens/desktop-chat-dark.png" alt="Ask Ledge: Otto and Luna are waiting, a card proposes a session to fix the tests" width="720">
+<img src="screens/desktop-chat-dark.png" alt="Ledge's chat in the right panel: Otto and Luna are waiting, a card proposes a session to fix the tests" width="720">
 
 The sections below are the island, the notch at the top of the screen.
 

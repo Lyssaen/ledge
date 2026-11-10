@@ -1,19 +1,19 @@
 import type { Page } from '@playwright/test';
 import { test, expect, seedAtelier } from './fixtures';
 import { fileURLToPath } from 'node:url';
-import { fakeDaemon, twoProjects, type ChatReply, openAtelier } from './daemon';
+import { fakeDaemon, twoProjects, type ChatReply } from './daemon';
+import { ideReady } from './ide';
 import { fleet, ottoThread } from './thread';
 
-test.beforeEach(async ({ page }) => {
-  await seedAtelier(page);
-});
+// The IDE opens on the Atelier tab, as a first launch does.
+test.beforeEach(async ({ page }) => { await seedAtelier(page); });
 
-// Captures Ledge Desktop for docs/screens (README, tour), in French, against the simulated daemon.
+// Captures Ledge Desktop's IDE for docs/screens (README, tour), in French, against the simulated daemon.
 // Skipped unless asked: LEDGE_SCREENSHOTS=1 pnpm --filter desktop exec playwright test e2e/screenshots.spec.ts
 const SCREENS = fileURLToPath(new URL('../../../docs/screens/', import.meta.url));
 test.skip(!process.env.LEDGE_SCREENSHOTS, 'set LEDGE_SCREENSHOTS=1 to refresh docs/screens');
 // LEDGE_CHROMIUM=/path/to/chrome when the Playwright build pinned by the project is not installed.
-test.use({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, reducedMotion: 'reduce', ...(process.env.LEDGE_CHROMIUM ? { launchOptions: { executablePath: process.env.LEDGE_CHROMIUM } } : {}) });
+test.use({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1, reducedMotion: 'reduce', ...(process.env.LEDGE_CHROMIUM ? { launchOptions: { executablePath: process.env.LEDGE_CHROMIUM } } : {}) });
 
 /** The session fixtures with a topic each, Nova with two helpers: a busy afternoon on two projects. */
 const topics: Record<string, string> = {
@@ -28,7 +28,7 @@ const busy = fleet.map(s => ({
 async function boot(page: Page, theme: 'dark' | 'light', chat?: ChatReply) {
   await page.addInitScript(t => { try { localStorage.setItem('desktop.lang', 'fr'); localStorage.setItem('desktop.theme', t); } catch { /* ignore */ } }, theme);
   const daemon = await fakeDaemon(page, busy, { projects: twoProjects, threads: { otto: ottoThread }, ...(chat ? { chat } : {}) });
-  await page.goto('/'); await openAtelier(page);
+  await page.goto('/'); await ideReady(page);
   await expect(page.locator('.agent-seat').first()).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   return daemon;
@@ -45,8 +45,8 @@ for (const theme of ['dark', 'light'] as const) {
 
   test(`session, ${theme}`, async ({ page }) => {
     await boot(page, theme);
-    await page.getByRole('tree').getByRole('button', { name: /^Otto/ }).click();
-    await expect(page.locator('.session-thread .turn').first()).toBeVisible();
+    await page.locator('.ide-explorer').getByRole('button', { name: /^Otto/ }).first().click();
+    await expect(page.locator('.session-thread .turn').first()).toBeVisible({ timeout: 20_000 });
     await page.screenshot({ path: `${SCREENS}desktop-session-${theme}.png` });
   });
 }
@@ -67,11 +67,12 @@ test('chat, dark', async ({ page }) => {
     proposal: { cwd: '/w/ledge', project: 'ledge', tool: 'claude', prompt: 'Corrige les tests de l\'overlay qui échouent' }
   };
   await boot(page, 'dark', chat);
-  await page.keyboard.press('Control+/');
-  const field = page.getByRole('complementary').getByRole('textbox').first();
-  await expect(field).toBeFocused();
+  // The right panel is open from the start, on Conversation.
+  const panel = page.getByRole('complementary', { name: 'Chat Ledge' });
+  const field = panel.getByRole('textbox').first();
+  await field.click();
   await field.fill('Qui a besoin de moi ?');
   await field.press('Enter');
-  await expect(page.getByRole('complementary').getByText('Les autres travaillent.', { exact: false })).toBeVisible();
+  await expect(panel.getByText('Les autres travaillent.', { exact: false })).toBeVisible();
   await page.screenshot({ path: `${SCREENS}desktop-chat-dark.png` });
 });

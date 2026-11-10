@@ -12,11 +12,11 @@ The workshop of one person who runs coding agents (Claude Code, Codex, Cursor Ag
 
 You hold the organisation: Ledge proposes, you decide. Personal project. Windows host + WSL2, with remote Linux machines over SSH.
 
-<img src="docs/screens/desktop-atelier-dark.png" alt="Ledge Desktop's atelier: two project tables, eight agents seated, Otto writing to Nova, two requests waiting in « À toi »" width="900">
+<img src="docs/screens/desktop-atelier-dark.png" alt="Ledge Desktop's IDE on its Atelier tab: the Projects view, two project tables with eight agents, Otto writing to Nova, Ledge's chat on the right" width="900">
 
 <p>
-  <img src="docs/screens/desktop-session-dark.png" alt="A session: its thread and the command waiting for your approval" width="440">
-  <img src="docs/screens/desktop-chat-dark.png" alt="Ask Ledge: who needs me, and a card to start a session" width="440">
+  <img src="docs/screens/desktop-session-dark.png" alt="A session in its tab: its thread and the command waiting for your approval" width="440">
+  <img src="docs/screens/desktop-chat-dark.png" alt="Ledge's chat in the right panel: who needs me, and a card to start a session" width="440">
 </p>
 
 **[Take the tour](docs/tour.md)**: Ledge Desktop and the island, captured from the real app.
