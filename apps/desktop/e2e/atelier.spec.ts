@@ -235,7 +235,7 @@ test('a message between agents: the bubble over Otto, an upright envelope flying
   const envelope = page.locator('.exchange-layer .exchange-envelope');
   await expect(envelope).toHaveCount(1);
   const landedOff = envelope.evaluate(el => new Promise<number>(done => el.addEventListener('animationend', e => {
-    if (e.animationName !== 'envelope-fly') return;
+    if ((e as AnimationEvent).animationName !== 'envelope-fly') return;
     const seat = document.querySelector('.agent-seat[data-agent="local:nova"]')!.getBoundingClientRect(), b = el.getBoundingClientRect();
     done(Math.abs(b.x + b.width / 2 - (seat.x + seat.width / 2)));
   })));
