@@ -1071,8 +1071,9 @@ export function createPhoneGateway(deps: {
   const forgeDetail = async (deviceId: string, msg: Extract<PhoneClientMessage, { type: 'forge.detail' }>) => {
     const a = await localAnswer('forge.detail.reply', requestId => ({ type: 'forge.detail', requestId, prId: msg.prId, ...(msg.log ? { log: msg.log } : {}) }), FORGE_WAIT_MS);
     if (!a?.ok || !a.detail) return push(deviceId, { type: 'forge.detail', prId: msg.prId, error: a?.code === 'unavailable' ? 'unavailable' : 'failed' });
-    const { detail, cut } = phoneForgeDetail(a.detail);
-    return push(deviceId, { type: 'forge.detail', prId: msg.prId, detail, ...(cut ? { cut: true as const } : {}) });
+    const fitted = phoneForgeDetail(a.detail);
+    if (!fitted) return push(deviceId, { type: 'forge.detail', prId: msg.prId, error: 'too_large' });
+    return push(deviceId, { type: 'forge.detail', prId: msg.prId, detail: fitted.detail, ...(fitted.cut ? { cut: true as const } : {}) });
   };
 
   /**

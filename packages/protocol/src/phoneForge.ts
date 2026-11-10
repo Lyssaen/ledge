@@ -13,6 +13,8 @@ export const PHONE_FORGE_FOLLOWED_MAX = 200;
 export const PHONE_FORGE_BYTES = 800_000;
 /** The longest description or comment a phone gets; longer ones end with « … » and the detail says `cut`. */
 export const PHONE_FORGE_TEXT_MAX = 8000;
+/** The most of a job's log a phone gets: its last characters, after « … » (the daemon already keeps its last 60 lines). */
+export const PHONE_FORGE_LOG_MAX = 64_000;
 /** The longest CLI line a phone gets with a failed action (redacted by the daemon, then shortened). */
 export const PHONE_FORGE_MESSAGE_MAX = 500;
 
@@ -20,8 +22,11 @@ export const PHONE_FORGE_MESSAGE_MAX = 500;
 export const PhoneForgeStatusSchema = ForgeStatusSchema.omit({ message: true });
 export type PhoneForgeStatus = z.infer<typeof PhoneForgeStatusSchema>;
 
-/** Why a read could not be answered: `unavailable` (not a request this PC follows, or no forge on this PC), `failed` (gh or glab failed). */
-export const PhoneForgeErrorSchema = z.enum(['unavailable', 'failed']);
+/**
+ * Why a read could not be answered: `unavailable` (not a request this PC follows, or no forge on this PC), `failed` (gh or glab failed),
+ * `too_large` (even cut down, the detail would not fit a phone's frame).
+ */
+export const PhoneForgeErrorSchema = z.enum(['unavailable', 'failed', 'too_large']);
 export type PhoneForgeError = z.infer<typeof PhoneForgeErrorSchema>;
 
 /**

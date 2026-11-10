@@ -95,15 +95,22 @@ Bornes :
   on ne sait pas). Un code inconnu s'affiche tel quel.
 
 **Pour tenir dans une trame** (environ 1 Mio une fois chiffrée), le PC allège le détail avant de l'envoyer et dit `cut: true` :
-1. une description ou un commentaire de plus de 8 000 caractères est raccourci et finit par « … » ;
+1. une description ou un commentaire de plus de 8 000 caractères est raccourci et finit par « … » ; un extrait de log de
+   plus de 64 000 caractères garde sa **fin** (ce qui a échoué) et commence par « … » ;
 2. si le détail pèse encore plus de 800 000 octets, les `patch` partent, mais la liste des fichiers reste ;
-3. puis les discussions les plus anciennes, puis les commits les plus anciens.
+3. puis les discussions les plus anciennes, puis les commits les plus anciens ;
+4. puis les fichiers au-delà des 300 premiers et les jobs au-delà des 200 premiers, puis l'extrait de log, puis les listes
+   restantes.
+
+La borne vaut pour le détail entier, vérifié à la fin. Si rien ne le fait tenir, le PC répond `error: 'too_large'` plutôt
+qu'une trame qui n'arriverait jamais.
 
 Le PC garde un détail 30 s : deux lectures rapprochées ne relancent pas `gh`.
 
 `error` :
 - `unavailable` : la demande n'est pas suivie sur ce PC (elle a disparu de la liste) ;
-- `failed` : `gh` ou `glab` a échoué, ou n'a pas répondu dans les 60 s.
+- `failed` : `gh` ou `glab` a échoué, ou n'a pas répondu dans les 60 s ;
+- `too_large` : même allégé, le détail ne tient pas dans une trame (§ 3).
 
 Jamais le texte du PC.
 

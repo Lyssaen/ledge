@@ -3,7 +3,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import {
-  PHONE_FORGE_BYTES, PHONE_FORGE_TEXT_MAX, PhoneClientMessageSchema, PhoneServerMessageSchema,
+  PHONE_FORGE_BYTES, PHONE_FORGE_LOG_MAX, PHONE_FORGE_TEXT_MAX, PhoneClientMessageSchema, PhoneServerMessageSchema,
   type ClientMessage, type ForgeAction, type ForgeStateMessage, type PrDetail, type PullRequest, type ServerMessage
 } from '@ledge/protocol';
 import { forgeSubject, phoneForgeDetail, phoneForgeState } from '../src/mobile/forge.js';
@@ -127,15 +127,17 @@ describe('phone forge: the detail', () => {
 
   it('a heavy detail fits the frame: long texts shortened, then patches, then the oldest discussions go, and it says cut', () => {
     const long = 'x'.repeat(PHONE_FORGE_TEXT_MAX + 10);
-    const light = phoneForgeDetail({ ...DETAIL, description: long });
+    const light = phoneForgeDetail({ ...DETAIL, description: long })!;
     expect(light.cut).toBe(true);
     expect(light.detail.description).toHaveLength(PHONE_FORGE_TEXT_MAX);
     expect(light.detail.files[0]!.patch).toBe('@@ -1 +1 @@');
     expect(phoneForgeDetail(DETAIL)).toEqual({ detail: DETAIL, cut: false });
+    expect(light.detail.description.endsWith('…')).toBe(true);
 
     const patch = 'y'.repeat(300_000);
     const thread = (i: number) => ({ id: `t${i}`, resolvable: true, resolved: false, comments: [{ id: `c${i}`, author: 'ana', at: new Date(Date.UTC(2026, 10, 1, 0, i)).toISOString(), body: 'z'.repeat(7000) }] });
     const heavy = phoneForgeDetail({ ...DETAIL, files: [1, 2, 3].map(i => ({ path: `f${i}`, added: 1, removed: 0, patch })), threads: Array.from({ length: 200 }, (_, i) => thread(i)) });
+    if (!heavy) throw new Error('not fitted');
     expect(heavy.cut).toBe(true);
     expect(Buffer.byteLength(JSON.stringify(heavy.detail))).toBeLessThanOrEqual(PHONE_FORGE_BYTES);
     expect(heavy.detail.files.every(f => f.patch === undefined)).toBe(true);
@@ -144,6 +146,38 @@ describe('phone forge: the detail', () => {
     // The newest discussions stay, in the forge's order.
     expect(heavy.detail.threads.at(-1)!.id).toBe('t199');
     expect(heavy.detail.threads.some(t => t.id === 't0')).toBe(false);
+  });
+});
+
+describe('phone forge: the frame is a bound on the whole detail', () => {
+  const fits = (d: PrDetail | undefined) => Buffer.byteLength(JSON.stringify(d)) <= PHONE_FORGE_BYTES;
+
+  it('a long job log keeps its end; a log of 900 000 characters alone fits', () => {
+    const log = `${'a'.repeat(900_000)}THE END`;
+    const r = phoneForgeDetail({ ...DETAIL, log: { jobId: '1', text: log } })!;
+    expect(r.cut).toBe(true);
+    expect(r.detail.log!.text).toHaveLength(PHONE_FORGE_LOG_MAX);
+    expect(r.detail.log!.text.startsWith('…')).toBe(true);
+    expect(r.detail.log!.text.endsWith('THE END')).toBe(true);
+    expect(fits(r.detail)).toBe(true);
+  });
+
+  it('heavy leftovers (thousands of files and jobs, a long log) are cut until the whole fits', () => {
+    const files = Array.from({ length: 20_000 }, (_, i) => ({ path: `src/${'d'.repeat(40)}/${i}.ts`, added: 1, removed: 1 }));
+    const jobs = Array.from({ length: 5_000 }, (_, i) => ({ id: String(i), name: 'j'.repeat(100), column: 0, columnName: 'c'.repeat(100), status: 'ok' as const }));
+    const r = phoneForgeDetail({ ...DETAIL, files, jobs, log: { jobId: '1', text: 'l'.repeat(2_000_000) } })!;
+    expect(r.cut).toBe(true);
+    expect(fits(r.detail)).toBe(true);
+    expect(r.detail.files.length).toBeLessThanOrEqual(300);
+  });
+
+  it('a detail nothing can bring under the bound is too_large, never a frame that would not arrive', async () => {
+    const huge: PrDetail = { ...DETAIL, labels: Array.from({ length: 40 }, () => 'x'.repeat(30_000)), pr: { ...PR, title: 't'.repeat(900_000) } };
+    expect(phoneForgeDetail(huge)).toBeNull();
+    const { g } = make({ detail: m => ({ type: 'forge.detail.reply', requestId: m.requestId, ok: true, detail: huge }) });
+    g.send('dev1', { type: 'forge.detail', prId: PR.id });
+    await until(() => g.got('dev1').some(m => m.type === 'forge.detail'));
+    expect(g.got('dev1').find(m => m.type === 'forge.detail')).toEqual({ type: 'forge.detail', prId: PR.id, error: 'too_large' });
   });
 });
 

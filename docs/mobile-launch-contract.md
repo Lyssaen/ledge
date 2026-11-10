@@ -96,9 +96,10 @@ Codes de refus (`reason`) :
 | `assertion_invalid`, `assertion_expired`, `assertion_replayed` | comme pour les autres actions vérifiées : refaire la vérification |
 | `unavailable` | ce PC ne lance pas pour le téléphone |
 
-**Textes :** la maquette ne donne que celui de `not_found` (« Démarrage refusé : le dossier est introuvable », « Rien n'a
-été lancé. Ton message est conservé. ») et celui du délai (« Le démarrage n'a pas répondu. »). Les textes des autres codes
-et de `failed` sont à demander à `design-ux`.
+**Textes :** validés par l'utilisateur le 2026-11-10 (décision 12 du plan) dans le complément
+`docs/mockups/ledge-mobile-refonte/m2-lancement.html` (branche `design/mobile-refonte-m0-m1`, Q49 à Q52, trace `8ddf0127`) :
+un reçu par code, un texte générique pour un code inconnu, et « Lancer avec Face ID ». `invalid` n'a pas de détail : son
+texte couvre tous ses cas (Q52 telle que proposée).
 
 ## 6. Sans réponse, et « Réessayer »
 
