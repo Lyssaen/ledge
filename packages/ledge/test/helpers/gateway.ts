@@ -47,6 +47,8 @@ export function fakeMobile(ids: string[], relayUrl = 'https://relay.test', withP
     revoked,
     receive(deviceId: string, text: string) { for (const fn of messageFns) fn(deviceId, text); },
     setDevices(next: string[]) { devices = next; for (const fn of changeFns) fn(); },
+    /** The service's PC key from now on (absent until set, like a daemon that has none to offer). */
+    setPcKey(key: string) { (this.mobile as { pcKey?: () => string }).pcKey = () => key; },
     names,
     prefs,
     mobile: {

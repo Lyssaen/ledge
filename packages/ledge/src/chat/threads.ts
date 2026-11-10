@@ -11,6 +11,9 @@ type Emit = (m: ChatMessage) => void;
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const checkId = (id: string) => { if (!SAFE_ID.test(id)) throw new Error('invalid device id'); };
 
+/** Where a paired device's thread keeps its turns: under the Ledge home, by the device's id. */
+export const deviceChatDir = (home: string, id: string): string => { checkId(id); return join(home, 'mobile', 'chat', id); };
+
 /** A pool of places shared by the threads: `take` is refused once `max` questions run. */
 export function createSlots(max = 3): { take(): boolean; give(): void } {
   let used = 0;
@@ -28,7 +31,7 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
   const devices = new Map<string, Chat>();
   const emitters = new Map<ChatThreadId, Emit>();
   const dropping = new Map<string, Promise<void>>();
-  const deviceHome = (id: string) => join(deps.home, 'mobile', 'chat', id);
+  const deviceHome = (id: string) => deviceChatDir(deps.home, id);
   /** A device keeps its conversations 7 days (M3 Q33), in its own folder: forgetting the device removes them with it. */
   const kept = new Map<string, Conversations>();
   const keptOf = (id: string): Conversations => {

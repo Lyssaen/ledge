@@ -21,7 +21,7 @@ import { IslandPrefsSchema } from './island.js';
 import { ProjectsSchema } from './projects.js';
 import { ThreadItemSchema } from './thread.js';
 import { DecidedBySchema, DecisionSchema, NOTE_MAX } from './decisions.js';
-import { DeviceNameSchema, MobileStateSchema, RelayUrlSchema } from './mobile.js';
+import { DeviceNameSchema, MobileRecoveryEventSchema, MobileStateSchema, RelayUrlSchema } from './mobile.js';
 import { TaskCmdSchema, TaskResultSchema, TaskUpdatedSchema } from './tasks.js';
 import { BrainAddSchema, BrainAnswerSchema, BrainListSchema, BrainNoteSchema, BrainResultSchema } from './brain.js';
 import { UsageAckSchema, UsageSetSchema, UsageStateMessageSchema } from './usage.js';
@@ -215,6 +215,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('island'), prefs: IslandPrefsSchema.nullable() }),
   /** Mobile access (lot 3), after the island in each snapshot and on every change. Local clients only. */
   z.object({ type: z.literal('mobile'), state: MobileStateSchema }),
+  /** A passkey recovery as it happens (docs/mobile-passkey-recover-contract.md), for the local fronts' toast; the lasting trace is in `mobile`. */
+  z.object({ type: z.literal('mobile.recovery') }).merge(MobileRecoveryEventSchema),
   /** The sessions a phone types into (« Téléphone au clavier »), after each snapshot and each change; `device` is its label. */
   z.object({ type: z.literal('terminal.holders'), holds: z.array(z.object({ id: z.string(), device: z.string() })) }),
   /** The daemon's immediate answer to a `session.message`: delivered (`accepted`), held for later (`queued`), left to Claude's own SendMessage (`native`), or refused with a `reason`. */
@@ -390,6 +392,10 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('mobile.device.rename'), id: z.string().min(1).max(100), name: DeviceNameSchema }),
   /** « Taper dans les terminaux depuis le téléphone »; turned off, every phone loses the hand. */
   z.object({ type: z.literal('mobile.terminal'), input: z.boolean() }),
+  /** « C'était bien moi » (`recovered`: its notice goes, the trace stays) or « Compris » (`refused`) on a device's row. */
+  z.object({ type: z.literal('mobile.device.ack'), id: z.string().min(1).max(100), what: z.enum(['recovered', 'refused']) }),
+  /** « Débloquer »: passkey recovery is taken again after 3 failed verifications. */
+  z.object({ type: z.literal('mobile.recovery.unblock') }),
   /** « Reprendre la main »: the phone typing into the session's terminal goes back to reading it. */
   z.object({ type: z.literal('terminal.release'), id: z.string().min(1) }),
   /** One session writing to another by Ledge name (`to` may end in ` [ref]`); `intercept` (the Claude hook): answer `native` unless `to` is a live non-Claude session. */

@@ -498,6 +498,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast({ type: 'mobile', state });
     if ((state.terminalInput === true) !== terminalInput) { terminalInput = state.terminalInput === true; gateway?.terminalInputChanged(); }
   });
+  // A passkey recovery as it happens: the local fronts' toast (the lasting trace comes with `mobile`).
+  const unsubscribeRecovery = mobile?.onRecovery(e => broadcast({ type: 'mobile.recovery', ...e }));
   /** The sessions a phone types into, by the device's label: Desktop shows « Téléphone au clavier ». */
   const terminalHolders = new Map<string, string>();
   const holdersMsg = (): ServerMessage => ({ type: 'terminal.holders', holds: [...terminalHolders].map(([id, deviceId]) => ({ id, device: (d => d?.name ?? d?.label)(mobile?.state().devices.find(d => d.id === deviceId)) ?? deviceId })) });
@@ -1876,6 +1878,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); unsubscribeUsage?.(); unsubscribeForge?.(); panes?.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); unsubscribeUsage?.(); unsubscribeForge?.(); panes?.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribeRecovery?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

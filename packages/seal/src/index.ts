@@ -4,3 +4,4 @@ export * from './identity.js';
 export * from './channel.js';
 export * from './pairing.js';
 export * from './fingerprint.js';
+export * from './recover.js';

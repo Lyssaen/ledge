@@ -567,3 +567,22 @@ describe('tool rows with images', () => {
     expect(isBrowserCapture('mcp__other__screenshot')).toBe(false);
   });
 });
+
+describe('passkey recovery on the local fronts', () => {
+  it('parses « C\'était bien moi », « Compris » and « Débloquer », and refuses another ack', () => {
+    expect(parseClientMessage({ type: 'mobile.device.ack', id: 'dev', what: 'recovered' })).toEqual({ type: 'mobile.device.ack', id: 'dev', what: 'recovered' });
+    expect(parseClientMessage({ type: 'mobile.device.ack', id: 'dev', what: 'refused' })).toMatchObject({ what: 'refused' });
+    expect(parseClientMessage({ type: 'mobile.recovery.unblock' })).toEqual({ type: 'mobile.recovery.unblock' });
+    expect(() => parseClientMessage({ type: 'mobile.device.ack', id: 'dev', what: 'blocked' })).toThrow();
+  });
+  it('parses the recovery event and the state\'s recovery fields', () => {
+    expect(parseServerMessage({ type: 'mobile.recovery', event: 'recovered', id: 'dev', at: T0 })).toEqual({ type: 'mobile.recovery', event: 'recovered', id: 'dev', at: T0 });
+    expect(parseServerMessage({ type: 'mobile.recovery', event: 'blocked', at: T0 })).toMatchObject({ event: 'blocked' });
+    const state = {
+      enabled: true, relayUrl: 'https://r', account: null, signin: null, signinError: null, link: { state: 'online' }, pairings: [],
+      devices: [{ id: 'dev', label: 'iPad', approvedAt: T0, online: false, recover: true, recovered: { at: T0, model: 'iPhone', pending: true }, refused: { at: T0, model: 'iPhone' } }],
+      recovery: { blocked: { since: T0, failures: 3 } }
+    };
+    expect(parseServerMessage({ type: 'mobile', state })).toEqual({ type: 'mobile', state });
+  });
+});

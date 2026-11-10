@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, renameSync, chmodSync, unlinkSync } from 'node:fs';
 import { z } from 'zod';
-import { DEFAULT_RELAY_URL, DeviceKindSchema, DeviceNameSchema, DevicePrefsSchema, MobileConfigSchema, type MobileConfig } from '@ledge/protocol';
+import { DEFAULT_RELAY_URL, DeviceKindSchema, DeviceNameSchema, DevicePrefsSchema, MobileConfigSchema, RecoveredSchema, type MobileConfig } from '@ledge/protocol';
 import { exportIdentity, generateIdentity, importIdentity, type Identity } from '@ledge/seal';
 import { paths } from '../paths.js';
 import { log } from '../log.js';
@@ -11,7 +11,9 @@ export type RelaySession = z.infer<typeof RelaySessionSchema>;
 /** Same fields as `DeviceCredential` (webauthn.ts, which imports nothing but node:crypto). */
 const DeviceCredentialSchema = z.object({
   id: z.string().min(1), publicKey: z.string().min(1), alg: z.union([z.literal(-7), z.literal(-257)]), counter: z.number().int().nonnegative(),
-  rpId: z.string().min(1), transports: z.array(z.string()).optional()
+  rpId: z.string().min(1), transports: z.array(z.string()).optional(),
+  /** Registered with the PC key's digest in its `user.id`: it can bring the device back after a reinstall. */
+  recover: z.literal(true).optional()
 });
 
 /** How many relay peers are kept per device: enough for a few sign-ins again, never a growing list. */
@@ -30,7 +32,11 @@ const ApprovedDeviceSchema = z.object({
   peers: z.array(z.string().min(1)).max(MAX_DEVICE_PEERS).optional(),
   /** The settings the device chose from its Réglages (`device.prefs`); absent: the defaults. A value this daemon cannot read is
    *  dropped alone (`catch`), never the whole list of devices. */
-  prefs: DevicePrefsSchema.optional().catch(undefined)
+  prefs: DevicePrefsSchema.optional().catch(undefined),
+  /** It came back with its passkey after a reinstall (`pending` until « C'était bien moi »). */
+  recovered: RecoveredSchema.optional().catch(undefined),
+  /** Another device tried to take its place with its passkey while it was connected (until « Compris »). */
+  refused: z.object({ at: z.string(), model: z.string().optional() }).optional().catch(undefined)
 });
 export type ApprovedDevice = z.infer<typeof ApprovedDeviceSchema>;
 
@@ -125,4 +131,24 @@ export function readRevocations(): Revocation[] {
 
 export function writeRevocations(list: Revocation[]): void {
   writePrivate(paths().revocations, JSON.stringify(z.array(RevocationSchema).parse(list), null, 2) + '\n');
+}
+
+/**
+ * Passkey recovery's memory (recovery.json): the passkeys of revoked devices for 90 days (`tombstones`, for « révoqué le … »), the
+ * times of the last recoveries asked (5 an hour) and of the failed verifications (3 block), and the block until « Débloquer ».
+ */
+const RecoveryFileSchema = z.object({
+  tombstones: z.array(z.object({ credentialId: z.string().min(1), device: z.string(), revokedAt: z.string() })).default([]),
+  attempts: z.array(z.string()).default([]),
+  failures: z.array(z.string()).default([]),
+  blocked: z.object({ since: z.string(), failures: z.number().int().min(0) }).optional()
+});
+export type RecoveryFile = z.infer<typeof RecoveryFileSchema>;
+
+export function readRecovery(): RecoveryFile {
+  return readJson(paths().recovery, 'recovery.json', RecoveryFileSchema) ?? { tombstones: [], attempts: [], failures: [] };
+}
+
+export function writeRecovery(r: RecoveryFile): void {
+  writePrivate(paths().recovery, JSON.stringify(RecoveryFileSchema.parse(r), null, 2) + '\n');
 }
