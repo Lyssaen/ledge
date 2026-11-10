@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ATTACHMENTS_MAX, ATTACHMENT_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentRefSchema, AttachmentStoredSchema, ImageUploadSchema, b64Max } from './attachments.js';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { HarnessUsageSchema, UsagePrefsSchema, dropUnknownHarnesses } from './usage.js';
-import { PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
+import { OmpApprovalSchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS, type CloseHow } from './chat.js';
 import { ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
@@ -277,6 +277,22 @@ const CardRowsSchema = z.array(z.number().int().min(0).max(MAX_PROPOSALS - 1)).m
 
 /** A phone-made change of the PC itself: strict, and backed by a passkey assertion (purpose `pc`). */
 const pcOp = { op: OperationIdSchema, assertion: AssertionSchema.optional() };
+
+/** Agents that work in several folders at once (`--add-dir`): the others take one. */
+export const PHONE_LAUNCH_MULTI: readonly Tool[] = ['claude', 'omp'];
+export const PHONE_LAUNCH_FOLDERS_MAX = 20;
+/**
+ * A session started from the phone's « Nouvelle session » (refonte mobile M2 §9, docs/mobile-launch-contract.md): the fields of the
+ * Desktop's launch form. `folders` are folders of this PC the project declares, the first being where the agent starts; more than one
+ * only for Claude Code and OMP. `approval` is OMP's alone. The PC picks the agent's name.
+ */
+export const PhoneLaunchSchema = z.object({
+  project: ProjectIdSchema, tool: ToolSchema,
+  folders: z.array(FolderPathSchema).min(1).max(PHONE_LAUNCH_FOLDERS_MAX),
+  prompt: z.string().trim().min(1).max(MESSAGE_MAX),
+  model: ModelIdSchema.optional(), effort: EffortSchema.optional(), approval: OmpApprovalSchema.optional()
+}).strict();
+export type PhoneLaunch = z.infer<typeof PhoneLaunchSchema>;
 /** What a `pc` challenge covers: installing a version then restarting, or restarting alone. */
 export const PcActionSchema = z.enum(['update', 'restart']);
 export type PcAction = z.infer<typeof PcActionSchema>;
@@ -296,7 +312,9 @@ export const PHONE_FOLDER_ENTRIES_MAX = 500;
 export const PhoneFolderErrorSchema = z.enum(['not_found', 'not_folder', 'unreadable']);
 export type PhoneFolderError = z.infer<typeof PhoneFolderErrorSchema>;
 /** A project's folder as the phone sees it: its machine (`local` is this PC, else the label the PC gives it) and its path. */
-export const PhoneFolderSchema = z.object({ machine: MachineIdSchema, label: z.string().max(80).optional(), path: FolderPathSchema });
+/** A project's folder. For one of this PC (`local`), `exists` and `branch` say whether it is there and its git branch (null: none), when known. */
+export const PhoneFolderSchema = z.object({ machine: MachineIdSchema, label: z.string().max(80).optional(), path: FolderPathSchema,
+  exists: z.boolean().optional(), branch: z.string().max(200).nullable().optional() });
 export type PhoneFolder = z.infer<typeof PhoneFolderSchema>;
 /** The folders of this PC its agents worked in lately, newest first. */
 export const PHONE_RECENT_FOLDERS_MAX = 20;
@@ -360,7 +378,9 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     /** A `project` challenge: the project deleted and where its agents go (null: no project). */ project: ProjectIdSchema.optional(), moveTo: ProjectIdSchema.nullable().optional(),
     /** A `folder` challenge: the project (`project`) and the folder of this PC added to it. */ path: FolderPathSchema.optional(),
     /** A `rigs` challenge: the action (`rigAct`) or the change of seats (`rigSeats`) it covers, exactly as it will be sent. */
-    rigAct: OpenRigActionSchema.optional(), rigSeats: z.object({ rig: RigNameSchema, seats: RigSeatCountsSchema }).strict().optional() }),
+    rigAct: OpenRigActionSchema.optional(), rigSeats: z.object({ rig: RigNameSchema, seats: RigSeatCountsSchema }).strict().optional(),
+    /** A `launch` challenge without `qid`: the « Nouvelle session » it covers, exactly as it will be sent. */
+    launch: PhoneLaunchSchema.optional() }),
   z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
@@ -440,6 +460,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   /** Takes the card's queued instruction back out of the queue, as the local `session.relay.cancel`. */
   z.object({ type: z.literal('chat.relay.cancel'), op: OperationIdSchema, qid: OperationIdSchema }),
   z.object({ type: z.literal('chat.launch'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
+  /** « Nouvelle session » (M2 §9): passkey, purpose `launch`, over this very launch. Applied, its result names the new session (`id`). */
+  z.object({ type: z.literal('session.launch'), op: OperationIdSchema, launch: PhoneLaunchSchema, assertion: AssertionSchema.optional() }).strict(),
   z.object({ type: z.literal('chat.close'), op: OperationIdSchema, qid: OperationIdSchema, rows: CardRowsSchema.optional(), assertion: AssertionSchema.optional() }),
   /** A row of the turn's task card: given by Ledge. */
   z.object({ type: z.literal('chat.task'), op: OperationIdSchema, qid: OperationIdSchema, row: z.number().int().min(0).max(MAX_PROPOSALS - 1) }),
@@ -573,6 +595,7 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session.thread.item'), id: z.string(), item: ThreadItemSchema, cut: z.literal(true).optional() }),
   z.object({ type: z.literal('operation.result'), op: OperationIdSchema, status: OperationStatusSchema, reason: OperationReasonSchema.optional(),
     /** How an applied `session.close` ended the agent: `killed` when it had to be forced. */ how: CloseHowSchema.optional(),
+    /** An applied `session.launch`: the new session, whose thread the phone opens. */ id: z.string().max(200).optional(),
     /** An applied `session.broadcast`: the names that got it and those that did not. */ sent: z.array(z.string().max(100)).max(BROADCAST_SESSIONS_MAX).optional(), refused: z.array(z.object({ name: z.string().max(100), reason: z.string().max(200) })).max(BROADCAST_SESSIONS_MAX).optional() }),
   /** The models an agent offers; `error`: it could not be asked, `models` is then what Ledge knows without it. */
   z.object({ type: z.literal('models.listing'), tool: ToolSchema, models: z.array(PhoneModelChoiceSchema).max(40), error: z.literal(true).optional() }),

@@ -64,6 +64,7 @@ import { createRouter } from '../chat/routing.js';
 import { serveSsh } from '../transport/ssh.js';
 import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
+import { phoneLaunch } from '../mobile/launch.js';
 import { createNotifier } from '../mobile/push/notifier.js';
 import { chatEndPayload, decisionPayload } from '../mobile/push/triggers.js';
 import { pushFor, resolvedFor } from '../mobile/push/triggers.js';
@@ -1772,7 +1773,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // The Atelier on the phone: the user's projects, the sessions placed in them as on the desktop; a `projects.set` follows by `forward`.
     projects: () => projects,
     // A project's folders from the phone: this machine's, browsed from its home, its recent folders first; the others by their label.
-    folders: { home: opts.home ?? homedir(), recents: () => store.recents().map(r => r.cwd), machineLabel: id => machines.find(m => m.id === id)?.label },
+    folders: { home: opts.home ?? homedir(), recents: () => store.recents().map(r => r.cwd), machineLabel: id => machines.find(m => m.id === id)?.label,
+      inspect: paths => inspectRepos(paths, { home: opts.home }) },
+    // « Nouvelle session » on the phone (M2 §9): the PC's own launch, its folders checked first so a refusal says why.
+    launch: phoneLaunch(launch, opts.home),
     // The phone's model switch (#58): `session.model` answers with a code, and `models.list` asks this machine's agents.
     models: true,
     // A session's « Fermer » on the phone: the cards' close, so a close under way (a card's, another phone's) is shared.
