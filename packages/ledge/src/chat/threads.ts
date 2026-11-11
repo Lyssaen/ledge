@@ -43,9 +43,13 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
   void readdir(join(deps.home, 'mobile', 'chat')).then(ids => Promise.all(ids.filter(id => SAFE_ID.test(id) && !dropping.has(id)).map(id => keptOf(id).prune())))
     .catch((e: NodeJS.ErrnoException) => { if (e.code !== 'ENOENT') log(`chat conversations not pruned (${e.code ?? e.name})`); });
 
+  /** The devices whose folder is about to move (passkey recovery): no thread opens on them until it is released. */
+  const held = new Map<string, Promise<void>>();
+
   const device = (id: string): Chat => {
     checkId(id);
     if (dropping.has(id)) throw new Error('device thread is being dropped');
+    if (held.has(id)) throw new Error('device thread is held');
     let c = devices.get(id);
     if (!c) { c = createChat({ ...rest, home: deviceHome(id), slots, conversations: keptOf(id) }); devices.set(id, c); }
     return c;
@@ -81,6 +85,27 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
       })();
       dropping.set(id, p);
       return p;
+    },
+    /**
+     * Quiets the device's thread before its folder moves under another id (passkey recovery): its question is stopped, every
+     * write under way lands, its conversations are closed, and no thread opens on it until the returned function is called. The
+     * next look at the device, if it stays, opens a fresh thread from its folder; its emitter is kept for that one.
+     */
+    async hold(id: string): Promise<() => void> {
+      checkId(id);
+      for (let h = held.get(id); h; h = held.get(id)) await h;
+      let open!: () => void;
+      const p = new Promise<void>(r => { open = r; });
+      held.set(id, p);
+      const release = () => { if (held.get(id) === p) held.delete(id); open(); };
+      try {
+        await dropping.get(id);
+        const c = devices.get(id); const k = kept.get(id);
+        devices.delete(id); kept.delete(id);
+        if (c) { for (const t of c.history()) c.cancel(t.qid); await c.idle(); }
+        await k?.close();
+      } catch (e) { release(); throw e; }
+      return release;
     },
     /** Every thread's queued instructions (each thread's day roll is told to its own emitter), the desktop's first. */
     queuedRelays(): Array<{ thread: ChatThreadId; qid: string; relay: ChatRelay; askedAt: string }> {

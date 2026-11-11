@@ -55,6 +55,11 @@ export interface MobileService {
   pcKey(): string;
   /** Each passkey recovery event as it happens (for the local fronts' toast); returns the unsubscribe. */
   onRecovery(fn: (e: MobileRecoveryEvent) => void): () => void;
+  /**
+   * How a passkey recovery quiets a device's chat before its folder moves: `hold` stops its question and waits for every write
+   * under way, so nothing lands in the old path; the returned function lets the thread open again.
+   */
+  holdChats?(hold: (deviceId: string) => Promise<() => void>): void;
   /** Texts opened from approved devices' sealed messages; returns the unsubscribe. */
   onMessage(fn: (deviceId: string, text: string) => void): () => void;
   stop(): Promise<void>;
@@ -186,8 +191,11 @@ export async function createMobileService(opts: {
   const shownName = (d: ApprovedDevice) => (d.name ?? d.label).slice(0, 40);
   const online = (id: string) => linkState.state === 'online' && channels.online().has(id);
 
+  /** Set by the daemon once its chat threads exist; without it (tests, no chat) there is nothing to quiet. */
+  let holdChat: ((deviceId: string) => Promise<() => void>) | null = null;
   const recovery = createRecovery({
     pc,
+    hold: (id) => (holdChat ? holdChat(id) : Promise.resolve(() => {})),
     pcName: () => hostname().slice(0, 40) || undefined,
     send: sendFrame,
     rp: () => rpOf(config.relayUrl),
@@ -657,6 +665,8 @@ export async function createMobileService(opts: {
       recoveryListeners.add(fn);
       return () => { recoveryListeners.delete(fn); };
     },
+
+    holdChats(hold) { holdChat = hold; },
 
     onMessage(fn) {
       messageListeners.add(fn);

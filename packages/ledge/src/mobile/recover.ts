@@ -51,6 +51,8 @@ export function createRecovery(opts: {
   rp(): Rp | null;
   byCredential(credentialId: string): RecoverTarget | null;
   online(deviceId: string): boolean;
+  /** Quiets the device's chat before its folder moves (no write left for the old path); the result opens it again. */
+  hold?(deviceId: string): Promise<() => void>;
   restore(old: RecoverTarget, next: { publicKey: string; id: string; peer: string; model?: string; counter: number }): string;
   refused(deviceId: string, model: string | undefined): void;
   onBlocked(): void;
@@ -136,7 +138,14 @@ export function createRecovery(opts: {
     // Not signed by WebAuthn: a consistency check only; the signed challenge is what binds the PC key (rule 1).
     if ((await userHandleMatches(f.userHandle, opts.pc.publicKey)) !== 'ok') return failed(peer, 'userHandle');
     const id = await fingerprint(e.device);
-    // Nothing waits from here to the restore: the block, the passkey and the device's presence are read as the restore finds them.
+    // The chat of a device about to move is quieted first, its writes done, so the folder moves whole; a connected device is
+    // refused below and keeps its question.
+    const release = opts.hold && !opts.online(target.id) ? await opts.hold(target.id) : null;
+    try { settle(peer, f, e, target, id, verified.counter); } finally { release?.(); }
+  };
+
+  /** Nothing waits from here to the restore: the block, the passkey and the device's presence are read as the restore finds them. */
+  const settle = (peer: string, f: Extract<SealedFrame, { k: 'recover_proof' }>, e: Entry, target: RecoverTarget, id: string, counter: number) => {
     if (stopped) return;
     if (mem.blocked) return no(peer, 'blocked');
     const now_ = opts.byCredential(f.assertion.id);
@@ -150,7 +159,7 @@ export function createRecovery(opts: {
     }
     let name: string;
     try {
-      name = opts.restore(target, { publicKey: e.device, id, peer, ...(e.model ? { model: e.model } : {}), counter: verified.counter });
+      name = opts.restore(target, { publicKey: e.device, id, peer, ...(e.model ? { model: e.model } : {}), counter });
     } catch (err) {
       log(`mobile recovery: device ${target.id} not restored (${(err as Error).message})`);
       return no(peer, 'failed');

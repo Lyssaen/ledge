@@ -1724,6 +1724,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     });
   }
 
+  // A passkey recovery moves the device's chat folder: its thread is quieted first, and the sessions its queued cards waited
+  // for go on, as when the thread is dropped.
+  mobile?.holdChats?.(async id => {
+    const waiting = [...new Set(threads.queuedRelays().filter(q => q.thread === `device:${id}`).map(q => q.relay.id))];
+    try { return await threads.hold(id); } finally { for (const sid of waiting) relay.settle(sid); }
+  });
   if (mobile) gateway = createPhoneGateway({
     mobile,
     // « À toi » on the phone (lot 3): this PC's OpenRig, as the desktop has it; a phone's answer goes through the same checks.

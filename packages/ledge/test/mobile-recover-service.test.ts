@@ -152,6 +152,29 @@ describe('passkey recovery through the service', () => {
     expect(readRecovery().tombstones).toEqual([{ credentialId: t.passkey.id, device: 'iPad de G', revokedAt: expect.any(String) }]);
   });
 
+  it('the device\'s chat is held before its folder moves and released after', async () => {
+    const t = await reinstalled();
+    const log: string[] = [];
+    t.s.holdChats!(async id => {
+      log.push(`hold ${id} ${existsSync(t.chat) ? 'before' : 'after'} the move`);
+      return () => { log.push(`release ${id} ${existsSync(t.chat) ? 'before' : 'after'} the move`); };
+    });
+    expect(await t.recover()).toMatchObject({ k: 'recover_ok' });
+    expect(log).toEqual([`hold ${t.oldId} before the move`, `release ${t.oldId} after the move`]);
+  });
+
+  it('connected: refused, its chat is not held', async () => {
+    const u = await reinstalled();
+    const held: string[] = [];
+    u.s.holdChats!(async id => { held.push(id); return () => {}; });
+    const again = await fakeDevice({ relayUrl: u.relay.url, token: u.relay.deviceToken(OLD_PEER), peer: OLD_PEER, pcPublicKey: u.s.pcKey(), identity: u.old.identity });
+    cleanups.push(() => again.close());
+    await again.hello();
+    await until(() => u.s.state().devices[0]?.online === true, 'iPad online');
+    expect(await u.recover()).toMatchObject({ k: 'recover_no', why: 'connected' });
+    expect(held).toEqual([]);
+  });
+
   it('« Réessayer » after a recover_ok the phone could not keep: a new device key is put back again, each start counts, Desktop hears it once', async () => {
     const t = await reinstalled();
     expect(await t.recover('iPhone')).toMatchObject({ k: 'recover_ok' });

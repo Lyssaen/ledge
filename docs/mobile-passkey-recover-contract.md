@@ -123,8 +123,9 @@ Si un `recover_start` plus récent du même pair, un nouveau `welcome` ou l'arr�
 - Le téléphone refait une clé d'appareil et recommence. L'appareil, remis sous la première nouvelle clé mais jamais relié,
   n'est pas connecté : il est remis en place une seconde fois, sous la nouvelle clé, avec son historique. Le pair de l'app
   n'est pas révoqué, puisqu'il est celui de la nouvelle entrée. Desktop n'est prévenu qu'une fois, au `hello`.
-- Une question encore en cours pour l'ancien id au moment de la remise en place est arrêtée, comme à un redémarrage du
-  daemon : la conversation suit l'appareil, mais la réponse de cette question est perdue.
+- Avant de déplacer le dossier, le PC met le chat de l'appareil au repos : une question encore en cours est arrêtée (sa
+  réponse ne viendra pas, comme à un redémarrage du daemon), et chaque écriture déjà lancée (réponse donnée, conversation
+  rangée) se termine dans le dossier avant qu'il ne bouge. Un appareil connecté, refusé, n'est pas touché.
 
 **Mémoire de la reconnexion** : `~/.ledge/recovery.json`, en mode 0600. Il contient :
 - les pierres tombales `{ credentialId, device, revokedAt }`, gardées 90 jours ;
