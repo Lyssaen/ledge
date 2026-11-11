@@ -46,6 +46,12 @@ describe('the decision footer of a wide screen (m1-a-toi.html §12)', () => {
     expect(footer()).toContain('L’agent ne redemande plus pour cette commande ou ces fichiers jusqu’à la fin de la session.');
   });
 
+  it('the pane\'s head gives the way to the thread; the footer no longer does (§12)', () => {
+    opened();
+    expect(screen.getByRole('link', { name: 'Ouvrir le fil' })).toHaveAttribute('href', '#/thread/a');
+    expect(screen.queryByRole('link', { name: 'Voir le fil de Pim' })).toBeNull();
+  });
+
   it('one row: Autoriser, Refuser, Toujours dans ce projet, then the keys', () => {
     opened();
     expect(footer()).toEqual(['Autoriser', 'Refuser', 'Toujours dans ce projet', 'Y / N au clavier', 'Claude Code enregistre la règle dans les réglages du projet : elle vaut aussi pour ses prochaines sessions dans ce projet.', 'La décision sera transmise immédiatement au PC.']);

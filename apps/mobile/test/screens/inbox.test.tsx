@@ -78,6 +78,27 @@ describe('« À toi » on a phone (m1-a-toi.html §1)', () => {
     expect(screen.getByRole('button', { name: 'Autoriser' })).toBeEnabled();
   });
 
+  it('a tap answers the request the card shows, even when the PC replaced it just before (review-qa)', () => {
+    const t = setup();
+    t.deliver(snapshot([perm('a', 'Pim')]));
+    render(<Inbox store={t.store} />);
+    const allow = screen.getByRole('button', { name: 'Autoriser' });
+    // The replacement is in the store, not yet drawn: the tap still names the request on screen, which the PC turns down.
+    t.deliver(snapshot([session('a', { name: 'Pim', state: 'waiting_permission', pending: pending({ key: 'ka2', text: 'pnpm build e2e' }) })]));
+    fireEvent.click(allow);
+    expect(t.of('session.decide')).toEqual([expect.objectContaining({ id: 'a', decision: 'accept', expect: expect.objectContaining({ key: 'ka', text: 'pnpm build a' }) })]);
+  });
+
+  it('an option tapped after the question went still names that question (review-qa)', () => {
+    const t = setup();
+    t.deliver(snapshot([session('b', { name: 'Ada', state: 'waiting_input', pending: pending({ key: 'kb', kind: 'question', text: 'Quelle base ?', options: ['sqlite', 'postgres'] }) })]));
+    render(<Inbox store={t.store} />);
+    const option = screen.getByRole('button', { name: 'sqlite' });
+    t.deliver(snapshot([session('b', { name: 'Ada' })]));
+    fireEvent.click(option);
+    for (const m of t.of('session.reply')) expect(m.expect).toMatchObject({ key: 'kb', kind: 'question', text: 'Quelle base ?' });
+  });
+
   it('nothing waiting and nothing working: the calm state and the way to Sessions (§7)', () => {
     const t = setup();
     t.deliver(snapshot([session('c')]));
@@ -132,27 +153,6 @@ describe('OpenRig\'s asks in « À toi » (§2, m1-reponses-rig.html)', () => {
     expect(screen.getByRole('heading', { name: /Rigs OpenRig/ })).toBeInTheDocument();
     const card = screen.getByRole('article', { name: 'Demande de pilot-lead, ledge-dev' });
     expect(within(card).getAllByRole('button').map(b => b.textContent)).toEqual(['Fusionner maintenantrecommandé', 'Attendre la relecture', 'Répondre autrement…']);
-  });
-
-  it('a tap answers the request the card shows, even when the PC replaced it just before (review-qa)', () => {
-    const t = setup();
-    t.deliver(snapshot([perm('a', 'Pim')]));
-    render(<Inbox store={t.store} />);
-    const allow = screen.getByRole('button', { name: 'Autoriser' });
-    // The replacement is in the store, not yet drawn: the tap still names the request on screen, which the PC turns down.
-    t.deliver(snapshot([session('a', { name: 'Pim', state: 'waiting_permission', pending: pending({ key: 'ka2', text: 'pnpm build e2e' }) })]));
-    fireEvent.click(allow);
-    expect(t.of('session.decide')).toEqual([expect.objectContaining({ id: 'a', decision: 'accept', expect: expect.objectContaining({ key: 'ka', text: 'pnpm build a' }) })]);
-  });
-
-  it('an option tapped after the question went still names that question (review-qa)', () => {
-    const t = setup();
-    t.deliver(snapshot([session('b', { name: 'Ada', state: 'waiting_input', pending: pending({ key: 'kb', kind: 'question', text: 'Quelle base ?', options: ['sqlite', 'postgres'] }) })]));
-    render(<Inbox store={t.store} />);
-    const option = screen.getByRole('button', { name: 'sqlite' });
-    t.deliver(snapshot([session('b', { name: 'Ada' })]));
-    fireEvent.click(option);
-    for (const m of t.of('session.reply')) expect(m.expect).toMatchObject({ key: 'kb', kind: 'question', text: 'Quelle base ?' });
   });
 
   it('without protected accepts: the options are greyed, the card says where to answer (Q64)', () => {
@@ -295,6 +295,9 @@ describe('« À toi » on a tablet (§12)', () => {
     render(<Inbox store={t.store} />);
     const requests = screen.getByRole('region', { name: 'Demandes' });
     expect(within(requests).getByRole('link', { name: /Pim/ })).toHaveAttribute('aria-current', 'page');
+    // The row says what is asked (« Autoriser une commande »), the list's head how many wait (design-ux, gaps 1 and 2).
+    expect(within(requests).getByRole('link', { name: /Pim/ })).toHaveTextContent('Autoriser une commande');
+    expect(screen.getByText('2 demandes')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Rigs OpenRig' })).getByRole('link', { name: /pilot-lead/ })).toHaveAttribute('href', '#/ask/r1');
     expect(within(screen.getByRole('region', { name: 'En cours' })).getByRole('link', { name: /Nova/ })).toHaveAttribute('href', '#/thread/w');
     expect(screen.queryByRole('article')).toBeNull();

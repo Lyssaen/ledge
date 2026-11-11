@@ -44,6 +44,12 @@ test('in landscape the app spans the whole width with its tabs on the left', asy
   await page.getByRole('link', { name: /pnpm test/ }).click();
   await expect(page.getByRole('button', { name: copy.decide.allow })).toBeEnabled();
   await shot(page, 'request', browserName);
+  // One pane with the rail, the command in view above the buttons (the user's « A », 2026-11-11 09:06Z).
+  const command = (await page.getByText('pnpm test', { exact: true }).first().boundingBox())!;
+  const allow = (await page.getByRole('button', { name: copy.decide.allow }).boundingBox())!;
+  expect.soft(command.y).toBeGreaterThanOrEqual(0);
+  expect.soft(command.y + command.height).toBeLessThanOrEqual(allow.y);
+  expect.soft(allow.y + allow.height).toBeLessThanOrEqual(page.viewportSize()!.height);
   expect.soft(await width()).toBe(page.viewportSize()!.width);
 
   await page.goBack();
