@@ -1,5 +1,5 @@
 import { CONTEXT_NEAR, type PhoneSession } from '@ledge/protocol';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { parseReply } from '@ledge/ui/reply/parse';
 import { copy } from '../copy';
 import { headline } from '../model/requests';
@@ -226,7 +226,31 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
   const gone = thread?.status === 'gone';
   const items = session && !gone ? threadItems(thread?.items ?? [], session, ops, now, thread?.cut ?? [], state.sessions, state.device?.id ?? null) : [];
   const end = items.at(-1)?.key;
-  useEffect(() => { const el = scroller.current; if (el) el.scrollTop = el.scrollHeight; }, [end, items.length]);
+  // The thread opens at its foot, or where « Terminal » left it (Comportements). It follows what comes while the person reads
+  // the foot; scrolled up, nothing moves, and a request arriving is told by « Demande en bas ».
+  const atFoot = useRef(true);
+  const [below, setBelow] = useState(false);
+  const toFoot = () => { const el = scroller.current; if (el) el.scrollTop = el.scrollHeight; atFoot.current = true; setBelow(false); };
+  const shown = useRef(false);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el || items.length === 0) return;
+    if (!shown.current) {
+      shown.current = true;
+      const kept = keptScroll.get(sessionId);
+      keptScroll.delete(sessionId);
+      if (kept !== undefined) { el.scrollTop = kept; atFoot.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOOT_SLACK; return; }
+    }
+    if (atFoot.current) toFoot();
+    else if (items.at(-1)?.kind === 'awaiting') setBelow(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [end, items.length]);
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    atFoot.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOOT_SLACK;
+    if (atFoot.current) setBelow(false);
+  };
 
   if (!session || gone) {
     const waiting = !gone && !fresh && state.syncedAt === null;
@@ -286,7 +310,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
         back={panel ? <span className="w-2.5" /> : <BackLink fallback={{ name: 'sessions' }} label={copy.thread.back} />}
         tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && fresh} sub={endedAt ?? where}
         more={<>
-          {panel ? <PanelButtons sessionId={sessionId} panel={panel} /> : <ViewToggle sessionId={sessionId} current="thread" />}
+          {panel ? <PanelButtons sessionId={sessionId} panel={panel} /> : <ViewToggle sessionId={sessionId} current="thread" onLeave={() => { if (scroller.current) keptScroll.set(sessionId, scroller.current.scrollTop); }} />}
           <button type="button" aria-haspopup="dialog" aria-label={copy.sessions.moreOf(session.name)} title={copy.sessions.more} onClick={() => setMore(true)} className={iconButtonClass({ className: more ? 'bg-raised text-fg' : 'text-muted' })}>
             <Icon name="more" />
           </button>
@@ -299,13 +323,20 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
           <a href={href({ name: 'terminal', sessionId })} className={buttonClass({ variant: 'primary' })}><Icon name="terminal" />{copy.atelier.ompTerminal}</a>
         </main>
       ) : <>
-      <main ref={scroller} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4 phone-side:pt-3 phone-side:pb-3">
+      <main ref={scroller} onScroll={onScroll} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4 phone-side:pt-3 phone-side:pb-3">
         {state.daemon?.checklist && state.checklists.get(sessionId) && <Checklist checklist={state.checklists.get(sessionId)!} current={session?.checklist?.current} />}
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
         {items.map(it => <Bubble key={it.key} item={it} store={store} storage={storage} inPanel={!!panel} onReconnect={onReconnect} keys={wide && !panel} />)}
       </main>
+      {below && (
+        <div className="relative h-0">
+          <button type="button" onClick={toFoot} className="absolute bottom-3 left-1/2 inline-flex h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border border-line bg-surface px-3.5 text-[13px] font-medium text-fg shadow-sm">
+            <Icon name="down" className="size-4" />{copy.sessions.requestBelow}
+          </button>
+        </div>
+      )}
       {ending.kind === 'open'
         ? <Reply name={session.name} focusAtEnd={focusOnOpen} composer={wide && physicalKeyboard() ? { ...composer, placeholder: `${composer.placeholder} · ${copy.sessions.keysHint}` } : composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
           {...(state.daemon?.commands && session.tool === 'claude' && !session.readOnly ? { slash: { tool: copy.tools[session.tool], listing: state.commands[sessionId], ask: () => store.requestCommands(sessionId) } } : {})}
@@ -322,14 +353,19 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
   );
 }
 
+/** Where the thread was left for its terminal, by session: the toggle back finds it there (Comportements). */
+const keptScroll = new Map<string, number>();
+/** How close to its foot the thread counts as read to the end. */
+const FOOT_SLACK = 48;
+
 /** « Fil · Terminal » in a session's head (§3): the two views of one session, each its own screen. */
-export function ViewToggle({ sessionId, current }: { sessionId: string; current: 'thread' | 'terminal' }) {
+export function ViewToggle({ sessionId, current, onLeave }: { sessionId: string; current: 'thread' | 'terminal'; /** Before going to the other view: it keeps this one's place. */ onLeave?: () => void }) {
   const V = copy.sessions.view;
   const tab = 'grid h-9 place-items-center px-3.5 text-[13px] font-medium text-muted aria-[current=page]:bg-raised aria-[current=page]:text-fg';
   return (
     <nav aria-label={V.label} className="flex flex-none overflow-hidden rounded-lg border border-input">
-      <a href={href({ name: 'thread', sessionId })} aria-current={current === 'thread' ? 'page' : undefined} className={tab}>{V.thread}</a>
-      <a href={href({ name: 'terminal', sessionId })} aria-current={current === 'terminal' ? 'page' : undefined} className={tab}>{V.terminal}</a>
+      <a href={href({ name: 'thread', sessionId })} onClick={current === 'thread' ? undefined : onLeave} aria-current={current === 'thread' ? 'page' : undefined} className={tab}>{V.thread}</a>
+      <a href={href({ name: 'terminal', sessionId })} onClick={current === 'terminal' ? undefined : onLeave} aria-current={current === 'terminal' ? 'page' : undefined} className={tab}>{V.terminal}</a>
     </nav>
   );
 }

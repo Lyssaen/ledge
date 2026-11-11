@@ -196,3 +196,53 @@ describe('the thread on a wide screen (m2-sessions.html §10, Q27)', () => {
     expect(t.of('session.decide')).toEqual([]);
   });
 });
+
+describe('the thread\'s place (m2-sessions.html, Comportements)', () => {
+  /** A main that has 1000 px of thread for 400 px of room, scrolled where the test says. */
+  function sized(main: HTMLElement) {
+    let top = 600;
+    Object.defineProperty(main, 'scrollHeight', { configurable: true, get: () => 1000 });
+    Object.defineProperty(main, 'clientHeight', { configurable: true, get: () => 400 });
+    Object.defineProperty(main, 'scrollTop', { configurable: true, get: () => top, set: (v: number) => { top = Math.min(v, 600); } });
+    return { at: () => top, scrollTo: (v: number) => { top = v; fireEvent.scroll(main); } };
+  }
+
+  it('scrolled up, a request arriving moves nothing and « Demande en bas » says it; a tap goes down', () => {
+    const t = opened({ state: 'working' });
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [prompt('1', 'Fais-le', '2026-11-11T10:00:00Z'), reply('2', 'Je m\'y mets.', '2026-11-11T10:00:05Z')], cut: [], more: false }));
+    const main = screen.getByRole('main', { name: /Kai/ });
+    const box = sized(main);
+    box.scrollTo(100);
+    act(() => t.deliver({ type: 'session.updated', session: session('a', { name: 'Kai', topic: 'Inbox mobile', repo: 'ledge', branch: 'feat/x', state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }) }) }));
+    expect(box.at()).toBe(100);
+    fireEvent.click(screen.getByRole('button', { name: 'Demande en bas' }));
+    expect(box.at()).toBe(600);
+    expect(screen.queryByRole('button', { name: 'Demande en bas' })).not.toBeInTheDocument();
+  });
+
+  it('at its foot, the request comes into view with no pill', () => {
+    const t = opened({ state: 'working' });
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [prompt('1', 'Fais-le', '2026-11-11T10:00:00Z')], cut: [], more: false }));
+    const box = sized(screen.getByRole('main', { name: /Kai/ }));
+    box.scrollTo(600);
+    act(() => t.deliver({ type: 'session.updated', session: session('a', { name: 'Kai', topic: 'Inbox mobile', repo: 'ledge', branch: 'feat/x', state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }) }) }));
+    expect(screen.queryByRole('button', { name: 'Demande en bas' })).not.toBeInTheDocument();
+    expect(box.at()).toBe(600);
+  });
+
+  it('« Terminal » keeps the thread\'s place, which « Fil » finds again', () => {
+    const t = opened({ state: 'idle' });
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [prompt('1', 'Fais-le', '2026-11-11T10:00:00Z')], cut: [], more: false }));
+    sized(screen.getByRole('main', { name: /Kai/ })).scrollTo(250);
+    fireEvent.click(screen.getByRole('link', { name: 'Terminal' }));
+    t.view.unmount();
+    // Every element's scroll, recorded: the thread places itself on its first render.
+    const tops = new WeakMap<Element, number>();
+    const own = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop')!;
+    Object.defineProperty(Element.prototype, 'scrollTop', { configurable: true, get() { return tops.get(this) ?? 0; }, set(v: number) { tops.set(this, v); } });
+    try {
+      const again = render(<Thread store={t.store} sessionId="a" storage={t.storage} />);
+      expect(tops.get(again.getByRole('main', { name: /Kai/ }))).toBe(250);
+    } finally { Object.defineProperty(Element.prototype, 'scrollTop', own); }
+  });
+});
