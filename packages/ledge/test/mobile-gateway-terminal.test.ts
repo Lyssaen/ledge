@@ -90,10 +90,11 @@ describe('phone gateway: the agent\'s terminal', () => {
     for (const { g } of [on, ro, off]) g.send('dev1', { type: 'snapshot.request' });
     await flush();
     const daemon = (g: G) => { const s = PhoneServerMessageSchema.parse(g.got('dev1')[0]); return s.type === 'snapshot' ? s.daemon : null; };
-    expect(daemon(on.g)).toMatchObject({ terminal: true, terminalInput: true });
-    expect(daemon(ro.g)).toMatchObject({ terminal: true });
+    expect(daemon(on.g)).toMatchObject({ terminal: true, terminalInput: true, helperTerminal: true });
+    expect(daemon(ro.g)).toMatchObject({ terminal: true, helperTerminal: true });
     expect(daemon(ro.g)).not.toHaveProperty('terminalInput');
     expect(daemon(off.g)).not.toHaveProperty('terminal');
+    expect(daemon(off.g)).not.toHaveProperty('helperTerminal');
   });
 
   it('opens a read-only stream with no passkey, on the session\'s own tmux, then streams its output', async () => {

@@ -580,6 +580,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional(),
     /** The daemon streams a session's terminal (`term.open`). */ terminal: z.literal(true).optional(),
     /** The PC lets a phone type into a terminal (`term.hold`): its setting is on. */ terminalInput: z.literal(true).optional(),
+    /** `term.open` takes `helper`: a subagent's terminal is its parent's, read-only for good. Absent (an older PC, which would drop
+     *  `helper` and open the parent's pane as its own): the phone opens no subagent's terminal. */
+    helperTerminal: z.literal(true).optional(),
     /** The daemon answers `session.commands`. */ commands: z.literal(true).optional(),
     /** The daemon answers `openrig.row`. */ rigRows: z.literal(true).optional(),
     /** The daemon answers `openrig.asks` and `openrig.answer` (« À toi »). */ openrig: z.literal(true).optional(),
