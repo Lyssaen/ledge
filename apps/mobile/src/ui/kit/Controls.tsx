@@ -51,7 +51,9 @@ export function DetailHeader({ back, tool, name, dot, pulse = false, sub, under 
   more?: ReactNode;
 }) {
   return (
-    <header className="flex h-14 flex-none items-center gap-2 border-b border-line pr-1.5 pl-0.5">
+    // Edge to edge, as the mockups' `.dhead` and the screen's own foot: inside the app's 18 px margins, a phone's ended
+    // session lost the 36 px its end time needs (review-qa e4f08d08).
+    <header className="bleed flex h-14 flex-none items-center gap-2 border-b border-line pr-1.5 pl-0.5">
       {back}
       {tool && <RuntimeTag tool={tool} />}
       {under && sub ? (

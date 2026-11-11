@@ -51,6 +51,13 @@ describe('a session’s head and foot (m2-sessions.html §3, §4)', () => {
       expect(within(screen.getByRole('banner')).getByText('Pim')).toHaveClass('truncate');
     });
 
+    // At 390 px the end time only fits with the 36 px of the app's margins: the head reaches the screen's edges, as `.dhead`
+    // does on the mockup (review-qa e4f08d08).
+    it('the head reaches the screen’s edges, as its foot does', () => {
+      opened([pim({ state: 'exited', exitedAt: new Date().toISOString() })]);
+      expect(screen.getByRole('banner')).toHaveClass('bleed');
+    });
+
     it('a live session has no second line', () => {
       opened([pim()]);
       expect(screen.getByRole('banner').querySelector('.flex-col')).toBeNull();
