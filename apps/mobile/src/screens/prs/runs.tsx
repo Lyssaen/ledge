@@ -31,7 +31,7 @@ export function ForgeRunNote({ run, pr, detail, forge, pc, onReload }: {
   const close = { onClose: () => forge.dismiss(run.id), closeLabel: C.close };
   if (run.phase === 'checking') return <HoldBar>{R.running.checking}</HoldBar>;
   if (run.phase === 'sending' || run.phase === 'received') {
-    return <HoldBar>{`${run.action.kind === 'merge' ? C.merging : C.rerun} · ${C.answers(w.cli)}`}</HoldBar>;
+    return <HoldBar>{run.action.kind === 'merge' ? `${C.merging} · ${C.answers(w.cli)}` : C.answers(w.cli)}</HoldBar>;
   }
   // The PC did not say it has it (Q76): it may have run; « Réessayer » sends the same operation, which the PC runs once.
   if (run.phase === 'uncertain') {
@@ -60,6 +60,7 @@ export function ForgeRunNote({ run, pr, detail, forge, pc, onReload }: {
       </Receipt>
     );
     case 'not_offered': {
+      if (run.action.kind === 'rerun') return <Receipt mark="warn" title={C.nothingToRerun} {...close} />;
       const first = detail ? mergeConditions(detail).find(c => !c.ok) : undefined;
       const why = first ? inFoot(condText(first, w.host), first) : d?.message ?? '';
       return <Receipt mark="bad" title={C.refused(w.host, why)} {...close} />;

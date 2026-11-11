@@ -2,11 +2,14 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { PrDetail, PrJob, PullRequest } from '@ledge/protocol';
 import { copy } from '../../copy';
 import {
-  PIPE_DOT, approvalsText, canMerge, duration, failedJob, inFoot, logCut, mergeConditions, shortSha, stagesOf, type MergeCondition, type Stage
+  PIPE_DOT, approvalsText, canMerge, canRerun, duration, failedJob, inFoot, logCut, mergeConditions, shortSha, stagesOf, type MergeCondition, type Stage
 } from '../../model/prs';
 import { LinkStrip, hostName, useShell } from '../../shell/Shell';
 import { useForge, type DetailRead, type ForgeRun, type ForgeStore } from '../../state/forge';
 import { useMobile, type MobileStore } from '../../state/store';
+import { dotOf } from '../../model/sessions';
+import { href } from '../../router';
+import type { PhoneSession } from '@ledge/protocol';
 import { iconButtonClass } from '../../ui/Button';
 import { Sheet } from '../../ui/Dialog';
 import { BackLink } from '../../ui/Header';
@@ -232,8 +235,77 @@ function Loading() {
   );
 }
 
+/** The sessions of the branch, most active first, as the phone knows them. */
+const sessionsOf = (pr: PullRequest, sessions: ReadonlyMap<string, PhoneSession>): PhoneSession[] =>
+  pr.sessions.map(id => sessions.get(id)).filter((s): s is PhoneSession => !!s);
+
+/**
+ * « Demander à Tom de corriger » (§5): Desktop's text to the branch's most active session, as a reply in its thread (`session.reply`,
+ * no device check: it acts on no forge). « ▾ » offers the others; without a session, a line says why.
+ */
+function AskFix({ pr, job, store }: { pr: PullRequest; job: string; store: MobileStore }) {
+  const m = useMobile(store);
+  const all = sessionsOf(pr, m.sessions);
+  const [pick, setPick] = useState<string | null>(null);
+  const [menu, setMenu] = useState(false);
+  const [sent, setSent] = useState<{ id: string; name: string } | 'refused' | null>(null);
+  const id = useId();
+  if (!all.length) return <p className="m-0 text-[12px] leading-4 text-muted">{C.noSession(pr.branch)}</p>;
+  const target = all.find(s => s.id === pick) ?? all[0]!;
+  const live = m.fresh;
+  const send = () => { setSent(store.reply(target.id, C.fixText(pr.ref, job)) ? { id: target.id, name: target.name } : 'refused'); };
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-1.5">
+        <button type="button" disabled={!live} onClick={send} className={rigButtonClass({ tone: 'dangerfill', className: 'flex-1' })}>{C.askFix(target.name)}</button>
+        {all.length > 1 && (
+          <button type="button" aria-label={C.otherSession} title={C.otherSession} aria-haspopup="menu" disabled={!live} onClick={() => setMenu(true)} className={rigButtonClass({ className: 'w-12 !px-0' })}>
+            <Icon name="down" className="size-4" />
+          </button>
+        )}
+      </div>
+      {sent === 'refused' && <Receipt mark="bad" title={copy.agents.notSent} onClose={() => setSent(null)} closeLabel={C.close} />}
+      {sent && sent !== 'refused' && (
+        <Receipt mark="ok" title={C.sentTo(sent.name)} onClose={() => setSent(null)} closeLabel={C.close}>
+          <a href={href({ name: 'thread', sessionId: sent.id })} className={rigButtonClass({ size: 'xs', className: 'mt-1.5' })}>{C.openAgent(sent.name)}</a>
+        </Receipt>
+      )}
+      {menu && (
+        <Sheet labelledBy={id} onClose={() => setMenu(false)}>
+          <h2 id={id} className="sr-only">{C.otherSession}</h2>
+          <div role="menu" aria-labelledby={id} className="flex flex-col overflow-hidden rounded-[10px] border border-line">
+            {all.map((s, i) => (
+              <button
+                key={s.id} type="button" role="menuitemradio" aria-checked={s.id === target.id} onClick={() => { setPick(s.id); setMenu(false); }}
+                className="flex min-h-12 items-center gap-3 border-b border-line px-3.5 text-left text-[15px] last:border-b-0 aria-checked:bg-secondary"
+              >
+                <Dot state={dotOf(s)} />
+                <span className="min-w-0 flex-1 truncate">{s.name} <small className="text-[12px] text-muted">{[copy.tools[s.tool], s.repo].filter(Boolean).join(' · ')}</small></span>
+                {i === 0 && <span className="text-[12px] text-muted">{C.mostActive}</span>}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+/** « Relancer le pipeline de !41 ? »: what happens, under whose name, then the device's check (§5, Q54). */
+function RerunSheet({ pr, confirm, live, onRerun, onClose }: { pr: PullRequest; confirm: boolean; live: boolean; onRerun: () => void; onClose: () => void }) {
+  return (
+    <RigSheet title={C.rerunTitle(pr.ref)} onClose={onClose}>
+      <p className="m-0 text-[12.5px] leading-[18px] text-muted">{C.rerunBody(forgeWords(pr).host)}</p>
+      <CheckedButton verb={C.rerun} confirm={confirm} disabled={!live} onClick={() => { onClose(); onRerun(); }} />
+      <Cancel onClose={onClose} />
+    </RigSheet>
+  );
+}
+
 /** The overview: the pipeline and the failed job's log, « Pour fusionner », the description, the details. */
-function Overview({ pr, read, onJob, onLog }: { pr: PullRequest; read: DetailRead | undefined; onJob: (j: PrJob) => void; onLog: (j: PrJob) => void }) {
+function Overview({ pr, read, store, live, onJob, onLog, onRerun }: {
+  pr: PullRequest; read: DetailRead | undefined; store: MobileStore; live: boolean; onJob: (j: PrJob) => void; onLog: (j: PrJob) => void; onRerun: () => void;
+}) {
   const d = read?.data;
   const w = forgeWords(pr);
   const failed = d ? failedJob(d.jobs) : null;
@@ -241,7 +313,11 @@ function Overview({ pr, read, onJob, onLog }: { pr: PullRequest; read: DetailRea
   const pipeNote = pr.pipeline === 'none' ? C.noCi : d?.mergeBlockers.includes('pipeline_not_started') ? C.notStarted : null;
   return (
     <>
-      <div className="flex items-center gap-2"><h2 className="m-0 text-[15px] font-semibold">{C.pipelineTitle}</h2><PipeChip pipeline={pr.pipeline} short /></div>
+      <div className="flex items-center gap-2">
+        <h2 className="m-0 text-[15px] font-semibold">{C.pipelineTitle}</h2><PipeChip pipeline={pr.pipeline} short />
+        <span className="flex-1" />
+        {canRerun(pr) && <button type="button" disabled={!live} onClick={onRerun} className={rigButtonClass({ size: 'sm' })}><Icon name="refresh" className="size-4" />{C.rerun}</button>}
+      </div>
       {pipeNote && <p className="m-0 text-[12px] text-muted">{pipeNote}</p>}
       {!d ? <Loading /> : (
         <>
@@ -250,6 +326,7 @@ function Overview({ pr, read, onJob, onLog }: { pr: PullRequest; read: DetailRea
             <>
               <div className="flex items-center gap-2 text-[12px] text-muted"><span>{`${C.log.title(failed.name)} · ${C.log.lines}`}</span></div>
               <LogBlock job={failed} read={read} pr={pr} onRetry={() => onLog(failed)} />
+              {open && <AskFix pr={pr} job={failed.name} store={store} />}
             </>
           )}
           {open && <ToMerge conds={mergeConditions(d)} host={w.host} />}
@@ -302,6 +379,7 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
   const f = useForge(forge);
   const m = useMobile(store);
   const [merging, setMerging] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
   const { pc, look } = useShell();
   const wide = useWide();
   const [view, setView] = useState<View>('overview');
@@ -357,7 +435,7 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
         {read?.cut && <Strip lead={<Icon name="alert" className="mt-px size-4 text-muted" />}><span>{C.cut(w.host)}</span></Strip>}
         <div className={`flex flex-col gap-2.5 ${offline ? 'opacity-50' : ''}`}>
           {view === 'overview' && (!read?.error || d) && (
-            <Overview pr={pr} read={read} onJob={j => { setSheetJob(j.id); openLog(j); }} onLog={openLog} />
+            <Overview pr={pr} read={read} store={store} live={live && !busy && !gone} onJob={j => { setSheetJob(j.id); openLog(j); }} onLog={openLog} onRerun={() => setRerunning(true)} />
           )}
           {(view === 'changes' || view === 'commits') && !d && !read?.error && <Loading />}
           {view === 'changes' && d && <Changes detail={d} />}
@@ -379,6 +457,7 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
           </>
         )}
       </footer>
+      {rerunning && <RerunSheet pr={pr} confirm={!!m.device?.confirm} live={live} onRerun={() => { void forge.act(id, { kind: 'rerun' }); }} onClose={() => setRerunning(false)} />}
       {merging && d && <MergeSheet d={d} pc={name} confirm={!!m.device?.confirm} live={live} onMerge={merge} onClose={() => setMerging(false)} />}
       {job && <LogSheet job={job} read={read} pr={pr} onRetry={() => openLog(job)} onClose={() => setSheetJob(null)} />}
     </>

@@ -7,6 +7,7 @@ import { copy } from '../../src/copy';
 import { getAssertion } from '../../src/link/webauthn';
 import { detail, forgeState, mr, pr } from '../model/forge-fixtures';
 import { snapshot } from '../state/helpers';
+import { session } from '../model/fixtures';
 import { app } from './app-setup';
 
 vi.mock('../../src/link/webauthn', () => ({ platformAvailable: vi.fn(async () => false), createCredential: vi.fn(), getAssertion: vi.fn() }));
@@ -16,9 +17,9 @@ const CHALLENGE = { type: 'confirm.challenge' as const, purpose: 'forge' as cons
 const at = (id: string) => `#/prs/${encodeURIComponent(id)}`;
 
 /** The app on a request, its PC sending its requests, the list delivered. */
-function open(id: string, o: { confirm?: boolean } = {}) {
+function open(id: string, o: { confirm?: boolean; sessions?: Parameters<typeof snapshot>[0] } = {}) {
   const t = app('ready', { hash: at(id) });
-  const snap = snapshot([], 'WSL', undefined, { confirm: o.confirm ?? true }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+  const snap = snapshot(o.sessions ?? [], 'WSL', undefined, { confirm: o.confirm ?? true }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
   act(() => t.deliver({ ...snap, daemon: { ...snap.daemon, forge: true } }));
   act(() => t.deliver({ type: 'forge.state', ...forgeState() }));
   const give = (d: PrDetail | undefined, extra: { cut?: true; error?: 'unavailable' | 'failed' | 'too_large' } = {}) =>
@@ -181,5 +182,65 @@ describe('merging a request', () => {
     t.give(ready());
     fireEvent.click(screen.getByRole('button', { name: C.merge }));
     expect(screen.getByText(copy.rigs.protectFirst)).toBeTruthy();
+  });
+});
+
+describe('a failed pipeline', () => {
+  const tom = session('s-tom', { name: 'Tom', tool: 'omp', repo: 'synapse' });
+  const ada = session('s-ada', { name: 'Ada', tool: 'claude', repo: 'synapse' });
+  const failing = (sessions = ['s-tom']) => mr({ sessions });
+
+  it('reruns its failed jobs after the device\'s check, and says it is rerun', async () => {
+    const t = open(mr().id, { sessions: [tom] });
+    t.give(detail(mr(), { mergeBlockers: ['pipeline'] }));
+    fireEvent.click(screen.getByRole('button', { name: C.rerun }));
+    const sheet = screen.getByRole('dialog', { name: C.rerunTitle('!41') });
+    expect(within(sheet).getByText(C.rerunBody('GitLab'))).toBeTruthy();
+    vi.mocked(getAssertion).mockResolvedValue({ id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' });
+    fireEvent.click(within(sheet).getByRole('button', { name: /Relancer avec/ }));
+    await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    act(() => t.deliver(CHALLENGE));
+    await waitFor(() => expect(t.of('forge.act')).toHaveLength(1));
+    const sent = t.of('forge.act')[0]!;
+    expect(sent.action).toEqual({ kind: 'rerun' });
+    act(() => t.deliver({ type: 'forge.done', op: sent.op, ok: false, error: 'not_offered' }));
+    expect(screen.getByText(C.nothingToRerun)).toBeTruthy();
+  });
+
+  it('shows no Rerun while the pipeline runs', () => {
+    const running = mr({ pipeline: 'run' });
+    const t = app('ready', { hash: at(running.id) });
+    const snap = snapshot([], 'WSL') as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+    act(() => t.deliver({ ...snap, daemon: { ...snap.daemon, forge: true } }));
+    act(() => t.deliver({ type: 'forge.state', ...forgeState({ prs: [running] }) }));
+    expect(screen.queryByRole('button', { name: C.rerun })).toBeNull();
+  });
+
+  it('asks the branch\'s session to fix it, in its thread, with Desktop\'s text', () => {
+    const t = open(failing().id, { sessions: [tom] });
+    t.give(detail(failing()));
+    fireEvent.click(screen.getByRole('button', { name: C.askFix('Tom') }));
+    expect(t.of('session.reply')).toMatchObject([{ id: 's-tom', text: C.fixText('!41', 'test') }]);
+    expect(screen.getByText(C.sentTo('Tom'))).toBeTruthy();
+    expect(screen.getByRole('link', { name: C.openAgent('Tom') }).getAttribute('href')).toBe('#/thread/s-tom');
+  });
+
+  it('offers the branch\'s other sessions, the most active first', () => {
+    const t = open(failing(['s-tom', 's-ada']).id, { sessions: [tom, ada] });
+    act(() => t.deliver({ type: 'forge.state', ...forgeState({ prs: [failing(['s-tom', 's-ada']), pr()] }) }));
+    t.give(detail(failing(['s-tom', 's-ada'])));
+    fireEvent.click(screen.getByRole('button', { name: C.otherSession }));
+    const items = screen.getAllByRole('menuitemradio');
+    expect(items.map(i => i.textContent)).toEqual([`Tom omp · synapse${C.mostActive}`.replace('omp', 'OMP'), 'Ada Claude Code · synapse']);
+    fireEvent.click(items[1]!);
+    fireEvent.click(screen.getByRole('button', { name: C.askFix('Ada') }));
+    expect(t.of('session.reply')[0]?.id).toBe('s-ada');
+  });
+
+  it('says nobody works on the branch', () => {
+    const t = open(failing().id);
+    t.give(detail(failing()));
+    expect(screen.getByText(C.noSession('fix/s3-timeout'))).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Demander à/ })).toBeNull();
   });
 });
