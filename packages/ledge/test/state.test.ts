@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Session, SessionEvent, SessionState } from '@ledge/protocol';
-import { pendingKey } from '@ledge/protocol';
-import { reduce, answeredBy, HOOK_PRIORITY_MS } from '../src/daemon/state.js';
+import { doingOf, pendingKey, RUNNING_MAX } from '@ledge/protocol';
+import { reduce, answeredBy, doingLabel, HOOK_PRIORITY_MS } from '../src/daemon/state.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const later = (ms: number) => new Date(Date.parse(T0) + ms).toISOString();
@@ -251,8 +251,9 @@ describe('reduce: pending rules', () => {
     expect(next.lastActivityAt).toBe(later(7000));
   });
   it('returns the same object when nothing changes', () => {
-    const s = session('working');
-    expect(reduce(s, ev('PreToolUse', { tool: 'Read', at: s.lastActivityAt }))).toBe(s);
+    // Already running that tool: the repeated hook changes nothing.
+    const s = session('working', { running: [{ id: 'r', tool: 'Read', label: 'Read', since: T0 }] });
+    expect(reduce(s, ev('PreToolUse', { tool: 'Read', toolUseId: 'r', at: s.lastActivityAt }))).toBe(s);
   });
 });
 
@@ -762,5 +763,127 @@ describe('answeredBy: the hook that confirms a reply typed from Ledge (#35)', ()
   it('nothing for a request no tool is tied to: the pane\'s, or a Notification\'s', () => {
     expect(answeredBy({ ...question, source: 'pane' }, ev('PostToolUse', { tool: 'AskUserQuestion' }))).toBe(false);
     expect(answeredBy({ kind: 'permission', text: 'Claude needs your permission', source: 'hook' }, ev('PostToolUse', { tool: 'Bash' }))).toBe(false);
+  });
+});
+
+describe('reduce: the tools the agent is running (running, doingOf)', () => {
+  const pre = (tool: string, text: string, extra: Partial<SessionEvent> = {}) => ev('PreToolUse', { tool, text, ...extra });
+  const post = (tool: string, extra: Partial<SessionEvent> = {}) => ev('PostToolUse', { tool, ...extra });
+  const run = (s: Session, ...events: SessionEvent[]) => events.reduce(reduce, s);
+
+  it('its own PreToolUse is what it does: the tool, its label and when', () => {
+    const s = reduce(session('working'), pre('Bash', 'pnpm --filter desktop test', { toolUseId: 't1' }));
+    expect(s.running).toEqual([{ id: 't1', tool: 'Bash', label: 'pnpm --filter desktop test', since: later(5000) }]);
+    expect(doingOf(s)).toEqual({ tool: 'Bash', label: 'pnpm --filter desktop test', since: later(5000) });
+  });
+
+  it('starts working from rest on a tool; the newest call shows, and the one before comes back when it ends', () => {
+    const a = reduce(session('idle'), pre('Read', 'Read e2e/workspace.spec.ts', { toolUseId: 'r' }));
+    expect(a.state).toBe('working');
+    const b = reduce(a, pre('Edit', 'Edit apps/desktop/src/App.tsx', { toolUseId: 'e', at: later(6000) }));
+    expect(doingOf(b)).toMatchObject({ tool: 'Edit' });
+    expect(doingOf(reduce(b, post('Edit', { toolUseId: 'e' })))).toMatchObject({ tool: 'Read' });
+    expect(reduce(b, ev('PostToolUseFailure', { tool: 'Read', toolUseId: 'r', error: 'x' })).running!.map(c => c.id)).toEqual(['e']);
+  });
+
+  it('parallel calls of the same tool end in any order: each end removes its own call', () => {
+    const s = run(session('working'), pre('Bash', 'npm test', { toolUseId: 'a' }), pre('Bash', 'npm run lint', { toolUseId: 'b', at: later(6000) }));
+    const first = reduce(s, post('Bash', { toolUseId: 'a' }));
+    expect(doingOf(first)).toMatchObject({ label: 'npm run lint' });
+    const second = reduce(s, post('Bash', { toolUseId: 'b' }));
+    expect(doingOf(second)).toMatchObject({ label: 'npm test' });
+    expect(reduce(first, post('Bash', { toolUseId: 'b' }))).not.toHaveProperty('running');
+  });
+
+  it('without ids, two identical calls are two: each end removes the oldest of that tool', () => {
+    const s = run(session('working'), pre('shell', 'ls'), pre('shell', 'ls', { at: later(6000) }));
+    expect(s.running).toHaveLength(2);
+    const one = reduce(s, post('shell'));
+    expect(one.running).toEqual([{ tool: 'shell', label: 'ls', since: later(6000) }]);
+    expect(reduce(one, post('shell'))).not.toHaveProperty('running');
+  });
+
+  it('the same call announced twice (same id) stays one call', () => {
+    const s = run(session('working'), pre('Bash', 'npm test', { toolUseId: 'a' }), pre('Bash', 'npm test', { toolUseId: 'a', at: later(7000) }));
+    expect(s.running).toEqual([{ id: 'a', tool: 'Bash', label: 'npm test', since: later(5000) }]);
+  });
+
+  it('a request hides it; accepted from Ledge, the call shows again until its own end', () => {
+    const asked = run(session('working'), pre('Bash', 'npm test', { toolUseId: 'a' }), ev('PermissionRequest', { tool: 'Bash', text: 'npm test' }));
+    expect(asked.state).toBe('waiting_permission');
+    expect(doingOf(asked)).toBeUndefined();
+    const accepted = reduce(asked, ev('Decided', { decision: 'accept', source: 'daemon' }));
+    expect(doingOf(accepted)).toEqual({ tool: 'Bash', label: 'npm test', since: later(5000) });
+    expect(reduce(accepted, post('Bash', { toolUseId: 'a' }))).not.toHaveProperty('running');
+    expect(doingOf(reduce(asked, ev('Decided', { decision: 'always', source: 'daemon' })))).toMatchObject({ tool: 'Bash' });
+  });
+
+  it('refused from Ledge, the call that asked is gone, and an older call shows again', () => {
+    const s = run(session('working'), pre('Read', 'Read a.ts', { toolUseId: 'r' }), pre('Bash', 'rm -rf dist', { toolUseId: 'b', at: later(6000) }),
+      ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }));
+    const denied = reduce(s, ev('Decided', { decision: 'deny', source: 'daemon' }));
+    expect(denied.running!.map(c => c.id)).toEqual(['r']);
+    expect(doingOf(denied)).toMatchObject({ tool: 'Read' });
+    // Its failure, reported after, finds nothing more to remove.
+    expect(reduce(denied, ev('PostToolUseFailure', { tool: 'Bash', toolUseId: 'b', error: 'denied' })).running!.map(c => c.id)).toEqual(['r']);
+  });
+
+  it('refused from Ledge, the call whose request it was goes by its id, even when a later call of that tool runs', () => {
+    // A starts, B starts, then A's request arrives: the refusal is A's, B runs on.
+    const s = run(session('working'), pre('Bash', 'npm test', { toolUseId: 'A' }), pre('Bash', 'npm run lint', { toolUseId: 'B', at: later(6000) }),
+      ev('PermissionRequest', { tool: 'Bash', text: 'npm test', toolUseId: 'A' }));
+    expect(s.running!.find(c => c.id === 'A')).toMatchObject({ asks: true });
+    const denied = reduce(s, ev('Decided', { decision: 'deny', source: 'daemon' }));
+    expect(denied.running).toEqual([{ id: 'B', tool: 'Bash', label: 'npm run lint', since: later(6000) }]);
+    expect(doingOf(denied)).toMatchObject({ label: 'npm run lint' });
+    expect(reduce(denied, post('Bash', { toolUseId: 'B' }))).not.toHaveProperty('running');
+    // Accepted: both run on, and none is marked as asking any more.
+    const accepted = reduce(s, ev('Decided', { decision: 'accept', source: 'daemon' }));
+    expect(accepted.running!.map(c => c.id)).toEqual(['A', 'B']);
+    expect(accepted.running!.some(c => c.asks)).toBe(false);
+  });
+
+  it('a request whose id matches no call marks none, and its refusal removes nothing', () => {
+    const s = run(session('working'), pre('Bash', 'npm test', { toolUseId: 'A' }), ev('PermissionRequest', { tool: 'Bash', text: 'x', toolUseId: 'Z' }));
+    expect(s.running!.some(c => c.asks)).toBe(false);
+    expect(reduce(s, ev('Decided', { decision: 'deny', source: 'daemon' })).running!.map(c => c.id)).toEqual(['A']);
+  });
+
+  it('the end of the turn drops them all: rest, error, a new prompt, the end', () => {
+    const s = run(session('working'), pre('Bash', 'npm test', { toolUseId: 'a' }), pre('Read', 'Read x', { toolUseId: 'b' }));
+    for (const e of [ev('Stop'), ev('StopFailure', { text: 'boom' }), ev('UserPromptSubmit', { text: 'autre chose' }), ev('SessionEnd'),
+      ev('PaneGone', { source: 'pane' }), post('Bash', { interrupt: true, toolUseId: 'a' })]) {
+      expect(reduce(s, e), e.name).not.toHaveProperty('running');
+    }
+  });
+
+  it('a question or a plan is a request, not something it runs', () => {
+    const q = reduce(session('working'), pre('AskUserQuestion', 'Which?', { options: ['A', 'B'] }));
+    expect(q.state).toBe('waiting_input');
+    expect(q).not.toHaveProperty('running');
+    expect(reduce(session('working'), pre('ExitPlanMode', 'Plan'))).not.toHaveProperty('running');
+  });
+
+  it('a subagent\'s tools neither add nor remove a call', () => {
+    const s = run(session('working'), ev('SubagentStart', { helperId: 'h' }), pre('Bash', 'npm test'));
+    expect(reduce(s, pre('Grep', 'Grep tabs', { helperId: 'h' })).running).toHaveLength(1);
+    expect(reduce(s, post('Bash', { helperId: 'h' })).running).toHaveLength(1);
+    expect(reduce(session('working'), pre('Grep', 'Grep tabs', { helperId: 'h' }))).not.toHaveProperty('running');
+  });
+
+  it('keeps RUNNING_MAX calls, the newest', () => {
+    let s = session('working');
+    for (let i = 0; i < RUNNING_MAX + 5; i++) s = reduce(s, pre('Read', `Read f${i}`, { toolUseId: `t${i}` }));
+    expect(s.running).toHaveLength(RUNNING_MAX);
+    expect(s.running!.at(-1)!.id).toBe(`t${RUNNING_MAX + 4}`);
+  });
+
+  it('keeps one short line: the first line, spaces collapsed, cut with « … »; the tool when there is no label', () => {
+    expect(reduce(session('working'), pre('Bash', `\n  pnpm   test\n--watch`)).running![0]!.label).toBe('pnpm test');
+    const cut = reduce(session('working'), pre('Bash', `cd /w && ${'x'.repeat(200)}`)).running![0]!.label;
+    expect(cut).toHaveLength(120);
+    expect(cut.endsWith('…')).toBe(true);
+    expect(reduce(session('working'), pre('Task', '')).running![0]!.label).toBe('Task');
+    expect(doingLabel(`${'a'.repeat(118)}😀b`)).toBe(`${'a'.repeat(118)}…`);
   });
 });

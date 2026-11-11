@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ClipboardEvent, type 
 import { isBusy, type DaemonClient } from '@ledge/fleet';
 import { useSlashCommands } from '@ledge/fleet/slashCommands';
 import { completed, draftCommand, matchCommands, slashQuery } from '@ledge/ui/slash/match';
-import { NOTE_MAX, offers, type Helper, type Session } from '@ledge/protocol';
+import { alwaysScope, NOTE_MAX, offers, type Helper, type Session } from '@ledge/protocol';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -20,7 +20,7 @@ import { isNative } from '../term/mode';
 import type { SessionMemory } from './memory';
 import { SessionModel } from './SessionModel';
 import { SlashMenu, slashOptionId } from './SlashMenu';
-import { alwaysScope, isFreeRow, PendingCard, sortOf, type PendingActions } from './PendingCard';
+import { isFreeRow, PendingCard, sortOf, type PendingActions } from './PendingCard';
 
 export interface ReplyProps {
   /** The parent on a subagent's page. */

@@ -163,6 +163,11 @@ du projet sur le PC : c'est le seul chemin transmis, comme dans « À toi ».
   sur la branche séparée `feat/chat-rig-actions`, en attente de ses textes (`actionWords`, `chat.action.verbs` fr/en), qui
   passent par design-ux, la validation de l'utilisateur, puis dev-front.
 - Les réglages du daemon partagés entre Desktop et téléphone (voir § 4).
+- **Redémarrer un seul siège** (« Redémarrer le siège », retiré de M2 par l'utilisateur le 2026-11-11). Piste, sans code :
+  OpenRig le fait en deux temps sans perdre la conversation du siège, `rig seat stop <seat>` (ne tue que la session tmux de
+  ce siège, audité) puis `rig launch <rig> --seats <logicalId>` (reprend sa conversation ; les autres sièges ne bougent
+  pas). L'operator l'a fait le 2026-11-10 pour design-ux et review-qa. Ce serait une nouvelle sorte d'action
+  (`seat.restart`, ces deux commandes en plan), à faire valider avant tout écran.
 
 ## 10. Équivalences Desktop
 

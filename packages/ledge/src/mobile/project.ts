@@ -1,4 +1,4 @@
-import { LEDGE_GIVER, openDecision, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
+import { DOING_LABEL_MAX, DOING_TOOL_MAX, doingOf, LEDGE_GIVER, openDecision, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import { EffortSchema, PhoneModelChoiceSchema, type ModelChoice, type PhoneModelChoice } from '@ledge/protocol';
 import { PHONE_COMMANDS_MAX, PhoneSlashCommandSchema, type PhoneSlashCommand, type SlashCommand } from '@ledge/protocol';
 import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
@@ -95,12 +95,15 @@ export function atelierOf(s: Session, projects: Projects): Pick<PhoneSession, 'p
 /** `projects`: the daemon feeds the Atelier (`daemon.atelier`): the session gets its project and its rig. */
 export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChecklistSummary, projects?: Projects): PhoneSession {
   const pending = toPhoneRequest(s, SNAPSHOT_BODY_MAX);
+  const doing = doingOf(s);
   return {
     id: s.id, name: s.name, tool: s.tool, project: s.project, title: s.title, state: s.state,
     startedAt: s.startedAt, lastActivityAt: s.lastActivityAt,
     // Topics are already cut to TOPIC_MAX where they are set; clipped again so no source can swell a snapshot.
     ...(s.topic !== undefined ? { topic: clip(s.topic, TOPIC_MAX).text } : {}),
-    ...pickSet(s, ['repo', 'branch', 'worktree', 'context', 'relieves', 'exitedAt']),
+    ...pickSet(s, ['repo', 'branch', 'worktree', 'context', 'relieves', 'exitedAt', 'closedHow']),
+    // Cut where it is set already; clipped again so no source can swell a snapshot.
+    ...(doing ? { doing: { tool: clip(doing.tool, DOING_TOOL_MAX).text, label: clip(doing.label, DOING_LABEL_MAX).text, since: doing.since } } : {}),
     // Known up front: the phone shows neither Close nor Resume for it, rather than learning it from a refusal.
     ...(s.source === 'hook_only' ? { readOnly: true as const } : {}),
     // Its relief's state only (context handover spec §3.2): the phone shows it, the PC starts it.

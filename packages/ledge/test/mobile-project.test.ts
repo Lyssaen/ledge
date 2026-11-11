@@ -54,6 +54,34 @@ describe('toPhoneSession', () => {
     expect(full?.cut).toBe(true);
   });
 
+  it('carries what it is running and a forced close, and an older phone ignores both without dropping the session', () => {
+    const doing = { tool: 'Bash', label: 'pnpm --filter desktop test', since: T };
+    const p = toPhoneSession(session({ running: [{ id: 'old', tool: 'Read', label: 'Read a.ts', since: T }, { id: 't', ...doing }] }), T);
+    expect(p.doing).toEqual(doing);
+    expect(p).not.toHaveProperty('running');
+    // Nothing shows while a request waits, nor at rest.
+    expect(toPhoneSession(session({ running: [{ ...doing }], state: 'waiting_permission', pending: { kind: 'permission', text: 'x', tool: 'Bash', source: 'hook' } }), T)).not.toHaveProperty('doing');
+    expect(toPhoneSession(session({ running: [{ ...doing }], state: 'idle' }), T)).not.toHaveProperty('doing');
+    const ended = toPhoneSession(session({ state: 'exited', exitedAt: T, closedHow: 'killed' }), T);
+    expect(ended).toMatchObject({ exitedAt: T, closedHow: 'killed' });
+    expect(toPhoneSession(session(), T)).not.toHaveProperty('doing');
+    expect(toPhoneSession(session(), T)).not.toHaveProperty('closedHow');
+    // A phone built before these fields parses the same object with a schema that lacks them: they are stripped, not refused.
+    const older = PhoneSessionSchema.omit({ doing: true, closedHow: true });
+    for (const x of [p, ended]) {
+      const r = older.safeParse(x);
+      expect(r.success).toBe(true);
+      expect(r.data).not.toHaveProperty('doing');
+      expect(r.data).not.toHaveProperty('closedHow');
+    }
+  });
+
+  it('clips a label no source should have let grow', () => {
+    const p = toPhoneSession(session({ running: [{ tool: 'T'.repeat(300), label: 'x'.repeat(5_000), since: T }] }), T);
+    expect(p.doing!.tool).toHaveLength(100);
+    expect(p.doing!.label).toHaveLength(120);
+  });
+
   it('computes unread', () => {
     const reply = (at: string) => ({ text: 'r', at });
     expect(toPhoneSession(session({ lastReply: reply('2026-10-20T10:00:01.000Z') }), T).unread).toBe(true);

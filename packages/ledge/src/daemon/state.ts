@@ -1,4 +1,4 @@
-import { cleanTopic, pendingKey, parseRigPrompt, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
+import { cleanTopic, DOING_LABEL_MAX, RUNNING_MAX, pendingKey, parseRigPrompt, sessionTitle, type RunningCall, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 import { crossSession, crossSessionNotices, ledgeNotice, ledgeTask } from './crossSession.js';
 import { sameQuestion } from '../adapters/types.js';
@@ -209,8 +209,77 @@ function withTopic(s: Session, text: string, source: TopicSource | undefined): S
   return { ...next, title: sessionTitle(next) };
 }
 
+/** A tool's label as one short line: its first non-empty line, spaces collapsed, cut to DOING_LABEL_MAX with « … ». */
+export function doingLabel(text: string): string {
+  const line = (text.split(/\r?\n/).map(l => l.trim()).find(l => l.length > 0) ?? '').replace(/\s+/g, ' ');
+  if (line.length <= DOING_LABEL_MAX) return line;
+  let end = DOING_LABEL_MAX - 1;
+  if (/[\ud800-\udbff]/.test(line[end - 1] ?? '')) end--;
+  return `${line.slice(0, end).trimEnd()}…`;
+}
+
+function withRunning(s: Session, running: RunningCall[]): Session {
+  if (running.length) return { ...s, running };
+  if (!s.running) return s;
+  const { running: _gone, ...rest } = s;
+  return rest;
+}
+
+/** The index of the call an end or a refusal is for: its id when both have one, else the oldest call of that tool. */
+function callIndex(running: RunningCall[], tool: string | undefined, id: string | undefined): number {
+  if (id) { const i = running.findIndex(c => c.id === id); if (i >= 0) return i; }
+  return running.findIndex(c => c.tool === tool && (!id || !c.id));
+}
+
+/**
+ * The tools the agent itself is running (`running`), after an event. Its own PreToolUse adds a call, unless that tool is a
+ * request (a question, a plan); the call's end removes it, matched by id, else the oldest of that tool, so parallel calls
+ * end in any order. A request keeps the calls and marks the one that asked (`asks`); accepted, it runs on; refused from
+ * Ledge, that call goes.
+ * The end of the turn (rest, error, exit, a new prompt) drops them all. A subagent's events never touch them.
+ */
+function withCalls(before: Session, next: Session, ev: SessionEvent): Session {
+  const running = next.running ?? [];
+  if (next.state === 'idle' || next.state === 'error' || next.state === 'exited' || next.state === 'starting') return withRunning(next, []);
+  if (ev.helperId) return next;
+  if (ev.name === 'UserPromptSubmit') return withRunning(next, []);
+  if (ev.name === 'PreToolUse' && ev.tool && !QUESTION_TOOLS.has(ev.tool) && ev.tool !== 'ExitPlanMode') {
+    if (ev.toolUseId && running.some(c => c.id === ev.toolUseId)) return next; // the same call announced again
+    const call: RunningCall = { ...(ev.toolUseId ? { id: ev.toolUseId } : {}), tool: ev.tool, label: doingLabel(ev.text ?? '') || ev.tool, since: ev.at };
+    return withRunning(next, [...running, call].slice(-RUNNING_MAX));
+  }
+  if (ev.name === 'PostToolUse' || ev.name === 'PostToolUseFailure') {
+    const i = callIndex(running, ev.tool, ev.toolUseId);
+    return i < 0 ? next : withRunning(next, running.filter((_, j) => j !== i));
+  }
+  // The request this event put up names the call that asked: by its id, else the newest call of that tool.
+  if (ev.name === 'PermissionRequest' && next.pending && next.pending !== before.pending && next.pending.source === 'hook') {
+    let i = ev.toolUseId ? running.findIndex(c => c.id === ev.toolUseId) : -1;
+    if (i < 0 && !ev.toolUseId) i = running.map(c => c.tool).lastIndexOf(ev.tool ?? '');
+    if (i < 0) return withoutAsks(next, running);
+    return withRunning(next, running.map((c, j) => (j === i ? { ...c, asks: true as const } : withoutAsk(c))));
+  }
+  // Refused from Ledge: the tool will not run, so the call that asked goes.
+  if (ev.name === 'Decided' && ev.decision === 'deny' && before.pending && !before.pending.helperId) {
+    const i = running.findIndex(c => c.asks);
+    return i < 0 ? withoutAsks(next, running) : withRunning(next, running.filter((_, j) => j !== i));
+  }
+  // Once no request waits, no call is the one asking any more (accepted, or answered elsewhere).
+  return next.pending ? next : withoutAsks(next, running);
+}
+
+function withoutAsk(c: RunningCall): RunningCall {
+  if (!c.asks) return c;
+  const { asks: _a, ...rest } = c;
+  return rest;
+}
+
+function withoutAsks(s: Session, running: RunningCall[]): Session {
+  return running.some(c => c.asks) ? withRunning(s, running.map(withoutAsk)) : s;
+}
+
 export function reduce(s: Session, ev: SessionEvent): Session {
-  const next = reduceEvent(s, ev);
+  const next = withCalls(s, reduceEvent(s, ev), ev);
   if (next === s) return s;
   let changed = false;
   const helpers = next.helpers.map(h => {

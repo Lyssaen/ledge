@@ -276,7 +276,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const cwd = (await tmux.paneCwd?.(n.session).catch(() => null)) ?? old?.cwd ?? '';
       if (old) {
         if (old.archivedAt) store.unarchive(id, at);
-        const { exitedAt: _e, exitCode: _c, pending: _p, ...rest } = store.get(id)!;
+        const { exitedAt: _e, exitCode: _c, closedHow: _k, running: _d, pending: _p, ...rest } = store.get(id)!;
         // Back under the harness it runs now: the one it had before may not be it any more.
         const same = rest.tool === tool ? rest : { ...withoutHarness(rest as Session), tool };
         store.upsert({ ...same, state: 'idle', tmuxSession: n.session, source: 'rig', rig, lastActivityAt: at });
@@ -835,6 +835,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (!last || last.state === 'exited') return { how: 'exit' };
       if (last.tmuxSession) await tmux.killSession(last.tmuxSession).catch(e => log(`kill of ${last.tmuxSession} failed: ${(e as Error).message}`));
       store.apply(id, { name: 'PaneGone', at: now(), source: 'daemon' });
+      // Kept on the session, so every front can say « Fermée de force », not only the one whose close it was.
+      store.patch(id, { closedHow: 'killed' });
       log(`close of ${id}: killed (${why})`);
       return { how: 'killed' };
     } finally { closing.delete(id); }
@@ -913,7 +915,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   async function respawn(s: Session, key: string, model: string | undefined, effort: string | undefined): Promise<string | null> {
     if (s.tool === 'omp') return respawnOmp(s, key, model, effort);
     // Marked live before the first await: a second resume arriving while this one spawns is then refused.
-    const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, ...rest } = s;
+    const { archivedAt: _a, exitedAt: _e, exitCode: _c, closedHow: _k, running: _d, modelNext: _n, ...rest } = s;
     store.upsert({ ...rest, state: 'starting', source: 'launcher', agentSessionId: key });
     try {
       const cwd = await resolveFolder(s.cwd, opts.home);
@@ -941,7 +943,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
 
   /** OMP continued from its exact journal under the same Ledge id and name: a new process, the same conversation. */
   async function respawnOmp(s: Session, file: string, model: string | undefined, effort: string | undefined): Promise<string | null> {
-    const { archivedAt: _a, exitedAt: _e, exitCode: _c, modelNext: _n, lastError: _l, ...rest } = s;
+    const { archivedAt: _a, exitedAt: _e, exitCode: _c, closedHow: _k, running: _d, modelNext: _n, lastError: _l, ...rest } = s;
     store.upsert({ ...rest, state: 'starting', source: 'launcher' });
     try {
       const cwd = await resolveFolder(s.cwd, opts.home);
