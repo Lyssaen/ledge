@@ -335,7 +335,7 @@ Le dernier choix d'agent, de modèle et d'effort est retenu pour chaque projet. 
 
 ### MR et PR (`prs`)
 
-Les MR et PR des branches des sessions et des sièges. Le PC ne les transmet pas encore au téléphone : l'onglet le dit, en attendant une prochaine version de Ledge sur le PC.
+Les MR GitLab et les PR GitHub des branches des sessions et des sièges, lues sur le PC par `gh` et `glab` : les ouvertes, le plus récent changement en haut, chacune avec le point de son pipeline, sa forge, son dépôt, son agent et son état, puis en mots « pipeline échoué », les discussions ouvertes, « prête à fusionner » ; les fusionnées et fermées repliées en bas. Toucher une ligne ouvre la MR ou PR. Une forge que le PC ne lit pas a son bandeau au-dessus de la liste : `glab` ou `gh` absent, pas connecté (avec la commande à lancer et « Copier »), ou un relevé qui échoue depuis une heure donnée. Le badge rouge de l'onglet compte les pipelines échoués. Hors ligne, la dernière liste reste affichée, grisée, sans action. Un PC qui ne transmet pas encore ses MR et PR : l'onglet le dit.
 
 ### Rigs (`rigs`)
 
