@@ -1,13 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage } from '@ledge/protocol';
 import { createRigs, READ_MS, RIGS_STATE_KEY, type RigsStore } from '../../src/state/rigs';
-import { UNCERTAIN_MS } from '../../src/state/operations';
+import { RESEND_MAX_MS, UNCERTAIN_MS } from '../../src/state/operations';
 import { createStore, type MobileStore } from '../../src/state/store';
 import { openrig, routing } from '../model/openrig-fixtures';
 import { fakeLink, MemoryStorage, snapshot } from './helpers';
 
 const open: { rigs: RigsStore; store: MobileStore }[] = [];
 afterEach(() => { for (const o of open.splice(0)) { o.rigs.close(); o.store.close(); } vi.useRealTimers(); });
+
+const BOOT = '11111111-1111-4111-8111-111111111111';
+const RESTARTED = '22222222-2222-4222-8222-222222222222';
+/** The PC's snapshot under `boot`, offering its rigs. */
+const snap = (boot: string) => {
+  const s = snapshot([], 'WSL', boot) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+  return { ...s, daemon: { ...s.daemon, rigs: true as const } };
+};
 
 /** A ready link to a PC that sends its rigs (`daemon.rigs`), unless `offered` is false. */
 function setup(offered = true, device?: { confirm: boolean }) {
@@ -16,8 +24,8 @@ function setup(offered = true, device?: { confirm: boolean }) {
   const store = createStore(f.link, storage);
   const rigs = createRigs(f.link, store, storage);
   open.push({ rigs, store });
-  const snap = snapshot([], 'WSL', undefined, device) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
-  f.deliver(offered ? { ...snap, daemon: { ...snap.daemon, rigs: true } } : snap);
+  const s = snapshot([], 'WSL', BOOT, device) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+  f.deliver(offered ? { ...s, daemon: { ...s.daemon, rigs: true } } : s);
   return { ...f, store, rigs, storage };
 }
 
@@ -129,7 +137,7 @@ describe('the rigs store', () => {
     expect(t.rigs.getState().runs[0]!.phase).toBe('received');
   });
 
-  it('turns a run the link dropped before the PC had it « uncertain », and sends it again with its own op on the next link', async () => {
+  it('turns a run the link dropped before the PC had it « uncertain », and sends it again with its own op once the next link names the same PC process', async () => {
     const t = setup();
     const ended = t.rigs.sendGoal('Une équipe', 'goal-drop-0001');
     await vi.waitFor(() => expect(t.of('rigs.goal.send')).toHaveLength(1));
@@ -137,6 +145,9 @@ describe('the rigs store', () => {
     t.set('pc_offline');
     expect(await ended).toMatchObject({ phase: 'uncertain' });
     t.set('ready');
+    // Nothing goes before the snapshot says which process answers.
+    expect(t.of('rigs.goal.send')).toHaveLength(1);
+    t.deliver(snap(BOOT));
     expect(t.of('rigs.goal.send')).toHaveLength(2);
     expect(t.of('rigs.goal.send')[1]!.op).toBe(first.op);
     t.deliver({ type: 'rigs.goal.sent', op: first.op, goalId: 'goal-drop-0001', ok: true });
@@ -153,11 +164,122 @@ describe('the rigs store', () => {
     expect(run.phase).toBe('uncertain');
     t.rigs.dismiss(run.id);
     t.set('ready');
+    t.deliver(snap(BOOT));
     t.set('pc_offline');
     t.set('ready');
+    t.deliver(snap(BOOT));
     expect(t.of('rigs.act')).toHaveLength(1);
     t.deliver({ type: 'rigs.done', op, ok: true, commands: [] });
     expect(t.rigs.getState().runs).toHaveLength(0);
+  });
+
+  it('never sends again what a PC that restarted may have run: the run stays uncertain', async () => {
+    const t = setup();
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const op = t.of('rigs.act')[0]!.op;
+    t.deliver({ type: 'operation.result', op, status: 'received' } as PhoneServerMessage);
+    // The rig is starting, its end is lost with the link, and the PC restarts before the next one.
+    t.set('pc_offline');
+    t.set('ready');
+    t.deliver(snap(RESTARTED));
+    expect(t.of('rigs.act')).toHaveLength(1);
+    expect(await ended).toMatchObject({ phase: 'uncertain', lost: true });
+    t.set('pc_offline');
+    t.set('ready');
+    t.deliver(snap(RESTARTED));
+    expect(t.of('rigs.act')).toHaveLength(1);
+  });
+
+  it('still shows the late end of a run it will not send again, as its receipt says', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = setup();
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const op = t.of('rigs.act')[0]!.op;
+    t.set('pc_offline');
+    expect(await ended).toMatchObject({ phase: 'uncertain' });
+    vi.advanceTimersByTime(RESEND_MAX_MS + 1);
+    t.set('ready');
+    t.deliver(snap(BOOT));
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+    t.deliver({ type: 'rigs.done', op, ok: true, commands: ['rig up ledge-dev --existing'] });
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'done', done: { ok: true } });
+    expect(t.of('rigs.act')).toHaveLength(1);
+  });
+
+  it('after a refused send again, ignores further refusals but takes the first send\'s own end', async () => {
+    const t = setup();
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const op = t.of('rigs.act')[0]!.op;
+    t.set('pc_offline');
+    expect(await ended).toMatchObject({ phase: 'uncertain' });
+    t.set('ready');
+    t.deliver(snap(BOOT));
+    t.deliver({ type: 'operation.result', op, status: 'rejected', reason: 'conflict' } as PhoneServerMessage);
+    t.deliver({ type: 'rigs.done', op, ok: false, rejected: 'assertion_invalid', commands: [] });
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+    t.deliver({ type: 'rigs.done', op, ok: true, commands: ['rig up ledge-dev --existing'] });
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'done', done: { ok: true } });
+  });
+
+  it('a PC restarted behind the relay, on the same link, loses what the old process held', async () => {
+    const t = setup();
+    const ended = t.rigs.sendGoal('Une équipe', 'goal-restart-0001');
+    await vi.waitFor(() => expect(t.of('rigs.goal.send')).toHaveLength(1));
+    t.deliver({ type: 'operation.result', op: t.of('rigs.goal.send')[0]!.op, status: 'received' } as PhoneServerMessage);
+    t.deliver(snap(RESTARTED));
+    expect(await ended).toMatchObject({ phase: 'uncertain', lost: true });
+    expect(t.of('rigs.goal.send')).toHaveLength(1);
+  });
+
+  it('takes a refusal of a send again as uncertain, not as the action not done', async () => {
+    const t = setup();
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const op = t.of('rigs.act')[0]!.op;
+    t.set('pc_offline');
+    expect(await ended).toMatchObject({ phase: 'uncertain' });
+    t.set('ready');
+    t.deliver(snap(BOOT));
+    expect(t.of('rigs.act')).toHaveLength(2);
+    // The PC forgot the op (its registry evicted it): the send again is new to it, and refused for itself.
+    t.deliver({ type: 'operation.result', op, status: 'rejected', reason: 'conflict' } as PhoneServerMessage);
+    t.deliver({ type: 'rigs.done', op, ok: false, rejected: 'assertion_invalid', commands: [] });
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+  });
+
+  it('does not send an uncertain action again once too old for the PC to still hold it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = setup();
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    t.set('pc_offline');
+    expect(await ended).toMatchObject({ phase: 'uncertain' });
+    vi.advanceTimersByTime(RESEND_MAX_MS + 1);
+    t.set('ready');
+    t.deliver(snap(BOOT));
+    expect(t.of('rigs.act')).toHaveLength(1);
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+  });
+
+  it('sends again, to the same process, a run that left on a new link before its snapshot came', async () => {
+    const t = setup();
+    t.set('pc_offline');
+    t.set('ready');
+    // The store still knows the PC offers its rigs: the action leaves before this link's snapshot.
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const op = t.of('rigs.act')[0]!.op;
+    t.deliver(snap(BOOT));
+    t.set('pc_offline');
+    expect(await ended).toMatchObject({ phase: 'uncertain' });
+    t.set('ready');
+    t.deliver(snap(BOOT));
+    expect(t.of('rigs.act')).toHaveLength(2);
+    expect(t.of('rigs.act')[1]!.op).toBe(op);
+    expect(t.rigs.getState().runs[0]!.lost).toBeUndefined();
   });
 
   it('forgets the old PC’s OpenRig when the phone is unpaired', () => {
