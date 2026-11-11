@@ -12,7 +12,7 @@ export interface ActionCardProps {
   rows: readonly ActionRowView[];
   /** Ignored (on every device): the card folds into a line, « Review » opens it again. */
   ignoredAt?: string;
-  /** The island's width: a row's buttons go under its text. */
+  /** The island's width: a row's buttons go under its text (as they do in any card narrower than NARROW_BELOW). */
   narrow?: boolean; disabled?: boolean;
   /** The rows to apply, in order; an irreversible one is confirmed in the card first, and `confirmed` says so (chat.act's). */
   onApply: (rows: number[], o: { confirmed: boolean }) => void; onDeny: (row: number) => void; onIgnore: () => void; onReview: () => void; onOpen: (row: number) => void;
@@ -26,6 +26,9 @@ const big: CSSProperties = { height: 28, padding: '0 10px', gap: 6, fontSize: 12
 const danger: CSSProperties = { color: 'var(--danger-text)', borderColor: 'color-mix(in srgb, var(--destructive) 50%, var(--input))' };
 const dangerFill: CSSProperties = { background: 'var(--destructive)', color: 'var(--destructive-foreground)', borderColor: 'transparent' };
 const foot: CSSProperties = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 10px', padding: '8px 12px', borderTop: '1px solid var(--sidebar-border)' };
+/** Below this width a card stacks each row as the island does (docs/mockups/ledge-action-card-overlay-*.png): the Desktop's
+ *  docked chat is 300 px wide, its full panel keeps the button at the right. */
+export const NARROW_BELOW = 400;
 const plain = (s: string) => s.replace(/\*\*/g, '');
 const spinner = <span aria-hidden className="ledge-spin" style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid currentColor', borderRightColor: 'transparent' }} />;
 
@@ -59,6 +62,16 @@ export function ActionCard(p: ActionCardProps) {
     folding.current = false;
     box.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus();
   }, [ignored]);
+  // The card's own width, not the device's: a docked chat is as narrow as the island.
+  const [slim, setSlim] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => { if (e) setSlim(e.contentRect.width > 0 && e.contentRect.width < NARROW_BELOW); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ignored]);
+  const narrow = !!p.narrow || slim;
   const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString(t.time.locale, { hour: '2-digit', minute: '2-digit' }) : '');
   const many = p.rows.length > 1;
 
@@ -149,7 +162,7 @@ export function ActionCard(p: ActionCardProps) {
     const fade: CSSProperties = dim ? { opacity: 0.55 } : {};
     return (
       <div key={i} data-action-row={s} data-destructive={destructive || undefined} data-dim={dim || undefined}
-        style={{ display: 'grid', gridTemplateColumns: `${many ? '22px ' : ''}minmax(0,1fr)${p.narrow ? '' : ' auto'}`, gap: '4px 10px', padding: '9px 12px', alignItems: 'start', borderTop: i > 0 ? '1px solid var(--sidebar-border)' : undefined, background: destructive && !settled ? 'color-mix(in srgb, var(--destructive) 6%, transparent)' : undefined }}>
+        style={{ display: 'grid', gridTemplateColumns: `${many ? '22px ' : ''}minmax(0,1fr)${narrow ? '' : ' auto'}`, gap: '4px 10px', padding: '9px 12px', alignItems: 'start', borderTop: i > 0 ? '1px solid var(--sidebar-border)' : undefined, background: destructive && !settled ? 'color-mix(in srgb, var(--destructive) 6%, transparent)' : undefined }}>
         {many && node(s, i, r)}
         <div style={{ minWidth: 0, ...fade }}>
           <div style={{ overflowWrap: 'anywhere' }}>{inline(s === 'denied' ? denial(r) : line(r))}</div>
@@ -174,7 +187,7 @@ export function ActionCard(p: ActionCardProps) {
           {s === 'cut' && <div style={{ marginTop: 5, ...muted }}>{c.words.cut.note(r.target ?? '')}</div>}
           {s === 'denied' && <div style={{ marginTop: 5, ...muted }}>{c.deniedNote(r.target ?? '')}</div>}
         </div>
-        {what && <div data-action-side data-under={p.narrow || undefined} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', ...(p.narrow ? { gridColumn: many ? 2 : 1, justifySelf: 'start' } : { justifySelf: 'end' }), ...fade }}>{what}</div>}
+        {what && <div data-action-side data-under={narrow || undefined} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', ...(narrow ? { gridColumn: many ? 2 : 1, justifySelf: 'start' } : { justifySelf: 'end' }), ...fade }}>{what}</div>}
       </div>
     );
   };

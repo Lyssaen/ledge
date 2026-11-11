@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import { ActionCard, actionRowOf, type ActionCardProps, type ActionRowView } from '../src/chat/ActionCard';
 import { ACTIONS, ACTION_ERROR_CODES, type ChatAction } from '@ledge/protocol';
 import { actionCopy as shipped } from '../src/chat/actionCopy';
@@ -244,6 +244,22 @@ describe('the action card (#94): a plan', () => {
   it('narrow (the island): the buttons go under the text', () => {
     card(plan(), { narrow: true });
     expect(rowsOf()[0]!.querySelector('[data-action-side]')!.getAttribute('data-under')).toBe('true');
+  });
+
+  it('a card narrower than 400 px (the Desktop\'s docked chat) stacks its rows as the island does; a wider one keeps the buttons at the right', () => {
+    const seen: ResizeObserverCallback[] = [];
+    const real = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class { constructor(cb: ResizeObserverCallback) { seen.push(cb); } observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
+    try {
+      card(plan());
+      const under = () => rowsOf()[0]!.querySelector('[data-action-side]')!.getAttribute('data-under');
+      expect(under()).toBeNull();
+      const width = (w: number) => act(() => { for (const cb of seen) cb([{ contentRect: { width: w } } as ResizeObserverEntry], {} as ResizeObserver); });
+      width(230);
+      expect(under()).toBe('true');
+      width(640);
+      expect(under()).toBeNull();
+    } finally { globalThis.ResizeObserver = real; }
   });
 });
 
