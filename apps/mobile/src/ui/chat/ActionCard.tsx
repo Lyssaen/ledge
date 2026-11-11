@@ -74,7 +74,9 @@ function RowText({ r, s, whole }: { r: ActionRowView; s: Shown; whole: boolean }
  * up to the first failure. A row the device must check, or that cannot be undone, is confirmed in a sheet first; the others
  * apply at the tap. « Ignorer » sets the turn's cards aside on every device.
  */
-export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { store: MobileStore; qid: string; actions: PhoneChatAction[]; ignoredAt?: string | undefined; canConfirm: boolean }) {
+export function ActionCards({ store, qid, actions, ignoredAt, canConfirm, readOnly = false }: { store: MobileStore; qid: string; actions: PhoneChatAction[]; ignoredAt?: string | undefined; canConfirm: boolean;
+  /** A past conversation's card (m3-chat.html §6): each row's outcome, « Pas appliquée » for the others, no button. */
+  readOnly?: boolean }) {
   const [asking, setAsking] = useState<number[] | null>(null);
   const [sending, setSending] = useState<ReadonlySet<number>>(new Set());
   const [note, setNote] = useState<{ rows: number[]; text: string } | null>(null);
@@ -105,7 +107,7 @@ export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { st
     return (
       <p className="flex flex-wrap items-center gap-x-2 px-1 text-small text-muted">
         {C.ignored(rows.length, clock(ignoredAt), { done: count('done'), denied: count('denied'), failed: count('failed') })}
-        <button type="button" className={GHOST} onClick={() => ignore(true)}>{C.review}</button>
+        {!readOnly && <button type="button" className={GHOST} onClick={() => ignore(true)}>{C.review}</button>}
       </p>
     );
   }
@@ -116,6 +118,7 @@ export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { st
     const accept = <button type="button" className={destructive ? DANGER : GHOST} disabled={busy || (sheeted([i]) && !canConfirm)} onClick={() => ask([i])}>{verbOf(r)}{sheeted([i]) ? '…' : ''}</button>;
     const deny = r.deny && <button type="button" className={GHOST} disabled={busy} onClick={() => send([i], { deny: true })}>{C.deny}</button>;
     const target = actions[i]!.session;
+    if (readOnly && (s === 'proposed' || s === 'held' || s === 'failed' || s === 'cut' || s === 'stale' || s === 'running')) return <span className="text-small text-muted">{copy.chat.history.notApplied}</span>;
     switch (s) {
       case 'proposed': case 'held': return <>{!many && s === 'proposed' && ignoreButton}{deny}{accept}</>;
       case 'running': return <span className="text-body text-attention">{C.running}</span>;
@@ -149,6 +152,7 @@ export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { st
 
   const foot = (): ReactNode => {
     if (!many) return null;
+    if (readOnly && !shown.every(s => s === 'done')) return null;
     if (shown.every(s => s === 'done')) {
       const last = rows.map(r => r.doneAt).filter((x): x is string => !!x).sort().at(-1);
       return <p className="inline-flex items-center gap-1.5 text-body text-ok"><Icon name="check" className="size-3.5" />{C.planDone(clock(last))}</p>;
@@ -169,7 +173,7 @@ export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { st
     );
   };
 
-  const needsSetup = !canConfirm && cardState(rows).open.some(i => actionChecked(actions[i]!));
+  const needsSetup = !readOnly && !canConfirm && cardState(rows).open.some(i => actionChecked(actions[i]!));
   const shownNote = note && note.rows.every(i => (rows[i]!.state ?? 'proposed') === 'proposed' || rows[i]!.state === 'failed') ? note.text : null;
   return (
     <section aria-label={C.label(rows.length)} aria-live="polite" className={CARD}>

@@ -1,6 +1,6 @@
 // The phone's chat with Ledge, as the store keeps it: the turns the PC sent, the question being answered, and why the
 // last one failed. Pure reducers: the store sends, these only say what each message of the PC changes.
-import type { ChatErrorCode, OperationReason, PhoneChatStep, PhoneChatTurn, PhoneServerMessage } from '@ledge/protocol';
+import type { ChatConversationSummary, ChatErrorCode, ChatLimitsRead, OperationReason, PhoneChatStep, PhoneChatTurn, PhoneServerMessage } from '@ledge/protocol';
 
 export interface ChatState {
   turns: PhoneChatTurn[];
@@ -20,6 +20,20 @@ export type ChatAction =
   | { status: 'expired' };
 
 export const emptyChat = (): ChatState => ({ turns: [], live: null, error: null });
+
+/** A conversation put away, as the PC gave it back (read-only); `gone`: the PC no longer keeps it. */
+export type PastConversation = { turns: PhoneChatTurn[]; limits: ChatLimitsRead[] } | { gone: true };
+
+/**
+ * The device's conversations (M3 §6, Q33): the list « Conversations » shows, asked at each opening of the sheet (`null`
+ * until it comes), and the past ones opened, by id (`null` while one loads).
+ */
+export interface Conversations {
+  list: { current?: ChatConversationSummary; past: ChatConversationSummary[] } | null;
+  open: Readonly<Record<string, PastConversation | null>>;
+}
+
+export const noConversations = (): Conversations => ({ list: null, open: {} });
 
 const finished = (t: PhoneChatTurn) => t.answer !== undefined || t.error !== undefined;
 

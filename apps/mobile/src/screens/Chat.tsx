@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { copy } from '../copy';
 import { href } from '../router';
-import { useChat, useMobile, type MobileStore } from '../state/store';
+import { useChat, useConversations, useMobile, type MobileStore } from '../state/store';
 import { Composer } from '../ui/chat/Composer';
 import { TurnView } from '../ui/chat/TurnView';
 import { HostPill, LinkStrip } from '../shell/Shell';
@@ -13,6 +13,10 @@ import type { PhoneSession, PhoneTask } from '@ledge/protocol';
 import { Icon } from '../ui/icons';
 import { Mascot } from '../ui/MobileBot';
 import { useWide } from '../ui/layout';
+import type { ChatConversationSummary } from '@ledge/protocol';
+import { ConversationsSheet, titleOf } from '../ui/chat/Conversations';
+import { DetailHeader, kitButtonClass } from '../ui/kit/Controls';
+import { iconButtonClass } from '../ui/Button';
 
 /** OpenRig's own rig: its name is not a rig the user asks about. */
 const KERNEL = 'kernel';
@@ -45,6 +49,11 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   const end = useRef<HTMLDivElement>(null);
   const running = chat.live !== null;
   const offline = !state.fresh;
+  const conversations = useConversations(store);
+  const kept = !!state.daemon?.conversations;
+  const [sheet, setSheet] = useState(false);
+  // A past conversation open in the tab's place, read-only (§6).
+  const [past, setPast] = useState<ChatConversationSummary | null>(null);
 
   // « Répondre » on a decision: the start of the question in the field, the caret after it, for the user to finish.
   const field = useRef<HTMLTextAreaElement>(null);
@@ -85,6 +94,23 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
     setText('');
   };
   const list = sessions.map(x => ({ id: x.id, name: x.name, repo: x.repo, exited: x.state === 'exited', state: x.state, helpers: x.helpers }));
+  const reset = () => { setRefused(null); store.resetChat(); };
+  const openSheet = () => { store.askConversations(); setSheet(true); };
+
+  if (past) {
+    const shown = conversations.open[past.id];
+    return (
+      <>
+        <DetailHeader name={titleOf(past, new Date())}
+          back={<button type="button" aria-label={copy.nav.backTo.chat} title={copy.nav.backTo.chat} onClick={() => setPast(null)} className={iconButtonClass({ className: 'text-muted' })}><Icon name="back" /></button>} />
+        <p className="bleed flex flex-none items-center gap-2 border-b border-line bg-raised px-3.5 py-2 text-small text-muted"><Icon name="clock" className="size-4 flex-none" />{copy.chat.history.pastBanner}</p>
+        <main data-tab-scroll="" className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain py-3 text-[14px]">
+          {shown && 'turns' in shown && shown.turns.map(t => <TurnView key={t.qid} store={store} turn={t} list={list} canConfirm={false} live={null} sessions={sessions.length} readOnly />)}
+        </main>
+        <div className="flex-none pt-1.5 pb-3"><button type="button" onClick={() => setPast(null)} className={kitButtonClass({ variant: 'primary', className: 'w-full' })}>{copy.chat.history.backToday}</button></div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -96,8 +122,11 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         </span>
         <HostPill />
         <span className="flex-1" />
+        <button type="button" onClick={openSheet} aria-haspopup="dialog" aria-label={kept ? copy.chat.history.title : copy.chat.history.today} title={kept ? copy.chat.history.title : copy.chat.history.today} className={HEAD_BUTTON}>
+          <Icon name="clock" />
+        </button>
         {/* Off while Ledge answers: the answer would be put away half done. */}
-        <button type="button" disabled={running} onClick={() => { setRefused(null); store.resetChat(); }} aria-label={copy.chat.reset} title={copy.chat.reset} className={HEAD_BUTTON}>
+        <button type="button" disabled={running} onClick={reset} aria-label={copy.chat.reset} title={copy.chat.reset} className={HEAD_BUTTON}>
           <Icon name="edit" />
         </button>
         {!wide && <a href={href({ name: 'connection' })} aria-label={copy.nav.settings} title={copy.nav.settings} className={HEAD_BUTTON}><Icon name="gear" /></a>}
@@ -124,8 +153,10 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
           </div>
         )}
         {chat.turns.map(t => (
-          <TurnView key={t.qid} store={store} turn={t} list={list} canConfirm={!!state.device?.confirm} live={chat.live?.qid === t.qid ? chat.live : null} sessions={sessions.length}
+          <div key={t.qid} id={`turn-${t.qid}`} className="contents">
+          <TurnView store={store} turn={t} list={list} canConfirm={!!state.device?.confirm} live={chat.live?.qid === t.qid ? chat.live : null} sessions={sessions.length}
             {...(!running && !offline ? { onAskAgain: (q: string) => ask(q) } : {})} />
+          </div>
         ))}
         {refused && (
           <div className="flex flex-col gap-1.5">
@@ -138,6 +169,12 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
       <Composer value={text} onChange={setText} onSend={send} canSend={(text.trim() !== '' || images.items.length > 0) && images.ready && !running && !offline}
         images={images} running={running} offline={offline} onStop={() => store.cancelAsk()} fieldRef={field} />
       {offline && <p role="status" className="flex-none pb-2 text-[13px] text-attention">{copy.chat.offline}</p>}
+      {sheet && (
+        <ConversationsSheet conversations={conversations} kept={kept} turns={chat.turns} running={running} now={new Date()}
+          onClose={() => setSheet(false)} onReset={() => { setSheet(false); reset(); }}
+          onOpen={c => { setSheet(false); store.openConversation(c.id); setPast(c); }}
+          onScrollTo={qid => { setSheet(false); document.getElementById(`turn-${qid}`)?.firstElementChild?.scrollIntoView?.({ block: 'start' }); }} />
+      )}
     </>
   );
 }

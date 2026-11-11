@@ -55,9 +55,11 @@ const errorText = (c: ChatErrorCode): string => ({ busy: copy.chat.busy, timeout
  * One question and what came of it. `live` is the question being answered: its steps and the text so far
  * (the answer's Markdown comes later, the text is shown as it is).
  */
-export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskAgain }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string; exited?: boolean; state?: PhoneSession['state']; helpers?: PhoneSession['helpers'] }[]; canConfirm: boolean;
+export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskAgain, readOnly = false }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string; exited?: boolean; state?: PhoneSession['state']; helpers?: PhoneSession['helpers'] }[]; canConfirm: boolean;
   /** « Reposer la question » after a timeout or a failure (Q37): the same question, as a new one; absent while it cannot be sent. */
-  onAskAgain?: (question: string) => void }) {
+  onAskAgain?: (question: string) => void;
+  /** A past conversation (m3-chat.html §6): its cards keep their outcome and are switched off; the PC refuses any action on them. */
+  readOnly?: boolean }) {
   const steps = live?.steps ?? turn.steps;
   const text = live ? live.text : turn.answer;
   // A name two sessions share says nothing about which one is meant: it is not linked.
@@ -84,11 +86,15 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskA
           )}
         </div>
       )}
+      {!live && (
+      <fieldset disabled={readOnly} className="contents">
       {!live && turn.closes && <CloseCards store={store} qid={turn.qid} closes={turn.closes} canConfirm={canConfirm} sessions={list} />}
       {!live && !turn.closes && relay && <RelayCard store={store} qid={turn.qid} relay={relay} target={list.find(x => x.id === relay.id)} known={list.some(x => x.id === relay.id)} ignoredAt={turn.ignoredAt} />}
       {!live && !turn.closes && turn.proposals && turn.proposals.length > 0 && <LaunchCards store={store} qid={turn.qid} proposals={turn.proposals} canConfirm={canConfirm} sessionIds={new Set(list.map(x => x.id))} ignoredAt={turn.ignoredAt} />}
-      {!live && turn.actions && <ActionCards store={store} qid={turn.qid} actions={turn.actions} ignoredAt={turn.ignoredAt} canConfirm={canConfirm} />}
+      {!live && turn.actions && <ActionCards store={store} qid={turn.qid} actions={turn.actions} ignoredAt={turn.ignoredAt} canConfirm={canConfirm} readOnly={readOnly} />}
       {!live && turn.tasks && turn.tasks.length > 0 && <TaskCards store={store} qid={turn.qid} tasks={turn.tasks} />}
+      </fieldset>
+      )}
     </div>
   );
 }

@@ -172,6 +172,12 @@ export const en: Copy = {
       given: (name: string, id: string, state: string) => `Given to ${name} · ${id} · ${state}`, notGiven: 'Not given.'
     },
     reset: 'New conversation',
+    history: {
+      title: 'Conversations', current: 'In progress', count: (n: number) => n > 1 ? `${n} questions` : '1 question', since: (time: string) => `since ${time}`,
+      today: 'Today', yesterday: 'Yesterday', kept: 'Kept 7 days on the PC, for this device only.',
+      pastBanner: 'Past conversation · read only · its cards no longer apply', backToday: 'Back to the current conversation',
+      notApplied: 'Not applied', none: 'No conversation today.', quote: (q: string) => `“${q}”`
+    },
     /** The empty thread's suggestions (M3 Q32): questions sent at once, and « New session », an action. */
     suggestions: {
       waiting: 'Who is waiting for me?',

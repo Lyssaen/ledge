@@ -173,6 +173,13 @@ const fr = {
       given: (name: string, id: string, state: string) => `Confiée à ${name} · ${id} · ${state}`, notGiven: 'Pas confiée.'
     },
     reset: 'Nouvelle conversation',
+    /** The conversations the PC keeps (M3 §6, Q33): the clock's sheet, and a past one, read-only. Fallback B: Desktop's words. */
+    history: {
+      title: 'Conversations', current: 'En cours', count: (n: number) => n > 1 ? `${n} questions` : '1 question', since: (time: string) => `depuis ${time}`,
+      today: 'Aujourd’hui', yesterday: 'Hier', kept: 'Gardées 7 jours sur le PC, pour cet appareil seulement.',
+      pastBanner: 'Conversation passée · lecture seule · ses cartes ne s’appliquent plus', backToday: 'Revenir à la conversation en cours',
+      notApplied: 'Pas appliquée', none: 'Aucune conversation aujourd’hui.', quote: (q: string) => `« ${q} »`
+    },
     /** The empty thread's suggestions (M3 Q32): questions sent at once, and « Nouvelle session », an action. */
     suggestions: {
       waiting: 'Qui attend quelque chose de moi ?',
