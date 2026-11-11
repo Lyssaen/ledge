@@ -1,4 +1,4 @@
-import type { Assertion } from '@ledge/protocol';
+import { offers, type Assertion } from '@ledge/protocol';
 import type { ReactNode } from 'react';
 import { copy } from '../copy';
 import type { InboxItem } from '../model/requests';
@@ -10,6 +10,7 @@ import type { ConfirmedExpect, MobileStore } from '../state/store';
 import { usePlatform } from './device';
 import { OnPc, RiskConfirm, type ConfirmReason } from './RiskConfirm';
 import { buttonClass } from '../ui/Button';
+import { useShortcuts } from '../ui/keys';
 
 const half = (variant?: 'primary') => buttonClass({ variant, className: 'flex-1' });
 const full = (variant?: 'primary' | 'ghost') => buttonClass({ variant, block: true });
@@ -26,7 +27,7 @@ export interface DecisionFooterProps {
   /** This very request (same key) still waits on the PC: only then may a decision be offered. */
   stillPending: boolean;
   onReread: () => void;
-  onDecide: (decision: 'accept' | 'deny') => void;
+  onDecide: (decision: 'accept' | 'deny' | 'always') => void;
   /** A question: whether it can be answered from here, the option chosen (none yet) and how to send it. */
   answerable?: boolean;
   choice?: number | null;
@@ -47,6 +48,8 @@ export interface DecisionFooterProps {
   optionReply?: { canConfirm: boolean; picked: number | null; onBack: () => void; onReply: (assertion: Assertion, expect: ConfirmedExpect) => string | null } | undefined;
   /** An OMP `ask` of several questions: how many have no choice yet, and what sending or declining does. */
   multi?: { missing: number; onSend: () => void; onCancel: () => void } | undefined;
+  /** A wide screen (m1-a-toi.html §12): the buttons on one row, and Y / N decide from the keyboard. */
+  keys?: boolean;
 }
 
 function reasonText(item: InboxItem, r: Extract<Outcome, { kind: 'rejected' | 'failed' }>['reason']): string {
@@ -69,10 +72,26 @@ function reasonText(item: InboxItem, r: Extract<Outcome, { kind: 'rejected' | 'f
  * footer never offers one it could not honour. A high-impact accept is confirmed with the device when the PC checks it (`RiskConfirm`), else done on the PC.
  */
 export function DecisionFooter(p: DecisionFooterProps) {
-  const { item, outcome, fresh, changed, stillPending, onReread, onDecide, answerable = false, choice = null, onAnswer, answerBlocked = false, onCheck, refused = false, store, deviceConfirm = false, optionReply, multi } = p;
+  const { item, outcome, fresh, changed, stillPending, onReread, onDecide, answerable = false, choice = null, onAnswer, answerBlocked = false, onCheck, refused = false, store, deviceConfirm = false, optionReply, multi, keys = false } = p;
   const D = copy.decide;
   const [checking, setChecking] = useBusy();
   const platform = usePlatform();
+
+  const onPc = item.risk === 'high' || (outcome.kind === 'rejected' && outcome.reason === 'confirm_required');
+  const live = fresh && !changed && stillPending;
+  // Allow and Deny as two plain buttons (no question, no device check, nothing on the PC): the only footer Y / N may answer.
+  const plain = item.kind !== 'question' && !optionReply && !multi && !answerable && !onPc;
+  // « Toujours dans ce projet » where the agent offers it; never for a high-impact accept (m1-a-toi.html §4).
+  const always = plain && offers(item.tool, item.kind, 'always');
+  // Y / N only while the buttons they stand for are shown and enabled.
+  const shown = outcome.kind !== 'sending' && outcome.kind !== 'uncertain'
+    && !((outcome.kind === 'rejected' || outcome.kind === 'failed') && (outcome.reason === 'no_prompt' || outcome.reason === 'nothing_to_decide' || outcome.reason === 'stale'));
+  useShortcuts(keys && plain && live && shown, k => {
+    const key = k.toLowerCase();
+    if (key === 'y') { onDecide('accept'); return true; }
+    if (key === 'n') { onDecide('deny'); return true; }
+    return false;
+  });
 
   const thread = <a href={p.threadHref ?? href({ name: 'thread', sessionId: item.sessionId })} className={full('ghost')}>{copy.result.thread(item.botName)}</a>;
   // The board's order: what to do, then the way to the thread, then what a tap does.
@@ -86,8 +105,6 @@ export function DecisionFooter(p: DecisionFooterProps) {
 
   if (item.kind === 'question' && !answerable && !optionReply && !multi) return wrap(null, D.answerOnPc);
 
-  const onPc = item.risk === 'high' || (outcome.kind === 'rejected' && outcome.reason === 'confirm_required');
-  const live = fresh && !changed && stillPending;
   // The device signs the PC's challenge here; without a credential, a platform authenticator or a PC that asks, it is the PC.
   const guard = deviceConfirm && platform ? store : undefined;
   const confirmable = optionReply ? optionReply.canConfirm && guard !== undefined : onPc && !answerable && guard !== undefined;
@@ -107,12 +124,24 @@ export function DecisionFooter(p: DecisionFooterProps) {
     <RiskConfirm store={guard} item={item} enabled={enabled} reason={deviceReason} onConfirm={(a, expect) => guard.decide(item.sessionId, 'accept', { assertion: a, expect })} onDeny={() => onDecide('deny')} />
   ) : answerable ? (
     <button type="button" disabled={!enabled || choice === null || answerBlocked} onClick={() => onAnswer?.()} className={full('primary')}>{D.send}</button>
+  ) : keys && plain ? (
+    // A wide screen's row (§12): Autoriser, Refuser, Toujours dans ce projet, then the keys.
+    <div className="flex flex-wrap items-center gap-2.5">
+      <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={buttonClass({ variant: 'primary', className: 'min-w-[150px]' })}>{D.allow}</button>
+      <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={buttonClass({ className: 'min-w-[120px]' })}>{D.deny}</button>
+      {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={buttonClass({ variant: 'ghost' })}>{copy.atoi.always}</button>}
+      <span className="flex-1" />
+      <span className="font-mono text-small text-muted">{copy.atoi.keys}</span>
+    </div>
   ) : (
-    <div className="flex gap-2.5">
-      <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={half()}>{D.deny}</button>
-      {onPc
-        ? <OnPc />
-        : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={half('primary')}>{D.allow}</button>}
+    <div className="flex flex-col gap-2.5">
+      <div className="flex gap-2.5">
+        <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={half()}>{D.deny}</button>
+        {onPc
+          ? <OnPc />
+          : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={half('primary')}>{D.allow}</button>}
+      </div>
+      {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={full('ghost')}>{copy.atoi.always}</button>}
     </div>
   );
   const linkHint = !fresh ? D.offlineHint : optionReply ? (confirmable ? D.answerHint : D.onPcHint) : multi ? D.answerHint : onPc && !answerable && !confirmable ? D.onPcHint : answerable ? D.answerHint : D.hint;

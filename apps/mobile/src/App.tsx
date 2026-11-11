@@ -4,7 +4,7 @@ import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react';
 import { UiCopyProvider } from '@ledge/ui/i18n/copy';
 import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
-import { openFromWorker, replaceRoute, useRoute } from './router';
+import { openFromWorker, parseRoute, replaceRoute, useRoute, type Route } from './router';
 import { AtelierScreen } from './atelier/AtelierScreen';
 import { Agents } from './screens/Agents';
 import { Chat } from './screens/Chat';
@@ -23,7 +23,9 @@ import { ChatUnavailable, EmptyPane, Prs, Rigs } from './screens/NotSent';
 import { Rail, ShellProvider, TabBar, TopBar, lookOf, type ShellLink } from './shell/Shell';
 import { atoiBadge, remember, tabOf, type Tab } from './shell/tabs';
 import { requestsOf } from './model/requests';
+import { atoiOrder, nextAfter, stepFrom, type AtoiTarget } from './model/atoi';
 import { RequestDetail } from './screens/RequestDetail';
+import { AskDetail } from './screens/atoi/AskDetail';
 import { StorageUnavailable } from './screens/StorageUnavailable';
 import { Terminal } from './screens/Terminal';
 import { Thread } from './screens/Thread';
@@ -31,6 +33,7 @@ import { Unrecognized } from './screens/Unrecognized';
 import { Update } from './screens/Update';
 import { copy, copyFor, useLang } from './copy';
 import { Split, SplitEmpty, useWide } from './ui/layout';
+import { useShortcuts } from './ui/keys';
 import { ownName } from './screens/ThisDevice';
 import { useMobile, type MobileStore } from './state/store';
 import type { UpdateWatch } from './sw/register';
@@ -90,6 +93,10 @@ export interface AppProps {
 }
 
 const defaultFetch: typeof fetch = (input, init) => globalThis.fetch(input, init);
+
+/** The request or ask a route opens in « À toi », if any. */
+const atoiTarget = (r: Route): AtoiTarget | null =>
+  r.name === 'request' ? { name: 'request', sessionId: r.sessionId, key: r.key } : r.name === 'ask' ? { name: 'ask', id: r.id } : null;
 
 export function App({ link, store, storage, fetchImpl = defaultFetch, updates = null, signin = null, lost = false, relay = globalThis.location.host }: AppProps) {
   // A language chosen in Réglages renders the whole app again in it, on the same screen (m0-langue.html, §1).
@@ -158,6 +165,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   // The app opens on « À toi » (question Q7); a shared link or a notification opens the screen it names. Each tab remembers
   // the screen it was left on, and Réglages lights the tab it was opened from.
   const lastTab = useRef<Tab>('atoi');
+  /** « À toi »'s order while the open request was still in it: where « the next one » is counted from once it left. */
+  const lastOrder = useRef<AtoiTarget[]>([]);
   const tab = tabOf(route);
   if (tab) lastTab.current = tab;
   useEffect(() => { remember(route); }, [route]);
@@ -167,6 +176,17 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   // snapshot the last known PC decides, so an offline iPad keeps its Atelier.
   const atelierOff = route.name === 'atelier' && (!wide || ((mobile.fresh || mobile.daemon !== null) && !mobile.daemon?.atelier));
   useEffect(() => { if (atelierOff) replaceRoute({ name: 'sessions' }); }, [atelierOff]);
+  const open = atoiTarget(route);
+  // ↑ / ↓ go through « À toi » on a wide screen (m1-a-toi.html §12), from the one open, else from the top. The address is read
+  // at the key itself: a key pressed before the last move reached the screen still counts from there.
+  useShortcuts(wide && kind === 'route' && tab === 'atoi', key => {
+    if (key !== 'ArrowUp' && key !== 'ArrowDown') return false;
+    const s = store.getState();
+    const to = stepFrom(atoiOrder(requestsOf([...s.sessions.values()]), s.asks ?? []), atoiTarget(parseRoute(globalThis.location.hash)), key === 'ArrowDown' ? 1 : -1);
+    if (!to) return false;
+    replaceRoute(to);
+    return true;
+  });
   // A device the PC knows by id but that has no name yet names itself once, after its model and browser (docs/mockups/
   // mobile-multi-device.html, part 3): the PC then shows « iPad · Safari », and so do the other devices' threads.
   const named = useRef(false);
@@ -238,9 +258,16 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           />
         );
     }
+    // A wide screen's « À toi » moves on once the open request is settled (m1-a-toi.html §12): the next in the list, else none.
+    const order = atoiOrder(requestsOf([...mobile.sessions.values()]), mobile.asks ?? []);
+    if (open && order.some(t => JSON.stringify(t) === JSON.stringify(open))) lastOrder.current = order;
+    const moveOn = (from: AtoiTarget) => () => {
+      const next = nextAfter(atoiOrder(requestsOf([...store.getState().sessions.values()]), store.getState().asks ?? []), from, lastOrder.current);
+      replaceRoute(next ?? { name: 'atoi' });
+    };
     const shell: ShellLink = { pc: pcName, look: lookOf(mobile.fresh, !!mobile.syncedAt, link.reach()), reach: link.reach(), since: clock(mobile.syncedAt), retry };
     const badges = { atoi: atoiBadge(requestsOf([...mobile.sessions.values()]), mobile.asks ?? []) };
-    const inbox = <Inbox store={store} />;
+    const inbox = <Inbox store={store} onReconnect={retry} />;
     const sessions = <Agents store={store} />;
     // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
     const chat = mobile.device?.chat || (!mobile.fresh && !mobile.device) ? <Chat store={store} onReconnect={retry} /> : <ChatUnavailable />;
@@ -250,7 +277,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       const content = (() => {
         switch (route.name) {
           case 'atoi': return <Split list={inbox} detail={<SplitEmpty {...copy.split.request} />} />;
-          case 'request': return <Split list={inbox} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />} />;
+          case 'ask': return <Split list={inbox} detail={<AskDetail key={route.id} store={store} id={route.id} onDone={moveOn({ name: 'ask', id: route.id })} />} />;
+          case 'request': return <Split list={inbox} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} onSettled={moveOn({ name: 'request', sessionId: route.sessionId, key: route.key })} keys />} />;
           case 'sessions': return <Split list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
           case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
           case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
@@ -284,6 +312,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />, false);
       case 'terminal': return framed(<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />, false);
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
+      case 'ask': return framed(<AskDetail key={route.id} store={store} id={route.id} />, false);
       case 'request': return framed(<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />, false);
     }
   })();

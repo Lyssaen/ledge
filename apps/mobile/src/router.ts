@@ -16,11 +16,13 @@ export type Route =
   | { name: 'thread'; sessionId: string }
   | { name: 'terminal'; sessionId: string }
   | { name: 'request'; sessionId: string; key: string }
+  /** An OpenRig ask in full (`#/ask/<qitem>`), opened from its card in « À toi » (m1-a-toi.html §2, §12). */
+  | { name: 'ask'; id: string }
   /** Réglages; `#/connection/link` opens it on its « Connexion » section (the host pill). */
   | { name: 'connection'; section?: 'link' };
 
 /** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
-const ROUTE_NAME: Record<Route['name'], true> = { atoi: true, sessions: true, prs: true, rigs: true, atelier: true, chat: true, thread: true, terminal: true, request: true, connection: true };
+const ROUTE_NAME: Record<Route['name'], true> = { atoi: true, sessions: true, prs: true, rigs: true, atelier: true, chat: true, thread: true, terminal: true, request: true, ask: true, connection: true };
 export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
 
 const SIMPLE = ['sessions', 'prs', 'rigs', 'chat', 'connection'] as const;
@@ -29,6 +31,7 @@ export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   try {
     if (parts[0] === 'request' && parts.length === 3) return { name: 'request', sessionId: decodeURIComponent(parts[1]!), key: decodeURIComponent(parts[2]!) };
+    if (parts[0] === 'ask' && parts.length === 2) return { name: 'ask', id: decodeURIComponent(parts[1]!) };
     if ((parts[0] === 'thread' || parts[0] === 'terminal') && parts.length === 2) return { name: parts[0], sessionId: decodeURIComponent(parts[1]!) };
     if (parts[0] === 'atelier' && parts.length === 4 && parts[2] === 'request') return { name: 'atelier', sessionId: decodeURIComponent(parts[1]!), requestKey: decodeURIComponent(parts[3]!) };
     if (parts[0] === 'atelier' && parts.length <= 2) return parts[1] ? { name: 'atelier', sessionId: decodeURIComponent(parts[1]) } : { name: 'atelier' };
@@ -42,6 +45,7 @@ export function parseRoute(hash: string): Route {
 
 export function href(r: Route): string {
   if (r.name === 'request') return `#/request/${encodeURIComponent(r.sessionId)}/${encodeURIComponent(r.key)}`;
+  if (r.name === 'ask') return `#/ask/${encodeURIComponent(r.id)}`;
   if (r.name === 'thread' || r.name === 'terminal') return `#/${r.name}/${encodeURIComponent(r.sessionId)}`;
   if (r.name === 'atelier') return !r.sessionId ? '#/atelier'
     : r.requestKey ? `#/atelier/${encodeURIComponent(r.sessionId)}/request/${encodeURIComponent(r.requestKey)}` : `#/atelier/${encodeURIComponent(r.sessionId)}`;

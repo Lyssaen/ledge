@@ -145,10 +145,18 @@ test('a phone signs in, pairs, decides, survives a relay restart and a session r
   });
 
   await test.step('a reload: still paired (IndexedDB), the inbox comes back', async () => {
-    h.daemon.sessions = [waiting()];
+    // A new request (a key never decided here): the one decided before would come back as its receipt.
+    h.daemon.sessions = [{ ...waiting(), pending: { ...waiting().pending!, key: 'p3' } }];
     await page.goto(h.url);
     await expect(page.getByRole('heading', { name: copy.inbox.title })).toBeVisible();
     await expect(page.getByRole('link', { name: /pnpm test/ })).toBeVisible();
+  });
+
+  await test.step('« À toi » decides in place: the card turns into its receipt (m1-a-toi.html §1, §5)', async () => {
+    const before = decides().length;
+    await page.getByRole('article').getByRole('button', { name: copy.atoi.allow, exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: copy.atoi.receipt.allowed('Otto') })).toBeVisible();
+    expect(decides()[before]).toMatchObject({ id: 's1', decision: 'accept', expect: { key: 'p3' } });
   });
 
   await test.step('no error in the browser console', async () => {

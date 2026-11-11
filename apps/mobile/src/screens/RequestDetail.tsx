@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { copy } from '../copy';
 import { consequenceFor, lowRiskNoticeFor } from '../model/consequence';
 import { checkFreeAnswer } from '../model/freeAnswer';
+import { RECEIPT_MS } from '../model/atoi';
 import { outcomeFor } from '../model/requestOutcome';
 import { ageLabel, headline, requestsOf, type InboxItem } from '../model/requests';
 import { href } from '../router';
@@ -60,7 +61,13 @@ function PanelHeader({ title, panel }: { title: string; panel: RequestPanel }) {
   );
 }
 
-export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel }: { store: MobileStore; sessionId: string; requestKey: string; onReconnect?: () => void; panel?: RequestPanel }) {
+export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel, onSettled, keys = false }: {
+  store: MobileStore; sessionId: string; requestKey: string; onReconnect?: () => void; panel?: RequestPanel;
+  /** A wide screen's « À toi »: Y / N decide from the keyboard, said in the footer. */
+  keys?: boolean;
+  /** A wide screen's « À toi » (m1-a-toi.html §12): once decided or handled elsewhere, the receipt shows for a while, then this (the next request). */
+  onSettled?: () => void;
+}) {
   const state = useMobile(store);
   const now = useNow();
   const { fresh, ops, capabilities } = state;
@@ -111,6 +118,13 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   const settled = outcome.kind === 'applied' || (item === undefined && !(outcome.kind === 'sending' || outcome.kind === 'uncertain' || outcome.kind === 'rejected' || outcome.kind === 'failed' || outcome.kind === 'changed') && fresh);
   const back = panel?.onBack;
   useEffect(() => { if (settled && back) back(); }, [settled, back]);
+  const settledRef = useRef(onSettled);
+  settledRef.current = onSettled;
+  useEffect(() => {
+    if (!settled || !settledRef.current) return;
+    const t = setTimeout(() => settledRef.current?.(), RECEIPT_MS);
+    return () => clearTimeout(t);
+  }, [settled]);
   const header = (title: string) => (panel ? <PanelHeader title={title} panel={panel} /> : <BackHeader title={title} fallback={backRoute} label={copy.detail.back} link={link} />);
 
   if (outcome.kind === 'applied') return <Result store={store} title={resultTitle(outcome)} body={copy.result.body} item={last.current} final />;
@@ -253,6 +267,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
         onCheck={onReconnect} refused={refused} store={store} deviceConfirm={state.device?.confirm === true}
         optionReply={optionMode ? { canConfirm: guarded ? canConfirm : true, picked: guarded ? picked : null, onBack: () => setPicked(null), onReply: (a, expect) => picked === null ? null : store.reply(sessionId, String(picked + 1), { assertion: a, expect }) } : undefined}
         multi={askQuestions ? { missing, onSend: () => sendAnswers(false), onCancel: () => sendAnswers(true) } : undefined}
+        keys={keys}
       />
     </>
   );

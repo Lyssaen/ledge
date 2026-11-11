@@ -315,7 +315,7 @@ Une application web pour le téléphone et la tablette. Sur le téléphone, cinq
 
 ### À toi (`atoi`)
 
-Les demandes en attente, les plus anciennes d'abord, filtrées par type (autorisations, questions, tâches). « Examiner » ouvre une demande. « Tu es à jour » quand rien n'attend. Le badge de l'onglet compte les autorisations en rouge, sinon les questions en ambre.
+Ce qui attend l'utilisateur, tranchable sur place. Les demandes des sessions en cartes, les plus anciennes d'abord : « Autoriser », « Refuser », « Toujours dans ce projet » (jamais pour un accord à fort impact, qui se confirme avec Face ID ou le code de l'appareil, sinon sur le PC), les options d'une question ou « Autre réponse… » ; un plan ou des modifications s'ouvrent par « Examiner ». Une carte décidée laisse un reçu d'une ligne, qui part au bout de 5 secondes. Puis « Rigs OpenRig » (voir « Demande d'un rig ») et « En cours », les sessions qui travaillent (cinq au plus, puis « Voir les N autres »). À partir de six demandes, des filtres : Tout, Autorisations, Questions, Rigs OpenRig. « Rien ne t'attend. » quand rien n'attend. Sur une tablette, la liste en lignes compactes à gauche et la demande choisie à droite ; une fois décidée, la suivante s'ouvre ; au clavier, ↑ ↓ changent de demande, Y autorise et N refuse. Le badge de l'onglet compte les autorisations en rouge, sinon les questions en ambre.
 
 ### Sessions (`sessions`)
 
@@ -348,6 +348,10 @@ Le terminal d'un agent, en direct et en couleurs, à la taille du PC : « Lisibl
 ### Demande (`request`)
 
 Une demande seule : autorisation, question, plan ou modifications. On l'approuve, la refuse ou y répond. Les notifications et les liens partagés ouvrent cet écran.
+
+### Demande d'un rig (`ask`)
+
+Une demande OpenRig en entier, ouverte depuis sa carte dans « À toi » : qui la pose, son texte complet, sa source et « Détails », puis la réponse (une option, « Répondre autrement… », « Répondre… » pour une ligne en attente de toi, ou « Vu » pour une nouvelle). Toute réponse sauf « Vu » se confirme avec Face ID ou le code de l'appareil ; sans accords protégés sur cet appareil, on y répond sur le PC.
 
 ### Réglages (`connection`)
 

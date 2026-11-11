@@ -41,7 +41,7 @@ describe('the request detail', () => {
   it('decides a low-risk command in one tap, then shows the result board', () => {
     const t = opened(pending({ text: 'pnpm test' }));
     expect(screen.getByText('pnpm test', { selector: 'pre' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser' }));
     const [sent] = t.of('session.decide');
     expect(sent).toMatchObject({ id: 'a', decision: 'accept', expect: { key: 'p1', kind: 'permission', text: 'pnpm test' } });
     expect(screen.getByText('Transmission au PC…')).toBeInTheDocument();
@@ -61,15 +61,15 @@ describe('the request detail', () => {
 
   it('goes to the new request when the PC says the one decided is stale, and asks to read it first', () => {
     const t = opened(pending({ text: 'pnpm test' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser' }));
     const op = t.of('session.decide')[0]!.op;
     act(() => t.deliver({ type: 'operation.result', op, status: 'rejected', reason: 'stale' }));
     act(() => t.deliver({ type: 'session.pending', id: 'a', pending: pending({ key: 'p2', text: 'pnpm build' }) }));
     expect(screen.getByText('pnpm build', { selector: 'pre' })).toBeInTheDocument();
     expect(screen.getByText('La demande a été mise à jour. Relis-la avant de décider.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Autoriser une fois' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Autoriser' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'J’ai relu la demande' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser' }));
     expect(t.of('session.decide').at(-1)).toMatchObject({ decision: 'accept', expect: { key: 'p2', text: 'pnpm build' } });
   });
 
@@ -146,7 +146,7 @@ describe('a question', () => {
 describe('the decision footer', () => {
   it('reads as the board: the buttons, then the way to the thread, then what a tap does', () => {
     opened(pending());
-    expect(footerOrder()).toEqual(['Refuser', 'Autoriser une fois', 'Voir le fil de Kai', 'La décision sera transmise immédiatement au PC.']);
+    expect(footerOrder()).toEqual(['Refuser', 'Autoriser', 'Toujours dans ce projet', 'Voir le fil de Kai', 'La décision sera transmise immédiatement au PC.']);
   });
 
   it('a question it cannot answer from here sends to the PC, the thread link before the hint', () => {
@@ -158,7 +158,7 @@ describe('the decision footer', () => {
   it('a decision whose delivery is unknown is checked by reconnecting', () => {
     const onReconnect = vi.fn();
     const t = opened(pending(), {}, { onReconnect });
-    fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser' }));
     act(() => t.set('pc_offline'));
     expect(screen.getByText('Réception non confirmée')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reconnecter et vérifier' }));
@@ -168,7 +168,7 @@ describe('the decision footer', () => {
 
   it('says so when the phone could not send the decision at all', () => {
     opened(pending(), {}, { store: s => ({ ...s, decide: () => null }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser' }));
     expect(screen.getByRole('alert')).toHaveTextContent('La décision n’a pas pu être transmise.');
   });
 

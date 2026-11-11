@@ -49,6 +49,63 @@ export const en: Copy = {
     emptyFilterHint: 'The other requests stay in “All”.',
     offlineNote: 'You can read the requests. No decision is sent while offline.'
   },
+  /** « À toi » (docs/mockups/ledge-mobile-refonte/m1-a-toi.html, 3228f5ed; m1-reponses-rig.html, adf70443): cards decided in the list, receipts. */
+  atoi: {
+    count: (n: number) => plural(n, '1 request', `${n} requests`),
+    pill: { permission: 'permission', question: 'question', plan: 'plan', diff: 'changes' },
+    allow: 'Allow', deny: 'Deny', always: 'Always in this project',
+    readAll: 'Show all', other: 'Other answer…',
+    sendHint: (bot: string) => `Your answer to ${bot} · Enter sends`,
+    region: (what: string, who: string, where: string) => `${what} from ${who}${where ? `, ${where}` : ''}`,
+    kindName: { permission: 'Permission', question: 'Question', plan: 'Plan', diff: 'Changes', rig: 'Request' },
+    requests: 'Requests', rigs: 'OpenRig rigs', working: 'Working',
+    more: (n: number) => `See the other ${n}`,
+    receipt: {
+      allowed: (who: string) => `Allowed · ${who}`, denied: (who: string) => `Denied · ${who}`,
+      allowedBody: 'The terminal received your decision', deniedBody: 'The command was not run',
+      answered: (answer: string, who: string) => `Answered: ${answer} · ${who}`,
+      sentTo: (who: string) => `Sent to ${who}`, seen: 'Seen',
+      thread: 'See the thread',
+      what: (who: string, what: string) => `${who} · ${what}`,
+      retry: 'Retry', check: 'Check',
+      uncertainBody: 'The decision may have arrived. Check before trying again.',
+      decidedAt: (who: string, what: 'accept' | 'deny' | 'always', time: string) => `${who} · ${what === 'deny' ? 'Denied' : 'Accepted'} at ${time}. No new decision was sent.`,
+      answeredAt: (who: string, time: string, draft: boolean) => `${who} · Answered at ${time}. ${draft ? 'Your draft was not sent.' : 'No new answer was sent.'}`,
+      gone: (who: string, draft: boolean) => `${who}.${draft ? ' Your draft was not sent.' : ''}`
+    },
+    noRequest: 'Nothing is waiting for you.',
+    calmHint: 'No session and no rig needs your decision. New requests appear here, and on the lock screen if notifications are on.',
+    nothingRunning: 'No session is working right now either.',
+    seeSessions: 'See the sessions',
+    keys: 'Y / N on the keyboard'
+  },
+  /** OpenRig's asks, with Desktop's words (apps/desktop/src/i18n/en.ts, `asks`), and the device check of an answer (Q63 to Q66). */
+  asks: {
+    pill: { decision: 'decision', question: 'question', update: 'update', parked: 'waiting on you' } as Record<'decision' | 'question' | 'update' | 'parked', string>,
+    priority: { urgent: 'urgent', critical: 'critical' } as Record<'urgent' | 'critical', string>,
+    recommended: 'recommended',
+    readAll: 'Show all', details: 'Details', source: 'Source',
+    answerOther: 'Answer another way…', answerParked: 'Answer…', writeAnswer: 'Write an answer…',
+    placeholder: 'Your answer, in a few words…', placeholderParked: (seat: string) => `What ${seat} should do…`,
+    send: 'Send', cancel: 'Cancel', seen: 'Seen',
+    progress: (n: number, total: number) => `${n}/${total} answered · the answer goes with the last one`,
+    notSent: (why: string) => `Not sent: ${why}`, retry: 'Retry',
+    uncertain: 'Uncertain: the answer may have been sent. Retrying won’t send it twice.',
+    settlesAll: 'This answer settles the whole request, including unanswered questions.',
+    stopped: 'OpenRig is stopped', unreachable: 'OpenRig is not responding',
+    already: 'Already settled elsewhere',
+    partial: 'List may be incomplete: OpenRig did not answer the last read.',
+    confirmHint: 'Your answer is confirmed with Face ID.', confirmHintDevice: 'Your answer is confirmed with your device.',
+    sendCheck: 'Send with Face ID', sendDevice: 'Send with my device',
+    needsDevice: 'An answer to a rig is confirmed with this device. You can give it on the PC.',
+    channel: {
+      no_person: { title: 'Ledge is not OpenRig’s human channel yet.', body: 'Rigs still go through Max, or the kernel’s TUI. Their requests don’t arrive here.' },
+      openrig_stopped: { title: 'OpenRig is stopped: rigs cannot write to you.', body: 'Your projects’ sessions still come here.' },
+      unreachable: { title: 'OpenRig is not responding.', body: '' },
+      no_default: { title: 'OpenRig has several people, and none is the default.', body: 'So its requests don’t arrive here.' },
+      not_installed: { title: (machine: string) => `OpenRig is not installed on ${machine}.`, body: 'Your projects’ sessions still come here.' }
+    }
+  },
   nav: {
     label: 'Main navigation',
     /** The five tabs, the rail's Atelier and Settings (m0-socle.html, §1 and §2); the first one named by ATOI. */
@@ -279,7 +336,7 @@ export const en: Copy = {
     destination: 'Destination'
   },
   decide: {
-    deny: 'Deny', allow: 'Allow once',
+    deny: 'Deny', allow: 'Allow',
     onPc: 'To accept on the PC',
     onPcHint: 'A high-impact request is accepted on the PC. You can deny it from here.',
     hint: 'The decision is sent to the PC at once.',
@@ -687,6 +744,9 @@ export const en: Copy = {
     go: 'Confirm with my device', goApple: 'Allow with Face ID',
     preparing: 'Preparing the check…',
     asking: 'Checking on this device…',
+    /** Under a card's spinning button (m1-a-toi.html §4). */
+    askingNote: 'Checking on this device… It confirms who you are, not that the command is safe.',
+    checking: 'Checking…',
     cancelled: 'Check cancelled. Nothing was sent.',
     expired: 'The check expired. Start again.',
     failed: 'The device check did not go through. Nothing was sent. Try again.',
@@ -704,6 +764,8 @@ export const en: Copy = {
     title: 'Protect the accepts',
     body: 'Face ID or this device’s code will be asked for to allow a high-impact command.',
     go: 'Protect the accepts', later: 'Later',
+    /** From a card that cannot be accepted here (m1-a-toi.html §4). */
+    link: 'Protect the accepts with this device',
     done: 'Protected by this device', row: 'High-impact accepts',
     unsupported: 'This device cannot protect the accepts.'
   },

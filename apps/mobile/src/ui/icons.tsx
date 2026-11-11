@@ -63,7 +63,8 @@ export const ICONS = {
   unlink: ['M18.8 13.4l1.6-1.6a4.5 4.5 0 0 0-6.4-6.4l-1.6 1.6M5.2 10.6l-1.6 1.6a4.5 4.5 0 0 0 6.4 6.4l1.6-1.6M8 2v3M2 8h3M16 22v-3M22 16h-3'],
   clock: [circle(12, 12, 9), 'M12 7v5l3 2'],
   lock: [rect(3, 11, 18, 11, 2), 'M7 11V7a5 5 0 0 1 10 0v4'],
-  bell: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0']
+  bell: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0'],
+  alert: ['M12 3l10 18H2z', 'M12 10v4M12 17.5v.01']
 } as const satisfies Record<string, readonly string[]>;
 
 export type IconName = keyof typeof ICONS;

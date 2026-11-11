@@ -88,7 +88,7 @@ describe('the decisions a session puts to the user', () => {
     expect(screen.getByText(copy.chat.point.calm)).toBeInTheDocument();
   });
 
-  it('« À traiter » shows no decision, open or answered', () => {
+  it('« À toi » shows no decision, open or answered', () => {
     const t = withDecision([decision(), decision({ id: 't0a0b0c', state: 'done' })]);
     render(<Inbox store={t.store} />);
     expect(screen.queryByRole('article')).toBeNull();
