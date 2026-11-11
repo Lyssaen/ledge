@@ -860,7 +860,9 @@ export function createPhoneGateway(deps: {
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
     if (s.source === 'hook_only' || s.source === 'rig') return { status: 'rejected', reason: 'read_only' };
     if (s.state === 'exited' || !s.tmuxSession || backendOf(s) === 'omp-rpc') return { status: 'rejected', reason: 'unavailable' };
-    terminals.open(deviceId, msg.op, { id: s.id, tmuxName: s.tmuxSession });
+    // A subagent has no pane of its own: its page shows its parent's, which it may never type into.
+    if (msg.helper !== undefined && !s.helpers.some(h => h.id === msg.helper)) return { status: 'rejected', reason: 'unknown_session' };
+    terminals.open(deviceId, msg.op, { id: s.id, tmuxName: s.tmuxSession, ...(msg.helper !== undefined ? { readOnly: true } : {}) });
     return { status: 'applied' };
   };
 

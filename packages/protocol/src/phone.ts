@@ -498,8 +498,9 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('brain.answer'), op: OperationIdSchema, task: z.string().min(1).max(40), choice: BrainChoiceSchema, assertion: AssertionSchema.optional() }),
   /** Puts a closed task Ledge gave away from « À traiter ». */
   z.object({ type: z.literal('task.seen'), op: OperationIdSchema, task: z.string().min(1).max(40) }),
-  /** Streams a session's pane, read-only; answered by `term.opened` or `operation.result` (rejected). */
-  z.object({ type: z.literal('term.open'), op: OperationIdSchema, id: sessionId }),
+  /** Streams a session's pane, read-only; answered by `term.opened` or `operation.result` (rejected). `helper`: one of the
+   *  session's subagents (`helpers[].id`), whose terminal is its parent's, read-only for good (`term.opened.readOnly`). */
+  z.object({ type: z.literal('term.open'), op: OperationIdSchema, id: sessionId, helper: z.string().min(1).max(200).optional() }),
   /** « Prendre la main »: passkey, purpose `terminal`, over the session; answered by `term.held` or `operation.result` (rejected). */
   z.object({ type: z.literal('term.hold'), op: OperationIdSchema, tid: TerminalIdSchema, assertion: AssertionSchema.optional() }),
   /** Keys to type, as xterm produced them; `n` counts from 0 for the terminal, so a duplicate is dropped and a gap seen. Refused unless held. */

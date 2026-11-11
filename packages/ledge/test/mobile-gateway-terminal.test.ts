@@ -107,6 +107,28 @@ describe('phone gateway: the agent\'s terminal', () => {
     expect(of(g, 'term.output')).toEqual([{ type: 'term.output', tid: opened!.tid, seq: 0, data: 'hello' }]);
   });
 
+  it('a subagent\'s terminal is its parent\'s pane, read-only for good; an unknown subagent is refused', async () => {
+    counter = 0;
+    const { g, tmux } = make();
+    const auth = await enroll(g);
+    g.sessions.set('a', mk('a', { helpers: [{ id: 'h1', kind: 'Explore', task: 'Lire le code', state: 'working' }] }));
+    const op = randomUUID();
+    g.send('dev1', { type: 'term.open', op, id: 'a', helper: 'h1' });
+    await wait(20);
+    const opened = of(g, 'term.opened').at(-1);
+    expect(g.results('dev1').at(-1)).toEqual({ type: 'operation.result', op, status: 'applied' });
+    expect(tmux.procs[0]!.argv).toEqual(['-C', 'attach-session', '-t', '=ledge-a', '-f', 'ignore-size,read-only']);
+    expect(opened).toMatchObject({ op, id: 'a', readOnly: true });
+    // « Prendre la main » is refused even with a passkey made for the session.
+    expect(await hold(g, auth, opened!.tid)).toMatchObject({ status: 'rejected', reason: 'read_only' });
+    // The parent's own page is not read-only.
+    expect((await open(g)).opened).not.toHaveProperty('readOnly');
+    const other = randomUUID();
+    g.send('dev1', { type: 'term.open', op: other, id: 'a', helper: 'gone' });
+    await flush();
+    expect(g.results('dev1').find(x => x.type === 'operation.result' && x.op === other && x.status !== 'received')).toMatchObject({ status: 'rejected', reason: 'unknown_session' });
+  });
+
   it('refuses a session started outside Ledge, an OpenRig seat, one with no pane, one ended, and an unknown one', async () => {
     const { g, tmux } = make();
     g.sessions.set('h', mk('h', { source: 'hook_only' }));
