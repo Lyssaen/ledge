@@ -80,6 +80,22 @@ describe('the action card', () => {
     });
   });
 
+  // Review caeb9e32: one background per element, so the fill is not lost to another class (m3-chat.html §5).
+  describe('the red fills (review caeb9e32)', () => {
+    const bgs = (el: Element) => [...el.classList].filter(c => /^!?bg-/.test(c));
+    it('the sheet’s confirm button is filled red, its outline background overridden', () => {
+      open({ actions: [cancel] });
+      fireEvent.click(within(card()).getByRole('button', { name: 'Abandonner…' }));
+      const go = within(screen.getByRole('dialog')).getByRole('button', { name: copy.confirm.go });
+      expect(go).toHaveClass('!bg-destructive', '!text-primary-fg', '!border-transparent');
+    });
+    it('a failed or refused step is a red disc with its ✕; an open one keeps the card’s background', () => {
+      open({ actions: [{ ...archive, state: 'refused', code: 'unchanged' }, { ...cancel, state: 'failed', code: 'failed' }, archive] });
+      for (const name of [C.stepState.refused(1), C.stepState.failed(2)]) expect(bgs(screen.getByRole('img', { name }))).toEqual(['bg-destructive']);
+      expect(bgs(screen.getByRole('img', { name: C.step(3) }))).toEqual(['bg-surface']);
+    });
+  });
+
   it('draws a cancellation with its risk, and confirms it in a sheet before any check', async () => {
     const t = open({ actions: [cancel] });
     const spy = vi.spyOn(t.store, 'act').mockResolvedValue({ status: 'applied' });

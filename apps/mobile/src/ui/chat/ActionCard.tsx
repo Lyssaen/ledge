@@ -15,7 +15,9 @@ import { CARD, GHOST, PRIMARY } from './RelayCard';
 
 const C = copy.chat.action;
 const DANGER = buttonClass({ size: 'sm', className: 'border-danger-fg/50 text-danger-fg' });
-const DANGER_FILL = buttonClass({ block: true, className: 'border-transparent bg-[var(--destructive)] text-[var(--destructive-foreground)] active:opacity-75' });
+// The sheet's « Confirmer » is filled red (m3-chat.html §5 `.btn.dangerfill`): `!` wins over the outline variant's own
+// border and background, which otherwise left it as bare text (review caeb9e32).
+const DANGER_FILL = buttonClass({ block: true, className: '!border-transparent !bg-destructive !text-primary-fg active:opacity-75' });
 
 /** `**name**` in a line, bold; the rest as text. */
 function bold(text: string): ReactNode {
@@ -49,12 +51,14 @@ function Risk({ r }: { r: ActionRowView }) {
 /** The step's node on the rail: its number, a check once applied, a cross once failed or refused. */
 function Node({ s, k, r, last }: { s: Shown; k: number; r: ActionRowView; last: boolean }) {
   const label = s === 'done' || s === 'failed' || s === 'refused' || s === 'running' ? C.stepState[s](k) : C.step(k);
-  const look = s === 'done' ? 'border-ok bg-ok text-bg' : s === 'failed' ? 'border-transparent bg-[var(--destructive)] text-[var(--destructive-foreground)]'
-    : r.risk === 'destructive' ? `border-danger-fg/60 text-danger-fg ${s === 'held' ? 'border-dashed' : ''}` : `border-input text-muted ${s === 'held' ? 'border-dashed' : ''}`;
+  // Its background is part of each look, never added beside it: two backgrounds left a failed step's ✕ white on white (review
+  // caeb9e32). A failed or refused step is a red disc with its ✕ (m3-chat.html §5 `.nd span.fail`).
+  const look = s === 'done' ? 'border-ok bg-ok text-bg' : s === 'failed' || s === 'refused' ? 'border-transparent bg-destructive text-primary-fg'
+    : r.risk === 'destructive' ? `border-danger-fg/60 bg-surface text-danger-fg ${s === 'held' ? 'border-dashed' : ''}` : `border-input bg-surface text-muted ${s === 'held' ? 'border-dashed' : ''}`;
   return (
     <div className="relative flex justify-center self-stretch">
       {!last && <span aria-hidden="true" className="absolute top-5 -bottom-3 left-1/2 w-px -translate-x-1/2 bg-muted/45" />}
-      <span role="img" aria-label={label} className={`relative grid size-5 place-items-center rounded-full border-[1.5px] bg-surface font-mono text-[11px] ${look}`}>
+      <span role="img" aria-label={label} className={`relative grid size-5 place-items-center rounded-full border-[1.5px] font-mono text-[11px] ${look}`}>
         {s === 'done' ? <Icon name="check" className="size-3" /> : s === 'failed' || s === 'refused' ? <Icon name="close" className="size-3" /> : s === 'running' ? <Icon name="spinner" className="size-3 motion-safe:animate-spin" /> : k}
       </span>
     </div>
