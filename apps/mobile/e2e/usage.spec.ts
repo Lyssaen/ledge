@@ -56,13 +56,15 @@ for (const theme of ['dark', 'light'] as const) {
     await expect(page.getByLabel('Claude · 5 h à 84 %')).toContainText('84 %');
     await limits.scrollIntoViewIfNeeded();
     await shot(page, `point-${theme}`);
-    // 2 · Agents: one line of indicators.
+    // 2 · Sessions: the list (m2-sessions.html §1).
     await nav(page).getByRole('link', { name: copy.nav.sessions }).click();
-    await expect(page.locator('[data-indicators]').first()).toContainText('Opus 5.5 · élevé · contexte 46 %');
+    await expect(page.getByRole('link', { name: /Otto/ })).toBeVisible();
     await shot(page, `agents-${theme}`);
-    // 3 · The thread's chips.
-    await page.locator('[data-indicators]').first().click();
-    await expect(page.locator('[data-chips]')).toContainText('Opus 5.5 · élevé');
+    // 3 · The thread's foot: its model and its context (§3).
+    await page.getByRole('link', { name: /Otto/ }).click();
+    const foot = page.getByRole('contentinfo', { name: copy.sessions.foot('Otto') });
+    await expect(foot).toContainText('Opus 5.5');
+    await expect(foot).toContainText('46 %');
     await shot(page, `thread-${theme}`);
   });
 }

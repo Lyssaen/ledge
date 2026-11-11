@@ -28,7 +28,9 @@ function opened(s: PhoneSession = nova()) {
   return t;
 }
 type T = ReturnType<typeof opened>;
-const dialog = () => screen.getByRole('dialog');
+const dialog = () => screen.getByRole('dialog', { name: /^Fermer Nova|^Reprendre Nova/ });
+/** « Plus d'actions », then its « Fermer » (m2-sessions.html §5). */
+const more = () => fireEvent.click(screen.getByRole('button', { name: 'Plus d’actions pour Nova' }));
 async function sheetReady(t: T, purpose: 'close' | 'act' = 'close') {
   await waitFor(() => expect(t.of('confirm.prepare').length).toBeGreaterThan(0));
   act(() => t.deliver(challenge(purpose)));
@@ -37,6 +39,7 @@ async function sheetReady(t: T, purpose: 'close' | 'act' = 'close') {
 const result = (t: T, type: 'session.close' | 'session.resume', status: 'applied' | 'rejected' | 'failed', extra: object = {}) =>
   act(() => t.deliver({ type: 'operation.result', op: t.of(type).at(-1)!.op, status, ...extra } as PhoneServerMessage));
 async function sendClose(t: T) {
+  more();
   fireEvent.click(screen.getByRole('button', { name: 'Fermer Nova' }));
   await sheetReady(t);
   fireEvent.click(within(dialog()).getByRole('button', { name: 'Fermer avec mon appareil' }));
@@ -53,7 +56,8 @@ beforeEach(() => {
 describe('double send', () => {
   it('two quick taps on the sheet’s button send one close and ask the device once', async () => {
     const t = opened();
-    fireEvent.click(screen.getByRole('button', { name: 'Fermer Nova' }));
+    more();
+  fireEvent.click(screen.getByRole('button', { name: 'Fermer Nova' }));
     await sheetReady(t);
     const go = within(dialog()).getByRole('button', { name: 'Fermer avec mon appareil' });
     fireEvent.click(go);
@@ -153,10 +157,11 @@ describe('a close whose outcome is unknown (S1)', () => {
     await sendClose(t);
     act(() => t.set('pc_offline'));
     await screen.findByRole('alert');
+    more();
     const held = screen.getByRole('button', { name: 'Fermeture de Nova en cours' });
-    expect(held).toHaveAttribute('aria-disabled', 'true');
+    expect(held).toBeDisabled();
     fireEvent.click(held);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Fermer Nova ?' })).not.toBeInTheDocument();
     expect(getAssertion).toHaveBeenCalledTimes(1);
   });
 });

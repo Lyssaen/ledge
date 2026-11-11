@@ -8,7 +8,7 @@ import { copy } from '../copy';
 import { navigate, replaceRoute } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
 import { sessionStatus } from '../model/agents';
-import { GroupWrite } from '../screens/Agents';
+import { GroupWrite } from '../screens/GroupWrite';
 import { RequestDetail } from '../screens/RequestDetail';
 import { Thread } from '../screens/Thread';
 import { HostPill, LinkStrip } from '../shell/Shell';

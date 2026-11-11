@@ -115,7 +115,7 @@ describe('« À toi » on a phone (m1-a-toi.html §1)', () => {
     render(<Inbox store={t.store} />);
     expect(screen.getByText(/Les nouvelles demandes arrivent ici/)).toBeInTheDocument();
     const lines = within(screen.getByRole('region', { name: 'En cours' })).getAllByRole('link');
-    expect(lines.map(l => l.getAttribute('href'))).toEqual(['#/thread/w6', '#/thread/w5', '#/thread/w4', '#/thread/w3', '#/thread/w2', '#/sessions']);
+    expect(lines.map(l => l.getAttribute('href'))).toEqual(['#/thread/w6', '#/thread/w5', '#/thread/w4', '#/thread/w3', '#/thread/w2', '#/sessions/working']);
     expect(screen.getByText('étape 6')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Voir les 2 autres/ })).toBeInTheDocument();
   });

@@ -48,7 +48,8 @@ describe('the app', () => {
     expect(screen.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument();
     act(() => { globalThis.location.hash = '#/thread/a'; });
     hashChange();
-    expect(screen.getByRole('heading', { name: 'Inbox mobile' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Vue de la session' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Autoriser une commande/ })).toHaveAttribute('href', '#/request/a/ka');
     act(() => { globalThis.location.hash = '#/terminal/a'; });
     hashChange();
     expect(screen.getByText('Terminal de Kai')).toBeInTheDocument();

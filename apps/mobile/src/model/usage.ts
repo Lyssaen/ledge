@@ -88,3 +88,20 @@ export function indicators(s: PhoneSession, now: number, threshold: number): { m
     ...(Number.isFinite(started) && s.state !== 'exited' ? { duration: span(now - started) } : {})
   };
 }
+
+// ── M2a (m2-sessions.html §10, Q27) ──
+
+/** A count of tokens as the tablet's foot writes it: « 620k », « 1M », « 1.5M ». */
+export function tokenCount(n: number): string {
+  if (n < 1000) return String(Math.round(n));
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${Number((n / 1_000_000).toFixed(1))}M`;
+}
+
+/** The window a session's foot shows for its tool's limits (Q27): the first one the PC read for that harness (the 5 hours), with
+ *  its tone past the PC's threshold; null when the PC does not know it, or knew it more than an hour ago. */
+export function footLimit(tool: string, usage: readonly PhoneHarnessUsage[] | null, alert: number | null, now: number, fresh: boolean): { harness: PhoneHarnessUsage['harness']; window: UsageWindow; tone: '' | 'amber' | 'red' } | null {
+  const h = usage && shownUsage(usage, now, fresh).find(u => u.harness === tool);
+  const window = h && h.status !== 'expired' && h.status !== 'loading' ? h.windows[0] : undefined;
+  return h && window ? { harness: h.harness, window, tone: usageTone(window.pct, alert) } : null;
+}

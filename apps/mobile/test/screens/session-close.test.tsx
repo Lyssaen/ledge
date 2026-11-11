@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import type { PhoneServerMessage, PhoneSession } from '@ledge/protocol';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAssertion, platformAvailable } from '../../src/link/webauthn';
-import { Agents } from '../../src/screens/Agents';
+import { Sessions } from '../../src/screens/Sessions';
 import { Thread } from '../../src/screens/Thread';
 import { pending, session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
@@ -26,7 +26,11 @@ function opened(s: PhoneSession = nova(), o: Parameters<typeof snap>[1] & { onRe
   const view = render(<Thread store={t.store} sessionId="a" storage={t.storage} {...(o.onReconnect ? { onReconnect: o.onReconnect } : {})} />);
   return { ...t, view };
 }
-const closeButton = () => screen.getByRole('button', { name: 'Fermer Nova' });
+/** « Fermer » is in « Plus d'actions » (m2-sessions.html §5): the sheet opens first when it is not open yet. */
+const closeButton = () => {
+  if (!screen.queryByRole('dialog', { name: 'Actions pour Nova' })) fireEvent.click(screen.getByRole('button', { name: 'Plus d’actions pour Nova' }));
+  return within(screen.getByRole('dialog', { name: 'Actions pour Nova' })).getByRole('button', { name: 'Fermer Nova' });
+};
 const dialog = () => screen.getByRole('dialog', { name: 'Fermer Nova ?' });
 /** Opens the sheet and hands it the PC's challenge. */
 async function sheetReady(t: ReturnType<typeof opened>, purpose: 'close' | 'act' = 'close') {
@@ -46,12 +50,13 @@ beforeEach(() => {
 describe('« Fermer » on a session’s page', () => {
   it('is offered for a session Ledge launched, by a PC that closes from a phone, and named for the agent', () => {
     opened();
-    expect(closeButton()).toHaveAttribute('title', 'Fermer Nova');
+    expect(closeButton()).toBeEnabled();
   });
 
   it('is not offered for a session started outside Ledge, an ended one, nor by an older PC', () => {
     for (const [s, o] of [[nova({ readOnly: true }), {}], [nova({ state: 'exited' }), {}], [nova(), { old: true as const }]] as const) {
       const t = opened(s, o);
+      fireEvent.click(screen.getByRole('button', { name: 'Plus d’actions pour Nova' }));
       expect(screen.queryByRole('button', { name: 'Fermer Nova' })).not.toBeInTheDocument();
       t.view.unmount();
     }
@@ -160,10 +165,12 @@ describe('a close from the phone, as the page follows it', () => {
     await waitFor(() => expect(footer).toHaveFocus());
     expect(screen.getByText('L’agent termine ce qu’il tape, puis quitte. Cela peut prendre jusqu’à 30 s.')).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Plus d’actions pour Nova' }));
     const held = screen.getByRole('button', { name: 'Fermeture de Nova en cours' });
-    expect(held).toHaveAttribute('aria-disabled', 'true');
+    expect(held).toBeDisabled();
     fireEvent.click(held);
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Fermer Nova ?' })).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Actions pour Nova' }), { key: 'Escape' });
 
     // The PC forced it: the session ended, said so with the time it ended.
     act(() => t.deliver({ type: 'session.updated', session: nova({ state: 'exited', exitedAt: EXITED }) }));
@@ -171,11 +178,14 @@ describe('a close from the phone, as the page follows it', () => {
     expect(screen.queryByRole('button', { name: /Fermer/ })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Session terminée' })).toBeInTheDocument();
     expect(screen.getByText('Fermée de force : l’agent ne répondait pas. Son dernier tour peut manquer.')).toBeInTheDocument();
-    expect(screen.getByText('Sa conversation est gardée. Reprendre relance l’agent sur cette conversation, dans le même dossier.')).toBeInTheDocument();
+    // Closed by force, its reason takes the body's place (m2-sessions.html §4).
+    expect(screen.queryByText('Sa conversation est gardée. Reprendre relance l’agent sur cette conversation, dans le même dossier.')).not.toBeInTheDocument();
     const time = new Date(EXITED).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     expect(screen.getByText(`Session fermée depuis cet appareil · ${time}`)).toBeInTheDocument();
-    // The primary button, with the resume icon before its words.
-    expect(screen.getByRole('button', { name: 'Reprendre Nova' }).firstElementChild?.tagName).toBe('svg');
+    // The button steps back from primary, with the resume icon before its words.
+    const resume = screen.getByRole('button', { name: 'Reprendre Nova' });
+    expect(resume.firstElementChild?.tagName).toBe('svg');
+    expect(resume.className).not.toMatch(/bg-primary/);
   });
 
   it('a refusal of the PC says why above the composer, keeps the draft, and « Réessayer » opens the sheet again', async () => {
@@ -265,17 +275,16 @@ describe('« Reprendre » an ended session', () => {
 });
 
 describe('the list while a session closes and once it ended', () => {
-  it('says « Fermeture… » over the session’s state, then « Terminée » with when', () => {
+  it('says « Fermeture… » over the session’s state, then « terminée » with when', () => {
     const t = setup();
     t.deliver(snap(nova({ state: 'working' })));
-    render(<Agents store={t.store} />);
-    expect(screen.getByText('Au travail')).toBeInTheDocument();
+    render(<Sessions store={t.store} />);
+    expect(screen.getByText('au travail')).toBeInTheDocument();
     act(() => { t.store.sessionClose('a', assertion); });
     expect(screen.getByText('Fermeture…')).toBeInTheDocument();
-    expect(screen.queryByText('Au travail')).not.toBeInTheDocument();
+    expect(screen.queryByText('au travail')).not.toBeInTheDocument();
     act(() => t.deliver({ type: 'session.updated', session: nova({ state: 'exited', exitedAt: new Date().toISOString() }) }));
-    expect(screen.getByText('Terminée')).toBeInTheDocument();
-    expect(screen.getByText(/^à \d\d:\d\d$/)).toBeInTheDocument();
+    expect(screen.getByText(/^terminée à \d\d:\d\d$/)).toBeInTheDocument();
     // Resuming is done from the session's page: the row is a link and nothing else.
     expect(screen.queryByRole('button', { name: /Reprendre/ })).not.toBeInTheDocument();
   });

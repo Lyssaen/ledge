@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { PhoneSession } from '@ledge/protocol';
 import { copy } from '../../copy';
 import { alwaysLabel, alwaysScope, type CardMode } from '../../model/atoi';
@@ -12,10 +12,12 @@ import type { MobileStore } from '../../state/store';
 import { Icon } from '../../ui/icons';
 import { Card } from '../../ui/kit/Box';
 import { kitButtonClass, RequestCode } from '../../ui/kit/Controls';
-import { Pill, RuntimeTag } from '../../ui/kit/marks';
+import { Dot, Pill, RuntimeTag } from '../../ui/kit/marks';
 import { isApple } from '../device';
 import { useDeviceCheck, type CheckProblem } from './check';
 import { Leaving, Receipt } from './Receipt';
+import { useShortcuts } from '../../ui/keys';
+import { useWide } from '../../ui/layout';
 
 /** What was tapped last on this card: the button that turns while it goes, and what « Réessayer » sends again. */
 type Sent = { kind: 'decide'; decision: 'accept' | 'deny' | 'always' } | { kind: 'reply'; text: string; label: string };
@@ -47,6 +49,10 @@ export interface SessionCardProps {
   onCheck?: (() => void) | undefined;
   /** The one opened beside the list (a wide screen). */
   selected?: boolean;
+  /** At the foot of its session's thread (m2-sessions.html §3): the head says what is asked, not who asks. */
+  inThread?: boolean;
+  /** A wide screen's thread (m2-sessions.html §10): Y allows, N refuses, and the head says so in the age's place. */
+  keys?: boolean;
 }
 
 /**
@@ -54,7 +60,7 @@ export interface SessionCardProps {
  * that decide it here, then, once decided, a one-line receipt in its place. A tap on its head or its text opens it in full.
  */
 export function SessionCard(p: SessionCardProps) {
-  const { store, item, mode, outcome, fresh, ghost, changed, canConfirm, enroll, onGone, selected = false } = p;
+  const { store, item, mode, outcome, fresh, ghost, changed, canConfirm, enroll, onGone, selected = false, inThread = false, keys = false } = p;
   const [sent, setSent] = useState<Sent | null>(null);
   const [refused, setRefused] = useState(false);
   const [otherOpen, setOtherOpen] = useState(mode.kind === 'question' && mode.options.length === 0 && mode.other);
@@ -62,10 +68,19 @@ export function SessionCard(p: SessionCardProps) {
   const [checking, setChecking] = useState(false);
   const [problem, setProblem] = useState<CheckProblem | null>(null);
   const check = useDeviceCheck(store);
+  // In a wide screen's thread the three answers share one line (m2-sessions.html §10); on a phone « Toujours » goes under them (§3).
+  const wide = useWide();
+  const oneRow = inThread && wide;
   const R = copy.atoi.receipt;
   const bot = item.botName;
   const kindWord = copy.atoi.pill[item.kind];
   const open = href({ name: 'request', sessionId: item.sessionId, key: item.key });
+  // Y / N, while the card shows its two buttons enabled (set below, once the card knows it).
+  const shortcut = useRef<((key: string) => boolean) | null>(null);
+  const keyed = keys && mode.kind === 'permission';
+  useShortcuts(keyed, k => shortcut.current?.(k) ?? false);
+  // A receipt in the card's place takes no key.
+  shortcut.current = null;
 
   // ── What it became ──
   if (outcome.kind === 'applied') {
@@ -119,6 +134,12 @@ export function SessionCard(p: SessionCardProps) {
     setSent({ kind: 'decide', decision: 'accept' });
     setRefused(store.decide(item.sessionId, 'accept', { assertion: signed, expect }) === null);
   };
+  shortcut.current = keyed && live ? k => {
+    const key = k.toLowerCase();
+    if (key === 'y') { send({ kind: 'decide', decision: 'accept' }); return true; }
+    if (key === 'n') { send({ kind: 'decide', decision: 'deny' }); return true; }
+    return false;
+  } : null;
   const turning = (s: Sent) => sending && sent !== null && JSON.stringify(sent) === JSON.stringify(s);
   const free = checkFreeAnswer(draft);
   const sendFree = () => { if (live && free.problem === null) send({ kind: 'reply', text: free.text, label: free.text }); };
@@ -140,7 +161,15 @@ export function SessionCard(p: SessionCardProps) {
   const where = [item.repo, item.branch].filter(Boolean).join(' · ');
   const btn = (variant: 'primary' | 'outline' = 'outline', extra = '') => kitButtonClass({ variant, className: `min-w-0 ${extra}` });
 
-  const head = (
+  const head = inThread ? (
+    <a href={open} className="-m-1 flex min-w-0 items-center gap-[7px] rounded-md p-1 active:bg-raised">
+      <Dot state={item.kind === 'question' ? 'ask' : item.kind === 'permission' ? 'perm' : 'work'} />
+      <b className="min-w-0 truncate font-semibold">{item.kind === 'permission' ? copy.atoi.line.permission : kindWord}</b>
+      <span className="flex-1" />
+      <span className="font-mono text-small whitespace-nowrap text-muted">{keyed ? copy.atoi.keys : ageLabel(item.since, Date.now())}</span>
+      {high && <Pill tone="risk">{copy.risk.badge}</Pill>}
+    </a>
+  ) : (
     <a href={open} className="-m-1 flex min-w-0 items-center gap-[7px] rounded-md p-1 active:bg-raised">
       <RuntimeTag tool={item.tool} />
       <b className="font-semibold whitespace-nowrap">{bot}</b>
@@ -167,7 +196,13 @@ export function SessionCard(p: SessionCardProps) {
       case 'answerOnPc':
         return hint(copy.decide.answerOnPc);
       case 'permission':
-        return (
+        return oneRow ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'accept' })} className={btn('primary', 'min-w-[140px]')}>{turning({ kind: 'decide', decision: 'accept' }) && <Spin />}{copy.atoi.allow}</button>
+            <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'deny' })} className={btn('outline', 'min-w-[120px]')}>{turning({ kind: 'decide', decision: 'deny' }) && <Spin />}{copy.atoi.deny}</button>
+            {mode.always && <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'always' })} className={kitButtonClass({ variant: 'ghost' })}>{turning({ kind: 'decide', decision: 'always' }) && <Spin />}{alwaysLabel(alwaysScope(item))}</button>}
+          </div>
+        ) : (
           <>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'accept' })} className={btn('primary')}>{turning({ kind: 'decide', decision: 'accept' }) && <Spin />}{copy.atoi.allow}</button>

@@ -268,6 +268,49 @@ export const en: Copy = {
       look: (name: string) => `Looks at ${name}…`
     }
   },
+  sessions: {
+    filter: { label: 'Filter the sessions', all: 'All', waiting: 'Waiting', working: 'Working' },
+    rigGroup: (name: string) => `Rig ${name}`,
+    line: {
+      permission: 'permission requested', working: 'working', idle: 'available', error: 'error',
+      ended: (when: string) => `ended ${when}`, endedPlain: 'ended',
+      thinking: 'Thinking…'
+    },
+    kids: (n: number) => `+${n}`,
+    kidsLabel: (n: number) => (n === 1 ? '1 sub-agent at work' : `${n} sub-agents at work`),
+    filterEmpty: 'Nothing is waiting for you.',
+    filterEmptyBody: (working: number) => `No session asks for your decision. ${working} ${working === 1 ? 'is' : 'are'} working.`,
+    seeAll: 'See all',
+    emptyWorking: {
+      title: 'No session is working.',
+      waiting: (n: number) => (n === 1 ? '1 is waiting for your decision.' : `${n} are waiting for your decision.`),
+      idle: 'They are all available or ended.'
+    },
+    seeWaiting: 'See waiting',
+    view: { label: 'Session view', thread: 'Thread', terminal: 'Terminal' },
+    more: 'More actions',
+    moreOf: (bot: string) => `More actions for ${bot}`,
+    tools: (n: number) => (n === 1 ? '1 tool' : `${n} tools`),
+    toolsNamed: (n: number, names: string) => `${n === 1 ? '1 tool' : `${n} tools`} · ${names}`,
+    toolStatus: { running: 'running', success: 'done', failed: 'failed', unknown: 'state unknown' },
+    foot: (bot: string) => `${bot}'s state`,
+    requestBelow: 'Request below',
+    keysHint: 'Enter sends, Shift+Enter starts a new line',
+    contextLabel: (pct: number) => `Context used: ${pct} %`,
+    folder: (name: string) => `Folder ${name}`,
+    sheet: {
+      label: (bot: string) => `Actions for ${bot}`,
+      writeGroup: (group: string) => `Write to the group ${group}`,
+      planCount: (done: number, total: number) => `${done} / ${total}`,
+      interruptNote: 'Interrupting does not undo actions already done.',
+      faceId: 'Face ID'
+    },
+    modelOff: {
+      olderPc: 'Changing it from the phone comes with a later version of Ledge on the PC.',
+      outside: 'Started outside Ledge: change it in its terminal.',
+      ended: 'The session has ended.'
+    }
+  },
   agents: {
     title: 'Sessions',
     subtitle: (sessions: number, projects: number) => `${sessions} ${plural(sessions, 'session', 'sessions')} · ${projects} ${plural(projects, 'project', 'projects')} on this PC`,

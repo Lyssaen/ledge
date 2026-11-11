@@ -147,7 +147,7 @@ describe('the Atelier screen', () => {
   it('the panel is the thread, with « Plein écran » and ×, and an OMP seat’s terminal instead of a thread', () => {
     const t = open('otto');
     const panel = screen.getByRole('complementary', { name: copy.atelier.session('Otto') });
-    expect(within(panel).getByRole('heading', { name: 'Préparer la 0.42' })).toBeInTheDocument();
+    expect(within(panel).getByText('Otto', { selector: 'b' })).toBeInTheDocument();
     expect(within(panel).getByRole('link', { name: copy.atelier.fullScreen })).toHaveAttribute('href', '#/thread/otto');
     expect(within(panel).queryByRole('link', { name: copy.nav.backTo.sessions! })).toBeNull();
     fireEvent.click(within(panel).getByRole('button', { name: copy.atelier.closePanel }));

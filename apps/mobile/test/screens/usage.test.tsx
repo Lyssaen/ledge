@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import type { PhoneHarnessUsage } from '@ledge/protocol';
 import { copy } from '../../src/copy';
 import { indicators, modelName, overWindows, resetLabel, span, usageTone } from '../../src/model/usage';
-import { Agents } from '../../src/screens/Agents';
 import { Chat } from '../../src/screens/Chat';
 import { session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
@@ -84,15 +83,6 @@ describe('« Le point »', () => {
   it('without limits from the PC, no LIMITES', () => {
     expect(within(point([])).queryByRole('group', { name: copy.chat.point.limitsLabel })).toBeNull();
   });
-});
-
-it('Agents: one line of indicators, the context amber past « Contexte max »', () => {
-  const t = setup();
-  t.deliver(snapshot([session('a', { name: 'Nova', repo: 'ledge', model: 'fable', effort: 'high', context: { used: 176_000, window: 200_000, at: at(0) }, startedAt: at(-220) })]));
-  const { container } = render(<Agents store={t.store} />);
-  const line = container.querySelector('[data-indicators]')!;
-  expect(line.textContent).toBe('Fable · élevé · contexte 88 % · 3 h 40');
-  expect(line.querySelector('.text-attention')?.textContent).toContain('contexte 88 %');
 });
 
 describe('Cursor Agent in « Le point »', () => {

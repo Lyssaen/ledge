@@ -26,6 +26,8 @@ const sent = <T extends PhoneClientMessage['type']>(type: T) => h.pc.received.ma
   .filter((m): m is Extract<PhoneClientMessage, { type: T }> => m.type === type);
 const S = copy.sessionEnd;
 const sheet = (page: Page, title: string) => page.getByRole('dialog', { name: title });
+/** « Fermer » sits in « Plus d'actions » (m2-sessions.html §5). */
+const more = (page: Page) => page.getByRole('button', { name: copy.sessions.moreOf('Otto') }).click();
 
 test('a session closed from its page with the passkey, read as ended in the list, then resumed on its conversation', async ({ page }) => {
   test.setTimeout(90_000);
@@ -60,10 +62,11 @@ test('a session closed from its page with the passkey, read as ended in the list
     expect(h.daemon.device?.registered).toBe(true);
     await page.getByRole('link', { name: copy.compare.seePending }).click();
     await page.getByRole('link', { name: copy.nav.sessions, exact: true }).click();
-    await page.getByRole('link', { name: /Pagination de \/invoices/ }).click();
+    await page.getByRole('link', { name: /Otto/ }).click();
   });
 
   await test.step('a cancelled check on the device sends nothing', async () => {
+    await more(page);
     await page.getByRole('button', { name: S.close('Otto') }).click();
     await expect(sheet(page, S.closeTitle('Otto'))).toBeVisible();
     await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false });
@@ -76,28 +79,28 @@ test('a session closed from its page with the passkey, read as ended in the list
   });
 
   await test.step('Fermer → the device → the PC verifies the assertion and closes; the page says the session ended', async () => {
+    await more(page);
     await page.getByRole('button', { name: S.close('Otto') }).click();
     await page.getByRole('button', { name: S.goClose }).click();
     await expect(page.getByRole('heading', { name: S.ended })).toBeVisible();
     expect(h.daemon.ended).toEqual(['s1']);
     expect(sent('session.close')).toMatchObject([{ id: 's1', assertion: { id: expect.any(String) } }]);
-    await expect(page.getByRole('button', { name: S.close('Otto') })).toBeHidden();
     await expect(page.getByText(/^Session fermée depuis cet appareil · \d\d:\d\d$/)).toBeVisible();
   });
 
   await test.step('the list reads « Terminée » with the time it ended, and offers no resume of its own', async () => {
     await page.getByRole('link', { name: copy.thread.back }).click();
-    await expect(page.getByText(copy.agents.state.exited)).toBeVisible();
-    await expect(page.getByText(/^à \d\d:\d\d$/)).toBeVisible();
+    await expect(page.getByText(/^terminée à \d\d:\d\d$/)).toBeVisible();
     await expect(page.getByRole('button', { name: /Reprendre/ })).toHaveCount(0);
   });
 
   await test.step('Reprendre → the device → the PC resumes it, and the composer is back', async () => {
-    await page.getByRole('link', { name: /Pagination de \/invoices/ }).click();
+    await page.getByRole('link', { name: /Otto/ }).click();
     await page.getByRole('button', { name: S.resume('Otto') }).click();
     await page.getByRole('button', { name: S.goResume }).click();
     await expect(page.getByRole('textbox')).toBeVisible();
     expect(h.daemon.resumed).toEqual(['s1']);
+    await more(page);
     await expect(page.getByRole('button', { name: S.close('Otto') })).toBeVisible();
   });
 

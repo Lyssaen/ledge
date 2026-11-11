@@ -57,8 +57,8 @@ test('the terminal streams at the PC\'s size, then types after the passkey', asy
     await expect(page.getByText(copy.enroll.done)).toBeVisible();
     await page.getByRole('link', { name: copy.compare.seePending }).click();
     await page.getByRole('link', { name: copy.nav.sessions, exact: true }).click();
-    await page.getByRole('link', { name: /Pagination de \/invoices/ }).click();
-    await page.getByRole('link', { name: copy.thread.terminal('Otto') }).click();
+    await page.getByRole('link', { name: /Otto/ }).click();
+    await page.getByRole('link', { name: copy.sessions.view.terminal, exact: true }).click();
   });
 
   await test.step('xterm draws the pane, read-only, at 120 columns', async () => {

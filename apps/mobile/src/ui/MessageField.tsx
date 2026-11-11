@@ -10,7 +10,8 @@ const MIN = 44;
 const MAX = 120;
 
 /** Only a physical keyboard sends with Enter in a text that may hold line breaks; on a touch keyboard Enter breaks the line. */
-const physicalKeyboard = () => globalThis.matchMedia?.('(hover: hover) and (pointer: fine)').matches === true;
+/** A keyboard and a fine pointer: Enter sends, Shift+Enter starts a new line. */
+export const physicalKeyboard = () => globalThis.matchMedia?.('(hover: hover) and (pointer: fine)').matches === true;
 
 /**
  * The phone's one message field: the images waiting under it, ＋, the text growing from 44 to 120 px as it wraps, and

@@ -6,7 +6,7 @@ import { MeResponseSchema } from '@ledge/protocol';
 import type { LinkState, PhoneLink } from './link/link';
 import { openFromWorker, parseRoute, replaceRoute, useRoute, type Route } from './router';
 import { AtelierScreen } from './atelier/AtelierScreen';
-import { Agents } from './screens/Agents';
+import { Sessions } from './screens/Sessions';
 import { Chat } from './screens/Chat';
 import { Compare } from './screens/Compare';
 import { Choose, Recover } from './screens/Recover';
@@ -280,7 +280,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     const shell: ShellLink = { pc: pcName, look: lookOf(mobile.fresh, !!mobile.syncedAt, link.reach()), reach: link.reach(), since: clock(mobile.syncedAt), retry };
     const badges = { atoi: atoiBadge(requestsOf([...mobile.sessions.values()]), mobile.asks ?? []) };
     const inbox = <Inbox store={store} onReconnect={retry} />;
-    const sessions = <Agents store={store} />;
+    const sessions = <Sessions store={store} filter={route.name === 'sessions' ? route.filter : undefined} />;
     // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
     const chat = mobile.device?.chat || (!mobile.fresh && !mobile.device) ? <Chat store={store} onReconnect={retry} /> : <ChatUnavailable />;
     // The Rigs tab once the PC sends its rigs (`daemon.rigs`, m4-rigs.html); before, it says the PC does not.

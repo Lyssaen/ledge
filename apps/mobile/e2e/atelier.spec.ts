@@ -72,7 +72,7 @@ for (const theme of ['dark', 'light'] as const) {
     // b · A tap on an agent: its session in a panel on the right, the Atelier still there; another agent changes the panel.
     await seat(page, 'otto').click();
     await expect(page).toHaveURL(/#\/atelier\/otto$/);
-    await expect(panel(page).getByRole('heading', { name: 'Préparer la 0.42' })).toBeVisible();
+    await expect(panel(page).locator('header').getByText('Otto', { exact: true })).toBeVisible();
     await expect(panel(page).getByText('Lance les tests avant de préparer la release.')).toBeVisible();
     await expect(panel(page).getByRole('link', { name: copy.thread.examine })).toBeVisible();
     await expect(panel(page).getByRole('link', { name: copy.nav.backTo.sessions! })).toHaveCount(0);
@@ -94,7 +94,7 @@ for (const theme of ['dark', 'light'] as const) {
     await expect(panel(page).getByRole('link', { name: copy.thread.examine })).toHaveCount(0);
     expect(h.daemon.typed).toHaveLength(1);
     await seat(page, 'nova').click();
-    await expect(panel(page).getByRole('heading', { name: 'Reconnexion SSH' })).toBeVisible();
+    await expect(panel(page).locator('header').getByText('Nova', { exact: true })).toBeVisible();
     await expect(panel(page).getByText('La reconnexion SSH boucle quand le Wi-Fi revient.')).toBeVisible();
     // A sub-agent opens its parent's session.
     await page.locator('.helper-seat').click();
@@ -132,7 +132,7 @@ for (const theme of ['dark', 'light'] as const) {
 
     // Portrait: the rooms in a column, the panel from the bottom.
     await page.setViewportSize(PORT);
-    await expect(panel(page).getByRole('heading', { name: 'Page d’accueil' })).toBeVisible();
+    await expect(panel(page).locator('header').getByText('Luna', { exact: true })).toBeVisible();
     const low = (await panel(page).boundingBox())!;
     expect(low.y).toBeGreaterThan(PORT.height * 0.3);
     expect(low.y + low.height).toBeGreaterThanOrEqual(PORT.height - 1);
@@ -177,7 +177,7 @@ test('the cases: an OMP seat, « Sans projet », a double tap, the PC offline', 
 
   // « Sans projet »: its card opens the session.
   await page.locator('.unassigned-zone [data-agent="kit"]').click();
-  await expect(panel(page).getByRole('heading', { name: 'Essais du proxy' })).toBeVisible();
+  await expect(panel(page).locator('header').getByText('Kit', { exact: true })).toBeVisible();
   await panel(page).getByRole('button', { name: copy.atelier.closePanel }).click();
 
   // A double tap on a room's floor frames it; « Ajuster » comes back.
@@ -194,7 +194,7 @@ test('the cases: an OMP seat, « Sans projet », a double tap, the PC offline', 
 
   // The PC offline: the last known state, the bots frozen, the panel read-only.
   await seat(page, 'luna').click();
-  await expect(panel(page).getByRole('heading', { name: 'Page d’accueil' })).toBeVisible();
+  await expect(panel(page).locator('header').getByText('Luna', { exact: true })).toBeVisible();
   await h.stopRelay();
   // The shell's banner (shell/Shell.tsx, LinkStrip), over the floor.
   await expect(page.locator('[data-strip]')).toBeVisible({ timeout: 20_000 });

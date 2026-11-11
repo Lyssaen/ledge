@@ -43,18 +43,35 @@ export function FilterChips<T extends string>({ label, options, value, onChange 
   );
 }
 
-/** A detail screen's head: back, the runtime, the name and its dot, where it works, and « Plus d'actions ». */
-export function DetailHeader({ back, tool, name, dot, sub, more }: {
-  back: ReactNode; tool?: Tool; name: string; dot?: DotState; sub?: string; more?: ReactNode;
+/** A detail screen's head: back, the runtime, the name and its dot (`pulse`: at work, live), where it works, and « Plus d'actions ». */
+export function DetailHeader({ back, tool, name, dot, pulse = false, sub, under = false, more }: {
+  back: ReactNode; tool?: Tool; name: string; dot?: DotState; pulse?: boolean; sub?: string | undefined;
+  /** `sub` goes under the name, in the same height: a phone's ended session, whose end time would not fit beside it (review-qa f3d4bee6, design-ux e39f7cba). */
+  under?: boolean;
+  more?: ReactNode;
 }) {
   return (
-    <header className="flex h-14 flex-none items-center gap-2 border-b border-line pr-1.5 pl-0.5">
+    // Edge to edge, as the mockups' `.dhead` and the screen's own foot: inside the app's 18 px margins, a phone's ended
+    // session lost the 36 px its end time needs (review-qa e4f08d08).
+    <header className="bleed flex h-14 flex-none items-center gap-2 border-b border-line pr-1.5 pl-0.5">
       {back}
       {tool && <RuntimeTag tool={tool} />}
-      <b className="text-base font-semibold whitespace-nowrap">{name}</b>
-      {dot && <Dot state={dot} />}
-      {sub && <span className="min-w-0 truncate text-small text-muted">{sub}</span>}
-      <span className="flex-1" />
+      {under && sub ? (
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="flex min-w-0 items-center gap-2">
+            <b className="min-w-0 truncate text-base leading-5 font-semibold">{name}</b>
+            {dot && <Dot state={dot} pulse={pulse} />}
+          </span>
+          <span className="truncate text-[12px] leading-4 text-muted">{sub}</span>
+        </span>
+      ) : (
+        <>
+          <b className="text-base font-semibold whitespace-nowrap">{name}</b>
+          {dot && <Dot state={dot} pulse={pulse} />}
+          {sub && <span className="min-w-0 truncate text-small text-muted">{sub}</span>}
+          <span className="flex-1" />
+        </>
+      )}
       {more}
     </header>
   );

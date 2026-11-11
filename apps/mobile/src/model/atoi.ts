@@ -1,4 +1,4 @@
-import { offers, type HumanAnswer, type HumanAsk, type PhoneSession } from '@ledge/protocol';
+import { alwaysScope as sharedAlwaysScope, offers, type AlwaysScope, type HumanAnswer, type HumanAsk, type PhoneSession } from '@ledge/protocol';
 import type { Op } from '../state/operations';
 import { isLive } from '../state/operations';
 import type { InboxItem } from './requests';
@@ -35,20 +35,13 @@ export function cardMode(item: InboxItem, caps: { decide?: boolean; freeTextAnsw
   return { kind: 'permission', always: offers(item.tool, item.kind, 'always') };
 }
 
-/** Claude Code's file tools: their « always » turns on accept-edits for the whole session. */
-const EDITS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
-
 /**
- * What « Toujours » grants (m2-toujours.html §1, Q67), by Desktop's rule (`apps/desktop/src/session/PendingCard.tsx`
- * `alwaysScope`) until it moves to `@ledge/protocol`: Claude's command rule goes to the project, its file tools and Codex
- * hold for the session, its plan switches to auto mode.
+ * What « Toujours » grants (m2-toujours.html §1, Q67), by the rule every front shares (`@ledge/protocol` `alwaysScope`):
+ * Claude's command rule goes to the project, its file tools and Codex hold for the session, its plan switches to auto mode.
  */
-export type AlwaysScope = 'project' | 'edits' | 'session' | 'plan';
-export function alwaysScope(item: Pick<InboxItem, 'tool' | 'kind' | 'pendingTool'>): AlwaysScope {
-  if (item.tool !== 'claude') return 'session';
-  if (item.kind === 'plan') return 'plan';
-  return item.kind === 'diff' || EDITS.has(item.pendingTool ?? '') ? 'edits' : 'project';
-}
+export type { AlwaysScope };
+export const alwaysScope = (item: Pick<InboxItem, 'tool' | 'kind' | 'pendingTool'>): AlwaysScope =>
+  sharedAlwaysScope(item.tool, { kind: item.kind, ...(item.pendingTool ? { tool: item.pendingTool } : {}) });
 
 /** The « Toujours » button's words for that scope. */
 export const alwaysLabel = (scope: AlwaysScope): string =>
