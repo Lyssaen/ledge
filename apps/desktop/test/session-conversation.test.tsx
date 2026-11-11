@@ -17,7 +17,18 @@ const observers: Array<() => void> = [];
 const resized = () => act(() => { for (const o of observers) o(); });
 beforeEach(() => {
   observers.length = 0;
-  vi.stubGlobal('ResizeObserver', class { constructor(cb: ResizeObserverCallback) { observers.push(() => cb([], this as unknown as ResizeObserver)); } observe() {} unobserve() {} disconnect() {} });
+  // As a browser does, an observer is called with one entry per element it watches, and not at all when it watches none:
+  // dockview reads the first entry's target.
+  vi.stubGlobal('ResizeObserver', class {
+    private watched = new Set<Element>();
+    constructor(cb: ResizeObserverCallback) {
+      observers.push(() => {
+        if (this.watched.size === 0) return;
+        cb([...this.watched].map(target => ({ target, contentRect: target.getBoundingClientRect() }) as unknown as ResizeObserverEntry), this as unknown as ResizeObserver);
+      });
+    }
+    observe(el: Element) { this.watched.add(el); } unobserve(el: Element) { this.watched.delete(el); } disconnect() { this.watched.clear(); }
+  });
 });
 afterEach(async () => {
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
