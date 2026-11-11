@@ -58,6 +58,9 @@ describe('a request', () => {
     expect(screen.getByText(C.log.reading('test'))).toBeTruthy();
     t.give({ ...detail(mr(), { mergeBlockers: ['pipeline'] }), log: { jobId: 'j2', text: 'FAIL worker/retry.test.ts' } });
     expect(screen.getByText('FAIL worker/retry.test.ts')).toBeTruthy();
+    // The failed job is red, in both themes (§3).
+    expect(document.querySelector('[data-job="j2"]')!.className).toMatch(/\bbg-danger-bg\b/);
+    expect(document.querySelector('[data-job="j2"]')!.className).not.toMatch(/dark:bg-transparent/);
     const foot = document.querySelector('[data-foot="why"]')!;
     expect(foot.textContent).toBe('0/1 approbation · le pipeline a échoué');
     expect((screen.getByRole('button', { name: C.merge }) as HTMLButtonElement).disabled).toBe(true);
@@ -348,6 +351,8 @@ describe('a request\'s discussion', () => {
 
   it('posts a comment from the footer, and clears it once posted', async () => {
     const t = discussion();
+    // Empty, the field shows its send arrow, off (§6); written, the check's button replaces it.
+    expect((screen.getByRole('button', { name: C.post }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByPlaceholderText(C.addComment), { target: { value: 'LGTM' } });
     const sent = await check(t, /^Publier avec/);
     expect(sent.action).toEqual({ kind: 'comment', body: 'LGTM' });

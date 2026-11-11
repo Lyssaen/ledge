@@ -41,18 +41,35 @@ function SentNote({ sent, onClose }: { sent: Sent; onClose: () => void }) {
   );
 }
 
-/** A text for the forge: its field, then the device's check over it and where it goes (« Publié sous ton nom sur GitHub. »). */
-function Write({ id, label, placeholder, verb, value, onChange, confirm, live, onPost, host, autoFocus = false, rows = 2 }: {
+/**
+ * A text for the forge: its field, then the device's check over it and where it goes (« Publié sous ton nom sur GitHub. »). `arrow`:
+ * the field of a new comment, which shows its send arrow, off, while empty (m5-mr-pr.html §6); the check's button replaces it.
+ */
+function Write({ id, label, placeholder, verb, value, onChange, confirm, live, onPost, host, autoFocus = false, rows = 2, arrow = false }: {
   id: string; label: string; placeholder: string; verb: string; value: string; onChange: (v: string) => void;
-  confirm: boolean; live: boolean; onPost: () => void; host: string; autoFocus?: boolean; rows?: number;
+  confirm: boolean; live: boolean; onPost: () => void; host: string; autoFocus?: boolean; rows?: number; arrow?: boolean;
 }) {
+  const field = (
+    <textarea
+      id={id} rows={value ? Math.max(rows, 2) : rows} value={value} placeholder={placeholder} autoFocus={autoFocus} onChange={e => onChange(e.target.value)}
+      className={arrow
+        ? 'min-h-[34px] min-w-0 flex-1 resize-none bg-transparent py-[6px] text-base leading-[22px] text-fg outline-none placeholder:text-muted'
+        : 'min-h-11 w-full resize-none rounded-[14px] border border-input bg-surface px-3.5 py-[11px] text-base leading-5 text-fg placeholder:text-muted'}
+    />
+  );
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className="sr-only">{label}</label>
-      <textarea
-        id={id} rows={value ? Math.max(rows, 2) : rows} value={value} placeholder={placeholder} autoFocus={autoFocus} onChange={e => onChange(e.target.value)}
-        className="min-h-11 w-full resize-none rounded-[14px] border border-input bg-surface px-3.5 py-[11px] text-base leading-5 text-fg placeholder:text-muted"
-      />
+      {arrow ? (
+        <div className="flex min-w-0 items-end gap-2 rounded-[10px] border border-input bg-surface py-[5px] pr-[5px] pl-3 focus-within:border-ring focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-ring)_30%,transparent)]">
+          {field}
+          {value.trim() === '' && (
+            <button type="button" disabled aria-label={verb} title={verb} className="grid size-9 flex-none place-items-center rounded-lg bg-primary text-primary-fg disabled:opacity-40">
+              <Icon name="send" className="size-[18px]" />
+            </button>
+          )}
+        </div>
+      ) : field}
       {value.trim() !== '' && (
         <>
           <CheckedButton verb={verb} confirm={confirm} disabled={!live} onClick={onPost} />
@@ -187,7 +204,7 @@ export function CommentFoot({ pr, forge, store, live, pc }: { pr: PullRequest; f
       {run && <ForgeRunNote run={run} pr={pr} detail={undefined} forge={forge} pc={pc} />}
       <Write
         id={`comment-${pr.id}`} label={C.addComment} placeholder={C.addComment} verb={C.post} value={draft} onChange={v => forge.setDraft(key, v)}
-        confirm={!!m.device?.confirm} live={live && !busy} onPost={() => void forge.act(pr.id, { kind: 'comment', body: draft.trim() })} host={forgeWords(pr).host} rows={1}
+        confirm={!!m.device?.confirm} live={live && !busy} onPost={() => void forge.act(pr.id, { kind: 'comment', body: draft.trim() })} host={forgeWords(pr).host} rows={1} arrow
       />
     </div>
   );

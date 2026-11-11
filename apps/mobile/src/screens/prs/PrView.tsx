@@ -70,8 +70,10 @@ function Views({ pr, d, view, onView }: { pr: PullRequest; d: PrDetail | undefin
 }
 
 const JOB_BORDER: Record<PrJob['status'], string> = {
-  ok: 'border-ok/40', fail: 'border-approval/60 bg-danger-bg/70', run: 'border-info/50', wait: 'border-line text-muted', skip: 'border-line text-muted', none: 'border-line text-muted'
+  ok: 'border-ok/40', fail: 'border-approval/60', run: 'border-info/50', wait: 'border-line text-muted', skip: 'border-line text-muted', none: 'border-line text-muted'
 };
+/** A failed job's row is red in both themes (m5-mr-pr.html §3, `.job.fail`); the others sit on the card, bare in dark. */
+const jobBg = (status: PrJob['status']): string => (status === 'fail' ? 'bg-danger-bg' : 'bg-surface dark:bg-transparent');
 
 /** What a job says on its right: its duration, « en cours » while it runs, else its state when it did not run. */
 function jobRight(j: PrJob): ReactNode {
@@ -90,7 +92,7 @@ function JobRow({ job, selected, onOpen }: { job: PrJob; selected: boolean; onOp
       {jobRight(job)}
     </>
   );
-  const className = `flex h-11 w-full items-center gap-2.5 rounded-[10px] border bg-surface px-3 text-left text-[14px] dark:bg-transparent ${JOB_BORDER[job.status]} ${selected ? 'shadow-[0_0_0_2px_var(--color-ring)]' : ''}`;
+  const className = `flex h-11 w-full items-center gap-2.5 rounded-[10px] border px-3 text-left text-[14px] ${jobBg(job.status)} ${JOB_BORDER[job.status]} ${selected ? 'shadow-[0_0_0_2px_var(--color-ring)]' : ''}`;
   return onOpen
     ? <button type="button" data-job={job.id} onClick={onOpen} className={className}>{inner}</button>
     : <div data-job={job.id} className={className}>{inner}</div>;
