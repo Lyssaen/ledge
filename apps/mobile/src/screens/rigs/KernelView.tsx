@@ -2,24 +2,25 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { KERNEL_RIG, type OpenRigAction, type RigGraph, type RigGraphSeat } from '@ledge/protocol';
 import { copy } from '../../copy';
 import {
-  attentionOf, changeOf, isOperator, kernelOf, kernelSeatName, listedRigs, rigDot, rigStatus, seatState, workingSeats, type RigStatus
+  attentionOf, changeOf, isOperator, kernelOf, kernelSeatName, listedRigs, permLevelOf, rigDot, rigStatus, seatState, workingSeats, type RigStatus
 } from '../../model/rigs';
 import { href } from '../../router';
 import { LinkStrip, hostName, useShell } from '../../shell/Shell';
 import { daemonAction, useDaemonPrefs } from '../../state/rigPrefs';
 import { useRigs, type RigsStore } from '../../state/rigs';
 import { useMobile, type MobileStore } from '../../state/store';
+import { iconButtonClass } from '../../ui/Button';
 import { BackLink } from '../../ui/Header';
 import { Icon } from '../../ui/icons';
 import { Dot, type DotState } from '../../ui/kit/marks';
 import { useWide } from '../../ui/layout';
 import { clock } from '../Inbox';
-import { GoalThread, ReplyField, goalAt, maxWord } from './Max';
-import { Chip, Frame, IconLabel, Lbl, Strip, rigButtonClass } from './kit';
+import { GoalThread, ReplyField, maxAt, maxWord } from './Max';
+import { Chip, Frame, IconLabel, Lbl, ReadFail, Strip, rigButtonClass } from './kit';
 import { DaemonChoices, DaemonRow, KERNEL_TONE } from './RigsList';
 import { Node, iso } from './RigView';
 import { RunNote, isRunning, lastRun } from './runs';
-import { ConfirmSheet } from './sheets';
+import { ConfirmSheet, KernelMenuSheet } from './sheets';
 
 /*
  * The kernel, OpenRig's own rig, and its daemon (m4-rigs.html, §8): the role in a sentence, the topology (Max, the advisor, the queue
@@ -30,7 +31,10 @@ import { ConfirmSheet } from './sheets';
 
 const C = copy.rigs;
 const K = C.kernelView;
-type Sheet = 'kernel.restart' | 'kernel.stop' | 'daemon.restart' | 'daemon.stop' | null;
+type Sheet = 'menu' | 'kernel.restart' | 'kernel.stop' | 'daemon.restart' | 'daemon.stop' | null;
+
+/** A queue row's id as Desktop shortens it in « attend la ligne …c8a66d5a »; any other word of OpenRig as it comes. */
+const rowId = (on: string): string => (/^qitem-\d{14}-[0-9a-f]{8,}$/.test(on) ? `…${on.slice(-8)}` : on);
 
 /** The kernel's topology, flat: Max on top, the other seats side by side under him (no pod boxes). */
 function KernelTopology({ graph, status, near }: { graph: RigGraph; status: RigStatus; near: number }) {
@@ -64,7 +68,7 @@ function Routing({ rigs }: { rigs: RigsStore }) {
   const words = (change: string): string => {
     const c = changeOf(change);
     if (c.verb === 'handed') return K.change.handed(c.to);
-    if (c.verb === 'blocked') return K.change.blocked(c.on);
+    if (c.verb === 'blocked') return K.change.blocked(rowId(c.on));
     if (c.verb === 'other') return c.text;
     return K.change[c.verb];
   };
@@ -73,9 +77,9 @@ function Routing({ rigs }: { rigs: RigsStore }) {
       <Lbl aside={K.allRigs}>{K.routing}</Lbl>
       <Frame>
         {!entries
-          ? <p role={read?.error ? 'alert' : 'status'} className="p-3 text-[13px] text-muted">{read?.error ? C.readError[read.error] : C.loading}</p>
+          ? read?.error ? <ReadFail retry={() => rigs.readRouting()} retryLabel={C.unavailable.retry}>{C.readError[read.error]}</ReadFail> : <p role="status" className="p-3 text-[13px] text-muted">{C.loading}</p>
           : entries.length === 0
-            ? <p className="p-3 text-[13px] text-muted">{K.noRouting}</p>
+            ? <ReadFail>{K.noRouting}</ReadFail>
             : entries.map((e, i) => (
               <div key={`${e.qitem}-${e.at}-${i}`} className="grid grid-cols-[44px_1fr] gap-x-2 border-b border-line px-3 py-2 text-[13px] leading-[18px] last:border-b-0">
                 <span className="font-mono text-[11.5px] text-muted">{clock(iso(e.at))}</span>
@@ -103,6 +107,11 @@ export function KernelView({ rigs, store }: { rigs: RigsStore; store: MobileStor
     rigs.followGoals();
     if (live) { rigs.openRig(KERNEL_RIG); rigs.readRouting(); }
   }, [rigs, live]);
+  // The level of each running rig in « Rigs pilotés », read once per rig on opening the kernel (m4-complement.html, F).
+  const running = r.state ? listedRigs(r.state).filter(x => rigStatus(x) !== 'stopped').map(x => x.name).join(' ') : '';
+  useEffect(() => {
+    if (live && running) for (const rig of running.split(' ')) rigs.readPermissions(rig);
+  }, [rigs, live, running]);
 
   const name = hostName(pc);
   const state = r.state;
@@ -112,8 +121,15 @@ export function KernelView({ rigs, store }: { rigs: RigsStore; store: MobileStor
       <BackLink fallback={{ name: 'rigs' }} label={C.back} />
       <h1 className={`min-w-0 truncate font-semibold ${wide ? 'text-[17px]' : 'text-base'}`}>{C.kernel}</h1>
       {chip}
+      <span className="flex-1" />
+      {chip && (
+        <button type="button" aria-label={C.more} title={C.more} aria-haspopup="menu" onClick={() => setSheet('menu')} className={iconButtonClass()}>
+          <Icon name="more" />
+        </button>
+      )}
     </header>
   );
+  const refresh = () => { rigs.retry(); rigs.openRig(KERNEL_RIG); rigs.readRouting(); };
 
   if (!state) {
     const why = r.error ? C.readError[r.error] : null;
@@ -167,6 +183,7 @@ export function KernelView({ rigs, store }: { rigs: RigsStore; store: MobileStor
 
   // Max: on a phone his last word and « Parler à Max »; wide, the goal he works on as a thread, with its field.
   const said = goals.find(g => maxWord(g) !== null);
+  const saidAt = said ? maxAt(said) : null;
   const current = goals.find(g => g.state !== 'done' && g.state !== 'closed');
   const talk = <a href={href({ name: 'max' })} className={rigButtonClass({ tone: 'primary', className: 'w-full' })}>{K.talk}</a>;
   const maxBox = wide && current
@@ -184,13 +201,15 @@ export function KernelView({ rigs, store }: { rigs: RigsStore; store: MobileStor
     : (
       <Frame>
         <div className="flex flex-col gap-2 p-3">
-          {said && <span className="text-[12px] text-muted">{K.lastMessage(clock(iso(goalAt(said))))}</span>}
+          {said && <span className="text-[12px] text-muted">{K.lastMessage(saidAt ? clock(iso(saidAt)) : null)}</span>}
           {said && <span className="text-[13.5px] leading-[19px] [overflow-wrap:anywhere]">{maxWord(said)}</span>}
           {talk}
         </div>
       </Frame>
     );
 
+  // « 5 sièges · Auto »: each running rig's level, read on opening the kernel; the count alone when that read fails.
+  const levelOf = (rig: string): string => { const p = r.permissions[rig]?.data; const l = p ? permLevelOf(p.seats) : null; return l ? C.level[l] : ''; };
   const driven = listed.length > 0 && (
     <>
       <Lbl>{K.driven}</Lbl>
@@ -202,7 +221,7 @@ export function KernelView({ rigs, store }: { rigs: RigsStore; store: MobileStor
             <a key={x.id} href={href({ name: 'rig', rig: x.name })} className="flex min-h-[46px] items-center gap-2.5 border-b border-line px-3 py-1.5 text-[13.5px] last:border-b-0">
               <Dot state={dot} />
               <span className={`min-w-0 flex-1 truncate ${s === 'stopped' ? 'text-muted' : ''}`}>{x.name}</span>
-              <span className="text-[12px] text-muted">{s === 'stopped' ? C.seatState.off : C.seatCount(x.seats)}</span>
+              <span className="text-[12px] text-muted">{s === 'stopped' ? C.seatState.off : [C.seatCount(x.seats), levelOf(x.name)].filter(Boolean).join(' · ')}</span>
               <Icon name="chevron" className="size-4 text-muted" />
             </a>
           );
@@ -264,6 +283,12 @@ export function KernelView({ rigs, store }: { rigs: RigsStore; store: MobileStor
           {daemonBox}
         </div>
       </main>
+      {sheet === 'menu' && (
+        <KernelMenuSheet
+          live={live} up={kernelUp && !busy} onClose={close} onRefresh={() => { close(); refresh(); }}
+          onRestart={() => setSheet('kernel.restart')} onStop={() => setSheet('kernel.stop')}
+        />
+      )}
       {sheet === 'kernel.restart' && <ConfirmSheet title={C.confirm.restartKernel(name)} conseq={{ title: C.confirm.kernelNote }} verb={C.actions.restart} confirm={confirm} live={can} onConfirm={() => act({ kind: 'kernel.restart' })} onClose={close} />}
       {sheet === 'kernel.stop' && <ConfirmSheet title={C.confirm.stopKernel(name)} conseq={{ title: C.confirm.kernelNote }} verb={C.actions.stop} confirm={confirm} live={can} onConfirm={() => act({ kind: 'kernel.stop' })} onClose={close} />}
       {sheet === 'daemon.restart' && <ConfirmSheet title={C.confirm.restartDaemon(name)} conseq={{ title: daemonConseq }} verb={C.actions.restart} confirm={confirm} live={can} onConfirm={() => act(daemonAction('restart', prefs))} onClose={close} />}

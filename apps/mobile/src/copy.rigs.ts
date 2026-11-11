@@ -41,6 +41,9 @@ export const rigsFr = {
   noKernelNext: 'Vaut au prochain démarrage ou redémarrage.',
   /** §3: the rig's view. */
   back: 'Retour aux rigs',
+  /** Accessibility labels of « Retour » from Max and from a goal (m4-complement.html, §4). */
+  backKernel: 'Retour au kernel',
+  backMax: 'Retour à Max',
   more: 'Plus d\'actions',
   tiles: { seats: 'Sièges', permissions: 'Permissions', snapshot: 'Snapshot' },
   level: { auto: 'Auto', standard: 'Standard', open: 'Ouvert', yolo: 'YOLO', locked: 'Verrouillé', spec: 'Spec', mixed: 'Mixte' },
@@ -133,9 +136,10 @@ export const rigsFr = {
     assertion_expired: (apple: boolean) => `la vérification ${apple ? 'Face ID' : 'de l\'appareil'} a expiré.`,
     assertion_invalid: (apple: boolean) => `la vérification ${apple ? 'Face ID' : 'de l\'appareil'} n'a pas été reconnue.`,
     cancelled: 'vérification annulée.',
-    unavailable: 'ce PC n\'expose pas OpenRig.',
-    unsent: 'pas envoyé, le PC ne répond pas.',
-    againStop: 'Rien n\'a été envoyé. Arrête de nouveau pour vérifier encore.',
+    unsent: 'le PC ne répond pas.',
+    /** « Rien n'a été envoyé. Arrête de nouveau pour vérifier encore. » (m4-complement.html, §3). */
+    again: (verb: string) => `Rien n'a été envoyé. ${verb} de nouveau pour vérifier encore.`,
+    againVerb: { stop: 'Arrête', restart: 'Redémarre', apply: 'Applique', save: 'Enregistre', remove: 'Retire' },
     nothingSent: 'Rien n\'a été envoyé.'
   },
   busy: { title: (pc: string) => `Une autre action OpenRig est en cours sur ${pc}.`, body: 'Réessaie quand elle sera finie.' },
@@ -227,18 +231,20 @@ export const rigsFr = {
   kernelView: {
     role: 'Le rig d\'OpenRig lui-même. Max t\'aide à composer et lancer une équipe ; l\'advisor relit les plans ; le queue worker route les lignes de queue entre les sièges.',
     max: 'Max',
-    lastMessage: (t: string) => `Max · dernier message · ${t}`,
+    lastMessage: (t: string | null) => (t ? `Max · dernier message · ${t}` : 'Max · dernier message'),
     talk: 'Parler à Max',
     driven: 'Rigs pilotés',
     routing: 'Routage de la file', allRigs: 'tous les rigs',
     noRouting: 'Aucun mouvement récent.',
     change: {
       claimed: 'a pris', completed: 'a terminé', canceled: 'a annulé', resumed: 'a repris', failed: 'a échoué',
-      handed: (to: string) => `a passé à ${to}`, blocked: (on: string) => `attend ${on}`
+      handed: (to: string) => `a passé à ${to}`, blocked: (on: string) => `attend la ligne ${on}`
     },
     actor: (seat: string) => `« ${seat} »`,
     stoppedTitle: 'Le kernel est arrêté.', stoppedBody: 'Max ne peut pas t\'aider à composer un rig.', startKernel: 'Démarrer le kernel',
     skippedTitle: 'Le daemon a démarré sans le kernel.', skippedBody: 'Désactive « Démarrer sans le kernel » puis redémarre le daemon, ou démarre le kernel seul.',
+    /** The kernel's « ⋯ » (Q73). */
+    menu: { refresh: 'Actualiser', restart: 'Redémarrer le kernel', stop: 'Arrêter le kernel' },
     daemonNote: 'Arrêter le daemon arrête tous les rigs et le kernel. Ces deux choix vivent sur ce téléphone ; Desktop garde les siens.'
   },
   /** §9: Max. */
@@ -275,6 +281,7 @@ export const rigsFr = {
     },
     sendAgain: 'Renvoyer',
     unsent: 'Pas envoyé : le PC ne répond pas.',
+    keeps: 'Le champ garde ton texte.',
     sending: 'Envoi à Max…',
     goalsUnavailable: 'Les objectifs de Max n\'ont pas pu être lus.'
   },

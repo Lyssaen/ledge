@@ -30,21 +30,35 @@ function notDone(run: Run): string {
   return k ? C.notDone[k] : C.rejected.nothingSent;
 }
 
-/** Why a run was refused before it ran, or did not leave. */
+/** The verb that sends a checked run again (« Arrête de nouveau pour vérifier encore »); null when the run asks no check. */
+function againVerb(run: Run): string | null {
+  const k = kindOf(run);
+  const V = C.rejected.againVerb;
+  if (k === 'seats') return V.remove;
+  if (k === 'rig.stop' || k === 'daemon.stop' || k === 'kernel.stop') return V.stop;
+  if (k === 'rig.restart' || k === 'daemon.restart' || k === 'kernel.restart') return V.restart;
+  if (k === 'rig.policy' || k === 'rig.permissions') return V.apply;
+  if (k === 'seat.set') return V.save;
+  return null;
+}
+
+/** Why a run was refused before it ran, or did not leave (m4-complement.html, §3): « <verbe> : <cause>. », then what happened. */
 function refusal(run: Run, pc: string): { mark: 'bad' | 'warn'; title: string; sub?: string } {
   const apple = isApple();
   const r = run.phase === 'expired' ? 'assertion_expired' : run.phase === 'cancelled' ? 'cancelled' : run.phase === 'unsent' ? 'unsent' : run.reason ?? 'unavailable';
-  const stop = kindOf(run) === 'rig.stop';
+  const verb = againVerb(run);
+  const again = verb ? C.rejected.again(verb) : C.rejected.nothingSent;
   switch (r) {
     case 'busy': return { mark: 'warn', title: C.busy.title(pc), sub: C.busy.body };
     case 'confirm_required':
       if (run.subject.kind === 'seats') return { mark: 'warn', title: apple ? C.reseat.wouldLeave.title : C.reseat.wouldLeave.titleDevice, sub: C.reseat.wouldLeave.body };
       return { mark: 'warn', title: C.rejected.confirm_required };
-    case 'assertion_expired': return { mark: 'bad', title: C.because(notDone(run), C.rejected.assertion_expired(apple)), sub: stop ? C.rejected.againStop : C.rejected.nothingSent };
-    case 'assertion_invalid': return { mark: 'bad', title: C.because(notDone(run), C.rejected.assertion_invalid(apple)), sub: C.rejected.nothingSent };
+    case 'assertion_expired': return { mark: 'bad', title: C.because(notDone(run), C.rejected.assertion_expired(apple)), sub: again };
+    case 'assertion_invalid': return { mark: 'bad', title: C.because(notDone(run), C.rejected.assertion_invalid(apple)), sub: again };
     case 'cancelled': return { mark: 'bad', title: C.because(notDone(run), C.rejected.cancelled), sub: C.rejected.nothingSent };
-    case 'unsent': return { mark: 'bad', title: C.because(notDone(run), C.rejected.unsent) };
-    default: return { mark: 'bad', title: C.because(notDone(run), C.rejected.unavailable) };
+    case 'unsent': return { mark: 'bad', title: C.because(notDone(run), C.rejected.unsent), sub: C.rejected.nothingSent };
+    // M0's words: the PC does not send its rigs to this device (yet).
+    default: return { mark: 'bad', title: C.because(notDone(run), `${C.notSent(pc)}.`) };
   }
 }
 

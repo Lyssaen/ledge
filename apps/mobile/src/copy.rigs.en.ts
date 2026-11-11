@@ -38,7 +38,9 @@ export const rigsEn: RigsCopy = {
   noKernel: 'Start without the kernel',
   noKernelHint: 'Max will not be there to help.',
   noKernelNext: 'Applies at the next start or restart.',
-  back: 'Back to rigs',
+  back: 'Back to the rigs',
+  backKernel: 'Back to the kernel',
+  backMax: 'Back to Max',
   more: 'More actions',
   tiles: { seats: 'Seats', permissions: 'Permissions', snapshot: 'Snapshot' },
   level: { auto: 'Auto', standard: 'Standard', open: 'Open', yolo: 'YOLO', locked: 'Locked', spec: 'Spec', mixed: 'Mixed' },
@@ -124,11 +126,11 @@ export const rigsEn: RigsCopy = {
   rejected: {
     confirm_required: 'Protect your approvals first, from Settings.',
     assertion_expired: (apple: boolean) => `the ${apple ? 'Face ID' : 'device'} check has expired.`,
-    assertion_invalid: (apple: boolean) => `the ${apple ? 'Face ID' : 'device'} check was not recognised.`,
-    cancelled: 'check cancelled.',
-    unavailable: 'this PC does not expose OpenRig.',
-    unsent: 'not sent, the PC does not answer.',
-    againStop: 'Nothing was sent. Stop again to check once more.',
+    assertion_invalid: (apple: boolean) => `the ${apple ? 'Face ID' : 'device'} check was not recognized.`,
+    cancelled: 'check canceled.',
+    unsent: 'the PC is not responding.',
+    again: (verb: string) => `Nothing was sent. ${verb} again to check once more.`,
+    againVerb: { stop: 'Stop', restart: 'Restart', apply: 'Apply', save: 'Save', remove: 'Remove' },
     nothingSent: 'Nothing was sent.'
   },
   busy: { title: (pc: string) => `Another OpenRig action is running on ${pc}.`, body: 'Try again when it is over.' },
@@ -215,18 +217,19 @@ export const rigsEn: RigsCopy = {
   kernelView: {
     role: 'The rig of OpenRig itself. Max helps you compose and launch a team; the advisor reviews the plans; the queue worker routes queue rows between seats.',
     max: 'Max',
-    lastMessage: (t: string) => `Max · last message · ${t}`,
+    lastMessage: (t: string | null) => (t ? `Max · last message · ${t}` : 'Max · last message'),
     talk: 'Talk to Max',
     driven: 'Driven rigs',
     routing: 'Queue routing', allRigs: 'all rigs',
-    noRouting: 'No recent move.',
+    noRouting: 'No recent movement.',
     change: {
       claimed: 'claimed', completed: 'completed', canceled: 'canceled', resumed: 'resumed', failed: 'failed',
-      handed: (to: string) => `handed off to ${to}`, blocked: (on: string) => `waits on ${on}`
+      handed: (to: string) => `handed off to ${to}`, blocked: (on: string) => `waits on line ${on}`
     },
     actor: (seat: string) => seat,
     stoppedTitle: 'The kernel is stopped.', stoppedBody: 'Max cannot help you compose a rig.', startKernel: 'Start the kernel',
     skippedTitle: 'The daemon started without the kernel.', skippedBody: 'Turn off “Start without the kernel”, then restart the daemon, or start the kernel alone.',
+    menu: { refresh: 'Refresh', restart: 'Restart the kernel', stop: 'Stop the kernel' },
     daemonNote: 'Stopping the daemon stops every rig and the kernel. These two choices live on this phone; Desktop keeps its own.'
   },
   max: {
@@ -261,7 +264,8 @@ export const rigsEn: RigsCopy = {
       refused: { title: 'Max refused the request.', body: '' }
     },
     sendAgain: 'Send again',
-    unsent: 'Not sent: the PC does not answer.',
+    unsent: 'Not sent: the PC is not responding.',
+    keeps: 'Max\'s field keeps your text.',
     sending: 'Sending to Max…',
     goalsUnavailable: 'Max\'s goals could not be read.'
   },

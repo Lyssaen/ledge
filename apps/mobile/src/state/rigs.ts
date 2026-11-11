@@ -81,6 +81,8 @@ export interface RigsStore {
   /** Reads a rig's topology, queue and permissions (on opening its view, after an action, « Actualiser »). */
   openRig(rig: string): void;
   readSnapshots(rig: string): void;
+  /** A rig's permissions alone: the kernel's « Rigs pilotés » shows each running rig's level. */
+  readPermissions(rig: string): void;
   readRouting(): void;
   /** Follows the goals given to Max (`rigs.goals`). */
   followGoals(): void;
@@ -346,6 +348,10 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
     },
     readSnapshots(rig) {
       if (read(`snapshots:${rig}`, { type: 'rigs.snapshots', rig }, () => set({ snapshots: { ...state.snapshots, [rig]: unavailable(state.snapshots[rig]) } }))) set({ snapshots: { ...state.snapshots, [rig]: loadingOf(state.snapshots[rig]) } });
+    },
+    readPermissions(rig) {
+      const p = `permissions:${rig}`;
+      if (read(p, { type: 'rigs.permissions', rig }, () => set({ permissions: { ...state.permissions, [rig]: unavailable(state.permissions[rig]) } }))) set({ permissions: { ...state.permissions, [rig]: loadingOf(state.permissions[rig]) } });
     },
     readRouting() {
       if (read('routing', { type: 'rigs.routing' }, () => set({ routing: unavailable(state.routing ?? undefined) }))) set({ routing: loadingOf(state.routing ?? undefined) });

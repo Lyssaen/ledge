@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useId, useRef, type PointerEvent, type ReactNode } from 'react';
 import { Icon, type IconName } from '../../ui/icons';
 import { Sheet } from '../../ui/Dialog';
 import { kitButtonClass } from '../../ui/kit/Controls';
@@ -81,9 +81,9 @@ export function Tile({ label, value, onOpen }: { label: string; value: string; o
 }
 
 /** A band over the content: what waits, OpenRig not answering, a partial rig. `warn`: its border amber. */
-export function Strip({ lead, warn = false, children, action, role, compact = false }: { lead: ReactNode; warn?: boolean; children: ReactNode; action?: ReactNode; role?: 'status' | 'alert'; compact?: boolean }) {
+export function Strip({ lead, warn = false, danger = false, children, action, role, compact = false }: { lead: ReactNode; warn?: boolean; danger?: boolean; children: ReactNode; action?: ReactNode; role?: 'status' | 'alert'; compact?: boolean }) {
   return (
-    <div role={role} className={`strip flex flex-none gap-[9px] rounded-lg border text-[13px] leading-[18px] ${compact ? 'items-center px-2.5 py-2' : 'items-start px-3 py-2.5'} ${warn ? 'border-attention/40' : 'border-line'}`}>
+    <div role={role} className={`strip flex flex-none gap-[9px] rounded-lg border text-[13px] leading-[18px] ${compact ? 'items-center px-2.5 py-2' : 'items-start px-3 py-2.5'} ${danger ? 'border-approval/45' : warn ? 'border-attention/40' : 'border-line'}`}>
       {lead}
       <div className={`flex min-w-0 flex-1 flex-col ${compact ? '' : 'gap-2'}`}>{children}</div>
       {action}
@@ -223,4 +223,38 @@ export function rigButtonClass({ tone = 'outline', size = 'md', className = '' }
 /** A button with its icon. */
 export function IconLabel({ icon, children, size = 'size-4' }: { icon: IconName; children: ReactNode; size?: string }) {
   return <><Icon name={icon} className={size} />{children}</>;
+}
+
+/**
+ * A block that could not be read, in its place (m4-complement.html, §2): the sentence, and « Réessayer » when reading again can help.
+ * An empty block says so the same way, without the mark and the button.
+ */
+export function ReadFail({ children, retry, retryLabel }: { children: string; retry?: (() => void) | undefined; retryLabel?: string }) {
+  return (
+    <div role={retry ? 'alert' : undefined} className="flex items-center gap-2.5 px-3 py-2.5 text-[13px] text-muted">
+      {retry && <Icon name="warning" className="size-4 flex-none text-attention" />}
+      <span className="min-w-0 flex-1">{children}</span>
+      {retry && retryLabel && <button type="button" onClick={retry} className={rigButtonClass({ size: 'xs' })}>{retryLabel}</button>}
+    </div>
+  );
+}
+
+/** A long press (or a right click) on a tile, as a row's actions open in M2 §8; the tap that follows it is swallowed. */
+export function useLongPress(onLong: (() => void) | undefined, ms = 500) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fired = useRef(false);
+  const stop = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; };
+  if (!onLong) return {};
+  return {
+    onPointerDown: (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') return;
+      fired.current = false;
+      stop();
+      timer.current = setTimeout(() => { fired.current = true; onLong(); }, ms);
+    },
+    onPointerUp: stop, onPointerLeave: stop, onPointerCancel: stop,
+    onContextMenu: (e: { preventDefault(): void }) => { e.preventDefault(); stop(); fired.current = true; onLong(); },
+    /** True once: the click after a long press is not a tap. */
+    swallow: () => { const f = fired.current; fired.current = false; return f; }
+  };
 }

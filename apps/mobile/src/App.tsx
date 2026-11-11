@@ -317,9 +317,9 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     }
     // A phone: the five tabs, always there (m0-socle.html, §1); the header above a tab's screen, a thread, a terminal, a request
     // and Réglages bring their own.
-    const framed = (body: ReactNode, top = true) => (
+    const framed = (body: ReactNode, top: boolean | string = true) => (
       <ShellProvider value={shell}>
-        {top && <TopBar />}
+        {top && <TopBar {...(typeof top === 'string' ? { title: top } : {})} />}
         {body}
         <TabBar route={route} active={tab ?? lastTab.current} badges={badges} />
       </ShellProvider>
@@ -328,8 +328,9 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'atoi': return framed(inbox);
       case 'sessions': case 'atelier': return framed(sessions);
       case 'prs': return framed(<Prs />);
-      case 'rigs': return framed(rigsList);
-      case 'rig': case 'kernel': case 'max': return rigsDetail ? framed(rigsDetail, false) : framed(rigsList);
+      // The Rigs tab's header (m4-rigs.html): « Rigs », the host, Réglages; before the PC sends its rigs, M0's.
+      case 'rigs': return framed(rigsList, rigsOn ? copy.rigs.title : true);
+      case 'rig': case 'kernel': case 'max': return rigsDetail ? framed(rigsDetail, false) : framed(rigsList, rigsOn ? copy.rigs.title : true);
       case 'chat': return framed(chat);
       case 'connection': return framed(connection, false);
       case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />, false);

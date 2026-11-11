@@ -6,7 +6,7 @@ import {
   SEAT_DOT, closedTone, newestFirst, parseRigTime, permLevelOf, podsOf, rigStatus, rowTone, runRig, seatName, seatState, sessionOfSeat, STATUS_TONE, toolOf, topSeat,
   type RigStatus, type RowTone
 } from '../../model/rigs';
-import { href } from '../../router';
+import { href, navigate } from '../../router';
 import { LinkStrip, hostName, useShell } from '../../shell/Shell';
 import type { QueueData, Read, RigsStore } from '../../state/rigs';
 import { useRigs } from '../../state/rigs';
@@ -17,7 +17,7 @@ import { Icon } from '../../ui/icons';
 import { Dot, Pill, RuntimeTag } from '../../ui/kit/marks';
 import { useWide } from '../../ui/layout';
 import { clock } from '../Inbox';
-import { Chip, Frame, HoldBar, IconLabel, Lbl, Opt, Strip, Tile, rigButtonClass } from './kit';
+import { Chip, Frame, HoldBar, IconLabel, Lbl, Opt, ReadFail, Strip, Tile, rigButtonClass, useLongPress } from './kit';
 import { RunNote, isRunning, lastRun } from './runs';
 import { MoreSheet, PermissionsSheet, ReseatForm, ReseatSheet, SeatSettingsSheet, SeatSheet, SnapshotList, SnapshotsSheet, StopSheet, snapWhen } from './sheets';
 
@@ -47,10 +47,13 @@ const who = (address: string): string => address.split('@')[0] ?? address;
  * A node of the topology: its dot, its name, its harness when it differs from the lead's, and its state and context in words. The kernel
  * names its operator Max (`name`) and writes only what is not idle (`words`).
  */
-export function Node({ seat, state, pod, tag, near, isNew, pulse, onOpen, top = false, name: given, words: givenWords }: {
+export function Node({ seat, state, pod, tag, near, isNew, pulse, onOpen, onMore, top = false, name: given, words: givenWords }: {
   seat: RigGraphSeat; state: ReturnType<typeof seatState>; pod?: string | undefined; tag: boolean; near: number; isNew: boolean; pulse: boolean; onOpen?: (() => void) | undefined; top?: boolean;
+  /** Wide (Q74): a long press or a right click opens the seat's sheet, the tap its session. */
+  onMore?: (() => void) | undefined;
   name?: string; words?: string;
 }) {
+  const { swallow, ...press } = useLongPress(onMore);
   const name = given ?? seatName(seat.logicalId, seat.session);
   const tool = toolOf(seat.runtime);
   const ctx = seat.context !== undefined && state !== 'off' && state !== 'waiting' ? Math.round(seat.context) : null;
@@ -70,26 +73,31 @@ export function Node({ seat, state, pod, tag, near, isNew, pulse, onOpen, top = 
   );
   const className = `flex min-w-0 flex-col gap-px rounded-[9px] border bg-surface px-[9px] py-[7px] text-left ${border} ${top ? 'w-[190px] max-w-full' : ''}`;
   return onOpen
-    ? <button type="button" onClick={onOpen} aria-label={C.seatLabel(name, C.seatState[state])} data-seat={seat.logicalId} className={className}>{body}</button>
+    ? <button type="button" {...press} onClick={() => { if (!swallow?.()) onOpen(); }} aria-label={C.seatLabel(name, C.seatState[state])} data-seat={seat.logicalId} className={className}>{body}</button>
     : <div data-seat={seat.logicalId} className={className}>{body}</div>;
 }
 
 /** The topology from `rigs.graph`: the lead alone on top, then the pods side by side, each node opening its seat's sheet. */
-function Topology({ graph, rig, status, sessions, near, added, onSeat }: {
+function Topology({ graph, rig, status, sessions, near, added, onSeat, wide = false }: {
   graph: RigGraph; rig: Rig; status: RigStatus; sessions: PhoneSession[]; near: number; added: readonly string[]; onSeat?: ((id: string) => void) | undefined;
+  /** Q74: wide, a tap opens the seat's session (« appuie sur un siège : son fil »), its sheet on a long press; a seat Ledge does not follow opens its sheet. */
+  wide?: boolean;
 }) {
   const topId = topSeat(graph.seats, graph.links);
   const top = graph.seats.find(s => s.logicalId === topId);
   const pods = podsOf(graph.seats.filter(s => s.logicalId !== topId), graph.pods);
   const leadRuntime = top?.runtime ?? graph.seats[0]?.runtime;
   const node = (s: RigGraphSeat, isTop = false) => {
-    const state = seatState({ session: sessionOfSeat(sessions, rig.name, s.logicalId), node: rig.nodes.find(n => n.logicalId === s.logicalId), graph: s, rigStatus: status });
+    const session = sessionOfSeat(sessions, rig.name, s.logicalId);
+    const state = seatState({ session, node: rig.nodes.find(n => n.logicalId === s.logicalId), graph: s, rigStatus: status });
     const pod = graph.pods.find(p => p.id === s.pod)?.label ?? s.pod;
+    const sheet = onSeat ? () => onSeat(s.logicalId) : undefined;
+    const thread = wide && session ? () => navigate({ name: 'thread', sessionId: session.id }) : undefined;
     return (
       <Node
         key={s.logicalId} seat={s} state={state} pod={pod} top={isTop} near={near} isNew={added.includes(s.logicalId)}
         tag={isTop || s.runtime !== leadRuntime} pulse={state === 'starting' || (status === 'starting' && state === 'work')}
-        onOpen={onSeat ? () => onSeat(s.logicalId) : undefined}
+        onOpen={thread ?? sheet} onMore={thread ? sheet : undefined}
       />
     );
   };
@@ -129,13 +137,13 @@ function RowDetail({ row, mine }: { row: QueueData['rows'][number]; mine: boolea
 }
 
 /** The OpenRig queue of this rig: the open rows, newest first, each unfolding; then the closed ones, folded. */
-function Queue({ read, asks, now }: { read: Read<QueueData> | undefined; asks: readonly HumanAsk[] | null; now: number }) {
+function Queue({ read, asks, now, retry }: { read: Read<QueueData> | undefined; asks: readonly HumanAsk[] | null; now: number; retry: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const [closed, setClosed] = useState(false);
   const data = read?.data;
   if (!data) {
     return (
-      <Frame><p role={read?.error ? 'alert' : 'status'} className="p-3 text-[13px] text-muted">{read?.error ? C.queue.unavailable : C.loading}</p></Frame>
+      <Frame>{read?.error ? <ReadFail retry={retry} retryLabel={C.unavailable.retry}>{C.queue.unavailable}</ReadFail> : <p role="status" className="p-3 text-[13px] text-muted">{C.loading}</p>}</Frame>
     );
   }
   const MARK = { done: <span className="text-ok">✓</span>, handed: <span className="text-muted">↪</span>, stopped: <span className="text-approval">✕</span> };
@@ -198,7 +206,7 @@ function Waits({ rig, sessions, asks }: { rig: string; sessions: PhoneSession[];
   const [pre, name, post] = perm ? C.waits.permission(seat) : C.waits.question(seat);
   const to = item ? href({ name: 'request', sessionId: item.sessionId, key: item.key }) : href({ name: 'atoi' });
   return (
-    <Strip warn={!perm} compact lead={<Dot state={perm ? 'perm' : 'ask'} />} action={<a href={to} className={rigButtonClass({ size: 'xs' })}>{C.waits.see}</a>}>
+    <Strip warn={!perm} danger={perm} compact lead={<Dot state={perm ? 'perm' : 'ask'} />} action={<a href={to} className={rigButtonClass({ size: 'xs' })}>{C.waits.see}</a>}>
       <span>{pre}<b className="font-semibold">{name}</b>{post}</span>
     </Strip>
   );
@@ -236,6 +244,7 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
   const act = (a: OpenRigAction) => { void rigs.act(a); };
   const reseat = (seats: Record<string, number>, delegation: 'pairs' | 'all' | undefined) => { void rigs.reseat(rig, seats, delegation ? { delegation } : {}); };
   const close = () => setSheet(null);
+  const reopen = () => rigs.openRig(rig);
   const more = (
     <button type="button" aria-label={C.more} title={C.more} aria-haspopup="menu" onClick={() => setSheet({ kind: 'more' })} className={iconButtonClass()}>
       <Icon name="more" />
@@ -265,8 +274,23 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
     );
   const scroll = `tab-main flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pb-[18px] ${wide ? 'pt-[18px]' : 'pt-3'}`;
 
+  // A rig gone from the PC takes the whole screen, as a session gone (m4-complement.html, §2).
+  const gone = !!state && (!it || graph?.error === 'unknown_rig' || queue?.error === 'unknown_rig');
+  if (gone) {
+    return (
+      <>
+        {header(null)}
+        <main data-tab-scroll="" className={scroll}>
+          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+            <h2 className="text-[17px] font-semibold">{C.readError.unknown_rig}</h2>
+            <a href={href({ name: 'rigs' })} className={rigButtonClass({ size: 'sm', className: 'mt-1.5' })}>{C.back}</a>
+          </div>
+        </main>
+      </>
+    );
+  }
   if (!it) {
-    const why = state ? C.readError.unknown_rig : r.error ? C.readError[r.error] : null;
+    const why = r.error ? C.readError[r.error] : null;
     return (
       <>
         {header(null)}
@@ -320,8 +344,8 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
     <>
       <Lbl aside={stopped ? C.topologyStopped : graph?.data ? C.topologyHint : undefined}>{C.topology}</Lbl>
       {graph?.data
-        ? <Topology graph={graph.data} rig={it} status={status} sessions={sessions} near={near} added={added} onSeat={id => setSheet({ kind: 'seat', id })} />
-        : <Frame><p role={graph?.error ? 'alert' : 'status'} className="p-3 text-[13px] text-muted">{graph?.error ? C.readError[graph.error] : C.loading}</p></Frame>}
+        ? <Topology graph={graph.data} rig={it} status={status} sessions={sessions} near={near} added={added} onSeat={id => setSheet({ kind: 'seat', id })} wide={wide} />
+        : <Frame>{graph?.error ? <ReadFail retry={reopen} retryLabel={C.unavailable.retry}>{C.readError[graph.error]}</ReadFail> : <p role="status" className="p-3 text-[13px] text-muted">{C.loading}</p>}</Frame>}
     </>
   );
   const resumeOpts = stopped && it.snapshot && (
@@ -333,7 +357,7 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
       </div>
     </>
   );
-  const queueBlock = <Queue read={queue} asks={m.asks} now={now} />;
+  const queueBlock = <Queue read={queue} asks={m.asks} now={now} retry={reopen} />;
 
   const body = wide
     ? (
@@ -351,7 +375,7 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
         <div className="flex min-w-0 flex-col gap-3.5">
           {queueBlock}
           <Lbl>{C.actions.snapshots}</Lbl>
-          <SnapshotList read={snaps} kindOnly />
+          <SnapshotList read={snaps} kindOnly retry={() => rigs.readSnapshots(rig)} />
           <button type="button" disabled={!can} onClick={() => act({ kind: 'rig.snapshot', rig })} className={rigButtonClass({ size: 'sm', className: 'self-start' })}><IconLabel icon="camera">{C.snapshots.take}</IconLabel></button>
         </div>
       </div>
@@ -391,7 +415,7 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
       {(sheet?.kind === 'stop' || sheet?.kind === 'restart') && <StopSheet rig={it} pc={name} verb={sheet.kind} confirm={confirm} live={can} onAct={act} onClose={close} />}
       {sheet?.kind === 'reseat' && <ReseatSheet rig={it} pc={name} confirm={confirm} live={can} onReseat={reseat} onClose={close} />}
       {sheet?.kind === 'permissions' && <PermissionsSheet rig={it} read={perms} level={perm} confirm={confirm} live={can} onAct={act} onClose={close} />}
-      {sheet?.kind === 'snapshots' && <SnapshotsSheet rig={rig} read={snaps} live={live} running={busy} onSnapshot={() => act({ kind: 'rig.snapshot', rig })} onClose={close} />}
+      {sheet?.kind === 'snapshots' && <SnapshotsSheet rig={rig} read={snaps} live={live} running={busy} onSnapshot={() => act({ kind: 'rig.snapshot', rig })} onRetry={() => rigs.readSnapshots(rig)} onClose={close} />}
       {sheet?.kind === 'seat' && seatSheet && graph?.data && (
         <SeatSheet
           rig={rig} seat={seatSheet} graph={graph.data} node={node} session={sessionOfSeat(sessions, rig, seatSheet.logicalId)} status={status} near={near}

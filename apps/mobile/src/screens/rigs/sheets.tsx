@@ -10,7 +10,7 @@ import type { PermissionsData, Read, RigsStore } from '../../state/rigs';
 import { Icon } from '../../ui/icons';
 import { Dot, Pill, RuntimeTag } from '../../ui/kit/marks';
 import { isApple } from '../device';
-import { CheckRow, Conseq, IconLabel, Opt, RigSheet, Seg, Stepper, rigButtonClass } from './kit';
+import { CheckRow, Conseq, IconLabel, Opt, ReadFail, RigSheet, Seg, Stepper, rigButtonClass } from './kit';
 
 /*
  * The sheets of a rig's view (m4-rigs.html, §3 to §7): « Plus d'actions », stop and restart, the seats per role, the rig's
@@ -67,10 +67,10 @@ export function ConfirmSheet({ title, conseq, note, verb, confirm, live, onConfi
 }
 
 /** A line of a menu sheet: its glyph, its words, what it holds on the right. */
-function MenuItem({ icon, label, aside, onClick, disabled = false }: { icon: 'camera' | 'list' | 'shield' | 'refresh'; label: string; aside?: string; onClick: () => void; disabled?: boolean }) {
+function MenuItem({ icon, label, aside, onClick, disabled = false, danger = false }: { icon: 'camera' | 'list' | 'shield' | 'refresh' | 'power'; label: string; aside?: string; onClick: () => void; disabled?: boolean; danger?: boolean }) {
   return (
-    <button type="button" role="menuitem" disabled={disabled} onClick={onClick} className="flex min-h-12 items-center gap-3 border-b border-line px-3.5 text-left text-[15px] last:border-b-0 disabled:opacity-45">
-      <Icon name={icon} className="size-[18px] text-muted" /><span className="min-w-0 flex-1">{label}</span>
+    <button type="button" role="menuitem" disabled={disabled} onClick={onClick} className={`flex min-h-12 items-center gap-3 border-b border-line px-3.5 text-left text-[15px] last:border-b-0 disabled:opacity-45 ${danger ? 'text-approval' : ''}`}>
+      <Icon name={icon} className={`size-[18px] ${danger ? '' : 'text-muted'}`} /><span className="min-w-0 flex-1">{label}</span>
       {aside && <span className="text-[13px] text-muted">{aside}</span>}
     </button>
   );
@@ -88,6 +88,21 @@ export function MoreSheet({ rig, live, running, snapshots, level, onSnapshot, on
         <MenuItem icon="list" label={C.actions.snapshots} {...(snapshots !== null ? { aside: String(snapshots) } : {})} onClick={onSnapshots} />
         <MenuItem icon="shield" label={C.actions.permissions} {...(level ? { aside: level } : {})} onClick={onPermissions} />
         <MenuItem icon="refresh" label={C.actions.refresh} disabled={!live} onClick={onRefresh} />
+      </div>
+    </RigSheet>
+  );
+}
+
+/** The kernel's « ⋯ » (Q73): read again, then its restart and stop, which open the same sheets as the buttons below. */
+export function KernelMenuSheet({ live, up, onRefresh, onRestart, onStop, onClose }: {
+  live: boolean; up: boolean; onRefresh: () => void; onRestart: () => void; onStop: () => void; onClose: () => void;
+}) {
+  return (
+    <RigSheet title={C.kernel} onClose={onClose}>
+      <div role="menu" aria-label={C.more} className="flex flex-col overflow-hidden rounded-[10px] border border-line">
+        <MenuItem icon="refresh" label={C.kernelView.menu.refresh} disabled={!live} onClick={onRefresh} />
+        <MenuItem icon="refresh" label={C.kernelView.menu.restart} disabled={!live || !up} onClick={onRestart} />
+        <MenuItem icon="power" label={C.kernelView.menu.stop} danger disabled={!live || !up} onClick={onStop} />
       </div>
     </RigSheet>
   );
@@ -261,7 +276,13 @@ export function SeatSheet({ rig, seat, graph, node, session, status, near, onSet
       </dl>
       {session
         ? <a href={href({ name: 'thread', sessionId: session.id })} className={rigButtonClass({ tone: 'primary', className: 'w-full' })}>{C.seat.openSession}</a>
-        : <p className="text-[12.5px] text-muted">{C.seat.noSession}</p>}
+        : (
+          // A disabled line keeps its place and says why (m4-complement.html, §1).
+          <>
+            <button type="button" disabled className={rigButtonClass({ tone: 'primary', className: 'w-full' })}>{C.seat.openSession}</button>
+            <p className="-mt-1 text-[12px] text-muted">{C.seat.noSession}</p>
+          </>
+        )}
       <button type="button" onClick={onSettings} className={rigButtonClass({ className: 'w-full' })}><IconLabel icon="gear">{C.seat.settings}</IconLabel></button>
     </RigSheet>
   );
@@ -325,10 +346,11 @@ export function SeatSettingsSheet({ rig, seat, node, selection, confirm, live, o
 }
 
 /** The snapshots, newest first: when, what kind, how it went. */
-export function SnapshotList({ read, kindOnly = false }: { read: Read<RigSnapshot[]> | undefined; kindOnly?: boolean }) {
+export function SnapshotList({ read, kindOnly = false, retry }: { read: Read<RigSnapshot[]> | undefined; kindOnly?: boolean; retry?: () => void }) {
   const list = newestFirst(read?.data ?? []);
-  if (read?.error && !read.data) return <p role="alert" className="text-[13px] text-attention">{C.snapshots.unavailable}</p>;
-  if (read?.data && list.length === 0) return <p className="text-[13px] text-muted">{C.snapshots.none}</p>;
+  const box = 'overflow-hidden rounded-[10px] border border-line bg-surface dark:bg-transparent';
+  if (read?.error && !read.data) return <div className={box}><ReadFail retry={retry} retryLabel={C.unavailable.retry}>{C.snapshots.unavailable}</ReadFail></div>;
+  if (read?.data && list.length === 0) return <div className={box}><ReadFail>{C.snapshots.none}</ReadFail></div>;
   if (!list.length) return <p role="status" className="text-[13px] text-muted">{C.loading}</p>;
   return (
     <div className="flex max-h-[45dvh] flex-col overflow-y-auto rounded-[10px] border border-line bg-surface dark:bg-transparent">
@@ -346,12 +368,12 @@ export function SnapshotList({ read, kindOnly = false }: { read: Read<RigSnapsho
 }
 
 /** §7: the rig's 20 last snapshots, and one now (no check). */
-export function SnapshotsSheet({ rig, read, live, running, onSnapshot, onClose }: {
-  rig: string; read: Read<RigSnapshot[]> | undefined; live: boolean; running: boolean; onSnapshot: () => void; onClose: () => void;
+export function SnapshotsSheet({ rig, read, live, running, onSnapshot, onRetry, onClose }: {
+  rig: string; read: Read<RigSnapshot[]> | undefined; live: boolean; running: boolean; onSnapshot: () => void; onRetry: () => void; onClose: () => void;
 }) {
   return (
     <RigSheet title={C.snapshots.title(rig)} onClose={onClose}>
-      <SnapshotList read={read} />
+      <SnapshotList read={read} retry={onRetry} />
       <button type="button" disabled={!live || running} onClick={() => { onClose(); onSnapshot(); }} className={rigButtonClass({ className: 'w-full' })}>
         <IconLabel icon="camera">{C.snapshots.take}</IconLabel>
       </button>

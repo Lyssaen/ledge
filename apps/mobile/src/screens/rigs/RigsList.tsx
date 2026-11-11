@@ -195,5 +195,5 @@ export function RigsList({ rigs, store }: { rigs: RigsStore; store: MobileStore 
       </>
     );
   })();
-  return <TabPage title={C.title} offlineBody={C.offlineBody}>{body}</TabPage>;
+  return <TabPage title={C.title} offlineBody={C.offlineBody} heading={false}>{body}</TabPage>;
 }
