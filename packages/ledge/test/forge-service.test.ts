@@ -54,7 +54,7 @@ function fakeReader(prs: ReadPr[] = []): Fake {
 
 let store: Store;
 beforeEach(() => { process.env.LEDGE_HOME = mkdtempSync(join(tmpdir(), 'ledge-forge-')); store = new Store(); clock = T0; gitConfigs.clear(); });
-const service = (gh: Fake, glab: Fake = fakeReader(), signed = ['github.com', 'gitlab.com']) => createForgeService({ store, now: () => clock, run: fakeGit, readers: { gh, glab }, signedIn: async () => new Set(signed) });
+const service = (gh: Fake, glab: Fake = fakeReader(), signed = ['github.com', 'gitlab.com']) => createForgeService({ store, now: () => clock, run: fakeGit, readers: { gh, glab }, signedIn: async () => new Set(signed), installed: async () => true });
 
 describe('where a branch is pushed (R1, review of d266f114)', () => {
   const listed = forgeOf('git@github.com:Lyssaen/ledge.git')!;
@@ -169,6 +169,20 @@ describe('only the hosts the CLI is signed in to (security review of the push)',
     expect(s.state().forges).toEqual(expect.arrayContaining([
       expect.objectContaining({ forge: 'gitlab', host: 'evil.example', status: 'unauthenticated', message: 'glab is not signed in to evil.example on this machine: Ledge does not read it' }),
       expect.objectContaining({ forge: 'github', host: 'code.github.attacker.example', status: 'unauthenticated' })]));
+  });
+
+  it('a CLI that is not installed is « missing », not « not signed in », and is never run (decision 35: no glab)', async () => {
+    store.upsert(mk('a'));
+    store.upsert(mk('g', { repoId: 'gitlab.example.com/team/app', branch: 'fix/x' }));
+    const gh = fakeReader([pr(226, 'feat/x')]), glab = fakeReader();
+    // No glab config either: before, the empty host list read as « not signed in ».
+    const s = createForgeService({ store, now: () => clock, run: fakeGit, readers: { gh, glab }, signedIn: async cli => new Set(cli === 'gh' ? ['github.com'] : []), installed: async cli => cli === 'gh' });
+    await s.refresh();
+    expect(glab.lists).toEqual([]);
+    expect(s.state().prs.map(p => p.number)).toEqual([226]);
+    expect(s.state().forges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ forge: 'gitlab', host: 'gitlab.example.com', status: 'missing', message: 'glab is not installed on this machine' }),
+      expect.objectContaining({ forge: 'github', host: 'github.com', status: 'ok' })]));
   });
 
   it('reads a self-hosted host once the CLI is signed in to it', async () => {
@@ -433,7 +447,7 @@ describe('actions (R5, R6)', () => {
 
   it('forgets where a session gone from the store pushes: back, its git config is read again', async () => {
     let gitReads = 0;
-    const s = createForgeService({ store, now: () => clock, run: async (...a) => { gitReads++; return fakeGit(...a); }, readers: { gh: fakeReader(), glab: fakeReader() }, signedIn: async () => new Set(['github.com']) });
+    const s = createForgeService({ store, now: () => clock, run: async (...a) => { gitReads++; return fakeGit(...a); }, readers: { gh: fakeReader(), glab: fakeReader() }, signedIn: async () => new Set(['github.com']), installed: async () => true });
     store.upsert(mk('a'));
     await s.refresh();
     expect(gitReads).toBe(1);

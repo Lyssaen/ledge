@@ -4,7 +4,7 @@ import { log } from '../../log.js';
 import { githubReader } from './github.js';
 import { gitlabReader } from './gitlab.js';
 import { signedInHosts } from './hosts.js';
-import { execForge, forgeOf, type ForgeCli, type ForgeRepo, type ForgeRun } from './run.js';
+import { execForge, forgeOf, installedCli, type ForgeCli, type ForgeRepo, type ForgeRun } from './run.js';
 import { blockerText, mergeBlockersOf, targetKey, type BranchTarget, ForgeError, ForgeRefusal, type ForgeReader, type ReadPr } from './types.js';
 
 /**
@@ -67,11 +67,22 @@ const strip = ({ blockers: _b, head: _h, notStarted: _n, ...pr }: ReadPr, sessio
 const isoAt = (ms: number): string => new Date(ms).toISOString();
 
 export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: () => Promise<NodeJS.ProcessEnv>; now?: () => number; readers?: Partial<Record<ForgeCli, ForgeReader>>;
-  /** The hosts each CLI is signed in to (signedInHosts by default); a test gives its own. */ signedIn?: (cli: ForgeCli) => Promise<Set<string>> }): ForgeService {
+  /** The hosts each CLI is signed in to (signedInHosts by default); a test gives its own. */ signedIn?: (cli: ForgeCli) => Promise<Set<string>>;
+  /** Whether each CLI is installed (looked up on the PATH by default); a test gives its own. */ installed?: (cli: ForgeCli) => Promise<boolean> }): ForgeService {
   const now = deps.now ?? Date.now;
   const env = deps.env ?? (async () => process.env);
   const run = deps.run ?? execForge(env);
   const signedIn = deps.signedIn ?? (async (cli: ForgeCli) => signedInHosts(cli, await env()));
+  const installed = deps.installed ?? (async (cli: ForgeCli) => installedCli(cli, await env()));
+  /** Whether each CLI is installed, looked up again every 5 minutes (an install is taken without a restart). */
+  const installedRead = new Map<ForgeCli, { at: number; has: Promise<boolean> }>();
+  const isInstalled = (cli: ForgeCli): Promise<boolean> => {
+    const had = installedRead.get(cli);
+    if (had && now() - had.at < HEAD_TTL_MS) return had.has;
+    const has = installed(cli).catch(() => true);
+    installedRead.set(cli, { at: now(), has });
+    return has;
+  };
   /** Each CLI's signed-in hosts, read again every 5 minutes (a new `gh auth login` is taken without a restart). */
   const hostsRead = new Map<ForgeCli, { at: number; hosts: Promise<Set<string>> }>();
   const hostsOf = (cli: ForgeCli): Promise<Set<string>> => {
@@ -167,6 +178,12 @@ export function createForgeService(deps: { store: Store; run?: ForgeRun; env?: (
 
   async function readRepo(f: Followed): Promise<void> {
     const reader = readers[f.repo.cli], k = hostKey(f.repo);
+    // A CLI that is not installed is said so (the phone's « glab is not installed »), before its absent config reads as signed out.
+    if (!(await isInstalled(f.repo.cli))) {
+      byRepo.set(f.repo.repo, []);
+      setStatus(f.repo, 'missing', `${f.repo.cli} is not installed on this machine`);
+      return;
+    }
     // Never a host the CLI is not signed in to (a repository cloned from anywhere must not make the daemon call it).
     if (!(await hostsOf(f.repo.cli)).has(f.repo.host.toLowerCase())) {
       byRepo.set(f.repo.repo, []);
