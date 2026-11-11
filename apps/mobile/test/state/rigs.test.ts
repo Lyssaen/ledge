@@ -173,7 +173,7 @@ describe('the rigs store', () => {
     expect(t.rigs.getState().runs).toHaveLength(0);
   });
 
-  it('never sends again what a PC that restarted may have run: the run stays uncertain, and a late refusal does not end it', async () => {
+  it('never sends again what a PC that restarted may have run: the run stays uncertain', async () => {
     const t = setup();
     const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
     await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
@@ -185,8 +185,43 @@ describe('the rigs store', () => {
     t.deliver(snap(RESTARTED));
     expect(t.of('rigs.act')).toHaveLength(1);
     expect(await ended).toMatchObject({ phase: 'uncertain', lost: true });
+    t.set('pc_offline');
+    t.set('ready');
+    t.deliver(snap(RESTARTED));
+    expect(t.of('rigs.act')).toHaveLength(1);
+  });
+
+  it('still shows the late end of a run it will not send again, as its receipt says', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = setup();
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const op = t.of('rigs.act')[0]!.op;
+    t.set('pc_offline');
+    expect(await ended).toMatchObject({ phase: 'uncertain' });
+    vi.advanceTimersByTime(RESEND_MAX_MS + 1);
+    t.set('ready');
+    t.deliver(snap(BOOT));
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+    t.deliver({ type: 'rigs.done', op, ok: true, commands: ['rig up ledge-dev --existing'] });
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'done', done: { ok: true } });
+    expect(t.of('rigs.act')).toHaveLength(1);
+  });
+
+  it('after a refused send again, ignores further refusals but takes the first send\'s own end', async () => {
+    const t = setup();
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const op = t.of('rigs.act')[0]!.op;
+    t.set('pc_offline');
+    expect(await ended).toMatchObject({ phase: 'uncertain' });
+    t.set('ready');
+    t.deliver(snap(BOOT));
+    t.deliver({ type: 'operation.result', op, status: 'rejected', reason: 'conflict' } as PhoneServerMessage);
     t.deliver({ type: 'rigs.done', op, ok: false, rejected: 'assertion_invalid', commands: [] });
     expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+    t.deliver({ type: 'rigs.done', op, ok: true, commands: ['rig up ledge-dev --existing'] });
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'done', done: { ok: true } });
   });
 
   it('a PC restarted behind the relay, on the same link, loses what the old process held', async () => {

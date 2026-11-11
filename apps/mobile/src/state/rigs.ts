@@ -27,7 +27,7 @@ export type PermissionsData = Pick<Msg<'rigs.permissions'>, 'policy' | 'seats'>;
  * check took too long, nothing sent), `unsent` (it could not leave) or `uncertain` (it left, but the PC did not say it has it within
  * `UNCERTAIN_MS`, or the link dropped first: it may have run). An uncertain run still takes the PC's late answer, and goes again with its
  * own op on the next link (the PC replays an op it has seen, never runs it twice), but only to the same PC process and while young enough
- * for it to still hold the op; otherwise it stays uncertain for good (`lost`).
+ * for it to still hold the op; otherwise it is never sent again (`lost`), and only its own late end settles it.
  */
 export type RunPhase = 'checking' | 'sending' | 'received' | 'done' | 'rejected' | 'cancelled' | 'expired' | 'unsent' | 'uncertain';
 
@@ -57,7 +57,7 @@ export interface Run {
   boot?: string | null;
   /** It left more than once: a refusal of a later send says nothing of the first one, which may have run. */
   again?: true;
-  /** An uncertain run the PC can no longer settle (it restarted, or the run is too old to be sent again): nothing is sent again. */
+  /** An uncertain run that may not go again (the PC restarted, or the run is too old to be sent again): only a late end settles it. */
   lost?: true;
 }
 
@@ -205,8 +205,11 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
     }
   }
   const runOfOp = (op: string) => state.runs.find(r => r.op === op);
-  /** A run the PC may still answer: under way, or uncertain and not lost (its answer may come late, or after the next link). */
-  const open = (r: Run | undefined): r is Run => !!r && (!isFinal(r.phase) || (r.phase === 'uncertain' && !r.lost));
+  /**
+   * A run the PC may still answer: under way, or uncertain (its answer may come late, or after the next link). A lost run is never sent
+   * again, but the first send's own late end still settles it, as its receipt says.
+   */
+  const open = (r: Run | undefined): r is Run => !!r && (!isFinal(r.phase) || r.phase === 'uncertain');
   const end = (op: string, patch: Partial<Run>) => {
     const r = runOfOp(op);
     answered(`op:${op}`);
