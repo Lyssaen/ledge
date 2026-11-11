@@ -56,7 +56,9 @@ branches par défaut et les HEAD détachées n'en font pas partie.
 | `sessions` | les sessions de ce PC sur cette branche, la plus active d'abord : leurs `id` sont ceux du snapshot. C'est le lien session ↔ PR (« #226 » dans le pied de session) |
 
 Le statut d'une forge (`forges`) : `{ forge, host, status: ok | missing | unauthenticated | error, at, since?, retryAt?, readAt? }`.
-- `missing` : le `gh` ou le `glab` du PC n'est pas installé.
+- `missing` : le `gh` ou le `glab` du PC n'est pas installé. Le PC le cherche dans le `PATH` du shell de connexion, sans le
+  lancer, toutes les 5 min, avant de lire ses hôtes connectés : un `glab` absent (le cas de l'utilisateur, décision 35) est
+  donc `missing`, jamais `unauthenticated`.
 - `unauthenticated` : la CLI n'est pas connectée à cet hôte. Le PC n'appelle alors jamais cet hôte.
 - `error` : la lecture a échoué. `since` dit depuis quand, `retryAt` quand le PC réessaie (dans 2 à 10 min), et `readAt`
   quand les demandes encore affichées ont été lues pour la dernière fois.
@@ -178,7 +180,7 @@ demande ou une autre action est refusé (`conflict`).
 **Vérifié dans le code :**
 - `gh` et `glab` tournent avec l'environnement du shell de connexion de l'utilisateur (`loginShellEnv`, relu toutes les
   5 min) : son proxy (`HTTPS_PROXY`, `NO_PROXY`) et sa connexion. Ils ne passent jamais par un shell ;
-- jamais d'invite : `NO_PROMPT`, `GLAB_CHECK_UPDATE=false`, `GLAB_SEND_TELEMETRY=false`, 30 s au plus par appel ;
+- jamais d'invite : `NO_PROMPT`, `GLAB_CHECK_UPDATE=false`, `GLAB_SEND_TELEMETRY=false`, 20 s au plus par appel ;
 - un hôte auquel `glab` n'est pas connecté n'est jamais appelé (`unauthenticated`) ;
 - une forge en échec garde ses demandes affichées et réessaie dans 2, 4, 8 puis 10 min. Le téléphone voit
   `status: 'error'`, `since` et `retryAt`, mais pas le texte de l'erreur.
@@ -191,7 +193,9 @@ demande ou une autre action est refusé (`conflict`).
   - que l'hôte GitLab est joignable avec le `HTTPS_PROXY` ou le `NO_PROXY` de ce shell ;
   - que le certificat de l'entreprise est connu de `glab`, qui utilise les certificats du système.
 - Sans ça, la forge GitLab apparaîtra en `error` (ou `unauthenticated`) dans la liste. C'est déjà le cas sur Desktop : ce
-  lot ne change rien au relevé.
+  lot ne change rien au relevé. Sans `glab` installé, elle apparaît en `missing`.
+- Une forge n'apparaît dans `forges` que si une session suivie a un dépôt sur cet hôte : sans dépôt GitLab suivi, il n'y a
+  pas de ligne GitLab du tout, `missing` ou non.
 
 ## 7. Vérifié, et non vérifié
 

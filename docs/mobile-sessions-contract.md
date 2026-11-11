@@ -74,7 +74,8 @@ doing?: { tool: string, label: string, since: datetime }
 `helpers: [{ id, kind, task, state, finishedAt? }]` sur chaque session. Détail : `docs/mobile-launch-contract.md` § 10.
 
 - `task` : ce que le parent lui a demandé ; `kind` : le type d'agent (`Explore`, `Review`…) ou `subagent`.
-- `state` : `working`, puis `exited` avec `finishedAt`. Un sous-agent fini **disparaît après 5 minutes**. Pour « +2 » : compter
+- `state` : un état de session : `working`, puis `exited` avec `finishedAt`, et aussi `waiting_permission` ou `idle`. Un
+  sous-agent fini **disparaît après 5 minutes**. Pour « +2 » : compter
   `helpers` (actifs et finis récents) ou filtrer `state !== 'exited'` pour les seuls actifs ; c'est un choix de `design-ux`.
 - Dans le fil du parent, l'élément `helper` (`{ task, agentType?, state }`) marque où il a été lancé (« 2 sous-agents lancés »,
   appui sur une ligne dépliée : ouvrir le fil du parent à cet endroit).
@@ -123,6 +124,14 @@ doing?: { tool: string, label: string, since: datetime }
 `term.hold` (passkey `terminal`) → `term.held`, « Rendre la main » : `term.release` → `term.released` ; « Ligne » et touches :
 `term.input`. Drapeaux `daemon.terminal` et `daemon.terminalInput` (saisie désactivée sur le PC : `inputOff`). Les touches
 contextuelles (« 1 Oui », « 2 Toujours », « 3 Non ») viennent de l'écran et de `pending.options` : rien du PC en plus.
+
+`term.open` est refusé (`operation.result` `rejected`) :
+- `read_only` : un siège OpenRig, ou une session lancée hors de Ledge (`hook_only`) : le PC n'y ouvre pas de terminal ;
+- `unavailable` : une session terminée, sans volet tmux, ou OMP en mode rpc ; ou un PC sans `daemon.terminal` ;
+- `unknown_session` : une session inconnue ou archivée, ou un sous-agent (`helper`) qu'elle ne liste plus.
+
+Le terminal d'un sous-agent est celui de son parent, en lecture seule (`term.open` avec `helper`, seulement si le PC
+annonce `daemon.helperTerminal` ; voir `docs/mobile-launch-contract.md` § 10).
 
 ## 7. L'Atelier sur téléphone, l'appui long (Q22)
 

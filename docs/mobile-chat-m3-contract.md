@@ -54,7 +54,8 @@ Le téléphone affiche alors, sous cette réponse, les barres de « Limites » t
 **Ce que le PC garde.** Chaque appareil a ses conversations, et l'une d'elles est en cours :
 - Le PC enregistre la conversation en cours à chaque changement (question, réponse, carte qui avance). Un daemon qui
   redémarre la retrouve : elle n'est plus perdue. Ce qui était en cours à l'arrêt ne l'est plus : une instruction en file
-  redevient proposée, une ligne en cours passe `failed`.
+  redevient proposée, une ligne en cours passe `failed`, et une question encore sans réponse revient avec `error: 'failed'`
+  (« Ledge n'a pas pu répondre », §3 de la maquette) : elle n'est jamais « en cours » pour toujours.
 - **« Nouvelle conversation » (`chat.reset`) range la conversation en cours** dans la liste, puis en ouvre une vide. Rien
   n'est effacé. Le fil reçoit `chat.history { turns: [] }` comme avant. Sans question, il n'y a rien à ranger.
 - **Un nouveau jour** range aussi la conversation de la veille. La première question du jour ouvre une nouvelle
@@ -111,7 +112,10 @@ bouton de §5 de la maquette :
 
 - `risk` vaut `destructive` pour un arrêt, un redémarrage, ou un retrait de sièges ; `reversible` sinon.
 - `summary` reste la phrase du daemon, en français : c'est le repli quand un `kind` est inconnu du téléphone.
-- **Les refus** (`code` d'une ligne `refused`, et `operation.result` `rejected`) :
+- **Les refus** se lisent sur **la ligne** (`state: 'refused'` et son `code`) de `chat.history` ou de `chat.done`, jamais
+  dans `operation.result` : un `chat.act` dont une ligne est refusée au moment d'appliquer reçoit `operation.result`
+  `failed`, sans raison. Seuls les refus d'avant l'application y arrivent en `rejected` (`confirm_required`, une
+  vérification de l'appareil refusée, une carte inconnue). Les codes d'une ligne :
   - `not_running` : le rig ou le kernel ne tourne pas ;
   - `running` : il tourne déjà ;
   - `unchanged` : le rôle a déjà ce nombre de sièges ;
@@ -122,7 +126,7 @@ bouton de §5 de la maquette :
     - `role` : le rig tourne, mais le rôle n'a aucun siège.
 
     Sans `vars.missing` (un PC d'avant #283), le téléphone n'affirme aucune cause : il dit seulement que l'action n'est
-    plus possible. La cause se lit sur la ligne de `chat.history` (ou de `chat.done`), pas dans `operation.result`.
+    plus possible.
     Desktop, l'île et la TUI disent la même chose : `packages/ui/src/chat/actionWords.ts` (`why`, cas `unknown`).
 
   Un code inconnu se lit comme `failed`.

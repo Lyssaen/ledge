@@ -90,10 +90,10 @@ Codes de refus (`reason`) :
 | Code | Cas |
 |---|---|
 | `not_found` | un dossier n'est plus là sur le PC |
-| `invalid` | ce que l'agent ne prend pas : plusieurs dossiers pour Codex ou Cursor, un dossier en double, `approval` hors OMP, un modèle ou un effort refusé par le PC ; ou un dossier trop large (le dossier personnel ou au-dessus, ou un lien symbolique qui y mène) |
+| `invalid` | ce que l'agent ne prend pas : plusieurs dossiers pour Codex ou Cursor, un dossier en double, `approval` hors OMP, un modèle absent du `models.listing` de l'agent, un effort que ce modèle (ou, sans modèle, celui par défaut) ne prend pas ; ou un dossier trop large (le dossier personnel ou au-dessus, ou un lien symbolique qui y mène). Quand le PC n'a pas pu lire les modèles de l'agent, il ne refuse ni modèle ni effort : l'agent le dit alors dans son terminal |
 | `stale` | le projet n'existe plus, ou un dossier n'est plus déclaré par le projet, ou appartient à une autre machine : recharger les projets |
 | `confirm_required` | pas de passkey enregistrée, ou pas d'assertion |
-| `assertion_invalid`, `assertion_expired`, `assertion_replayed` | comme pour les autres actions vérifiées : refaire la vérification |
+| `assertion_invalid`, `assertion_expired` | comme pour les autres actions vérifiées : refaire la vérification (une vérification déjà utilisée revient en `assertion_invalid`) |
 | `unavailable` | ce PC ne lance pas pour le téléphone |
 
 **Textes :** validés par l'utilisateur le 2026-11-10 (décision 12 du plan) dans le complément
@@ -113,7 +113,9 @@ Le PC ne fixe pas de délai : c'est le téléphone qui décide que le démarrage
 - Si l'assertion a expiré entre-temps et que le PC n'a jamais reçu le premier envoi, la réponse est `assertion_expired` :
   refaire la vérification, puis envoyer avec **un nouvel `op`**.
 
-Le PC garde le résultat 24 h (au plus 500 opérations, les plus anciennes finies partent d'abord).
+Le PC garde le résultat 24 h (au plus 500 opérations, les plus anciennes finies partent d'abord), **en mémoire** : après un
+redémarrage du daemon, il ne connaît plus l'`op`, et « Réessayer » lance une session même si le premier envoi en avait
+déjà lancé une.
 
 ## 7. Ce qui n'est pas dans ce lot
 
@@ -141,9 +143,11 @@ Chaque session du snapshot porte déjà ses sous-agents : `PhoneSession.helpers`
 `{ id, kind, task, state, finishedAt? }` (`HelperSchema`, `packages/protocol/src/session.ts`).
 - `task` : ce que le parent lui a demandé (première ligne) ; `kind` : le type d'agent quand l'outil le dit, sinon
   `subagent` ;
-- `state` : `working` pendant qu'il travaille, `exited` quand il a fini (`finishedAt`) ;
+- `state` : un état de session (`SessionStateSchema`) : `working` pendant qu'il travaille, `exited` quand il a fini
+  (`finishedAt`, posé au passage suivant du daemon : il peut manquer quelques secondes), et aussi `waiting_permission` ou
+  `idle` selon ce que l'agent en dit. Les actifs sont ceux dont `state` n'est pas `exited` ;
 - un sous-agent fini **disparaît après 5 minutes** (`HELPER_RETENTION_MS`). Le « +2 » de la maquette compte donc ceux qui
-  travaillent et ceux finis depuis moins de 5 minutes ; pour ne compter que les actifs, filtrer sur `state`.
+  travaillent et ceux finis depuis moins de 5 minutes ; pour ne compter que les actifs, filtrer sur `state !== 'exited'`.
 
 D'où le daemon le sait, par agent :
 
@@ -159,7 +163,17 @@ Dans le fil du parent :
 - les éléments du fil propre d'un sous-agent portent `helperId`.
 
 Une demande (permission, question) venue d'un sous-agent porte `pending.helperId`. Le terminal d'un sous-agent est celui
-de son parent, en lecture seule (`readOnly`).
+de son parent, en lecture seule :
+
+```
+→ { type: 'term.open', op, id: <la session parente>, helper: <helpers[].id> }
+← { type: 'term.opened', …, id: <la session parente>, readOnly: true }
+```
+
+« Prendre la main » y est refusé (`read_only`). Un `helper` que la session ne liste pas (fini depuis plus de 5 minutes)
+est refusé en `unknown_session`. Le téléphone n'envoie `helper` qu'à un PC qui annonce `daemon.helperTerminal` : un PC
+d'avant ce champ le retirerait sans rien dire et ouvrirait le volet du parent comme le sien, où l'on peut prendre la main.
+Sans le drapeau, le téléphone n'ouvre pas le terminal d'un sous-agent.
 
 ## 11. Q29 : les titres des notifications, écrits par le téléphone
 
