@@ -6,7 +6,7 @@
 import { devices, expect, test, type ConsoleMessage, type Page } from '@playwright/test';
 import type { PhoneClientMessage } from '@ledge/protocol';
 import { copy } from '../src/copy';
-import { startHarness, waiting, type Harness } from './harness';
+import { PC_NAME, startHarness, waiting, type Harness } from './harness';
 
 const { defaultBrowserType: _chromium, ...pixel } = devices['Pixel 7'];
 test.use(pixel);
@@ -87,7 +87,8 @@ test('notifications: turned on while pairing, a push shows a notification, an un
     signedIn = true;
     await page.getByRole('button', { name: copy.compare.same }).click();
     h.pc.ok();
-    await expect(page.getByRole('heading', { name: new RegExp(` lié à ${copy.yourPc}$`) })).toBeVisible();
+    // The heading names the PC once its first snapshot has come (mobile-multi-device.html: « iPad lié à Legion »).
+    await expect(page.getByRole('heading', { name: new RegExp(` lié à ${PC_NAME}$`) })).toBeVisible();
     // Nothing to protect here (the PC says the device is covered): the step after the pairing is the notifications.
     // The step is offered once the PC's snapshot has said so: wait for the phone to have asked, and for the answer.
     await expect.poll(() => sent().some((m) => m.type === 'snapshot.request')).toBe(true);

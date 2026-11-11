@@ -5,7 +5,7 @@ import { devices, expect, test, type ConsoleMessage, type Page } from '@playwrig
 import type { PhoneClientMessage, PhoneSession } from '@ledge/protocol';
 import { copy } from '../src/copy';
 import { createDeviceCheck } from '../test/fakePc';
-import { startHarness, waiting, type Harness } from './harness';
+import { PC_NAME, startHarness, waiting, type Harness } from './harness';
 
 const { defaultBrowserType: _chromium, ...pixel } = devices['Pixel 7'];
 test.use(pixel);
@@ -58,7 +58,8 @@ test('a passkey protects the high-impact accepts: enrolled at pairing, asked at 
     signedIn = true;
     await page.getByRole('button', { name: copy.compare.same }).click();
     h.pc.ok();
-    await expect(page.getByRole('heading', { name: new RegExp(` lié à ${copy.yourPc}$`) })).toBeVisible();
+    // The heading names the PC once its first snapshot has come (mobile-multi-device.html: « iPad lié à Legion »).
+    await expect(page.getByRole('heading', { name: new RegExp(` lié à ${PC_NAME}$`) })).toBeVisible();
     await page.getByRole('button', { name: copy.enroll.go }).click();
     await expect(page.getByText(copy.enroll.done)).toBeVisible();
     expect(h.daemon.device?.registered).toBe(true);
