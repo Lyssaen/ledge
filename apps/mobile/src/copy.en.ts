@@ -191,6 +191,10 @@ export const en: Copy = {
     askAgain: 'Ask again',
     stepsLabel: 'Steps',
     sources: 'Sources: ',
+    inAnswer: {
+      request: (name: string) => `Waiting in ${name}'s session`, settled: 'Settled since',
+      more: (n: number) => `See the ${n} others in For you`
+    },
     field: 'Question for Ledge',
     placeholder: 'Ask Ledge…',
     send: 'Send the question',

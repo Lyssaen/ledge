@@ -193,6 +193,11 @@ const fr = {
     askAgain: 'Reposer la question',
     stepsLabel: 'Étapes',
     sources: 'Sources : ',
+    /** A request waiting in a session the answer read (M3 Q30): its card under the latest answer, a line under an older one. */
+    inAnswer: {
+      request: (name: string) => `En attente dans la session de ${name}`, settled: 'Réglée depuis',
+      more: (n: number) => `Voir les ${n} autres dans À toi`
+    },
     field: 'Question pour Ledge',
     placeholder: 'Demander à Ledge…',
     send: 'Envoyer la question',

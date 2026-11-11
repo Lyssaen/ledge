@@ -15,6 +15,8 @@ import { Mascot } from '../ui/MobileBot';
 import { useWide } from '../ui/layout';
 import type { ChatConversationSummary } from '@ledge/protocol';
 import { ConversationsSheet, titleOf } from '../ui/chat/Conversations';
+import { AnswerRequests, IN_ANSWER_MAX, requestId, SettledLines, sourceIds } from '../ui/chat/InAnswer';
+import { requestsOf } from '../model/requests';
 import { DetailHeader, kitButtonClass } from '../ui/kit/Controls';
 import { iconButtonClass } from '../ui/Button';
 
@@ -54,6 +56,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   const [sheet, setSheet] = useState(false);
   // A past conversation open in the tab's place, read-only (§6).
   const [past, setPast] = useState<ChatConversationSummary | null>(null);
+  const shownUnder = useRef(new Map<string, Map<string, string>>());
 
   // « Répondre » on a decision: the start of the question in the field, the caret after it, for the user to finish.
   const field = useRef<HTMLTextAreaElement>(null);
@@ -95,6 +98,24 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   };
   const list = sessions.map(x => ({ id: x.id, name: x.name, repo: x.repo, exited: x.state === 'exited', state: x.state, helpers: x.helpers }));
   const reset = () => { setRefused(null); store.resetChat(); };
+  // Q30: the requests waiting now in the latest answer's sources; what each answer showed, for « Réglée depuis » once gone.
+  const unique = new Map<string, string>();
+  const twice = new Set<string>();
+  for (const x of sessions) { if (!x.name) continue; if (unique.has(x.name)) twice.add(x.name); else unique.set(x.name, x.id); }
+  for (const n of twice) unique.delete(n);
+  const waiting = requestsOf(sessions);
+  const waitingIds = new Set(waiting.map(requestId));
+  const last = chat.turns.at(-1);
+  const latest = !running && last?.answer !== undefined ? last : undefined;
+  const latestItems = latest ? (() => { const ids = sourceIds(latest.steps, unique); return waiting.filter(i => ids.has(i.sessionId)); })() : [];
+  if (latest) {
+    const mine = shownUnder.current.get(latest.qid) ?? new Map<string, string>();
+    for (const i of latestItems.slice(0, IN_ANSWER_MAX)) mine.set(requestId(i), i.botName);
+    shownUnder.current.set(latest.qid, mine);
+  }
+  const inAnswerOf = (qid: string) => qid === latest?.qid
+    ? <AnswerRequests store={store} items={latestItems} />
+    : <SettledLines names={[...new Set([...(shownUnder.current.get(qid) ?? [])].filter(([id]) => !waitingIds.has(id)).map(([, n]) => n))]} />;
   const limitsOf = (at: string) => ({ at, usage: state.usage ?? [], alert: state.usageAlert, fresh: state.fresh });
   const openSheet = () => { store.askConversations(); setSheet(true); };
 
@@ -159,7 +180,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         {chat.turns.map(t => (
           <div key={t.qid} id={`turn-${t.qid}`} className="contents">
           <TurnView store={store} turn={t} list={list} canConfirm={!!state.device?.confirm} live={chat.live?.qid === t.qid ? chat.live : null} sessions={sessions.length}
-            {...(!running && !offline ? { onAskAgain: (q: string) => ask(q) } : {})} limits={chat.limits[t.qid] !== undefined ? limitsOf(chat.limits[t.qid]!) : undefined} />
+            {...(!running && !offline ? { onAskAgain: (q: string) => ask(q) } : {})} limits={chat.limits[t.qid] !== undefined ? limitsOf(chat.limits[t.qid]!) : undefined} inAnswer={inAnswerOf(t.qid)} />
           </div>
         ))}
         {refused && (

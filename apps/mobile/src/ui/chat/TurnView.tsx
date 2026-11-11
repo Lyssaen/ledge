@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ChatErrorCode, PhoneChatStep, PhoneChatTurn, PhoneSession } from '@ledge/protocol';
 import { copy } from '../../copy';
 import type { MobileStore } from '../../state/store';
@@ -61,13 +62,15 @@ const errorText = (c: ChatErrorCode): string => ({ busy: copy.chat.busy, timeout
  * One question and what came of it. `live` is the question being answered: its steps and the text so far
  * (the answer's Markdown comes later, the text is shown as it is).
  */
-export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskAgain, readOnly = false, limits }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string; exited?: boolean; state?: PhoneSession['state']; helpers?: PhoneSession['helpers'] }[]; canConfirm: boolean;
+export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskAgain, readOnly = false, limits, inAnswer }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string; exited?: boolean; state?: PhoneSession['state']; helpers?: PhoneSession['helpers'] }[]; canConfirm: boolean;
   /** « Reposer la question » after a timeout or a failure (Q37): the same question, as a new one; absent while it cannot be sent. */
   onAskAgain?: (question: string) => void;
   /** A past conversation (m3-chat.html §6): its cards keep their outcome and are switched off; the PC refuses any action on them. */
   readOnly?: boolean;
   /** The answer read the account limits (Q31): when, and the phone's own usage to draw them with. */
-  limits?: { at: string; usage: readonly PhoneHarnessUsage[]; alert: number | null; fresh: boolean } | undefined }) {
+  limits?: { at: string; usage: readonly PhoneHarnessUsage[]; alert: number | null; fresh: boolean } | undefined;
+  /** Under « Sources » (Q30): the requests waiting in them, or the lines of those settled since. */
+  inAnswer?: ReactNode }) {
   const steps = live?.steps ?? turn.steps;
   const text = live ? live.text : turn.answer;
   // A name two sessions share says nothing about which one is meant: it is not linked.
@@ -84,6 +87,7 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskA
       {live && text && <p aria-live="polite" className="px-1 whitespace-pre-wrap break-words">{text}</p>}
       {!live && text && <Answer text={text} names={names} />}
       {!live && turn.answer && <Sources names={sourcesOf(steps)} ids={names} />}
+      {!live && turn.answer && inAnswer}
       {!live && turn.answer && limits && limits.usage.length > 0 && (
         <div className={IN_ANSWER}>
           <Limits usage={limits.usage} now={Date.now()} alert={limits.alert} fresh={limits.fresh} />
