@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { copy } from '../copy';
 import { consequenceFor, lowRiskNoticeFor } from '../model/consequence';
 import { checkFreeAnswer } from '../model/freeAnswer';
@@ -63,6 +63,11 @@ function PanelHeader({ title, panel }: { title: string; panel: RequestPanel }) {
   );
 }
 
+
+/** The `phone-side` variant of styles.css: a phone on its side. */
+const PHONE_SIDE = '(orientation: landscape) and (max-height: 500px)';
+/** What the person does to a page that ends its placing: they took it over. */
+const HANDS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
 export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel, onSettled, keys = false }: {
   store: MobileStore; sessionId: string; requestKey: string; onReconnect?: () => void; panel?: RequestPanel;
   /** A wide screen's « À toi »: Y / N decide from the keyboard, said in the footer. */
@@ -127,6 +132,35 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
     const t = setTimeout(() => settledRef.current?.(), RECEIPT_MS);
     return () => clearTimeout(t);
   }, [settled]);
+  // A phone on its side (under 500 px of height) opens the request scrolled so its command sits whole just above the footer, or
+  // starts at the top when it is taller than the room; the session and the pill stay above, a scroll up (design-ux 69be1d14, Q69).
+  const scroller = useRef<HTMLElement>(null);
+  const commandBox = useRef<HTMLDivElement>(null);
+  // The page settles after its first paint (the footer, a whole body asked again): placed again at each size change, until the
+  // person scrolls or touches it themselves.
+  const placedFor = useRef<string | null>(null);
+  const unplace = useRef<(() => void) | null>(null);
+  useEffect(() => () => { unplace.current?.(); unplace.current = null; }, [key]);
+  useLayoutEffect(() => {
+    const main = scroller.current, box = commandBox.current;
+    if (!main || !box || placedFor.current === key) return;
+    placedFor.current = key;
+    if (globalThis.matchMedia?.(PHONE_SIDE).matches !== true) return;
+    const place = () => {
+      const cmd = box.firstElementChild ?? box;
+      const room = main.getBoundingClientRect(), at = cmd.getBoundingClientRect();
+      const top = at.top - room.top + main.scrollTop;
+      const pad = parseFloat(getComputedStyle(main).paddingBottom) || 0;
+      main.scrollTop = at.height > main.clientHeight - pad ? top : Math.max(0, top + at.height - (main.clientHeight - pad));
+    };
+    place();
+    const watch = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
+    watch?.observe(main);
+    watch?.observe(box);
+    const stop = () => { watch?.disconnect(); for (const e of HANDS) main.removeEventListener(e, stop); };
+    for (const e of HANDS) main.addEventListener(e, stop, { passive: true });
+    unplace.current = stop;
+  });
   const header = (title: string) => (panel ? <PanelHeader title={title} panel={panel} /> : <BackHeader title={title} fallback={backRoute} label={copy.detail.back} link={link} />);
 
   if (outcome.kind === 'applied') return <Result store={store} title={resultTitle(outcome)} body={copy.result.body} item={last.current} final />;
@@ -222,7 +256,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   return (
     <>
       {paneHead || header(copy.detail.heading[req.kind])}
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
+      <main ref={scroller} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {!paneHead && <div className="mt-4 flex items-start gap-3 rounded-card border border-line bg-surface p-3.5">
           <MobileBot tool={req.tool} seed={req.sessionId} state={state.sessions.get(sessionId)?.state ?? 'idle'} frozen={!fresh} />
           <div className="min-w-0 flex-1">
@@ -248,7 +282,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
           </>
         ) : (
           <>
-            <Command text={req.body ?? req.text} />
+            <div ref={commandBox}><Command text={req.body ?? req.text} /></div>
             {optionMode && optionList}
             {!optionMode && options.length > 0 && (
               <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">

@@ -44,8 +44,11 @@ test('in landscape the app spans the whole width with its tabs on the left', asy
   await page.getByRole('link', { name: /pnpm test/ }).click();
   await expect(page.getByRole('button', { name: copy.decide.allow })).toBeEnabled();
   await shot(page, 'request', browserName);
-  // One pane with the rail, the command in view above the buttons (the user's « A », 2026-11-11 09:06Z).
-  const command = (await page.getByText('pnpm test', { exact: true }).first().boundingBox())!;
+  // One pane with the rail, the command in view above the buttons (the user's « A », 2026-11-11 09:06Z): the request opens scrolled
+  // to it, the session above a scroll up (design-ux 69be1d14).
+  const shown = page.getByText('pnpm test', { exact: true }).first();
+  await expect(shown).toBeInViewport({ ratio: 1 });
+  const command = (await shown.boundingBox())!;
   const allow = (await page.getByRole('button', { name: copy.decide.allow }).boundingBox())!;
   expect.soft(command.y).toBeGreaterThanOrEqual(0);
   expect.soft(command.y + command.height).toBeLessThanOrEqual(allow.y);
