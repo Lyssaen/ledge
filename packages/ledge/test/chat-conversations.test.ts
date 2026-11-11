@@ -56,7 +56,7 @@ describe('a device keeps its conversations', { timeout: 20_000 }, () => {
     await vi.waitFor(async () => { expect((await first.device('d1').conversations!()).current).toMatchObject({ count: 1 }); });
     const again = setup(home, clock);
     const [turn] = again.d1().history();
-    expect(turn).toMatchObject({ qid: 'q1', error: 'the daemon stopped before Ledge answered' });
+    expect(turn).toMatchObject({ qid: 'q1', error: 'the daemon stopped before the answer', errorCause: 'interrupted' });
     expect(turn!.answeredAt).toBeUndefined();
     // The phone reads it as « Ledge could not answer »; nothing is reading any more, so the next question goes.
     await again.d1().ask('q2', 'Et maintenant ?', quiet);

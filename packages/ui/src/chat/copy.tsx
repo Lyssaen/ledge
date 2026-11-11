@@ -15,6 +15,8 @@ export interface ChatCopy {
     emptyTitle: string; emptyHint: (sessions: number) => string; starters: string; chips: string[]; thinking: string;
     step: Steps; source: Steps;
     sources: string; sourcesNone: string; ago: Say; error: Say; stopped: string;
+    /** A question the daemon stopped in the middle of (`errorCause` `interrupted`); a front without it shows `error` with the daemon's text. */
+    interrupted?: string;
     card: {
       label: string; folder: string; tool: string; byDefault: Say; prompt: string; noPrompt: string;
       launch: string; launching: string; retry: string; orRephrase: string; orFolder: string;

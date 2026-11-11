@@ -144,14 +144,15 @@ export async function folderTooWide(path: string, userHome: string): Promise<str
 const FENCE_OF = new Map(Object.entries(LEGACY_FENCE_ACTION).map(([kind, id]) => [id as string, kind as BlockKind]));
 const sameStep = (a: ChatTurn['steps'][number], b: ChatTurn['steps'][number]) => a.kind === b.kind && a.id === b.id && a.path === b.path;
 
-/** What a question still unanswered when the daemon stopped says: it is over, as a failed one (M3 §3, « Ledge could not answer »). */
-export const INTERRUPTED = 'the daemon stopped before Ledge answered';
+/** What a question still unanswered when the daemon stopped says: it is over, as a failed one (M3 §3, « Ledge could not answer »).
+ *  Its cause, `interrupted`, lets Desktop say it in the user's language (Q79); a front without that copy shows this text. */
+export const INTERRUPTED = 'the daemon stopped before the answer';
 
 /** A turn written before the daemon stopped: what was under way then is no longer (a question unanswered failed, a queued instruction is
  *  proposed again, a running row failed). */
 function resumed(t: ChatTurn): ChatTurn {
   const out: ChatTurn = { ...t };
-  if (out.answeredAt === undefined && out.error === undefined) out.error = INTERRUPTED;
+  if (out.answeredAt === undefined && out.error === undefined) { out.error = INTERRUPTED; out.errorCause = 'interrupted'; }
   if (out.relay?.status === 'queued') { const { status: _s, ...relay } = out.relay; out.relay = relay; }
   if (out.actions?.some(a => a.state === 'running')) out.actions = out.actions.map(a => (a.state === 'running' ? { ...a, state: 'failed' as const, error: 'interrupted' } : a));
   return out;

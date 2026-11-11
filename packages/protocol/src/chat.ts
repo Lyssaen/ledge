@@ -102,11 +102,13 @@ export type ChatAction = z.infer<typeof ChatActionSchema>;
 export const ChatActionsSchema = z.array(ChatActionSchema).min(1).max(MAX_PROPOSALS);
 
 /** One question to Ledge and its answer; `error` set when it could not answer, both absent while it is still reading.
+ *  `errorCause`: a cause of `error` a front can say in its own words (`interrupted`: the daemon stopped before the answer);
+ *  any other front shows `error`, the daemon's text. A string, so a cause added later never makes an older front drop the turn.
  *  `ignoredAt`: the user set the turn's cards aside (on any device): nothing of them applies until `chat.ignore` with `undo`. */
 export const ChatTurnSchema = z.object({
   machineId: z.string().optional(), machineName: z.string().optional(), choices: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
   qid: z.string().min(1), question: z.string(), askedAt: z.string().datetime(),
-  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
+  steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), errorCause: z.string().max(40).optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
   projectProposal: ChatProjectProposalSchema.optional(),
   tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional(),
   ignoredAt: z.string().datetime().optional(), attachments: z.array(AttachmentRefSchema).optional(),

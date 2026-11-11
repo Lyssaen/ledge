@@ -1323,6 +1323,7 @@ export const en: Messages = {
     source: { sessions: 'the sessions', pane: (name: string) => `${name}'s terminal`, reply: (name: string) => `${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'nothing read', ago: (when: string) => `${when} ago`,
     error: (why: string) => `Ledge could not answer: ${why}`,
+    interrupted: 'Ledge could not answer: the daemon stopped before the answer.',
     stopped: 'Stopped.',
     card: {
       label: 'Proposed session', folder: 'Folder', tool: 'Harness', byDefault: (tool: string) => `${tool} · default`, prompt: 'Instruction', noPrompt: 'None, empty session',

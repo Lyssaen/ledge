@@ -1395,6 +1395,7 @@ export const fr = {
     source: { sessions: 'les sessions', pane: (name: string) => `le terminal de ${name}`, reply: (name: string) => `la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'aucune lecture', ago: (when: string) => `il y a ${when}`,
     error: (why: string) => `Ledge n’a pas pu répondre : ${why}`,
+    interrupted: 'Ledge n’a pas pu répondre : le daemon s’est arrêté avant la réponse.',
     stopped: 'Arrêté.',
     card: {
       label: 'Session proposée', folder: 'Dossier', tool: 'Harnais', byDefault: (tool: string) => `${tool} · par défaut`, prompt: 'Instruction', noPrompt: 'Aucune, session vide',
