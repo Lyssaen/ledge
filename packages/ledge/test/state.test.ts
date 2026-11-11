@@ -828,6 +828,27 @@ describe('reduce: the tools the agent is running (running, doingOf)', () => {
     expect(reduce(denied, ev('PostToolUseFailure', { tool: 'Bash', toolUseId: 'b', error: 'denied' })).running!.map(c => c.id)).toEqual(['r']);
   });
 
+  it('refused from Ledge, the call whose request it was goes by its id, even when a later call of that tool runs', () => {
+    // A starts, B starts, then A's request arrives: the refusal is A's, B runs on.
+    const s = run(session('working'), pre('Bash', 'npm test', { toolUseId: 'A' }), pre('Bash', 'npm run lint', { toolUseId: 'B', at: later(6000) }),
+      ev('PermissionRequest', { tool: 'Bash', text: 'npm test', toolUseId: 'A' }));
+    expect(s.running!.find(c => c.id === 'A')).toMatchObject({ asks: true });
+    const denied = reduce(s, ev('Decided', { decision: 'deny', source: 'daemon' }));
+    expect(denied.running).toEqual([{ id: 'B', tool: 'Bash', label: 'npm run lint', since: later(6000) }]);
+    expect(doingOf(denied)).toMatchObject({ label: 'npm run lint' });
+    expect(reduce(denied, post('Bash', { toolUseId: 'B' }))).not.toHaveProperty('running');
+    // Accepted: both run on, and none is marked as asking any more.
+    const accepted = reduce(s, ev('Decided', { decision: 'accept', source: 'daemon' }));
+    expect(accepted.running!.map(c => c.id)).toEqual(['A', 'B']);
+    expect(accepted.running!.some(c => c.asks)).toBe(false);
+  });
+
+  it('a request whose id matches no call marks none, and its refusal removes nothing', () => {
+    const s = run(session('working'), pre('Bash', 'npm test', { toolUseId: 'A' }), ev('PermissionRequest', { tool: 'Bash', text: 'x', toolUseId: 'Z' }));
+    expect(s.running!.some(c => c.asks)).toBe(false);
+    expect(reduce(s, ev('Decided', { decision: 'deny', source: 'daemon' })).running!.map(c => c.id)).toEqual(['A']);
+  });
+
   it('the end of the turn drops them all: rest, error, a new prompt, the end', () => {
     const s = run(session('working'), pre('Bash', 'npm test', { toolUseId: 'a' }), pre('Read', 'Read x', { toolUseId: 'b' }));
     for (const e of [ev('Stop'), ev('StopFailure', { text: 'boom' }), ev('UserPromptSubmit', { text: 'autre chose' }), ev('SessionEnd'),

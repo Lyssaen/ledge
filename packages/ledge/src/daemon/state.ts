@@ -234,7 +234,8 @@ function callIndex(running: RunningCall[], tool: string | undefined, id: string 
 /**
  * The tools the agent itself is running (`running`), after an event. Its own PreToolUse adds a call, unless that tool is a
  * request (a question, a plan); the call's end removes it, matched by id, else the oldest of that tool, so parallel calls
- * end in any order. A request keeps the calls (an accepted one runs on); a refusal from Ledge removes the call it refused.
+ * end in any order. A request keeps the calls and marks the one that asked (`asks`); accepted, it runs on; refused from
+ * Ledge, that call goes.
  * The end of the turn (rest, error, exit, a new prompt) drops them all. A subagent's events never touch them.
  */
 function withCalls(before: Session, next: Session, ev: SessionEvent): Session {
@@ -251,13 +252,30 @@ function withCalls(before: Session, next: Session, ev: SessionEvent): Session {
     const i = callIndex(running, ev.tool, ev.toolUseId);
     return i < 0 ? next : withRunning(next, running.filter((_, j) => j !== i));
   }
-  // Refused from Ledge: the tool will not run. Its request named the tool; the newest such call is the one that asked.
-  if (ev.name === 'Decided' && ev.decision === 'deny' && before.pending && !before.pending.helperId && before.pending.tool) {
-    const tool = before.pending.tool;
-    const i = running.map(c => c.tool).lastIndexOf(tool);
-    return i < 0 ? next : withRunning(next, running.filter((_, j) => j !== i));
+  // The request this event put up names the call that asked: by its id, else the newest call of that tool.
+  if (ev.name === 'PermissionRequest' && next.pending && next.pending !== before.pending && next.pending.source === 'hook') {
+    let i = ev.toolUseId ? running.findIndex(c => c.id === ev.toolUseId) : -1;
+    if (i < 0 && !ev.toolUseId) i = running.map(c => c.tool).lastIndexOf(ev.tool ?? '');
+    if (i < 0) return withoutAsks(next, running);
+    return withRunning(next, running.map((c, j) => (j === i ? { ...c, asks: true as const } : withoutAsk(c))));
   }
-  return next;
+  // Refused from Ledge: the tool will not run, so the call that asked goes.
+  if (ev.name === 'Decided' && ev.decision === 'deny' && before.pending && !before.pending.helperId) {
+    const i = running.findIndex(c => c.asks);
+    return i < 0 ? withoutAsks(next, running) : withRunning(next, running.filter((_, j) => j !== i));
+  }
+  // Once no request waits, no call is the one asking any more (accepted, or answered elsewhere).
+  return next.pending ? next : withoutAsks(next, running);
+}
+
+function withoutAsk(c: RunningCall): RunningCall {
+  if (!c.asks) return c;
+  const { asks: _a, ...rest } = c;
+  return rest;
+}
+
+function withoutAsks(s: Session, running: RunningCall[]): Session {
+  return running.some(c => c.asks) ? withRunning(s, running.map(withoutAsk)) : s;
 }
 
 export function reduce(s: Session, ev: SessionEvent): Session {

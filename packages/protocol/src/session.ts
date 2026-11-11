@@ -18,7 +18,11 @@ export const DOING_LABEL_MAX = 120;
 export const DOING_TOOL_MAX = 100;
 
 /** One tool call the agent is running (`Session.running`). */
-export const RunningCallSchema = z.object({ id: z.string().optional(), tool: z.string(), label: z.string(), since: z.string().datetime() });
+export const RunningCallSchema = z.object({
+  id: z.string().optional(), tool: z.string(), label: z.string(), since: z.string().datetime(),
+  /** The call whose permission request waits now: a refusal from Ledge removes this one, not another call of that tool. */
+  asks: z.literal(true).optional()
+});
 export type RunningCall = z.infer<typeof RunningCallSchema>;
 /** The most calls `running` keeps: the newest win. */
 export const RUNNING_MAX = 20;

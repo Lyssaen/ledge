@@ -57,7 +57,9 @@ doing?: { tool: string, label: string, since: datetime }
   écrit), au repos, sur une erreur, après un nouveau message, une fois terminée. Un sous-agent ne compte pas.
 - **Une demande le cache sans l'oublier :** pendant une autorisation, `doing` est absent (la ligne dit la demande). Accordée
   depuis Ledge, l'outil tourne : `doing` revient sur lui jusqu'à sa fin. Refusée depuis Ledge, l'outil ne tourne pas : son
-  appel est retiré.
+  appel est retiré, celui de la demande (par identifiant d'appel ; sans identifiant, le plus récent de cet outil), même si un
+  autre appel du même outil a démarré après lui. Une demande vue seulement à l'écran (sans hook) ne désigne aucun appel :
+  après un refus, l'appel reste jusqu'à sa fin ou la fin du tour.
   Refusée dans le terminal du PC : Ledge ne le sait que si le harnais signale l'échec de l'outil ; sinon l'appel reste
   jusqu'à la fin du tour (non vérifié pour chaque harnais).
 - Une question (`AskUserQuestion`) ou un plan (`ExitPlanMode`) n'est pas un `doing` : c'est une demande (`pending`).
