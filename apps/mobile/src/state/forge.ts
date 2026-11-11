@@ -246,10 +246,9 @@ export function createForge(link: PhoneLink, store: MobileStore, storage?: Stora
       case 'forge.done': {
         const r = runOfOp(m.op);
         if (!r) return;
-        // A refusal a send again may get for itself says nothing of the first send; any other end is the action's own, and settles
-        // even a lost run (its receipt says its result will show if it comes).
-        const forItself = !!m.rejected && RESENT_REFUSALS.has(m.rejected);
-        if (forItself && (r.again || r.lost)) { if (!r.lost) lose(r); return; }
+        // A refusal a send again may get for itself says nothing of the first send. Any other end, and any end of a run never sent
+        // again, is the action's own: it settles even a lost run (its receipt says its result will show if it comes).
+        if (r.again && !!m.rejected && RESENT_REFUSALS.has(m.rejected)) { if (!r.lost) lose(r); return; }
         const ending: Partial<ForgeRun> = m.rejected ? { phase: 'rejected', reason: m.rejected, done: m } : { phase: 'done', done: m, ...(m.error ? { reason: m.error } : {}) };
         if (r.lost) {
           inFlight.delete(r.op);

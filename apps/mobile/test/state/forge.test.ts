@@ -188,7 +188,7 @@ describe('the forge store', () => {
     expect(t.forge.getState().runs).toHaveLength(0);
   });
 
-  it('never sends again what a PC that restarted may have run: the run stays uncertain, with no retry, and a late refusal does not end it', async () => {
+  it('never sends again what a PC that restarted may have run: the run stays uncertain, with no retry, its text kept', async () => {
     const t = setup();
     const key = draftKey(pr().id);
     t.forge.setDraft(key, 'Merci');
@@ -202,7 +202,7 @@ describe('the forge store', () => {
     expect(await ended).toMatchObject({ phase: 'uncertain', lost: true });
     t.forge.resend(t.forge.getState().runs[0]!.id);
     expect(t.of('forge.act')).toHaveLength(1);
-    t.deliver({ type: 'forge.done', op: sent.op, ok: false, rejected: 'assertion_invalid' });
+    expect(t.of('forge.act')[0]!.op).toBe(sent.op);
     expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
     expect(t.forge.getState().drafts[key]).toBe('Merci');
   });
@@ -266,16 +266,20 @@ describe('the forge store', () => {
     expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
   });
 
-  it('does not send an uncertain action again once too old for the PC to still hold it', async () => {
+  it('does not send an uncertain action again once too old for the PC to still hold it; a late refusal of its only send settles it', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const t = setup();
-    const { ended } = await acted(t, pr().id, { kind: 'rerun' });
+    const { ended, sent } = await acted(t, pr().id, { kind: 'rerun' });
     vi.advanceTimersByTime(RESEND_MAX_MS + 1);
     const run = await ended;
     t.forge.resend(run.id);
     await flush();
     expect(t.of('forge.act')).toHaveLength(1);
     expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+    // Never sent again: this refusal can only be the first send's, and the receipt shows it.
+    t.deliver({ type: 'forge.done', op: sent.op, ok: false, rejected: 'assertion_expired' });
+    expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'rejected', reason: 'assertion_expired' });
+    expect(t.forge.getState().runs[0]!.lost).toBeUndefined();
   });
 
   it('keeps a comment not posted in its field, and drops it once posted', async () => {
