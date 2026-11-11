@@ -180,10 +180,12 @@ export function EndFooter({ ending, name, canResume, resumeHeld = false, readOnl
           {ending.error && <EndErrorNotice error={ending.error} fresh={fresh} onRetry={onResume} onReconnect={onReconnect} />}
           <section aria-labelledby="ended-title" className="flex flex-col gap-2.5 rounded-card border border-line bg-surface p-4">
             <h2 id="ended-title" className="text-body font-semibold">{C.ended}</h2>
-            {!readOnly && <p className="text-small leading-[1.6] text-muted">{canResume ? C.endedBody : C.endedOnPc}</p>}
-            {ending.killed && <p className="text-small text-attention">{C.killed}</p>}
+            {/* Closed by force, its reason takes the body's place and « Reprendre » steps back (m2-sessions.html §4). */}
+            {ending.killed
+              ? <p className="text-small leading-[1.6] text-muted">{C.killed}</p>
+              : !readOnly && <p className="text-small leading-[1.6] text-muted">{canResume ? C.endedBody : C.endedOnPc}</p>}
             {canResume && !readOnly && (
-              <button type="button" aria-disabled={resumeHeld || undefined} onClick={() => { if (!resumeHeld) onResume(); }} className={buttonClass({ variant: 'primary', block: true, className: resumeHeld ? 'opacity-45' : '' })}>
+              <button type="button" aria-disabled={resumeHeld || undefined} onClick={() => { if (!resumeHeld) onResume(); }} className={buttonClass({ variant: ending.killed ? 'outline' : 'primary', block: true, className: resumeHeld ? 'opacity-45' : '' })}>
                 <Icon name="resume" />
                 {C.resume(name)}
               </button>

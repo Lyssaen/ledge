@@ -178,11 +178,14 @@ describe('a close from the phone, as the page follows it', () => {
     expect(screen.queryByRole('button', { name: /Fermer/ })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Session terminée' })).toBeInTheDocument();
     expect(screen.getByText('Fermée de force : l’agent ne répondait pas. Son dernier tour peut manquer.')).toBeInTheDocument();
-    expect(screen.getByText('Sa conversation est gardée. Reprendre relance l’agent sur cette conversation, dans le même dossier.')).toBeInTheDocument();
+    // Closed by force, its reason takes the body's place (m2-sessions.html §4).
+    expect(screen.queryByText('Sa conversation est gardée. Reprendre relance l’agent sur cette conversation, dans le même dossier.')).not.toBeInTheDocument();
     const time = new Date(EXITED).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
     expect(screen.getByText(`Session fermée depuis cet appareil · ${time}`)).toBeInTheDocument();
-    // The primary button, with the resume icon before its words.
-    expect(screen.getByRole('button', { name: 'Reprendre Nova' }).firstElementChild?.tagName).toBe('svg');
+    // The button steps back from primary, with the resume icon before its words.
+    const resume = screen.getByRole('button', { name: 'Reprendre Nova' });
+    expect(resume.firstElementChild?.tagName).toBe('svg');
+    expect(resume.className).not.toMatch(/bg-primary/);
   });
 
   it('a refusal of the PC says why above the composer, keeps the draft, and « Réessayer » opens the sheet again', async () => {
