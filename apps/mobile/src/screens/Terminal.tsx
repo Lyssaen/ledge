@@ -9,6 +9,7 @@ import { useNow } from '../useNow';
 import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 import type { PhoneLink } from '../link/link';
+import type { ForgeStore } from '../state/forge';
 import { TerminalLive } from './TerminalLive';
 import { SessionHead } from './SessionHead';
 
@@ -32,10 +33,10 @@ const STEP = iconButtonClass({ variant: 'outline', className: 'text-body font-me
 type Interrupt = Op & { message: Extract<Op['message'], { type: 'session.interrupt' }> };
 
 /** The live terminal when the PC streams it (`daemon.terminal`), the preview of an older PC otherwise. */
-export function Terminal({ store, link, sessionId, storage }: { store: MobileStore; link?: PhoneLink; sessionId: string; storage?: Storage }) {
+export function Terminal({ store, link, sessionId, storage, forge }: { store: MobileStore; link?: PhoneLink; sessionId: string; storage?: Storage; forge?: ForgeStore | null }) {
   const state = useMobile(store);
   const session = state.sessions.get(sessionId);
-  if (link && session && state.daemon?.terminal) return <TerminalLive key={sessionId} store={store} link={link} session={session} {...(storage ? { storage } : {})} />;
+  if (link && session && state.daemon?.terminal) return <TerminalLive key={sessionId} store={store} link={link} session={session} forge={forge} {...(storage ? { storage } : {})} />;
   return <TerminalPreview store={store} sessionId={sessionId} {...(storage ? { storage } : {})} />;
 }
 

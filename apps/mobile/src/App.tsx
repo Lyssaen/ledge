@@ -336,7 +336,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} forge={forge} />} />;
           // « Nouvelle session » opens beside the list, like a session (Q82, validated by the user 2026-11-11).
           case 'launch': return <Split list={sessions} detail={<NewSession store={store} storage={storage} />} />;
-          case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
+          case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} forge={forge} />} />;
           case 'prs': case 'pr': return <Split list={prsList} detail={prView ?? <EmptyPane icon="pr" {...copy.prs.pane} />} />;
           case 'rigs': case 'rig': case 'kernel': case 'max': return <Split list={rigsList} detail={rigsDetail ?? <EmptyPane icon="rigs" {...copy.rigs.pane} />} />;
           case 'atelier': return mobile.daemon?.atelier
@@ -370,7 +370,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'chat': return framed(chat, !chatOn);
       case 'connection': return framed(connection, false);
       case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} forge={forge} />, false);
-      case 'terminal': return framed(<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />, false);
+      case 'terminal': return framed(<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} forge={forge} />, false);
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
       case 'ask': return framed(<AskDetail key={route.id} store={store} id={route.id} />, false);
       // Full screen, over the tabs (m2-sessions.html §9).
