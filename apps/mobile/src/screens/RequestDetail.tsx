@@ -134,19 +134,16 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   }, [settled]);
   // A phone on its side (under 500 px of height) opens the request scrolled so its command sits whole just above the footer, or
   // starts at the top when it is taller than the room; the session and the pill stay above, a scroll up (design-ux 69be1d14, Q69).
-  const scroller = useRef<HTMLElement>(null);
-  const commandBox = useRef<HTMLDivElement>(null);
+  // The elements as state: the effect below runs again when they appear or change, and cleans up what that run set up.
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const [commandBox, setCommandBox] = useState<HTMLDivElement | null>(null);
   // The page settles after its first paint (the footer, a whole body asked again): placed again at each size change, until the
-  // person scrolls or touches it themselves. Turning the phone on its side, from portrait or back to it, places it anew (review-qa).
-  const placedFor = useRef<string | null>(null);
-  const unplace = useRef<(() => void) | null>(null);
-  useEffect(() => () => { unplace.current?.(); unplace.current = null; }, [key]);
+  // person scrolls or touches it themselves. Turning the phone on its side, from portrait or back to it, places it anew; a request
+  // replaced in place starts over (review-qa).
   useLayoutEffect(() => {
-    const main = scroller.current, box = commandBox.current;
-    if (!main || !box || placedFor.current === key) return;
-    placedFor.current = key;
+    const main = scroller, box = commandBox;
     const side = globalThis.matchMedia?.(PHONE_SIDE);
-    if (!side) return;
+    if (!main || !box || !side) return;
     let taken = false;
     const place = () => {
       if (taken || !side.matches) return;
@@ -164,12 +161,12 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
     watch?.observe(box);
     side.addEventListener?.('change', turned);
     for (const e of HANDS) main.addEventListener(e, took, { passive: true });
-    unplace.current = () => {
+    return () => {
       watch?.disconnect();
       side.removeEventListener?.('change', turned);
       for (const e of HANDS) main.removeEventListener(e, took);
     };
-  });
+  }, [key, scroller, commandBox]);
   const header = (title: string) => (panel ? <PanelHeader title={title} panel={panel} /> : <BackHeader title={title} fallback={backRoute} label={copy.detail.back} link={link} />);
 
   if (outcome.kind === 'applied') return <Result store={store} title={resultTitle(outcome)} body={copy.result.body} item={last.current} final />;
@@ -265,7 +262,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   return (
     <>
       {paneHead || header(copy.detail.heading[req.kind])}
-      <main ref={scroller} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
+      <main ref={setScroller} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
         {!paneHead && <div className="mt-4 flex items-start gap-3 rounded-card border border-line bg-surface p-3.5">
           <MobileBot tool={req.tool} seed={req.sessionId} state={state.sessions.get(sessionId)?.state ?? 'idle'} frozen={!fresh} />
           <div className="min-w-0 flex-1">
@@ -291,7 +288,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
           </>
         ) : (
           <>
-            <div ref={commandBox}><Command text={req.body ?? req.text} /></div>
+            <div ref={setCommandBox}><Command text={req.body ?? req.text} /></div>
             {optionMode && optionList}
             {!optionMode && options.length > 0 && (
               <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">

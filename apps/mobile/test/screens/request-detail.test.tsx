@@ -89,6 +89,42 @@ describe('the request detail', () => {
   });
 });
 
+describe('a phone on its side', () => {
+  /** A phone's orientation the test turns, and the observers the screen leaves running. */
+  function turnable() {
+    const listeners = new Set<() => void>();
+    const mql = { matches: false, addEventListener: (_: string, f: () => void) => listeners.add(f), removeEventListener: (_: string, f: () => void) => listeners.delete(f) };
+    vi.stubGlobal('matchMedia', (q: string) => (q.includes('max-height: 500px') ? mql : { matches: false, addEventListener() {}, removeEventListener() {} }));
+    const observers = new Set<object>();
+    vi.stubGlobal('ResizeObserver', class { constructor() { observers.add(this); } observe() {} disconnect() { observers.delete(this); } });
+    const turn = (side: boolean) => { mql.matches = side; for (const f of [...listeners]) f(); };
+    return { listeners, observers, turn };
+  }
+
+  it('a request replaced in place, then turned on its side, is placed again; nothing stays listening once closed (review-qa)', () => {
+    const phone = turnable();
+    try {
+      const t = opened(pending({ text: 'pnpm test' }));
+      expect(phone.listeners.size).toBe(1);
+      fireEvent.click(screen.getByRole('button', { name: 'Autoriser' }));
+      act(() => t.deliver({ type: 'operation.result', op: t.of('session.decide')[0]!.op, status: 'rejected', reason: 'stale' }));
+      act(() => t.deliver({ type: 'session.pending', id: 'a', pending: pending({ key: 'p2', text: 'pnpm build' }) }));
+      expect(screen.getByText('pnpm build', { selector: 'pre' })).toBeInTheDocument();
+      // The new request alone is watched: the old one's watchers are gone, the new one's were not unplugged.
+      expect(phone.listeners.size).toBe(1);
+      expect(phone.observers.size).toBe(1);
+      const main = screen.getByRole('main');
+      const placed = vi.fn();
+      Object.defineProperty(main, 'scrollTop', { configurable: true, get: () => 0, set: placed });
+      act(() => phone.turn(true));
+      expect(placed).toHaveBeenCalled();
+      t.view.unmount();
+      expect(phone.listeners.size).toBe(0);
+      expect(phone.observers.size).toBe(0);
+    } finally { vi.unstubAllGlobals(); }
+  });
+});
+
 describe('a question', () => {
   it('offers a free answer when the tool takes one, and sends it as typed', () => {
     const t = opened(question());
