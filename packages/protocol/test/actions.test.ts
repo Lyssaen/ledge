@@ -29,7 +29,9 @@ describe('the action registry', () => {
   });
   it('asks a phone for its device check before every destructive action', () => {
     for (const a of ACTIONS) if (riskOf(a, a.example) === 'destructive') expect(a.phone, a.id).not.toBeNull();
-    expect(ACTIONS.filter(a => a.card === 'generic' && a.phone).map(a => a.phone)).toEqual(['act', 'act', 'act', 'act']);
+    expect(Object.fromEntries(ACTIONS.filter(a => a.card === 'generic' && a.phone).map(a => [a.id, a.phone]))).toEqual({
+      'session.resume': 'act', 'session.decide': 'act', 'task.cancel': 'act', 'task.answer': 'act', 'rig.act': 'act', 'rig.seats': 'act'
+    });
   });
   it('keeps the five earlier cards on their own card', () => {
     expect(Object.fromEntries(ACTIONS.filter(a => a.card !== 'generic').map(a => [a.id, a.card]))).toEqual({

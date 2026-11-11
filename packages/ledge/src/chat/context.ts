@@ -1,18 +1,26 @@
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { DEFAULT_PROJECTS, isArchived, projectOf, taskClosed, type ChatStep, type Projects, type Recent, type Session, type Task } from '@ledge/protocol';
+import { DEFAULT_PROJECTS, type HarnessUsage, isArchived, projectOf, seatsByRole, taskClosed, type ChatStep, type OpenRigState, type Projects, type Recent, type Session, type Task } from '@ledge/protocol';
 import { LEDGE_MD, writeLedgeMd, type LedgeInfo } from './guide.js';
 import { writeNotes } from './notes.js';
 
 /** `sessions`: every session the daemon holds, archived ones included (listed apart, for `session.restore`). */
 export interface ContextInput { sessions: Session[]; recents?: Recent[]; projects?: Projects; tasks?: Task[];
+  /** This PC's OpenRig as last read: `rigs.md` (its rigs, their seats by role, the kernel), only where OpenRig is installed. */
+  rigs?: OpenRigState;
+  /** The harnesses' account limits as the daemon last read them: `limits.md`, only where the daemon reads them. */
+  usage?: readonly HarnessUsage[];
   /** What `ledge.md` holds (the guide, the version, the agents installed); no `ledge.md` when left out. */
   ledge?: LedgeInfo;
   /** The user's notes folder (`~/.ledge/context`): copied as `context-<name>.md` with `context-index.md`; none when left out. */
   notesDir?: string;
   capture: (s: Session) => Promise<string[] | null>; git: (cwd: string) => Promise<string | null>; now: string }
-export interface Context { dir: string; steps: Map<string, ChatStep>; repoPaths: string[] }
+export interface Context { dir: string; steps: Map<string, ChatStep>; repoPaths: string[];
+  /** `limits.md` was written: reading it reads the limits. */
+  limits?: true }
+/** The file that holds the limits: a turn that reads it is one a phone shows the limits under (M3 Q31). */
+export const LIMITS_MD = 'limits.md';
 
 const STATE: Record<Session['state'], string> = {
   starting: 'starting', working: 'working', waiting_permission: "waiting for the user's approval", waiting_input: 'asking the user a question',
@@ -67,13 +75,49 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   // The projects (build spec §5), only where the daemon holds some; a name or a description is one line, so it forges no heading.
   if (withProjects) await writeFile(join(dir, 'projects.md'), projectsMd(projects));
   if (input.tasks) await writeTasksContext(dir, input.tasks, steps, input.now.slice(0, 10));
+  if (input.rigs?.installed) { await writeFile(join(dir, 'rigs.md'), rigsMd(input.rigs)); steps.set('rigs.md', { kind: 'sessions' }); }
+  if (input.usage) await writeFile(join(dir, LIMITS_MD), limitsMd(input.usage, input.now));
   if (input.ledge) { await writeLedgeMd(dir, input.ledge); steps.set(LEDGE_MD, { kind: 'repo', name: 'Ledge', path: LEDGE_MD }); }
   if (input.notesDir) await writeNotes(dir, input.notesDir, steps);
   // The live sessions' repositories and the projects' ones on this machine: a question with no session can still read a project.
   // A project's folder may be gone (an --add-dir that does not exist would fail the run): only folders that exist now.
   const projectRepos = await existing(projects.projects.flatMap(p => p.repos.filter(r => r.machine === 'local').map(r => r.path)));
   const repoPaths = [...new Set([...live.map(s => s.repoPath ?? s.cwd), ...projectRepos].filter(p => p && !coversHome(p)).map(p => resolve(p)))];
-  return { dir, steps, repoPaths };
+  return { dir, steps, repoPaths, ...(input.usage ? { limits: true as const } : {}) };
+}
+
+const HARNESS: Record<HarnessUsage['harness'], string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' };
+const WINDOW: Record<HarnessUsage['windows'][number]['kind'], string> = { five_hour: '5-hour window', seven_day: 'week', model: 'week, one model', month: 'month', pool: 'included usage' };
+const USAGE_STATUS: Record<HarnessUsage['status'], string> = {
+  ok: 'read less than 5 minutes ago', loading: 'not read yet since the daemon started', stale: 'not read for more than 5 minutes',
+  unreachable: 'the last read failed', expired: "Claude Code's session has expired: the user signs in again in Claude Code"
+};
+/** `limits.md`: each harness's account limits as the daemon last read them, the same the user sees under « Limites ». */
+export function limitsMd(usage: readonly HarnessUsage[], now: string): string {
+  const lines = [`# Account limits at ${now}`, '', "Each harness the user's agents run on, its windows (how much is used, when it starts again from zero) and when the daemon read them.", ''];
+  if (usage.length === 0) lines.push('- (no harness read on this PC)');
+  for (const h of usage) {
+    lines.push(`## ${HARNESS[h.harness]}`, `- status: ${USAGE_STATUS[h.status]}`, `- read at: ${h.readAt ?? 'never'}`);
+    for (const w of h.windows) {
+      const what = `${WINDOW[w.kind]}${w.model ? ` (${oneLine(w.model)})` : ''}${w.pool ? ` (${w.pool === 'cursor' ? "Cursor's models" : 'other models'})` : ''}`;
+      lines.push(`- ${what}: ${w.pct} % used${w.pct >= 100 ? ' (reached)' : ''}, ${w.resetsAt ? `starts again at ${w.resetsAt}` : 'reset time not given'}`);
+    }
+    if (h.windows.length === 0) lines.push('- no window read');
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+/** `rigs.md`: OpenRig on this PC as Ledge last read it, what rig.act and rig.seats name (a rig by its name, a role as `pod.member`). */
+export function rigsMd(st: OpenRigState): string {
+  const lines = [`# OpenRig on this PC, read at ${st.at}`, '', `- OpenRig ${st.version ?? '(version unknown)'}, daemon ${st.daemon.state}, kernel ${st.kernel.state}`, ''];
+  for (const r of st.rigs) {
+    lines.push(`## ${oneLine(r.name)} — ${oneLine(r.status)}`, `- seats: ${r.running} of ${r.seats} running${r.attention ? `, ${r.attention} need attention` : ''}`);
+    for (const [role, ids] of seatsByRole(r.nodes)) lines.push(`- role ${role}: ${ids.length} seat${ids.length > 1 ? 's' : ''} (${ids.join(', ')})`);
+    lines.push('');
+  }
+  if (!st.rigs.length) lines.push('- (no rig)', '');
+  return lines.join('\n');
 }
 
 /** `projects.md` (also `ledge brain projects`): each project, its description and repositories per machine, then the filed folders. */

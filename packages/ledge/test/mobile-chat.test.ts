@@ -222,6 +222,30 @@ describe('phoneEmitter', () => {
     expect(JSON.stringify(r.sent)).not.toContain('/x');
   });
 
+  it('a turn that read the limits follows its history and its end with chat.limits, apart from the strict turn (M3 Q31)', () => {
+    const READ = '2026-10-20T08:00:30.000Z';
+    const plain = turn({ answer: 'ok' });
+    const read = turn({ answer: '84 %', limitsAt: READ });
+    const r = rig([plain, read]);
+    r.emit({ type: 'chat.history', turns: [plain, read] });
+    r.emit({ type: 'chat.done', qid: plain.qid, text: 'ok', at: AT });
+    r.emit({ type: 'chat.done', qid: read.qid, text: '84 %', at: AT });
+    expect(r.types()).toEqual(['chat.history', 'chat.limits', 'chat.done', 'chat.done', 'chat.limits']);
+    for (const [m] of r.sent) expect(PhoneServerMessageSchema.safeParse(m).success).toBe(true);
+    expect(r.sent[1]).toEqual([{ type: 'chat.limits', reads: [{ qid: read.qid, at: READ }] }, 'chat.limits']);
+    expect(r.sent[4]![0]).toEqual({ type: 'chat.limits', reads: [{ qid: read.qid, at: READ }] });
+    // An older phone keeps the history: the turn itself carries nothing new.
+    expect(JSON.stringify(r.sent[0]![0])).not.toContain('limitsAt');
+  });
+
+  it('a history without a turn that read the limits sends no chat.limits', () => {
+    const t = turn({ answer: 'ok' });
+    const r = rig([t]);
+    r.emit({ type: 'chat.history', turns: [t] });
+    r.emit({ type: 'chat.history', turns: [] });
+    expect(r.types()).toEqual(['chat.history', 'chat.history']);
+  });
+
   it('180 s of deltas four times a second never overflow the outbox', async () => {
     const t = turn({ answer: 'x'.repeat(8_192) });
     let overflowed = 0;

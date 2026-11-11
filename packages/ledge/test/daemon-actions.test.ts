@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { ACTION_ERROR_CODES, actionById, ChatActionSchema, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Session, type Task } from '@ledge/protocol';
-import { denied } from '../src/chat/act.js';
-import { actionMessage, cardRefusal, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
+import { ACTION_ERROR_CODES, actionById, ChatActionSchema, type OpenRigState, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Session, type Task } from '@ledge/protocol';
+import { actFromChat, denied } from '../src/chat/act.js';
+import { actionMessage, cardRefusal, cutVars, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
 
 const T0 = '2026-10-26T08:00:00.000Z';
 const mk = (id: string, name: string, extra: Partial<Session> = {}): Session => ({ id, name, tool: 'claude', cwd: '/w/api', project: 'api', title: `${name} · api`,
@@ -33,7 +33,7 @@ const refused = (id: ActionId, args: unknown, c = ctx()): string => {
 
 describe('resolveAction', () => {
   it('covers every generic action of the registry', () => {
-    expect([...GENERIC_ACTIONS].sort()).toEqual(['note.add', 'session.archive', 'session.decide', 'session.interrupt', 'session.model', 'session.restore', 'session.resume',
+    expect([...GENERIC_ACTIONS].sort()).toEqual(['note.add', 'rig.act', 'rig.seats', 'session.archive', 'session.decide', 'session.interrupt', 'session.model', 'session.restore', 'session.resume',
       'task.answer', 'task.cancel', 'task.pass']);
   });
   it('names a session by id or by bot name, and refuses an unknown or ambiguous one', () => {
@@ -187,5 +187,111 @@ describe('actionMessage', () => {
     const c = ctx();
     for (const [id, args] of [['session.decide', { session: 'Nova', decision: 'deny', note: 'non' }], ['task.cancel', { task: 't91b0d4', reason: 'non' }], ['task.pass', { task: 't91b0d4', to: 'Bix', note: 'à toi' }], ['task.answer', { task: 'tdeci01', answer: 'non' }]] as const)
       expect(() => parseClientMessage(actionMessage(ok(id, args, c), 'r1'))).not.toThrow();
+  });
+});
+
+// Rigs from the chat (refonte mobile B4): « Lancer » a rig command Ledge proposes.
+const seat = (logicalId: string) => ({ logicalId, session: `${logicalId.replace('.', '-')}@ledge-dev`, runtime: 'claude-code', model: null, sessionStatus: 'running',
+  lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 });
+const RIGS: OpenRigState = {
+  installed: true, version: '0.7.10', daemon: { state: 'running', port: 7433 }, kernel: { state: 'ready' }, at: T0,
+  rigs: [
+    { id: 'r1', name: 'ledge-dev', status: 'running', lifecycleState: 'running', seats: 3, running: 3, attention: 0, uptime: '1h', snapshot: null, nodes: [seat('dev.back'), seat('dev.back-2'), seat('dev.front')] },
+    { id: 'r2', name: 'idle', status: 'stopped', lifecycleState: 'stopped', seats: 1, running: 0, attention: 0, uptime: null, snapshot: null, nodes: [seat('dev.back')] }
+  ]
+};
+const withRigs = (over: Partial<OpenRigState> = {}) => ctx({ rigs: { ...RIGS, ...over } });
+
+describe('rig.act and rig.seats', () => {
+  it('rig.act checks the rig and the kernel against OpenRig as last read; stop and restart are destructive', () => {
+    const c = withRigs();
+    expect(ok('rig.act', { kind: 'rig.restart', rig: 'ledge-dev' }, c)).toMatchObject({ args: { kind: 'rig.restart', rig: 'ledge-dev' }, risk: 'destructive', summary: 'Redémarrer le rig **ledge-dev**' });
+    expect(ok('rig.act', { kind: 'rig.start', rig: 'idle' }, c)).toMatchObject({ risk: 'reversible', summary: 'Démarrer le rig **idle**' });
+    // « de le » contracts into « du » (mockup M3 §5).
+    expect(ok('rig.act', { kind: 'rig.snapshot', rig: 'ledge-dev' }, c)).toMatchObject({ risk: 'reversible', summary: 'Prendre un snapshot du rig **ledge-dev**' });
+    expect(ok('rig.act', { kind: 'kernel.stop' }, c)).toMatchObject({ args: { kind: 'kernel.stop' }, risk: 'destructive', summary: 'Arrêter le kernel' });
+    expect(code('rig.act', { kind: 'rig.start', rig: 'ledge-dev' }, c)).toBe('running');
+    expect(code('rig.act', { kind: 'rig.stop', rig: 'idle' }, c)).toBe('not_running');
+    expect(code('rig.act', { kind: 'rig.stop', rig: 'nope' }, c)).toBe('unknown');
+    expect(code('rig.act', { kind: 'kernel.start' }, c)).toBe('running');
+    expect(code('rig.act', { kind: 'kernel.restart' }, withRigs({ kernel: { state: 'stopped' } }))).toBe('not_running');
+    // OpenRig not read yet, or not installed: nothing to check against.
+    expect(code('rig.act', { kind: 'kernel.start' }, ctx())).toBe('unknown');
+    expect(code('rig.act', { kind: 'kernel.start' }, withRigs({ installed: false }))).toBe('unknown');
+  });
+  it('rig.act takes only a rig\'s or the kernel\'s power: never the daemon, a rig.* always names its rig, a kernel.* never', () => {
+    const args = actionById('rig.act')!.args;
+    expect(args.safeParse({ kind: 'daemon.stop' }).success).toBe(false);
+    expect(args.safeParse({ kind: 'rig.stop' }).success).toBe(false);
+    expect(args.safeParse({ kind: 'kernel.stop', rig: 'kernel' }).success).toBe(false);
+  });
+  it('rig.seats: a running rig\'s role, a change; removing a seat is destructive', () => {
+    const c = withRigs();
+    expect(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.front', count: 2 }, c)).toMatchObject({ risk: 'reversible', vars: { rig: 'ledge-dev', role: 'dev.front', count: '2', from: '1' },
+      summary: 'Passer **dev.front** de **ledge-dev** de 1 à 2 sièges' });
+    expect(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, c).risk).toBe('destructive');
+    expect(code('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 2 }, c)).toBe('unchanged');
+    expect(code('rig.seats', { rig: 'ledge-dev', role: 'qa.review', count: 1 }, c)).toBe('unknown');
+    expect(code('rig.seats', { rig: 'idle', role: 'dev.back', count: 2 }, c)).toBe('not_running');
+  });
+  it('each row carries what a phone writes its line with (M3 Q34), and an irreversible one the seats it stops (Q35)', () => {
+    const c = withRigs({ rigs: [...RIGS.rigs, { id: 'k', name: 'kernel', status: 'running', lifecycleState: 'running', seats: 2, running: 2, attention: 0, uptime: '1h', snapshot: null,
+      nodes: [{ ...seat('ops.operator'), session: 'operator-agent@kernel' }, { ...seat('ops.advisor'), session: 'advisor-agent@kernel' }] }] });
+    expect(ok('rig.act', { kind: 'rig.restart', rig: 'ledge-dev' }, c).vars).toEqual({ kind: 'rig.restart', rig: 'ledge-dev', seats: 'dev-back, dev-back-2, dev-front', seatCount: '3' });
+    expect(ok('rig.act', { kind: 'rig.stop', rig: 'ledge-dev' }, c).vars).toMatchObject({ seatCount: '3' });
+    // A start or a snapshot stops nothing.
+    expect(ok('rig.act', { kind: 'rig.snapshot', rig: 'ledge-dev' }, c).vars).toEqual({ kind: 'rig.snapshot', rig: 'ledge-dev' });
+    expect(ok('rig.act', { kind: 'rig.start', rig: 'idle' }, c).vars).toEqual({ kind: 'rig.start', rig: 'idle' });
+    expect(ok('rig.act', { kind: 'kernel.stop' }, c).vars).toEqual({ kind: 'kernel.stop', rig: 'kernel', seats: 'operator-agent, advisor-agent', seatCount: '2' });
+    // A kernel this PC does not read the seats of: the row, without them.
+    expect(ok('rig.act', { kind: 'kernel.restart' }, withRigs()).vars).toEqual({ kind: 'kernel.restart', rig: 'kernel' });
+    // Removing seats: the role's last ones, as OpenRig removes them.
+    expect(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, c).vars).toEqual({ rig: 'ledge-dev', role: 'dev.back', count: '1', from: '2', seats: 'dev-back-2', seatCount: '1' });
+    expect(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.front', count: 2 }, c).vars).toEqual({ rig: 'ledge-dev', role: 'dev.front', count: '2', from: '1' });
+  });
+  it('a confirmed step whose seats changed before it applies is refused, not applied to other seats', async () => {
+    const before = withRigs();
+    const apply = async (rows: ChatAction[], after: ResolveCtx) => {
+      const applied: string[] = [];
+      const card = [...rows];
+      const r = await actFromChat({ chat: { action: (_q: string, i: number) => card[i], markAction: (_q: string, i: number, patch: Partial<ChatAction>) => { card[i] = { ...card[i]!, ...patch }; } },
+        emit: () => {}, inFlight: new Set(), resolve: (x: ChatAction) => resolveAction(x.action, x.args, after), apply: async (x: ChatAction) => { applied.push(x.action); } }, 'q', undefined, true);
+      return { r, applied, card };
+    };
+    const ledge = RIGS.rigs[0]!;
+    const rigsWith = (nodes: typeof ledge.nodes) => withRigs({ rigs: [{ ...ledge, nodes }, RIGS.rigs[1]!] });
+    const shrink = ok('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, before);
+    expect(shrink.cuts).toEqual(['dev-back-2@ledge-dev']);
+    // The seat the card named was replaced by another: the same count, another seat stopped.
+    const replaced = await apply([shrink], rigsWith([seat('dev.back'), seat('dev.back-3'), seat('dev.front')]));
+    expect(replaced.applied).toEqual([]);
+    expect(replaced.card[0]).toMatchObject({ state: 'refused', code: 'changed', error: 'the seats it stops have changed since the card' });
+    // The role grew: going to 1 now stops two seats.
+    expect((await apply([shrink], rigsWith([seat('dev.back'), seat('dev.back-2'), seat('dev.back-3'), seat('dev.front')]))).applied).toEqual([]);
+    // A rig restarted after a seat was added.
+    const restart = ok('rig.act', { kind: 'rig.restart', rig: 'ledge-dev' }, before);
+    expect((await apply([restart], rigsWith([...ledge.nodes, seat('qa.review')]))).applied).toEqual([]);
+    // Nothing changed: it applies.
+    expect((await apply([shrink, restart], before)).applied).toEqual(['rig.seats', 'rig.act']);
+  });
+  it('a long list of seats keeps what fits in 300 characters, and says how many are left out', () => {
+    const many = Array.from({ length: 40 }, (_, i) => `seat-number-${i}@big`);
+    const v = cutVars('big', many);
+    expect(v.seats!.length).toBeLessThanOrEqual(300);
+    expect(v.seats!.startsWith('seat-number-0, seat-number-1')).toBe(true);
+    expect(Number(v.seatsMore) + v.seats!.split(', ').length).toBe(40);
+    expect(v.seatCount).toBe('40');
+    expect(cutVars('big', [])).toEqual({});
+  });
+  it('turns the rows into the Desktop\'s own OpenRig messages, valid client messages', async () => {
+    const { parseClientMessage } = await import('@ledge/protocol');
+    const c = withRigs();
+    const restart = actionMessage(ok('rig.act', { kind: 'rig.restart', rig: 'ledge-dev' }, c), 'r1');
+    expect(restart).toEqual({ type: 'openrig.act', requestId: 'r1', action: { kind: 'rig.restart', rig: 'ledge-dev' } });
+    const kernel = actionMessage(ok('rig.act', { kind: 'kernel.start' }, withRigs({ kernel: { state: 'stopped' } })), 'r1');
+    expect(kernel).toEqual({ type: 'openrig.act', requestId: 'r1', action: { kind: 'kernel.start' } });
+    const seats = actionMessage(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, c), 'r1');
+    expect(seats).toEqual({ type: 'openrig.seats', requestId: 'r1', rig: 'ledge-dev', seats: { 'dev.back': 1 } });
+    for (const m of [restart, kernel, seats]) expect(() => parseClientMessage(m)).not.toThrow();
   });
 });

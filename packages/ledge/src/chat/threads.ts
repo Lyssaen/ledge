@@ -1,7 +1,9 @@
-import { readFile, rm } from 'node:fs/promises';
+import { readdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ChatRelay, Tool } from '@ledge/protocol';
 import { createChat, type Chat, type ChatDeps, type ChatMessage } from './service.js';
+import { createConversations, type Conversations } from './conversations.js';
+import { log } from '../log.js';
 
 export type ChatThreadId = 'desktop' | `device:${string}`;
 type Emit = (m: ChatMessage) => void;
@@ -27,12 +29,22 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
   const emitters = new Map<ChatThreadId, Emit>();
   const dropping = new Map<string, Promise<void>>();
   const deviceHome = (id: string) => join(deps.home, 'mobile', 'chat', id);
+  /** A device keeps its conversations 7 days (M3 Q33), in its own folder: forgetting the device removes them with it. */
+  const kept = new Map<string, Conversations>();
+  const keptOf = (id: string): Conversations => {
+    let k = kept.get(id);
+    if (!k) { k = createConversations(join(deviceHome(id), 'conversations'), { ...(deps.now ? { now: deps.now } : {}) }); kept.set(id, k); }
+    return k;
+  };
+  // The daemon's start prunes every device's old conversations, the devices that ask nothing included.
+  void readdir(join(deps.home, 'mobile', 'chat')).then(ids => Promise.all(ids.filter(id => SAFE_ID.test(id) && !dropping.has(id)).map(id => keptOf(id).prune())))
+    .catch((e: NodeJS.ErrnoException) => { if (e.code !== 'ENOENT') log(`chat conversations not pruned (${e.code ?? e.name})`); });
 
   const device = (id: string): Chat => {
     checkId(id);
     if (dropping.has(id)) throw new Error('device thread is being dropped');
     let c = devices.get(id);
-    if (!c) { c = createChat({ ...rest, home: deviceHome(id), slots }); devices.set(id, c); }
+    if (!c) { c = createChat({ ...rest, home: deviceHome(id), slots, conversations: keptOf(id) }); devices.set(id, c); }
     return c;
   };
   const all = (): Array<[ChatThreadId, Chat]> => [['desktop', desktop], ...[...devices].map(([id, c]): [ChatThreadId, Chat] => [`device:${id}`, c])];
@@ -56,10 +68,11 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
       checkId(id);
       const running = dropping.get(id); if (running) return running;
       const c = devices.get(id);
-      devices.delete(id); emitters.delete(`device:${id}`);
+      devices.delete(id); emitters.delete(`device:${id}`); const k = kept.get(id); kept.delete(id);
       const p = (async () => {
         try {
           if (c) { for (const t of c.history()) c.cancel(t.qid); await c.idle(); }
+          await k?.close();
           await rm(deviceHome(id), { recursive: true, force: true });
         } finally { dropping.delete(id); }
       })();

@@ -1,6 +1,6 @@
 // The daemon's side of the action registry (spec 2026-10-26 action registry §2.1): whether an action is possible now, and
 // the message the daemon already handles that applies it. The chat's generic card and, in #93, the CLI share it.
-import { backendOf, isArchived, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, type ActionErrorCode, type ActionId, type ChatAction, type ClientMessage, type Session, type Task } from '@ledge/protocol';
+import { backendOf, isArchived, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, KERNEL_RIG, seatPlan, seatsByRole, type ActionErrorCode, type ActionId, type ChatAction, type ClientMessage, type OpenRigAction, type OpenRigState, type Session, type Task } from '@ledge/protocol';
 import { isOmpSeat } from './omp/seats.js';
 import { noteName } from '../brain/write.js';
 
@@ -8,6 +8,8 @@ export interface ResolveCtx {
   sessions: readonly Session[]; tasks: readonly Task[];
   /** The sessions the same answer closes (its close card): archived once closed, they count as ended for session.archive. */
   closing?: ReadonlySet<string>;
+  /** This PC's OpenRig as last read (rig.act, rig.seats); none when the daemon has not read it: those rows are refused. */
+  rigs?: OpenRigState;
 }
 /** Why not: the daemon's words (the log, the PC's error) and a code for a front's own. */
 export type Refusal = { refused: string; code: ActionErrorCode };
@@ -59,7 +61,58 @@ const withSession = (ctx: ResolveCtx, ref: unknown, check: (s: Session) => Refus
   return check(s) ?? then(s);
 };
 
+/** A rig runs when OpenRig says so, or some of its seats do. */
+const rigRuns = (r: OpenRigState['rigs'][number]) => r.status === 'running' || r.status === 'partial' || r.running > 0;
+/** The longest `seats` var: the list of seats a step stops, in a phone's confirmation sheet (M3 Q35). */
+const SEATS_VAR_MAX = 300;
+/** The seats a step stops, each as its session without `@rig` (`dev-back`), with their count and how many did not fit. */
+export function cutVars(rig: string, sessions: readonly string[]): Record<string, string> {
+  if (sessions.length === 0) return {};
+  const names = sessions.map(s => (s.endsWith(`@${rig}`) ? s.slice(0, -rig.length - 1) : s));
+  const shown: string[] = []; let len = 0;
+  for (const n of names) { const add = (shown.length ? 2 : 0) + n.length; if (len + add > SEATS_VAR_MAX) break; shown.push(n); len += add; }
+  return { ...(shown.length ? { seats: shown.join(', ') } : {}), seatCount: String(names.length), ...(shown.length < names.length ? { seatsMore: String(names.length - shown.length) } : {}) };
+}
+/** Each kind's words up to its object, article included: French contracts « de le » into « du » (« Prendre un snapshot du rig »). */
+const RIG_VERB: Record<string, string> = { start: 'Démarrer le', stop: 'Arrêter le', restart: 'Redémarrer le', snapshot: 'Prendre un snapshot du' };
+
 const IMPLS: Partial<Record<ActionId, Impl>> = {
+  // A rig's or the kernel's power, checked against OpenRig as last read: a start of what runs, or a stop of what does not, is refused.
+  'rig.act': (a, ctx) => {
+    const st = ctx.rigs;
+    if (!st?.installed) return no('unknown', 'OpenRig is not on this machine');
+    const kind = String(a.kind); const verb = RIG_VERB[kind.split('.')[1]!]!;
+    if (kind.startsWith('kernel.')) {
+      const runs = st.kernel.state === 'ready' || st.kernel.state === 'starting';
+      if (kind === 'kernel.start' && runs) return no('running', 'the kernel already runs');
+      if (kind !== 'kernel.start' && !runs) return no('not_running', 'the kernel does not run');
+      // What a stop or a restart cuts, when this PC reads the kernel's seats.
+      const k = kind === 'kernel.start' ? undefined : st.rigs.find(r => r.name === KERNEL_RIG);
+      const cut = k?.nodes.map(n => n.session);
+      return row('rig.act', { kind }, `${verb} kernel`, { kind, rig: KERNEL_RIG, ...(cut ? cutVars(KERNEL_RIG, cut) : {}) }, cut ? { cuts: cut } : {});
+    }
+    const rig = st.rigs.find(r => r.name === a.rig);
+    if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`);
+    if (kind === 'rig.start' && rigRuns(rig)) return no('running', `${rig.name} already runs`);
+    if ((kind === 'rig.stop' || kind === 'rig.restart') && !rigRuns(rig)) return no('not_running', `${rig.name} does not run`);
+    const cut = kind === 'rig.stop' || kind === 'rig.restart' ? rig.nodes.map(n => n.session) : undefined;
+    return row('rig.act', { kind, rig: rig.name }, `${verb} rig ${b(rig.name)}`, { kind, rig: rig.name, ...(cut ? cutVars(rig.name, cut) : {}) }, cut ? { cuts: cut } : {});
+  },
+  // A role's seats, as the Rigs screen changes them: removing one stops its agent, so that row is destructive.
+  'rig.seats': (a, ctx) => {
+    const rig = ctx.rigs?.rigs.find(r => r.name === a.rig);
+    if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`);
+    if (!rigRuns(rig)) return no('not_running', `${rig.name} does not run`);
+    const role = String(a.role); const count = Number(a.count);
+    const now = seatsByRole(rig.nodes).get(role)?.length ?? 0;
+    if (now === 0) return no('unknown', `${rig.name} has no ${role} seat`);
+    if (now === count) return no('unchanged', `${rig.name} already has ${count} ${role} seat(s)`);
+    const removed = seatPlan(rig.nodes, { [role]: count }).remove;
+    // The seats OpenRig removes are the role's last ones: their sessions, for the sheet's « … s'arrêtent ».
+    const cut = removed.map(id => rig.nodes.find(n => n.logicalId === id)?.session ?? id);
+    return row('rig.seats', { rig: rig.name, role, count }, `Passer ${b(role)} de ${b(rig.name)} de ${now} à ${count} siège${count > 1 ? 's' : ''}`,
+      { rig: rig.name, role, count: String(count), from: String(now), ...cutVars(rig.name, cut) }, cut.length ? { risk: 'destructive', cuts: cut } : {});
+  },
   'session.model': (a, ctx) => withSession(ctx, a.session, writable, s => {
     const model = a.model as string | null; const effort = a.effort as string | null;
     if (model === (s.model ?? null) && effort === (s.effort ?? null)) return no('same_model', `${s.name} already runs that model`);
@@ -182,6 +235,8 @@ export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: strin
     case 'task.answer': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'done', task: String(a.task), text: String(a.answer) };
     case 'note.add': return { type: 'brain.add', rid, note: String(a.note), fact: String(a.fact), ...(a.source ? { source: String(a.source) } : {}) };
     case 'task.pass': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'pass', task: String(a.task), to: String(a.to), ...(a.note ? { text: String(a.note) } : {}) };
+    case 'rig.act': return { type: 'openrig.act', requestId: rid, action: (a.rig !== undefined ? { kind: a.kind, rig: a.rig } : { kind: a.kind }) as OpenRigAction };
+    case 'rig.seats': return { type: 'openrig.seats', requestId: rid, rig: String(a.rig), seats: { [String(a.role)]: Number(a.count) } };
     default: throw new Error(`${r.action} is not a generic action`);
   }
 }

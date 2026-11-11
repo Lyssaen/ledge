@@ -68,7 +68,8 @@ export const ChatTasksSchema = z.array(ChatTaskProposalSchema).min(1).max(MAX_PR
 
 /** A row's display words (action registry spec §5.1), by action, each at most 300 characters: what a front fills its own
  *  copy with, `summary` its fallback. session.* `session` (its name); session.model `model`, `effort`; session.decide
- *  `decision` (accept | deny), `kind` (permission | diff | plan), `note`; task.* `task` (its title), `owner` (who holds it), task.cancel `reason`, task.pass `session` (who gets it), `note`. */
+ *  `decision` (accept | deny), `kind` (permission | diff | plan), `note`; task.* `task` (its title), `owner` (who holds it), task.cancel `reason`, task.pass `session` (who gets it), `note`;
+ *  rig.act `kind`, `rig`; rig.seats `rig`, `role`, `count`, `from` (the count now). */
 export const ActionVarsSchema = z.record(z.string().max(40), z.string().max(300));
 export const DETAIL_MAX = 4000;
 /** Why a row was refused or failed (`cut`: a request the card shows cut, accepted only in the session), for a front's own words (`error` stays the daemon's text, for the log): a string on the
@@ -76,7 +77,7 @@ export const DETAIL_MAX = 4000;
 export const ACTION_ERROR_CODES = [
   'unknown', 'ambiguous', 'read_only', 'exited', 'running', 'archived', 'not_archived', 'no_terminal', 'same_model', 'no_request',
   'in_session', 'no_note', 'closed', 'holder',
-  'changed', 'cut', 'not_decision', 'failed'
+  'changed', 'cut', 'not_decision', 'failed', 'unchanged', 'not_running'
 ] as const;
 export type ActionErrorCode = (typeof ACTION_ERROR_CODES)[number];
 /** A row of the chat's generic card (action registry spec §5.1): an action the daemon resolved, ready to apply. `action` is a
@@ -92,6 +93,8 @@ export const ChatActionSchema = z.object({
   action: z.string().min(1).max(40), args: z.record(z.unknown()), summary: z.string().min(1).max(300), vars: ActionVarsSchema.optional(),
   detail: z.string().max(DETAIL_MAX).optional(), detailCut: z.literal(true).optional(),
   risk: ActionRiskSchema, session: z.string().optional(),
+  /** The sessions an OpenRig step stops, whole (`vars.seats` is cut for the screen): the step is refused if they changed before it applies. */
+  cuts: z.array(z.string().max(200)).max(500).optional(),
   state: ChatActionStateSchema.optional(), doneAt: z.string().datetime().optional(), error: z.string().optional(), code: z.string().max(40).optional()
 });
 export type ChatAction = z.infer<typeof ChatActionSchema>;
@@ -106,7 +109,9 @@ export const ChatTurnSchema = z.object({
   steps: z.array(ChatStepSchema), answer: z.string().optional(), answeredAt: z.string().datetime().optional(), error: z.string().optional(), proposal: ChatProposalSchema.optional(), proposals: ChatProposalsSchema.optional(), relay: ChatRelaySchema.optional(), closes: ChatClosesSchema.optional(),
   projectProposal: ChatProjectProposalSchema.optional(),
   tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional(),
-  ignoredAt: z.string().datetime().optional(), attachments: z.array(AttachmentRefSchema).optional()
+  ignoredAt: z.string().datetime().optional(), attachments: z.array(AttachmentRefSchema).optional(),
+  /** When Ledge read the account limits for this answer (`limits.md`): a phone shows the limits under it (M3 Q31). */
+  limitsAt: z.string().datetime().optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 

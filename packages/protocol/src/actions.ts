@@ -3,6 +3,7 @@ import { CloseBlockSchema, ProjectBlockSchema, ProposalBlockSchema, RelayBlockSc
 import { EffortSchema, ModelIdSchema } from './models.js';
 import { NOTE_MAX } from './decisions.js';
 import { BRAIN_FACT_MAX, BRAIN_SOURCE_MAX, NoteNameSchema, TASK_TEXT_MAX } from './tasks.js';
+import { RigNameSchema, RigRoleSchema } from './openrig.js';
 
 /**
  * What the user loses if the click was a mistake (action registry spec §2): `read` nothing (applied on click),
@@ -20,7 +21,7 @@ export type ActionPhoneCheck = 'launch' | 'close' | 'decide' | 'act';
 export const ACTION_IDS = [
   'session.launch', 'session.relay', 'session.close', 'project.propose', 'task.give',
   'session.model', 'session.interrupt', 'session.archive', 'session.restore', 'session.resume', 'session.decide',
-  'task.cancel', 'task.pass', 'task.answer', 'note.add'
+  'task.cancel', 'task.pass', 'task.answer', 'note.add', 'rig.act', 'rig.seats'
 ] as const;
 export const ActionIdSchema = z.enum(ACTION_IDS);
 export type ActionId = z.infer<typeof ActionIdSchema>;
@@ -41,6 +42,12 @@ const def = <A extends z.ZodTypeAny>(d: ActionDef<A>): ActionDef => d as unknown
 /** A session as Ledge names it: its id or its bot name, as sessions.md gives them. */
 const SessionRef = z.string().trim().min(1).max(80);
 const TaskRef = z.string().trim().min(1).max(40);
+
+/** What the chat may do to OpenRig (refonte mobile B4): a rig's or the kernel's power, and a snapshot. Never the daemon itself, nor
+ *  permissions: those stay on the Rigs screens. */
+export const RIG_CHAT_KINDS = ['rig.start', 'rig.stop', 'rig.restart', 'rig.snapshot', 'kernel.start', 'kernel.stop', 'kernel.restart'] as const;
+const RigActArgs = z.object({ kind: z.enum(RIG_CHAT_KINDS), rig: RigNameSchema.optional() })
+  .refine(a => (a.kind.startsWith('rig.') ? a.rig !== undefined : a.rig === undefined), 'rig names the rig of a rig.* kind, and only of one');
 
 const LaunchArgs = ProposalBlockSchema.extend({ model: ModelIdSchema.optional(), effort: EffortSchema.optional() });
 
@@ -138,6 +145,21 @@ export const ACTIONS: readonly ActionDef[] = [
     summary: 'ajouter un fait durable à une note de l\'utilisateur (context-index.md), daté et signé « dit par l\'utilisateur », sous « Ajouts »',
     when: 'seulement quand l\'utilisateur dit un fait sur son environnement et demande de le retenir (« retiens que… ») : note est le nom d\'une note de context-index.md (son fichier sans context- ni .md) qui en parle ; aucune ne convient, ou plusieurs : cite-les et demande laquelle ; jamais la valeur d\'un secret',
     example: { note: 'machines', fact: 'Legion a 64 Go de RAM' }
+  }),
+  def({
+    id: 'rig.act', args: RigActArgs, card: 'generic', phone: 'act', max: 4,
+    risk: a => (a.kind.endsWith('.stop') || a.kind.endsWith('.restart') ? 'destructive' : 'reversible'),
+    summary: 'démarrer, arrêter ou redémarrer un rig OpenRig de ce PC (rig.*, avec rig) ou son kernel (kernel.*, sans rig), ou prendre un snapshot d\'un rig ; arrêter coupe ses agents',
+    when: 'seulement quand l\'utilisateur demande explicitement d\'agir sur un rig ou sur le kernel, et que rigs.md montre ce rig (son nom tel quel) dans l\'état qui le permet ; jamais pour le daemon OpenRig ni pour les permissions, qui se règlent dans l\'écran Rigs',
+    example: { kind: 'rig.restart', rig: 'ledge-dev' }
+  }),
+  def({
+    id: 'rig.seats', args: z.object({ rig: RigNameSchema, role: RigRoleSchema, count: z.number().int().min(0).max(9) }), card: 'generic', phone: 'act', max: 4,
+    // Removing a seat stops its agent: the daemon marks that row destructive once it knows the rig's seats.
+    risk: 'reversible',
+    summary: 'mettre un rôle d\'un rig en cours à count sièges (role tel que rigs.md le donne, pod.membre) : ajoute des copies du premier siège, ou retire les dernières',
+    when: 'seulement quand l\'utilisateur demande explicitement d\'ajouter ou de retirer des sièges d\'un rôle d\'un rig qui tourne, lu dans rigs.md',
+    example: { rig: 'ledge-dev', role: 'dev.back', count: 2 }
   })
 ];
 
