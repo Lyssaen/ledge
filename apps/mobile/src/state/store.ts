@@ -35,7 +35,7 @@ export interface MobileState {
   capabilities: CapabilitiesByTool | null;
   /** What the PC offers for confirming on the device; null until a snapshot, and from a PC that says nothing (lot 5). */
   /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
-  device: { confirm: boolean; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string; /** This device's own settings (`daemon.settings`). */ prefs?: DevicePrefs } | null;
+  device: { confirm: boolean; /** Its passkey can bring it back after a reinstall: without it, « Mettre à jour la passkey ». */ recover?: true; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string; /** This device's own settings (`daemon.settings`). */ prefs?: DevicePrefs } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
   daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true; /** Sends `usage.state`. */ usage?: true; /** Answers `openrig.asks` (« À toi »). */ openrig?: true } | null;
   /** The user's projects, in their order (`daemon.atelier`): the Atelier's rooms. Kept for an offline start; empty from an older PC. */
@@ -143,7 +143,12 @@ export interface MobileStore {
   /** Answers the questions of OMP's dialog `requestId` together, or declines it (`cancel`). The op's id, or null when nothing was sent. */
   answer(id: string, requestId: string, answers: Answer[], opts: { expect: PhoneExpect; cancel?: boolean }): string | null;
   /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
-  registerCredential(c: Credential): string | null;
+  /** `userId`: the passkey's `user.id`, base64url (« L1 » ‖ the PC key's digest ‖ random), so the PC marks it `recover`. */
+  registerCredential(c: Credential, userId?: string): string | null;
+  /** The pinned PC's public key, the one a passkey made now names; null when unpaired. */
+  pcKey(): string | null;
+  /** The pinned PC's name, as its snapshots gave it; null when unknown. */
+  pcName(): string | null;
   /** Names this device on the PC (`device.rename`); its next snapshot carries the name. The op's id, or null when nothing was sent. */
   renameDevice(name: string): string | null;
   /** Stores this device's own settings on the PC, whole (`device.prefs`); its next snapshot carries them. Resolves when the PC answers. */
@@ -868,9 +873,12 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       return op === null ? Promise.resolve({ status: 'failed' }) : finalOf(op);
     },
 
-    registerCredential(c) {
-      return write(op => ({ type: 'credential.register', op, credential: c }));
+    registerCredential(c, userId) {
+      return write(op => ({ type: 'credential.register', op, credential: c, ...(userId ? { userId } : {}) }));
     },
+
+    pcKey: () => link.pinned()?.publicKey ?? null,
+    pcName: () => link.pinned()?.name ?? state.daemon?.name ?? null,
 
     forgetDevice() {
       if (closed || !ready()) return Promise.resolve(false);

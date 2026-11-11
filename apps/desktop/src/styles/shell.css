@@ -107,6 +107,8 @@ body:has(.titlebar) .modal-backdrop { top: var(--titlebar-h); }
 .undo-toast button{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;color:var(--foreground)}
 .undo-toast button:hover{background:var(--accent)}
 .undo-toast button kbd{font-size:10px}
+.undo-toast>svg{flex-shrink:0;color:var(--success)}
+.undo-toast.warn>svg{color:var(--warning)}
 .undo-toast>i{position:absolute;left:0;bottom:0;height:2px;width:100%;background:var(--primary);transform-origin:left;animation:undo-time linear forwards}
 @keyframes undo-time{to{transform:scaleX(0)}}
 

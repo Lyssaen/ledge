@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { Icon, ICONS } from '@ledge/ui/ui/icons';
 
 /** Test hook: every `notify` call is pushed here (a notice replaces the previous one on screen, so the DOM cannot count them). */
 let history: string[] | null = null;
@@ -6,7 +7,8 @@ export function recordToastsForTests(): string[] { return (history = []); }
 
 /** A button on the toast (« Annuler »): `run` does it, `ms` is how long the toast, and so the button, lives (the hook's default otherwise).
  *  `undo: false` for a button that undoes nothing (« Réglages », lot 11): no Ctrl Z, neither shown nor taken. */
-export interface ToastAction { label: string; run(): void; ms?: number; undo?: false }
+/** `tone` puts the mockup's glyph before the text: a check (`ok`) or a warning in its colour (`warn`, docs/mockups/ledge-mobile-passkey 5 b). */
+export interface ToastAction { label: string; run(): void; ms?: number; undo?: false; tone?: 'ok' | 'warn' }
 interface Shown { text: string; action?: ToastAction }
 
 /** One notice at a time (observatory.tsx's `notice`): it stays `ms` (6 s by default, like the mockup; an action sets its own), and a new one
@@ -46,7 +48,7 @@ export function Toast({ notice, action, onAction }: { notice: string | null; act
       {notice !== null && (
         action
           // Keyed by the action object (one per notify): a new notice remounts the bar, so its clock restarts.
-          ? <div className="toast undo-toast" key={keyOf(action)}><span>{notice}</span>{action.undo === false
+          ? <div className={action.tone === 'warn' ? 'toast undo-toast warn' : 'toast undo-toast'} key={keyOf(action)}>{action.tone && <Icon d={action.tone === 'warn' ? ICONS.warning.d : ICONS.check.d} size={16} />}<span>{notice}</span>{action.undo === false
             ? <button type="button" onClick={onAction}>{action.label}</button>
             : <button type="button" aria-keyshortcuts="Control+Z" onClick={onAction}>{action.label} <kbd>Ctrl Z</kbd></button>}<i style={{ animationDuration: `${(action.ms ?? 6000) / 1000}s` }} /></div>
           : <div className="toast">{notice}</div>

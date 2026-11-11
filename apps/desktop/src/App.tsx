@@ -73,6 +73,7 @@ import { TermStoreContext } from './term/useTerms';
 import { defaultShell, loadLastShell, menuDir, saveLastShell, sessionShell, shellLaunch, shellMenu, type ShellKind, type ShellsAvailable } from './term/shells';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
+import { requestDeviceView, useRecoveryToast } from './settings/recovery';
 import { useResumeOnStart, useRigsMachine, useShowUsage } from './workspace/prefs';
 import { liveTabs, loadLiveTabs, machineOf, nextMemo, saveLiveTabs, toResume } from './workspace/resume';
 import { useOpenSession } from './workspace/openPrefs';
@@ -427,6 +428,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const order = useMemo(() => mainOrder(sessions, projects), [sessions, projects]);
   // Putting an agent away: drag and drop or « Ranger dans… » write a folder rule; the toast says how it went.
   const { notice, action: noticeAction, notify, act: toastAct, undo } = useToast();
+  // A device back with its passkey, or an attempt refused (docs/mockups/ledge-mobile-passkey, 5): « Voir » opens its row in Settings.
+  useRecoveryToast(fleet, notify, id => { dispatch({ type: 'settings', section: 'mobile' }); requestDeviceView(id); });
   // Applying a disposition (docs/mockups/ledge-ide-layouts-palette.html, « Appliquer »): its tabs whose session, rig or machine is
   // gone are left out and counted, its shells gone open again (same type, same folder), the shells open that it does not hold go
   // to the bottom panel (none is killed). Its name is shown from then on, with a « • » once the workspace changes.

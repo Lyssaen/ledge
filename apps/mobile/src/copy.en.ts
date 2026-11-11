@@ -1,7 +1,7 @@
 import { MESSAGE_MAX, type ActionErrorCode } from '@ledge/protocol';
 import { actionWords, type ActionVars } from '@ledge/ui/chat/actionWords';
 
-import type { Copy } from './copy';
+import type { Copy, Model } from './copy';
 
 /** English counts only 1 as singular. */
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -10,6 +10,12 @@ const ATOI = 'For you';
 
 /** The phone app's strings in English, key for key with the French table of copy.ts. The words come first from the
  *  mockups' English column (docs/mockups/ledge-mobile-refonte), then from Ledge Desktop's en.ts. */
+/** A sentence that opens on a name: « Your PC is offline ». */
+const capEn = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const thisEn = (m: Model) => (m ? `this ${m}` : 'this device');
+/** The device a passkey names, as the PC calls it: « the iPad », or its own name in quotes. */
+const theEn = (name: string | undefined) => (!name || name === 'Android' ? 'the device' : /^(iPhone|iPad)$/.test(name) ? `the ${name}` : `“${name}”`);
+
 export const en: Copy = {
   appName: 'Ledge',
   /** A percentage as the language writes it (« 84 % », "84%"). */
@@ -710,6 +716,103 @@ export const en: Copy = {
     failed: 'Turning on did not go through: the PC did not receive the subscription. Check the connection, then try again.',
     noPush: 'Notifications are not available on this PC.',
     stale: 'The PC changed its keys: turn notifications on again so this device receives them again.'
+  },
+  recover: {
+    title: (m) => `Link ${thisEn(m)}`,
+    lead: 'Used Ledge on this device before? Your passkey can reconnect it to your PC, without a code.',
+    notes: (m) => [
+      m ? 'Your passkey stayed in the iCloud keychain, even though the app was deleted.' : 'Your passkey stayed in your passkey manager, even though the app was deleted.',
+      'This device checks that the passkey was made for your PC before sending anything.',
+      'Your PC is told about the reconnection and can revoke this device.'
+    ],
+    go: 'Reconnect with my passkey',
+    code: 'Pair with a code',
+    cancel: 'Cancel',
+    retry: 'Try again',
+    checking: {
+      title: 'Checking your passkey',
+      body: (pc) => `${capEn(pc)} checks that this passkey is one of its devices'.`,
+      reaching: (pc) => `Reaching ${pc}…`,
+      reached: (pc) => `${capEn(pc)} reached`,
+      faceId: 'Face ID', check: 'Device check',
+      verifying: (pc) => `${capEn(pc)} checks the passkey…`
+    },
+    done: {
+      title: (m, pc) => `${m ?? 'Device'} reconnected to ${pc}`,
+      body: (pc) => `No code needed: your passkey was enough. ${capEn(pc)} kept this device's name, its settings and its conversation history.`,
+      told: (pc) => `${capEn(pc)} shows this reconnection and can revoke the device.`,
+      notify: 'Reinstalling switched notifications off. Turn them back on to open a request from your lock screen.'
+    },
+    no: {
+      none: {
+        title: 'No passkey was used',
+        body: (pc) => `The check was cancelled, or this device has no Ledge passkey. Nothing was sent to ${pc}.`,
+        hintTitle: 'First time on this device?', hint: 'Pair it with a code: it has never been linked.'
+      },
+      revoked: {
+        title: (m) => `${capEn(thisEn(m))} was revoked`,
+        body: (pc, date) => `It was revoked in Ledge on ${pc}${date ? ` on ${date}` : ''}. Its passkey no longer opens anything.`,
+        hint: 'To link it again, pair it with a code and approve it on the PC.'
+      },
+      old: {
+        title: 'Your passkey is too old',
+        body: 'It was made before Ledge could reconnect a device without a code. Nothing was sent.',
+        hintTitle: 'One last time with a code.',
+        hint: (m) => `Pair ${thisEn(m)} with a code; Ledge will then offer to update your passkey. Next time, it will be enough.`
+      },
+      offline: {
+        title: (pc) => `${capEn(pc)} is offline`,
+        body: (pc) => `Open Ledge on ${pc} and turn on mobile access: the reconnection resumes once it's online.`
+      },
+      otherPc: {
+        title: (pc) => `This passkey isn't ${pc}'s`,
+        body: 'It was made for another PC than the one answering on your account. This device stopped there: nothing was sent, nothing was saved.',
+        inPasskey: 'In the passkey', expected: 'expected PC', received: 'Received', unknown: 'unknown',
+        reinstalledTitle: 'Reinstalled Ledge on the PC, or changed PC?', reinstalledBody: "That's expected: pair with a code.",
+        otherwise: 'Otherwise,', warning: "don't go further and tell the server's administrator.",
+        signOut: 'Sign out'
+      },
+      connected: {
+        title: (device) => `This passkey belongs to ${theEn(device)}, which is connected right now`,
+        body: (pc) => `iCloud shares your passkey between your Apple devices. Ledge doesn't replace a connected device. ${capEn(pc)} was told.`,
+        otherTitle: (device) => `On another device than ${theEn(device)}?`,
+        other: 'Pair it with a code: it will have its own place.',
+        reinstalledTitle: (device) => `Reinstalled ${theEn(device)}?`,
+        reinstalled: (device) => `Close Ledge in Safari on ${theEn(device)}, then try again.`
+      },
+      rate: {
+        title: 'Too many tries',
+        body: (pc, min) => `5 reconnections in an hour: ${pc} refuses more for now. ${min !== null ? `Try again in ${min} min` : 'Try again later'}, or pair with a code.`,
+        retryIn: (min) => `Try again in ${min} min`
+      },
+      blocked: {
+        title: (pc) => `Reconnection blocked on ${pc}`,
+        body: (pc) => `3 passkey checks failed. ${capEn(pc)} refuses passkey reconnections until you unblock them on the PC.`,
+        hintBefore: (pc) => `In Ledge on ${pc}: Settings › Mobile access › Devices › `,
+        unblock: 'Unblock',
+        hintAfter: '. Pairing with a code still works.'
+      },
+      timeout: {
+        title: (pc) => `${capEn(pc)} didn't answer`,
+        body: "The check didn't finish in time. Nothing was saved on this device."
+      },
+      unsaved: {
+        title: 'Reconnection not saved',
+        body: (pc, m) => `${capEn(pc)} accepted your passkey, but ${thisEn(m)} couldn't save ${pc}'s key: its storage may be full. Nothing is linked yet.`
+      }
+    }
+  },
+  passkeyUpdate: {
+    title: 'Update your passkey',
+    body: (m) => `With an up-to-date passkey, ${thisEn(m)} can come back without a code after a reinstall. Face ID will be asked once.`,
+    bodyOther: (m) => `With an up-to-date passkey, ${thisEn(m)} can come back without a code after a reinstall. A check on this device will be asked once.`,
+    go: 'Update the passkey', later: 'Later', updating: 'Updating…', retry: 'Try again',
+    done: 'Passkey updated',
+    doneBody: (m) => `${capEn(thisEn(m))} can reconnect without a code after a reinstall.`,
+    cancelled: 'Update cancelled. Your old passkey still protects your accepts.',
+    failed: (pc) => `The update didn't go through: ${pc} didn't receive the new passkey. The old one still works.`,
+    row: 'Reconnect without a code', rowHint: 'Your passkey must be updated once', update: 'Update', ready: 'Ready',
+    stepBody: (m) => `It will protect your high-impact accepts, and let ${thisEn(m)} come back without a code after a reinstall.`
   },
   compare: {
     /** The name this phone gives itself in its `pair_commit`, when its user agent names no known device. */

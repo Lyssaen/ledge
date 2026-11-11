@@ -9,6 +9,8 @@ import { AtelierScreen } from './atelier/AtelierScreen';
 import { Agents } from './screens/Agents';
 import { Chat } from './screens/Chat';
 import { Compare } from './screens/Compare';
+import { Choose, Recover } from './screens/Recover';
+import { usePlatform } from './screens/device';
 import { ProtectStep } from './screens/Enroll';
 import { Connection } from './screens/Connection';
 import { NotifyStep, offersNotifications } from './screens/Notifications';
@@ -113,6 +115,17 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   const startedRef = useRef(false);
   const [started, setStarted] = useState(false);
   const step = link.pairing()?.state() ?? null;
+  const recovery = link.recovery()?.state() ?? null;
+  const recovering = recovery?.step === 'reaching' || recovery?.step === 'faceid' || recovery?.step === 'checking';
+  const platform = usePlatform();
+  // The pairing by code was chosen after the passkey was found too old (screen 2 c): its last step offers the update (4 i).
+  const [sawOld, setSawOld] = useState(false);
+  // Screen 1 d offers the notifications until the PC's snapshot says whether this device can have them; once offered, the
+  // step stays, so the snapshot arriving does not swap it for another button under the user's finger.
+  const [recoverNotify, setRecoverNotify] = useState(false);
+  const wantsNotify = recovery?.step === 'done' && (!mobile.fresh || offersNotifications(mobile.device?.push));
+  useEffect(() => { if (wantsNotify) setRecoverNotify(true); }, [wantsNotify]);
+  useEffect(() => { if (recovery && recovery.step !== 'done') setRecoverNotify(false); }, [recovery?.step]);
 
   const loginError = signinError(issue);
   const kind = issue === 'not_allowed' ? 'denied'
@@ -121,16 +134,14 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     : state === 'key_changed' ? 'keyChanged'
     : state === 'denied' ? 'unrecognized'
     : state === 'storage_unavailable' ? 'storage'
-    : state === 'unpaired' || state === 'pairing' || (step?.step === 'linked' && !doneSeen) ? 'compare'
+    : recovery?.step === 'done' && !doneSeen ? 'recover'
+    : step?.step === 'linked' && !doneSeen ? 'compare'
+    : state === 'unpaired' || state === 'pairing'
+      // An app without a key opens on the choice (passkey-reinstall.html, 1 a): the code once chosen, the passkey's screens while it runs.
+      ? (step !== null || started || (state === 'pairing' && !recovering) ? 'compare' : recovery && recovery.step !== 'cancelled' ? 'recover' : 'choose')
     : 'route';
-  // The pairing starts by itself only once its screen is the one shown (not behind the login or a refusal), and
-  // only once: when it falls back to unpaired without a step, the screen offers to start again.
-  const autoPair = kind === 'compare' && state === 'unpaired' && step === null && !started;
   const begin = (start: () => void) => { startedRef.current = true; setStarted(true); start(); };
-
-  useEffect(() => {
-    if (autoPair && !startedRef.current) begin(() => link.startPairing());
-  }, [autoPair, link]);
+  const pairByCode = () => { setSawOld(recovery?.step === 'failed' && recovery.why === 'old'); begin(() => link.startPairing()); };
   useEffect(() => {
     if (state === 'ready') { startedRef.current = false; setStarted(false); setKeysLost(false); setForgetNote(false); }
     if (state === 'unpaired' || state === 'pairing') { setDoneSeen(false); setNotifyStep(false); }
@@ -200,6 +211,19 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'unrecognized':
         return <Unrecognized pcName={pcName} onRelink={relink} onSignOut={signOut} />;
       case 'storage': return <StorageUnavailable onRetry={retry} onReload={() => globalThis.location.reload()} />;
+      case 'choose':
+        return <Choose login={login} platform={platform} onPasskey={() => link.startRecovery()} onCode={pairByCode} />;
+      case 'recover':
+        return (
+          <Recover
+            state={recovery!} login={login} reach={link.reach()}
+            onRetry={() => { if (!link.recovery()?.again()) link.startRecovery(); }}
+            onCode={pairByCode} onCancel={() => link.cancelRecovery()} onSignOut={signOut} onDone={() => setDoneSeen(true)}
+            actions={recoverNotify
+              ? <NotifyStep store={store} fetchImpl={fetchImpl} body={copy.recover.done.notify} onDone={() => setDoneSeen(true)} />
+              : undefined}
+          />
+        );
       case 'compare':
         return (
           <Compare
@@ -210,7 +234,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
             onRestart={() => begin(() => link.startPairing())} onDone={() => setDoneSeen(true)}
             actions={notifyStep
               ? <NotifyStep store={store} fetchImpl={fetchImpl} onDone={() => { setNotifyStep(false); setDoneSeen(true); }} />
-              : <ProtectStep store={store} onDone={() => { if (offersNotifications(mobile.device?.push)) setNotifyStep(true); else setDoneSeen(true); }} />}
+              : <ProtectStep store={store} update={sawOld} onDone={() => { if (offersNotifications(mobile.device?.push)) setNotifyStep(true); else setDoneSeen(true); }} />}
           />
         );
     }

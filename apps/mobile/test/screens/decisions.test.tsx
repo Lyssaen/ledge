@@ -11,7 +11,7 @@ import { session } from '../model/fixtures';
 import { chat, snapshot } from '../state/helpers';
 import { setup } from './setup';
 
-vi.mock('../../src/link/webauthn', () => ({ platformAvailable: vi.fn(), createCredential: vi.fn(), getAssertion: vi.fn() }));
+vi.mock('../../src/link/webauthn', () => ({ platformAvailable: vi.fn(async () => false), createCredential: vi.fn(), getAssertion: vi.fn() }));
 
 const QID = '0b1e8f7a-4c1d-4a55-9d0e-2f3a4b5c6d7e';
 const NOW = new Date().toISOString();

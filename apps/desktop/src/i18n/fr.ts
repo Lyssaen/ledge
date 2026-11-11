@@ -10,6 +10,7 @@ import type { SshProblem, Summary, Why } from '@ledge/fleet';
 import type { ScanStep } from '../projects/useLedgeScan';
 import type { DraftProblem } from '../settings/machineDrafts';
 import type { SaveOutcome } from '../settings/useMachineEditor';
+import type { DeviceWord } from '../settings/recovery';
 
 type PlanStatus = PlanDoc['status'];
 
@@ -18,6 +19,12 @@ const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 /** « de Otto », « d’Iris ». */
 const deName = (n: string) => (/^[aeiouyhàâéèêîôûAEIOUYHÀÂÉÈÊÎÔÛ]/.test(n) ? `d’${n}` : `de ${n}`);
 const andList = (xs: readonly string[]) => new Intl.ListFormat('fr', { type: 'conjunction' }).format(xs);
+/** A device in a sentence: a name the user gave is said bare, a model takes its article (« l'iPad », « cet iPad », « de l'iPad »). */
+const vowel = (w: string) => /^[aeiouyhàâéèêîôûAEIOUYHÀÂÉÈÊÎÔÛ]/.test(w);
+const theDevice = (d: DeviceWord) => (d.named ? d.text : vowel(d.text) ? `l'${d.text}` : `le ${d.text}`);
+const thisDevice = (d: DeviceWord) => (d.named ? d.text : vowel(d.text) ? `cet ${d.text}` : `ce ${d.text}`);
+const ofDevice = (d: DeviceWord) => (d.named ? deName(d.text) : vowel(d.text) ? `de l'${d.text}` : `du ${d.text}`);
+const upFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Desktop's copy in French: the source of truth, whose shape is `Messages` (see messages.ts, which loads it on demand). */
 export const fr = {
@@ -336,7 +343,11 @@ export const fr = {
       about: 'Versions et mises à jour.'
     } as Record<SectionId, string>,
     machineOffline: 'Une machine est hors ligne', updateWaiting: 'Une mise à jour est disponible',
-    mobileOffline: "L'accès mobile est hors ligne", mobileAsks: "Un appareil demande l'accès",
+    mobileOffline: "L'accès mobile est hors ligne", mobileAsks: "Un appareil demande l'accès", // The tab's dot after a passkey recovery: one label per cause, a count when there are several (P18).
+    mobileRecovery: {
+      recovered: 'Une reconnexion par passkey à vérifier', refused: 'Une tentative de reconnexion refusée', blocked: 'Reconnexion par passkey bloquée',
+      several: (n: number) => `Accès mobile : ${n} points à vérifier`
+    },
     workspace: {
       openSession: 'Ouvrir une session',
       active: 'Dans le groupe actif', right: 'À droite', saved: (where: string) => `Ouvrir une session : ${where}`,
@@ -516,7 +527,30 @@ export const fr = {
       emptyTitle: 'Aucun appareil lié.', emptyBefore: ' Sur votre téléphone ou votre tablette, ouvrez ', emptyAfter: " et connectez-vous avec le même compte GitHub. Un code s'affichera ici et sur l’appareil.",
       unavailable: (error: string) => `L'accès mobile n'a pas démarré sur ce PC : ${error}`,
       outdated: 'Le daemon local est trop ancien pour l’accès mobile : mettez-le à jour.',
-      refused: { offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour l’accès mobile : mettez-le à jour.' }
+      refused: { offline: 'Le daemon local est hors ligne : rien n’a changé.', outdated: 'Le daemon local est trop ancien pour l’accès mobile : mettez-le à jour.' },
+      /** Passkey recovery after a reinstall (docs/mockups/ledge-mobile-passkey/passkey-reinstall.html, 5 and 6). */
+      view: 'Voir',
+      /** The device a toast names when the daemon's state does not hold it yet. */
+      someDevice: 'appareil',
+      /** When, in the copy below: today it is the time alone, another day its date. */
+      when: { today: (time: string) => `aujourd'hui à ${time}`, on: (date: string) => `le ${date}`, at: (time: string) => `À ${time}`, atOn: (date: string, time: string) => `Le ${date} à ${time}`, since: (time: string) => time, sinceOn: (date: string, time: string) => `le ${date} à ${time}` },
+      recovered: {
+        tag: 'Reconnecté',
+        hint: (when: string) => ` · reconnecté avec sa passkey ${when}`,
+        well: (d: DeviceWord) => `${upFirst(thisDevice(d))} s'est reconnecté sans code, avec sa passkey, après une réinstallation de l'app. Si ce n'était pas vous, révoquez-le : il perd l'accès tout de suite.`,
+        ack: "C'était bien moi",
+        toast: (d: DeviceWord) => `${upFirst(theDevice(d))} s'est reconnecté avec sa passkey`
+      },
+      recoverRefused: {
+        tag: 'Tentative refusée',
+        well: (at: string, d: DeviceWord) => `${at}, un autre appareil a tenté de prendre la place ${ofDevice(d)} avec sa passkey. Refusé : ${theDevice(d)} était connecté. Une passkey synchronisée par iCloud marche sur tous les appareils Apple du compte ; si ce n'était pas vous, révoquez ${thisDevice(d)}.`,
+        ack: 'Compris',
+        toast: (d: DeviceWord) => `Reconnexion avec la passkey ${ofDevice(d)} refusée : il est connecté`
+      },
+      recoverBlocked: {
+        well: (failures: number, since: string) => `Reconnexion par passkey bloquée : ${failures} ${plural(failures, 'vérification a échoué', 'vérifications ont échoué')} depuis ${since}. Les appareils liés continuent de marcher, l'appairage avec un code aussi.`,
+        unblock: 'Débloquer'
+      }
     },
     projects: {
       title: 'Projets',

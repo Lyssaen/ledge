@@ -11,6 +11,8 @@ export interface KeyStore {
   saveIdentity(id: Identity): Promise<void>;
   pinned(): Promise<PinnedPc | null>;
   pin(pc: PinnedPc): Promise<void>;
+  /** Drops the pinned PC only, the identity kept: a pin that a cancelled recovery wrote is undone with it. */
+  unpin(): Promise<void>;
   /** Drops the identity, the pinned PC and every `ledge.mobile.*` entry of localStorage. */
   forget(): Promise<void>;
 }
@@ -77,6 +79,7 @@ export function memoryKeys(storage: Storage | null = defaultStorage()): KeyStore
     },
     async pinned() { return pc; },
     async pin(p) { pc = { ...p }; },
+    async unpin() { pc = null; },
     async forget() {
       identity = null;
       pc = null;
@@ -162,6 +165,9 @@ export function indexedDbKeys(storage: Storage | null = defaultStorage()): KeySt
     },
     async pin(pc) {
       await run('readwrite', (s) => s.put({ ...pc }, PC));
+    },
+    async unpin() {
+      await run('readwrite', (s) => s.delete(PC));
     },
     async forget() {
       const tx = await transaction('readwrite');

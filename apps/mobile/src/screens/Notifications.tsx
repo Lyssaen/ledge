@@ -71,7 +71,7 @@ export const offersNotifications = (push: 'on' | 'off' | 'stale' | 'unavailable'
   (push === 'off' || push === 'stale') && pushSupport() !== 'unsupported';
 
 /** The step after « Protéger les accords »: « Être prévenu quand un agent attend », then the way to the inbox. */
-export function NotifyStep({ store, onDone, fetchImpl }: { store: MobileStore; onDone: () => void; fetchImpl?: typeof fetch }) {
+export function NotifyStep({ store, onDone, fetchImpl, body = N.body }: { store: MobileStore; onDone: () => void; fetchImpl?: typeof fetch; /** After a recovery: the reinstall switched them off. */ body?: string }) {
   const n = useNotifications(store, fetchImpl);
   const fresh = useMobile(store).fresh;
   const go = () => {
@@ -81,7 +81,7 @@ export function NotifyStep({ store, onDone, fetchImpl }: { store: MobileStore; o
     <>
       <section aria-labelledby="notify-title" className="flex flex-col gap-3 rounded-control border border-line bg-surface p-4">
         <h2 id="notify-title" className="text-title leading-[1.35] font-semibold">{N.title}</h2>
-        <p className="text-body leading-[1.6] text-muted">{N.body}</p>
+        <p className="text-body leading-[1.6] text-muted">{body}</p>
         {n.problem && <Notice title={n.problem} tone="warning" role="alert" />}
         <button type="button" disabled={n.busy || !fresh} onClick={go} className={PRIMARY}>{n.busy ? N.working : fresh ? N.enable : N.waiting}</button>
       </section>

@@ -21,6 +21,8 @@ async function shot(page: Page, name: string, browser: string) {
 test('on an iPad the list and the request sit side by side, either way up', async ({ page, browserName }) => {
   await page.goto(h.url);
   await page.getByRole('link', { name: copy.login.github }).click();
+  // The app without a key opens on the choice (passkey-reinstall.html, 1 a): the code.
+  await page.getByRole('button', { name: copy.recover.code }).click();
   await h.pc.code();
   await page.getByRole('button', { name: copy.compare.same }).click();
   h.pc.ok();

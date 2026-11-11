@@ -19,7 +19,7 @@ export async function platformAvailable(): Promise<boolean> {
  */
 export async function createCredential(
   ch: { challenge: string; rpId: string },
-  user: { label: string }
+  user: { label: string; id: Uint8Array }
 ): Promise<Credential | 'cancelled' | 'unsupported'> {
   const credentials = globalThis.navigator?.credentials;
   if (!credentials?.create) return 'unsupported';
@@ -28,9 +28,10 @@ export async function createCredential(
       publicKey: {
         challenge: fromB64u(ch.challenge),
         rp: { id: ch.rpId, name: 'Ledge' },
-        user: { id: crypto.getRandomValues(new Uint8Array(16)), name: user.label, displayName: user.label },
+        // `id`: « L1 » ‖ the PC key's digest ‖ random (recoveryUserId), what lets a reinstalled app recognise its PC.
+        user: { id: user.id as Uint8Array<ArrayBuffer>, name: user.label, displayName: user.label },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-        authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'preferred', userVerification: 'required' },
+        authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'required', userVerification: 'required' },
         attestation: 'none',
         timeout: 60_000
       }
@@ -76,6 +77,37 @@ export async function getAssertion(ch: { challenge: string; rpId: string; creden
       clientDataJSON: b64u(new Uint8Array(r.clientDataJSON)),
       authenticatorData: b64u(new Uint8Array(r.authenticatorData)),
       signature: b64u(new Uint8Array(r.signature))
+    };
+  } catch (e) {
+    if (isCancel(e)) return 'cancelled';
+    throw e;
+  }
+}
+
+/** A discoverable assertion and the `userHandle` the passkey was made with (empty when the device gives none). */
+export type Discoverable = { assertion: Assertion; userHandle: string };
+
+/**
+ * Asks the device for any passkey of `rpId` (no `allowCredentials`): after a reinstall the app knows none, and iOS still has
+ * it in the iCloud keychain. `cancelled`: dismissed, timed out, or no passkey at all (iOS says the same for both, P3).
+ */
+export async function getDiscoverable(ch: { challenge: string; rpId: string }): Promise<Discoverable | 'cancelled'> {
+  const credentials = globalThis.navigator?.credentials;
+  if (!credentials?.get) return 'cancelled';
+  try {
+    const got = await credentials.get({
+      publicKey: { challenge: fromB64u(ch.challenge), rpId: ch.rpId, userVerification: 'required', timeout: 60_000 }
+    }) as PublicKeyCredential | null;
+    const r = got?.response as AuthenticatorAssertionResponse | undefined;
+    if (!got || !r) return 'cancelled';
+    return {
+      assertion: {
+        id: b64u(new Uint8Array(got.rawId)),
+        clientDataJSON: b64u(new Uint8Array(r.clientDataJSON)),
+        authenticatorData: b64u(new Uint8Array(r.authenticatorData)),
+        signature: b64u(new Uint8Array(r.signature))
+      },
+      userHandle: r.userHandle ? b64u(new Uint8Array(r.userHandle)) : ''
     };
   } catch (e) {
     if (isCancel(e)) return 'cancelled';

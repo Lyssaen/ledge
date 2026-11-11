@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssertionSchema, CredentialSchema } from '@ledge/protocol';
-import { createCredential, getAssertion, platformAvailable } from '../../src/link/webauthn';
+import { createCredential, getAssertion, getDiscoverable, platformAvailable } from '../../src/link/webauthn';
 
 const buf = (...n: number[]) => new Uint8Array(n).buffer;
 
@@ -41,50 +41,53 @@ describe('platformAvailable', () => {
   });
 });
 
+const ID = new Uint8Array([0x4c, 0x31, 7, 8, 9]);
+
 describe('createCredential', () => {
   it('asks for a platform passkey with user verification and returns base64url fields', async () => {
     const create = vi.fn(async () => created());
     stub({ create });
-    const c = await createCredential({ challenge: 'AQID', rpId: 'relay.example' }, { label: 'iPhone de Kai' });
+    const c = await createCredential({ challenge: 'AQID', rpId: 'relay.example' }, { label: 'iPhone de Kai', id: ID });
     expect(c).toEqual({ id: '-_8B', publicKey: 'BgcICQ', alg: -7, clientDataJSON: 'AQID', authenticatorData: 'BAU', transports: ['internal'] });
     expect(CredentialSchema.safeParse(c).success).toBe(true);
     const { publicKey: o } = (create.mock.calls[0] as unknown as [{ publicKey: Record<string, any> }])[0];
     expect([...new Uint8Array(o.challenge)]).toEqual([1, 2, 3]);
     expect(o.rp).toEqual({ id: 'relay.example', name: 'Ledge' });
     expect(o.user.name).toBe('iPhone de Kai');
-    expect(o.user.id.byteLength ?? o.user.id.length).toBe(16);
+    // The id it is given (« L1 » ‖ the PC key's digest ‖ random), not one of its own.
+    expect([...o.user.id]).toEqual([...ID]);
     expect(o.pubKeyCredParams).toEqual([{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }]);
-    expect(o.authenticatorSelection).toEqual({ authenticatorAttachment: 'platform', residentKey: 'preferred', userVerification: 'required' });
+    expect(o.authenticatorSelection).toEqual({ authenticatorAttachment: 'platform', residentKey: 'required', userVerification: 'required' });
     expect(o.attestation).toBe('none');
     expect(o.timeout).toBe(60_000);
   });
 
   it('is unsupported when the browser gives no public key or algorithm', async () => {
     stub({ create: async () => created({ getPublicKey: () => null }) });
-    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x' })).toBe('unsupported');
+    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x', id: ID })).toBe('unsupported');
     stub({ create: async () => created({ getPublicKeyAlgorithm: () => null }) });
-    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x' })).toBe('unsupported');
+    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x', id: ID })).toBe('unsupported');
     stub({ create: async () => created({ getPublicKey: undefined }) });
-    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x' })).toBe('unsupported');
+    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x', id: ID })).toBe('unsupported');
     stub({ create: async () => created({ getPublicKeyAlgorithm: () => -8 }) });
-    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x' })).toBe('unsupported');
+    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x', id: ID })).toBe('unsupported');
   });
 
   it('is unsupported without navigator.credentials', async () => {
     vi.stubGlobal('navigator', {});
-    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x' })).toBe('unsupported');
+    expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x', id: ID })).toBe('unsupported');
   });
 
   it('is cancelled, without throwing, on NotAllowedError or AbortError', async () => {
     for (const name of ['NotAllowedError', 'AbortError']) {
       stub({ create: async () => { throw domError(name); } });
-      expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x' })).toBe('cancelled');
+      expect(await createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x', id: ID })).toBe('cancelled');
     }
   });
 
   it('lets another failure through', async () => {
     stub({ create: async () => { throw domError('SecurityError'); } });
-    await expect(createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x' })).rejects.toThrow('SecurityError');
+    await expect(createCredential({ challenge: 'AQID', rpId: 'r' }, { label: 'x', id: ID })).rejects.toThrow('SecurityError');
   });
 });
 
@@ -111,5 +114,31 @@ describe('getAssertion', () => {
     }
     stub({ get: async () => null });
     expect(await getAssertion({ challenge: 'AQID', rpId: 'r', credentialId: 'AQ' })).toBe('cancelled');
+  });
+});
+
+describe('getDiscoverable', () => {
+  it('names no credential, requires user verification, and returns the assertion with its userHandle', async () => {
+    const get = vi.fn(async () => { const a = asserted(); return { ...a, response: { ...a.response, userHandle: buf(0x4c, 0x31) } }; });
+    stub({ get });
+    const d = await getDiscoverable({ challenge: 'AQID', rpId: 'relay.example' });
+    expect(d).toEqual({ assertion: { id: '-_8B', clientDataJSON: 'AQI', authenticatorData: 'Aw', signature: '__4' }, userHandle: 'TDE' });
+    const { publicKey: o } = (get.mock.calls[0] as unknown as [{ publicKey: Record<string, any> }])[0];
+    expect([...new Uint8Array(o.challenge)]).toEqual([1, 2, 3]);
+    expect(o.rpId).toBe('relay.example');
+    expect(o.userVerification).toBe('required');
+    expect(o.allowCredentials).toBeUndefined();
+  });
+
+  it('gives an empty userHandle when the device gives none', async () => {
+    stub({ get: async () => asserted() });
+    expect(await getDiscoverable({ challenge: 'AQID', rpId: 'r' })).toMatchObject({ userHandle: '' });
+  });
+
+  it('is cancelled on NotAllowedError (no passkey, or the sheet dismissed: P3) and when the browser gives nothing', async () => {
+    stub({ get: async () => { throw domError('NotAllowedError'); } });
+    expect(await getDiscoverable({ challenge: 'AQID', rpId: 'r' })).toBe('cancelled');
+    stub({ get: async () => null });
+    expect(await getDiscoverable({ challenge: 'AQID', rpId: 'r' })).toBe('cancelled');
   });
 });

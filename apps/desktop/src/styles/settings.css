@@ -302,6 +302,15 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .set-rows>.pending-entry:first-child{border-top:0}
 .pending-entry .machine-glyph{color:var(--sidebar-primary);border-color:color-mix(in srgb,var(--sidebar-primary) 40%,var(--input))}
 .pending-entry .machine-main>.set-actions{margin-left:0}
+/* A passkey recovery on a device's row, and its block on the account (docs/mockups/ledge-mobile-passkey, 6 a, 6 d, 6 e). */
+.machine-top .set-tag{margin-left:0}
+.set-tag.info{color:var(--info);background:var(--status-info-soft)}
+.set-well.info{border-color:color-mix(in srgb,var(--info) 40%,var(--input))}
+.set-well.info>svg{color:var(--info)}
+.set-well.warn.recovery-well{flex-direction:row}
+.set-well.warn.recovery-well>svg{color:var(--warning)}
+.recovery-well .set-actions{flex-basis:100%;margin-left:22px}
+.set-rows>.recovery-blocked{margin:10px 0 4px}
 .pending-what{font-size:13px;color:var(--muted-foreground)}
 /* « Lier un appareil » (docs/mockups/mobile-access/mobile-access.css): the dialog opens on any screen, so these load with the app. */
 .modal.pair-modal{width:440px}

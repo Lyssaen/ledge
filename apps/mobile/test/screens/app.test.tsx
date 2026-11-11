@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCredential, platformAvailable } from '../../src/link/webauthn';
 import { forgetIfKeysLost } from '../../src/boot';
+import { b64u, generateIdentity, userHandleMatches } from '@ledge/seal';
 import { memoryKeys, type PinnedPc } from '../../src/link/keys';
 import { LAST_STATE_KEY } from '../../src/state/persist';
 import { pending, session } from '../model/fixtures';
@@ -214,8 +215,10 @@ describe('the app', () => {
     expect(storage.getItem('other.app')).toBe('kept');
 
     const t = app('unpaired', { lost: true });
-    expect(screen.getByText('Cet appareil n’est plus lié')).toBeInTheDocument();
+    // The choice first (passkey-reinstall.html, 1 a); the pairing by code says the keys were lost.
+    fireEvent.click(screen.getByRole('button', { name: 'Appairer avec un code' }));
     expect(t.calls).toEqual(['startPairing']);
+    expect(screen.getByText('Cet appareil n’est plus lié')).toBeInTheDocument();
   });
 
   it('keys kept, or nothing cached → nothing wiped', async () => {
@@ -231,19 +234,28 @@ describe('the app', () => {
   describe('protecting the high-impact accepts with this device', () => {
     const challenge = { type: 'confirm.challenge' as const, purpose: 'register' as const, challenge: 'Y2hhbGw', rpId: 'relay.example', expiresInMs: 60_000 };
     const credential = { id: 'AQ', publicKey: 'AQID', alg: -7 as const, clientDataJSON: 'AQI', authenticatorData: 'Aw' };
-    beforeEach(() => { vi.mocked(platformAvailable).mockResolvedValue(true); vi.mocked(createCredential).mockReset(); });
+    // The passkey's user.id names the pinned PC's key: a real P-256 key.
+    let realPc: PinnedPc;
+    beforeEach(async () => {
+      vi.mocked(platformAvailable).mockResolvedValue(true); vi.mocked(createCredential).mockReset();
+      realPc = { ...pc, publicKey: (await generateIdentity()).publicKey };
+    });
     const withDevice = (confirm: boolean) => ({ ...snapshot([], 'PC-Desan'), device: { confirm } }) as never;
 
     it('Connection without a credential offers « Protéger les accords », and a tap creates the passkey and registers it', async () => {
       vi.mocked(createCredential).mockResolvedValue(credential);
       const t = app('ready', { hash: '#/connection' });
+      act(() => t.setPinned(realPc));
       act(() => t.deliver(withDevice(false)));
       await waitFor(() => expect(t.of('confirm.prepare')).toMatchObject([{ purpose: 'register' }]));
       expect(screen.getByText('Accords à impact élevé')).toBeInTheDocument();
       act(() => t.deliver(challenge));
       fireEvent.click(await screen.findByRole('button', { name: 'Protéger les accords' }));
-      expect(createCredential).toHaveBeenCalledWith({ challenge: 'Y2hhbGw', rpId: 'relay.example' }, { label: expect.any(String) });
-      await waitFor(() => expect(t.of('credential.register')).toMatchObject([{ credential }]));
+      expect(createCredential).toHaveBeenCalledWith({ challenge: 'Y2hhbGw', rpId: 'relay.example' }, { label: expect.any(String), id: expect.any(Uint8Array) });
+      // The user.id goes with it, « L1 » ‖ the PC key's digest ‖ random, so the PC marks the passkey `recover`.
+      const id = vi.mocked(createCredential).mock.calls[0]![1].id;
+      expect(await userHandleMatches(id, realPc.publicKey)).toBe('ok');
+      await waitFor(() => expect(t.of('credential.register')).toMatchObject([{ credential, userId: b64u(id) }]));
       act(() => t.deliver({ type: 'operation.result', op: t.of('credential.register')[0]!.op, status: 'applied' }));
       act(() => t.deliver(withDevice(true)));
       expect(await screen.findByText('Protégés par cet appareil')).toBeInTheDocument();
@@ -259,6 +271,7 @@ describe('the app', () => {
     it('a cancelled passkey says nothing was sent, and registers nothing', async () => {
       vi.mocked(createCredential).mockResolvedValue('cancelled');
       const t = app('ready', { hash: '#/connection' });
+      act(() => t.setPinned(realPc));
       act(() => t.deliver(withDevice(false)));
       await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
       act(() => t.deliver(challenge));
