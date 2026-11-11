@@ -268,6 +268,26 @@ export const en: Copy = {
       look: (name: string) => `Looks at ${name}…`
     }
   },
+  sessions: {
+    filter: { label: 'Filter the sessions', all: 'All', waiting: 'Waiting', working: 'Working' },
+    rigGroup: (name: string) => `Rig ${name}`,
+    line: {
+      permission: 'permission requested', working: 'working', idle: 'available', error: 'error',
+      ended: (when: string) => `ended ${when}`, endedPlain: 'ended',
+      thinking: 'Thinking…'
+    },
+    kids: (n: number) => `+${n}`,
+    kidsLabel: (n: number) => (n === 1 ? '1 sub-agent at work' : `${n} sub-agents at work`),
+    filterEmpty: 'Nothing is waiting for you.',
+    filterEmptyBody: (working: number) => `No session asks for your decision. ${working} ${working === 1 ? 'is' : 'are'} working.`,
+    seeAll: 'See all',
+    emptyWorking: {
+      title: 'No session is working.',
+      waiting: (n: number) => (n === 1 ? '1 is waiting for your decision.' : `${n} are waiting for your decision.`),
+      idle: 'They are all available or ended.'
+    },
+    seeWaiting: 'See waiting'
+  },
   agents: {
     title: 'Sessions',
     subtitle: (sessions: number, projects: number) => `${sessions} ${plural(sessions, 'session', 'sessions')} · ${projects} ${plural(projects, 'project', 'projects')} on this PC`,

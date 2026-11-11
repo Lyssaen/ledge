@@ -79,7 +79,7 @@ function Working({ sessions, threshold, now, stale }: { sessions: PhoneSession[]
         );
       })}
       {rest > 0 && (
-        <a href={href({ name: 'sessions' })} className="flex min-h-11 items-center gap-1 px-3 text-[13px] font-medium text-muted">
+        <a href={href({ name: 'sessions', filter: 'working' })} className="flex min-h-11 items-center gap-1 px-3 text-[13px] font-medium text-muted">
           {copy.atoi.more(rest)}<Icon name="chevron" className="size-4" />
         </a>
       )}

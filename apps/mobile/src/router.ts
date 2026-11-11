@@ -4,8 +4,9 @@ import { useSyncExternalStore } from 'react';
 export type Route =
   /** « À toi », the app's first screen (`#/`). */
   | { name: 'atoi' }
-  /** « Sessions » (`#/sessions`; `#/agents`, its old address, still leads there). */
-  | { name: 'sessions' }
+  /** « Sessions » (`#/sessions`; `#/agents`, its old address, still leads there); `#/sessions/working` opens it on « Au travail »
+   *  (« Voir les N autres » in « À toi »), `#/sessions/waiting` on « En attente ». */
+  | { name: 'sessions'; filter?: 'waiting' | 'working' }
   /** « MR/PR » and « Rigs »: what the PC does not send to the phone yet (docs/mockups/ledge-mobile-refonte/m0-socle.html, §3). */
   | { name: 'prs' }
   | { name: 'rigs' }
@@ -43,6 +44,7 @@ export function parseRoute(hash: string): Route {
     if (parts[0] === 'connection' && parts.length === 2 && parts[1] === 'link') return { name: 'connection', section: 'link' };
     if (parts[0] === 'rigs' && parts.length === 2) return { name: 'rig', rig: decodeURIComponent(parts[1]!) };
     if (parts[0] === 'max' && parts.length === 2) return { name: 'max', goalId: decodeURIComponent(parts[1]!) };
+    if (parts[0] === 'sessions' && parts.length === 2 && (parts[1] === 'working' || parts[1] === 'waiting')) return { name: 'sessions', filter: parts[1] };
   } catch { /* malformed escape: fall through to À toi */ }
   if (parts[0] === 'agents' && parts.length === 1) return { name: 'sessions' };
   const simple = SIMPLE.find((n) => n === parts[0]);
@@ -59,6 +61,7 @@ export function href(r: Route): string {
   if (r.name === 'connection' && r.section) return `#/connection/${r.section}`;
   if (r.name === 'rig') return `#/rigs/${encodeURIComponent(r.rig)}`;
   if (r.name === 'max' && r.goalId) return `#/max/${encodeURIComponent(r.goalId)}`;
+  if (r.name === 'sessions' && r.filter) return `#/sessions/${r.filter}`;
   return r.name === 'atoi' ? '#/' : `#/${r.name}`;
 }
 

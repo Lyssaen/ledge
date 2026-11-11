@@ -270,6 +270,29 @@ const fr = {
       look: (name: string) => `Regarde ${name}…`
     }
   },
+  /** « Sessions » (docs/mockups/ledge-mobile-refonte/m2-sessions.html §1, Q24, Q25): the filters, the groups, a row's line. */
+  sessions: {
+    filter: { label: 'Filtrer les sessions', all: 'Toutes', waiting: 'En attente', working: 'Au travail' } as Record<'label' | 'all' | 'waiting' | 'working', string>,
+    rigGroup: (name: string) => `Rig ${name}`,
+    line: {
+      permission: 'autorisation demandée', working: 'au travail', idle: 'disponible', error: 'erreur',
+      ended: (when: string) => `terminée ${when}`, endedPlain: 'terminée',
+      /** What it does, when the PC does not say (Q68, M1 §8). */
+      thinking: 'Réfléchit…'
+    },
+    kids: (n: number) => `+${n}`,
+    kidsLabel: (n: number) => (n === 1 ? '1 sous-agent au travail' : `${n} sous-agents au travail`),
+    filterEmpty: 'Rien ne t’attend.',
+    filterEmptyBody: (working: number) => `Aucune session ne demande ta décision. ${working === 1 ? '1 est au travail' : `${working} sont au travail`}.`,
+    seeAll: 'Voir toutes',
+    /** « Au travail » with nobody at work (m2-vides.html, Q70, b2dfd693). */
+    emptyWorking: {
+      title: 'Aucune session n’est au travail.',
+      waiting: (n: number) => (n === 1 ? '1 attend ta décision.' : `${n} attendent ta décision.`),
+      idle: 'Elles sont toutes disponibles ou terminées.'
+    },
+    seeWaiting: 'Voir en attente'
+  },
   agents: {
     title: 'Sessions',
     subtitle: (sessions: number, projects: number) => `${sessions} ${sessions > 1 ? 'sessions' : 'session'} · ${projects} ${projects > 1 ? 'projets' : 'projet'} sur ce PC`,
