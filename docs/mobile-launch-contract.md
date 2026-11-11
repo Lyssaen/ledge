@@ -113,7 +113,10 @@ Le PC ne fixe pas de délai : c'est le téléphone qui décide que le démarrage
 - Si l'assertion a expiré entre-temps et que le PC n'a jamais reçu le premier envoi, la réponse est `assertion_expired` :
   refaire la vérification, puis envoyer avec **un nouvel `op`**.
 
-Le PC garde le résultat 24 h (au plus 500 opérations, les plus anciennes finies partent d'abord), **en mémoire** : après un
+Le PC garde le résultat **au moins 6 min** : la fenêtre de renvoi du téléphone (5 min, `OPERATION_RESEND_MS` dans
+`@ledge/protocol`) plus une minute de trajet, et au plus 24 h. Au-delà de 500 opérations, il oublie d'abord la plus
+ancienne finie sortie de cette fenêtre ; s'il n'en a aucune, le nouvel `op` est refusé (`rejected` / `conflict`,
+« réessaie ») plutôt que d'oublier un `op` que le téléphone peut encore renvoyer. Le tout **en mémoire** : après un
 redémarrage du daemon, il ne connaît plus l'`op`, et « Réessayer » lance une session même si le premier envoi en avait
 déjà lancé une.
 

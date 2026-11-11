@@ -83,7 +83,9 @@ navigateur (`apps/desktop/src/ide/openrig/prefs.ts`) ; le téléphone garde les 
 - `rejected` : refus avant exécution, voir § 5.
 
 Une action dure autant que `rig` : pas de délai côté passerelle, le téléphone garde `received` jusque-là. Rejouer le même `op`
-renvoie le même `rigs.done` sans relancer l'action.
+renvoie le même `rigs.done` sans relancer l'action, tant que le PC le garde : au moins 6 min (la fenêtre de renvoi du
+téléphone, 5 min, plus le trajet ; détail au § 6 de `docs/mobile-launch-contract.md`), jamais après un redémarrage du
+daemon.
 
 ## 5. Passkey (but `rigs`)
 

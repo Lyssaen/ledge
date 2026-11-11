@@ -1,6 +1,6 @@
 // Makes a phone's writes idempotent: an operation id (a uuid the phone picks) runs once, and a retry gets the stored outcome.
-// In memory only, so a daemon restart forgets every operation.
-import type { CloseHow, OperationReason, OperationStatus, PhoneClientMessage } from '@ledge/protocol';
+// In memory only, so a daemon restart forgets every operation; each is kept at least as long as the phone may send it again.
+import { OPERATION_RESEND_MS, type CloseHow, type OperationReason, type OperationStatus, type PhoneClientMessage } from '@ledge/protocol';
 
 export type PhoneOperation = Extract<PhoneClientMessage, { op: string }>;
 
@@ -46,17 +46,27 @@ export function fingerprint(m: PhoneOperation): string {
     ...(m.type === 'forge.act' ? [m.prId, m.action] : [])]);
 }
 
-/** Bounded (24 h, 500 records): the oldest finished record goes first, and a record still `received` is never evicted. */
+/** The phone counts its window from its first send, the PC from the arrival, and a resend sent just in time still travels:
+ *  a minute more covers the trip. */
+export const KEEP_MS = OPERATION_RESEND_MS + 60_000;
+
+/** Bounded (24 h, 500 records): past 500, the oldest finished record older than the phone's resend window
+ *  (`OPERATION_RESEND_MS`, plus the trip: `KEEP_MS`) goes first; a record still `received`, or one the phone may still send again, is never evicted.
+ *  With none to evict, a new operation is refused (`conflict`, « try again »), like when every record is in flight:
+ *  forgetting one the phone may resend would run it a second time, and growing past the bound would let one device fill
+ *  the daemon's memory. 500 operations in 5 minutes is far beyond a person's use. */
 export class OperationRegistry {
   private records = new Map<string, OperationRecord>();
   private now: () => number;
   private ttlMs: number;
   private max: number;
+  private keepMs: number;
 
-  constructor(o: { now?: () => number; ttlMs?: number; max?: number } = {}) {
+  constructor(o: { now?: () => number; ttlMs?: number; max?: number; keepMs?: number } = {}) {
     this.now = o.now ?? Date.now;
     this.ttlMs = o.ttlMs ?? 86_400_000;
     this.max = o.max ?? 500;
+    this.keepMs = o.keepMs ?? KEEP_MS;
   }
 
   begin(owner: string, op: string, fp: string): BeginResult {
@@ -96,8 +106,9 @@ export class OperationRegistry {
   }
 
   private evictOldestFinished(): boolean {
+    const kept = this.now() - this.keepMs;
     for (const [op, r] of this.records) {
-      if (r.status !== 'received') { this.records.delete(op); return true; }
+      if (r.status !== 'received' && r.at <= kept) { this.records.delete(op); return true; }
     }
     return false;
   }

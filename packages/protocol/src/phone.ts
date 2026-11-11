@@ -88,6 +88,9 @@ export type RiskReason = z.infer<typeof RiskReasonSchema>;
 /** A phone-made operation is named by a uuid it generates, so a retry after a lost connection is recognised. */
 export const OperationIdSchema = z.string().uuid();
 export type OperationId = z.infer<typeof OperationIdSchema>;
+/** How long a phone may send an operation again with its op (5 min), and so how long the PC keeps it at the least: within it, a
+ *  retry gets the stored result, never a second run. */
+export const OPERATION_RESEND_MS = 300_000;
 
 export const OperationStatusSchema = z.enum(['received', 'applied', 'rejected', 'failed']);
 export type OperationStatus = z.infer<typeof OperationStatusSchema>;

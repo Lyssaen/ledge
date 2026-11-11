@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { PhoneClientMessage } from '@ledge/protocol';
-import { OperationRegistry, fingerprint, type PhoneOperation } from '../src/mobile/operations.js';
+import { OPERATION_RESEND_MS, type PhoneClientMessage } from '@ledge/protocol';
+import { KEEP_MS, OperationRegistry, fingerprint, type PhoneOperation } from '../src/mobile/operations.js';
 
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
@@ -47,12 +47,42 @@ describe('OperationRegistry', () => {
     expect(r.begin('d', uid(1), 'fp').kind).toBe('fresh');
   });
 
-  it('forgets the oldest finished record past the maximum', () => {
-    const r = new OperationRegistry();
-    for (let i = 0; i <= 500; i++) { r.begin('d', uid(i), 'fp'); r.finish(uid(i), 'applied'); }
+  it('forgets the oldest finished record past the maximum, once the phone can no longer send it again', () => {
+    let now = 0;
+    const r = new OperationRegistry({ now: () => now });
+    for (let i = 0; i < 500; i++) { r.begin('d', uid(i), 'fp'); r.finish(uid(i), 'applied'); }
+    now += KEEP_MS;
+    expect(r.begin('d', uid(500), 'fp').kind).toBe('fresh');
     expect(r.get(uid(0))).toBeUndefined();
     expect(r.get(uid(1))).toBeDefined();
     expect(r.get(uid(500))).toBeDefined();
+  });
+
+  it('keeps every finished record the phone may still send again: 500 finished, the first one replays its result', () => {
+    let now = 0;
+    const r = new OperationRegistry({ now: () => now });
+    r.begin('d', uid(0), 'fp'); r.finish(uid(0), 'rejected', 'stale');
+    for (let i = 1; i < 500; i++) { now += 10; r.begin('d', uid(i), 'fp'); r.finish(uid(i), 'applied'); }
+    // A 501st within the window is refused, not run at the cost of one the phone may resend.
+    expect(r.begin('d', uid(500), 'fp')).toEqual({ kind: 'conflict' });
+    now = OPERATION_RESEND_MS - 1;
+    const again = r.begin('d', uid(0), 'fp');
+    expect(again.kind).toBe('replay');
+    expect(again.kind === 'replay' && again.record).toMatchObject({ status: 'rejected', reason: 'stale' });
+  });
+
+  it('keeps a minute past the phone\'s window for the trip, then the oldest finished one goes', () => {
+    let now = 0;
+    const r = new OperationRegistry({ now: () => now, max: 2 });
+    r.begin('d', uid(1), 'fp'); r.finish(uid(1), 'applied');
+    r.begin('d', uid(2), 'fp'); r.finish(uid(2), 'applied');
+    expect(KEEP_MS).toBe(OPERATION_RESEND_MS + 60_000);
+    now = KEEP_MS - 1;
+    expect(r.begin('d', uid(3), 'fp')).toEqual({ kind: 'conflict' });
+    now = KEEP_MS;
+    expect(r.begin('d', uid(3), 'fp').kind).toBe('fresh');
+    expect(r.get(uid(1))).toBeUndefined();
+    expect(r.get(uid(2))).toBeDefined();
   });
 
   it('is full when 500 records are still received: nothing is forgotten, the new one conflicts', () => {

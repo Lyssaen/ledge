@@ -1,6 +1,6 @@
 // The phone's own operations (a decision, a reply, an interrupt): each named by a uuid it made, so sending it again
 // after a lost connection is recognised by the PC, which replays the result it already gave.
-import { OperationReasonSchema, PhoneClientMessageSchema, type CloseHow, type OperationReason, type PhoneClientMessage, type PhoneServerMessage } from '@ledge/protocol';
+import { OPERATION_RESEND_MS, OperationReasonSchema, PhoneClientMessageSchema, type CloseHow, type OperationReason, type PhoneClientMessage, type PhoneServerMessage } from '@ledge/protocol';
 import { z } from 'zod';
 import { localStore } from './storage';
 
@@ -82,10 +82,10 @@ export const expectKey = (m: OpMessage): string | undefined => 'expect' in m ? m
 /**
  * How long an instruction or an interrupt of unknown outcome may still be sent again (the same as the thread's
  * window). Neither names a request, so past this an old intent could act on a later, unrelated turn, and the PC
- * may have forgotten the op (it keeps results 24 h, 500 at most) and apply it a second time. An answer to a request
+ * may have forgotten the op (it keeps one this long and a minute more, at most 24 h) and apply it a second time. An answer to a request
  * names it by its key, so the PC refuses it as `stale` once the request changed: it is always sent again.
  */
-export const RESEND_MAX_MS = 300_000;
+export const RESEND_MAX_MS = OPERATION_RESEND_MS;
 
 /**
  * Whether an operation is sent again. One too old stays uncertain for good (« vérifiez le terminal »). The PC keeps

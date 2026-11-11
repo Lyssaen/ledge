@@ -163,8 +163,9 @@ Ce que fait le PC est exactement le `forge.act` de Desktop :
 | `unavailable` | `rejected` / `unavailable` | la demande n'est plus suivie |
 | `failed` | `failed` | `gh` ou `glab` a échoué ; `message` est sa ligne (secrets masqués par le PC, ≤ 500 caractères). C'est le seul texte du PC que le téléphone reçoit |
 
-Le même `op` renvoyé (« Réessayer ») redonne le résultat et `forge.done`, sans seconde action. Le même `op` avec une autre
-demande ou une autre action est refusé (`conflict`).
+Le même `op` renvoyé (« Réessayer ») redonne le résultat et `forge.done`, sans seconde action, tant que le PC le garde : au
+moins 6 min (la fenêtre de renvoi du téléphone, 5 min, plus le trajet ; détail au § 6 du contrat de lancement), jamais
+après un redémarrage du daemon. Le même `op` avec une autre demande ou une autre action est refusé (`conflict`).
 
 ## 5. Ce qui reste au téléphone
 
