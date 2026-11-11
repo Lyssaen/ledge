@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { AttachmentRef, ThreadItem } from '@ledge/protocol';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { Thread } from '../../src/screens/Thread';
 import { pending, session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
@@ -160,5 +160,39 @@ describe('the checklist on the thread', () => {
     act(() => t.deliver({ type: 'attachment.data', requestId: t.of('attachment.get')[0]!.requestId, attachment: REF.id, mime: 'image/png', data: 'AAAA' }));
     fireEvent.click(await waitFor(() => { const el = document.querySelector<HTMLElement>('[data-thumb=ready]'); expect(el).not.toBeNull(); return el!; }));
     expect(screen.getByRole('dialog')).toBeVisible();
+  });
+});
+
+describe('the thread on a wide screen (m2-sessions.html §10, Q27)', () => {
+  const wide = (on: boolean) => { globalThis.matchMedia = ((q: string) => ({ matches: on, media: q, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia; };
+  afterEach(() => { wide(false); });
+  const now = Date.now();
+  const at = (min: number) => new Date(now + min * 60_000).toISOString();
+
+  it('says where the session works, decides with Y, says Enter sends, and its foot gains tokens, project and the limit', () => {
+    wide(true);
+    const t = opened({ project: 'ledge', state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }), context: { at: at(-1), used: 620_000, window: 1_000_000 } });
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
+    act(() => t.deliver({ type: 'usage.state', harnesses: [{ harness: 'claude', status: 'ok', readAt: at(-1), windows: [{ kind: 'five_hour', pct: 84, resetsAt: at(60) }] }], prefs: { alert: 0.8 } }));
+    expect(screen.getByText('ledge · feat/x')).toBeInTheDocument();
+    expect(screen.getByText('Y / N au clavier')).toBeInTheDocument();
+    expect(screen.getByLabelText('Message pour Kai')).toHaveAttribute('placeholder', 'Traite la demande ci-dessus · Entrée envoie, Maj+Entrée passe à la ligne');
+    const foot = screen.getByRole('contentinfo', { name: 'État de Kai' });
+    expect(foot).toHaveTextContent('· 620k / 1M');
+    expect(foot).toHaveTextContent('feat/xledge');
+    expect(foot).toHaveTextContent('Claude 5 h 84 %');
+    expect(screen.getByText('84 %', { selector: 'b' })).toHaveClass('text-attention');
+    fireEvent.keyDown(document.body, { key: 'y' });
+    expect(t.of('session.decide')).toEqual([expect.objectContaining({ id: 'a', decision: 'accept', expect: expect.objectContaining({ key: 'k1' }) })]);
+  });
+
+  it('on a phone keeps the head, the card and the foot as §3 draws them', () => {
+    const t = opened({ project: 'ledge', state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }), context: { at: at(-1), used: 620_000, window: 1_000_000 } });
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
+    expect(screen.queryByText('ledge · feat/x')).not.toBeInTheDocument();
+    expect(screen.queryByText('Y / N au clavier')).not.toBeInTheDocument();
+    expect(screen.getByRole('contentinfo', { name: 'État de Kai' })).not.toHaveTextContent('620k');
+    fireEvent.keyDown(document.body, { key: 'y' });
+    expect(t.of('session.decide')).toEqual([]);
   });
 });

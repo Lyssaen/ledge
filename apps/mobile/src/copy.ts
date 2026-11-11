@@ -300,6 +300,7 @@ const fr = {
     toolsNamed: (n: number, names: string) => `${n === 1 ? '1 outil' : `${n} outils`} · ${names}`,
     toolStatus: { running: 'en cours', success: 'fait', failed: 'en échec', unknown: 'état inconnu' },
     foot: (bot: string) => `État de ${bot}`,
+    keysHint: 'Entrée envoie, Maj+Entrée passe à la ligne',
     contextLabel: (pct: number) => `Contexte utilisé : ${pct} %`,
     folder: (name: string) => `Dossier ${name}`,
     /** « Plus d'actions » (§5). */

@@ -17,7 +17,10 @@ import { loadDraft, markCleared, saveDraft, takeFocus, wasCleared } from '../sta
 import { isLive } from '../state/operations';
 import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
-import { indicators } from '../model/usage';
+import { footLimit, indicators, tokenCount } from '../model/usage';
+import { useWide } from '../ui/layout';
+import { physicalKeyboard } from '../ui/MessageField';
+import { windowLabel } from '../ui/chat/Limits';
 import { BackLink, LinkStatus, linkView } from '../ui/Header';
 import { Notice } from '../ui/Notice';
 import { ReplyView } from '../ui/ReplyView';
@@ -70,13 +73,13 @@ function Tools({ tools }: { tools: ToolLine[] }) {
 }
 
 /** The request waiting, as « À toi »'s card at the thread's foot (§3, Q19): decided here, « Toujours » where the agent offers it. */
-function ThreadRequest({ store, item, onReconnect }: { store: MobileStore; item: InboxItem; onReconnect?: (() => void) | undefined }) {
+function ThreadRequest({ store, item, onReconnect, keys }: { store: MobileStore; item: InboxItem; onReconnect?: (() => void) | undefined; keys: boolean }) {
   const state = useMobile(store);
   const platform = usePlatform();
   const session = state.sessions.get(item.sessionId);
   return (
     <SessionCard
-      store={store} item={item} session={session} inThread
+      store={store} item={item} session={session} inThread keys={keys}
       mode={cardMode(item, state.capabilities?.[item.tool], session?.readOnly === true)}
       outcome={outcomeFor(item, [...state.sessions.values()], state.ops)} fresh={state.fresh} ghost={false}
       changed={false} onReread={() => {}} canConfirm={state.device?.confirm === true && platform} enroll={platform && state.device?.confirm !== true}
@@ -86,7 +89,7 @@ function ThreadRequest({ store, item, onReconnect }: { store: MobileStore; item:
 }
 
 /** `inPanel`: in the Atelier's panel, a request opens there, to be decided without leaving the Atelier. */
-function Bubble({ item, store, storage, inPanel = false, onReconnect }: { item: ThreadItem; store: MobileStore; storage?: Storage | undefined; inPanel?: boolean; onReconnect?: (() => void) | undefined }) {
+function Bubble({ item, store, storage, inPanel = false, onReconnect, keys = false }: { item: ThreadItem; store: MobileStore; storage?: Storage | undefined; inPanel?: boolean; onReconnect?: (() => void) | undefined; /** A wide screen: Y / N decide the request at the foot. */ keys?: boolean }) {
   switch (item.kind) {
     case 'tools': return <Tools tools={item.tools} />;
     case 'time': return <div className="text-center font-mono text-meta text-muted">{item.label}</div>;
@@ -126,7 +129,7 @@ function Bubble({ item, store, storage, inPanel = false, onReconnect }: { item: 
       );
     }
     case 'event': return <div className="text-center text-meta text-muted">{item.label}</div>;
-    case 'awaiting': return !inPanel ? <ThreadRequest store={store} item={item.item} onReconnect={onReconnect} /> : (
+    case 'awaiting': return !inPanel ? <ThreadRequest store={store} item={item.item} onReconnect={onReconnect} keys={keys} /> : (
       <Notice title={inPanel ? copy.atelier.awaiting : copy.thread.awaiting} tone={item.item.kind === 'question' ? 'warning' : 'approval'}>
         <p className="[overflow-wrap:anywhere]">{headline(item.item)}</p>
         <a href={href(inPanel ? { name: 'atelier', sessionId: item.item.sessionId, requestKey: item.item.key } : { name: 'request', sessionId: item.item.sessionId, key: item.item.key })} className={buttonClass({ block: true, className: 'mt-3' })}>
@@ -158,6 +161,7 @@ function PanelButtons({ sessionId, panel }: { sessionId: string; panel: ThreadPa
 export function Thread({ store, sessionId, storage, onReconnect, panel }: { store: MobileStore; sessionId: string; storage?: Storage; onReconnect?: () => void; panel?: ThreadPanel }) {
   const state = useMobile(store);
   const now = useNow();
+  const wide = useWide();
   const session = state.sessions.get(sessionId);
   const thread = state.threads.get(sessionId);
   const { fresh, ops } = state;
@@ -273,12 +277,14 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
   const omp = !!panel && session.tool === 'omp';
   const dot = dotOf(session);
   const endedAt = session.state === 'exited' && session.exitedAt ? copy.sessions.line.ended(endedAtLabel(session.exitedAt, now)) : undefined;
+  // A wide screen's head also says where the session works (§10): its project and its branch.
+  const where = wide ? [session.project, session.branch].filter(Boolean).join(' · ') || undefined : undefined;
 
   return (
     <>
       <DetailHeader
         back={panel ? <span className="w-2.5" /> : <BackLink fallback={{ name: 'sessions' }} label={copy.thread.back} />}
-        tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && fresh} sub={endedAt}
+        tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && fresh} sub={endedAt ?? where}
         more={<>
           {panel ? <PanelButtons sessionId={sessionId} panel={panel} /> : <ViewToggle sessionId={sessionId} current="thread" />}
           <button type="button" aria-haspopup="dialog" aria-label={copy.sessions.moreOf(session.name)} title={copy.sessions.more} onClick={() => setMore(true)} className={iconButtonClass({ className: more ? 'bg-raised text-fg' : 'text-muted' })}>
@@ -298,15 +304,15 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
-        {items.map(it => <Bubble key={it.key} item={it} store={store} storage={storage} inPanel={!!panel} onReconnect={onReconnect} />)}
+        {items.map(it => <Bubble key={it.key} item={it} store={store} storage={storage} inPanel={!!panel} onReconnect={onReconnect} keys={wide && !panel} />)}
       </main>
       {ending.kind === 'open'
-        ? <Reply name={session.name} focusAtEnd={focusOnOpen} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
+        ? <Reply name={session.name} focusAtEnd={focusOnOpen} composer={wide && physicalKeyboard() ? { ...composer, placeholder: `${composer.placeholder} · ${copy.sessions.keysHint}` } : composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
           {...(state.daemon?.commands && session.tool === 'claude' && !session.readOnly ? { slash: { tool: copy.tools[session.tool], listing: state.commands[sessionId], ask: () => store.requestCommands(sessionId) } } : {})}
           alert={endError && <EndErrorNotice error={endError} fresh={fresh} onRetry={() => openSheet('close')} onReconnect={onReconnect} />}
           {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />
         : <EndFooter key={ending.kind} ending={ending.kind === 'ended' && ending.error?.op === cleared ? { ...ending, error: null } : ending} name={session.name} canResume={closable} resumeHeld={resumeHeld(session, ops, boot, now)} readOnly={!!session.readOnly} fresh={fresh} focus={sent} onResume={() => openSheet('resume')} onReconnect={onReconnect} />}
-      <SessionFoot store={store} session={session} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
+      <SessionFoot store={store} session={session} wide={wide} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
       </>}
       {more && <SessionMore store={store} session={session} closable={closable && !omp} closing={shut} onClose={() => setMore(false)}
         onModel={() => { setMore(false); setModel(true); }} onCloseSession={() => { setMore(false); openSheet('close'); }} />}
@@ -332,12 +338,14 @@ export function ViewToggle({ sessionId, current }: { sessionId: string; current:
  * The session's foot (§3, §4): its model (a tap opens « Modèle et effort » when the phone can change it), its context in percent,
  * amber past « Contexte max », and its branch, or its folder without Git. No MR/PR before M5. What is not known is not there.
  */
-function SessionFoot({ store, session, threshold, onModel }: { store: MobileStore; session: PhoneSession; threshold: number; onModel: () => void }) {
-  const { daemon, fresh } = useMobile(store);
+function SessionFoot({ store, session, wide, threshold, onModel }: { store: MobileStore; session: PhoneSession; wide: boolean; threshold: number; onModel: () => void }) {
+  const { daemon, fresh, usage, usageAlert } = useMobile(store);
   const now = useNow();
   const i = indicators(session, now, threshold);
   const S = copy.sessions;
   const can = modelOff(daemon, session) === null;
+  // A wide screen's foot adds what the PC knows (Q27): the context in tokens, the project, the tool's limit on the right.
+  const limit = wide ? footLimit(session.tool, usage, usageAlert, now, fresh) : null;
   return (
     <footer aria-label={S.foot(session.name)} className="bleed flex h-10 flex-none items-center gap-2.5 border-t border-line bg-sidebar px-3 text-small whitespace-nowrap text-muted">
       {i.model && (can
@@ -349,10 +357,19 @@ function SessionFoot({ store, session, threshold, onModel }: { store: MobileStor
           {i.context.pct} %
         </span>
       )}
+      {wide && session.context && <span>· {tokenCount(session.context.used)} / {tokenCount(session.context.window)}</span>}
       {(i.model || i.context) && <span className="h-3 w-px flex-none bg-line" />}
       {session.branch
-        ? <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{session.branch}</span>
-        : <span aria-label={S.folder(session.project)} className="inline-flex min-w-0 flex-1 items-center gap-1"><Icon name="folder" className="size-3.5" /><span className="truncate">{session.project}</span></span>}
+        ? <span className={`min-w-0 truncate font-mono text-[11px] ${wide ? '' : 'flex-1'}`}>{session.branch}</span>
+        : <span aria-label={S.folder(session.project)} className={`inline-flex min-w-0 items-center gap-1 ${wide ? '' : 'flex-1'}`}><Icon name="folder" className="size-3.5" /><span className="truncate">{session.project}</span></span>}
+      {wide && session.branch && <span className="min-w-0 truncate">{session.project}</span>}
+      {wide && <span className="flex-1" />}
+      {limit && (
+        <span className="flex-none">
+          {copy.chat.point.harnessShort[limit.harness] ?? limit.harness} {windowLabel(limit.window)}{' '}
+          <b className={`font-semibold ${limit.tone === 'red' ? 'text-approval' : limit.tone === 'amber' ? 'text-attention' : 'text-fg'}`}>{limit.window.pct} %</b>
+        </span>
+      )}
     </footer>
   );
 }

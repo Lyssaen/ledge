@@ -294,6 +294,7 @@ export const en: Copy = {
     toolsNamed: (n: number, names: string) => `${n === 1 ? '1 tool' : `${n} tools`} · ${names}`,
     toolStatus: { running: 'running', success: 'done', failed: 'failed', unknown: 'state unknown' },
     foot: (bot: string) => `${bot}'s state`,
+    keysHint: 'Enter sends, Shift+Enter starts a new line',
     contextLabel: (pct: number) => `Context used: ${pct} %`,
     folder: (name: string) => `Folder ${name}`,
     sheet: {
