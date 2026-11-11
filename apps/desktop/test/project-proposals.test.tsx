@@ -3,20 +3,20 @@ import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@te
 import type { ClientMessage, FoundRepo, Machines, ServerMessage } from '@ledge/protocol';
 import type { DaemonClient, Proposal } from '@ledge/fleet';
 import { fakeSession } from '@ledge/fleet/test/mockDaemon';
-import { boot, closeDaemons, openProjectEditor, PROJECTS, type MockDaemon } from './helpers';
+import { boot, closeDaemons, openProjectEditor, preloadChunks, PROJECTS, type MockDaemon } from './helpers';
 import { machine } from './fleet-helpers';
 import { LangProvider } from '../src/i18n/lang';
 import { MESSAGES } from '../src/i18n/messages';
 import { afterSave, applyProposal, newDraft } from '../src/projects/draft';
 import { ProjectDialog } from '../src/projects/ProjectDialog';
 import { rememberProposal, proposalOf } from '../src/projects/proposals';
-import { loadEditor } from '../src/projects/lazy';
 import { useLedgeScan } from '../src/projects/useLedgeScan';
 /** The app's notice (the IDE has another status region, its editor's « … opened »). */
 const notice = () => document.querySelector<HTMLElement>('.toast-region')!;
 
-// The editor's chunk is there before the dialog renders alone (boot does it for the app).
-beforeAll(async () => { await loadEditor(); });
+// The app's chunks (the editor's among them, for the dialog rendered alone) are there before the first test: on a loaded
+// machine their first import alone takes seconds, which the first test's own time would pay.
+beforeAll(async () => { await preloadChunks(); }, 120_000);
 
 afterEach(async () => {
   vi.useRealTimers();
@@ -46,6 +46,9 @@ const LEDGE_CLONE: FoundRepo[] = [
 const OTTO = [fakeSession('otto', { name: 'Otto', cwd: '/w/ledge', state: 'working' })];
 
 /** The app on the mock daemon (Local answers the scan with `found`, Dev is offline), then New project from Settings › Projects. */
+/** A dialog that follows a scan waits on the fake machines' answer, which comes later under load: the wait is on the dialog, not a tight delay. */
+const SCANNED = { timeout: 10_000 };
+
 async function openNew(found: FoundRepo[]) {
   const env = await boot({ sessions: OTTO, machines: MACHINES });
   env.d.found.push(...found);
@@ -64,14 +67,14 @@ describe('« Let Ledge do it » in the project editor', () => {
     expect(dialog.queryByRole('button', { name: 'Ask Ledge' })).toBeNull();
 
     await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
-    const scan = within(await screen.findByRole('dialog', { name: 'Ledge is preparing a project' }));
+    const scan = within(await screen.findByRole('dialog', { name: 'Ledge is preparing a project' }, SCANNED));
     expect(scan.getByText('Ledge is scanning Local…')).toBeVisible();
     expect(scan.getByText('Dev offline, skipped')).toBeVisible();
     expect(await scan.findByText('Local · 2 repositories found')).toBeVisible();
     expect(scan.getByText('Remotes and sessions compared')).toBeVisible();
     expect(document.querySelector('.pe-scan .pe-dots')).not.toBeNull();
 
-    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, SCANNED));
     expect(prop.getByRole('textbox', { name: 'Name' })).toHaveValue('Paper');
     // The first colour no project uses (PROJECTS: blue, green, amber).
     expect(prop.getByRole('radio', { name: 'Violet' })).toBeChecked();
@@ -109,7 +112,7 @@ describe('« Let Ledge do it » in the project editor', () => {
   it('a proposal that overlaps a project is « Add to » it: the title says so, and the send keeps its repositories and adds the checked ones', async () => {
     const { d, user, dialog } = await openNew(LEDGE_CLONE);
     await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
-    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal for Ledge' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal for Ledge' }, SCANNED));
     expect(prop.getByRole('textbox', { name: 'Name' })).toHaveValue('Ledge');
     const site = prop.getByRole('checkbox', { name: 'Keep site (Local)' });
     expect(site).toBeChecked();
@@ -136,7 +139,7 @@ describe('« Let Ledge do it » in the project editor', () => {
   it('a proposed repository another project took meanwhile: « already in » is said and the save refused while it is checked; unchecking it unblocks', async () => {
     const { d, user, dialog } = await openNew(PAPER);
     await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
-    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, SCANNED));
     const fonts = prop.getByRole('checkbox', { name: 'Keep paper-fonts (Local)' });
     // A broadcast puts paper-fonts in Docs.
     const docs = PROJECTS.projects[2]!;
@@ -165,7 +168,7 @@ describe('« Let Ledge do it » in the project editor', () => {
     expect(dialog.queryByRole('button', { name: 'Ask Ledge' })).toBeNull();
     expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveFocus();
     await user.click(dialog.getByRole('button', { name: 'Search the repositories of “Fonts lab”' }));
-    const scan = within(await screen.findByRole('dialog', { name: 'Ledge is preparing a project' }));
+    const scan = within(await screen.findByRole('dialog', { name: 'Ledge is preparing a project' }, SCANNED));
     expect(scan.getByText('Scanning Local…')).toBeVisible();
     expect(scan.getByRole('button', { name: 'Cancel' })).toHaveFocus();
     await user.click(scan.getByRole('button', { name: 'Cancel' }));
@@ -179,7 +182,7 @@ describe('« Let Ledge do it » in the project editor', () => {
     // Now Local answers: the typed name is kept and the repositories whose name holds one of its words are proposed.
     vi.mocked(client.send).mockRestore();
     await user.click(back.getByRole('button', { name: 'Search the repositories of “Fonts lab”' }));
-    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, SCANNED));
     expect(prop.getByRole('textbox', { name: 'Name' })).toHaveValue('Fonts lab');
     expect(prop.getByRole('checkbox', { name: 'Keep paper-fonts (Local)' }).closest('li')!.querySelector('.pe-why')).toHaveTextContent('Ledge · Name close to “fonts”');
     expect(prop.queryByRole('checkbox', { name: 'Keep paper-templates (Local)' })).toBeNull();
@@ -188,7 +191,7 @@ describe('« Let Ledge do it » in the project editor', () => {
   it('nothing free: the mockup\'s message, and the form stays as it was', async () => {
     const { user, dialog } = await openNew([{ path: '/w/ledge', branch: 'main' }]);
     await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
-    const back = within(await screen.findByRole('dialog', { name: 'New project' }, { timeout: 3000 }));
+    const back = within(await screen.findByRole('dialog', { name: 'New project' }, SCANNED));
     expect(await back.findByText('Every repository found already belongs to a project. Add one by hand.')).toBeVisible();
     expect(back.getByRole('textbox', { name: 'Name' })).toHaveValue('');
   });
@@ -196,11 +199,11 @@ describe('« Let Ledge do it » in the project editor', () => {
   it('after « nothing free », « Run again » scans again and can propose', async () => {
     const { d, user, dialog } = await openNew([{ path: '/w/ledge', branch: 'main' }]);
     await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
-    const back = within(await screen.findByRole('dialog', { name: 'New project' }, { timeout: 3000 }));
+    const back = within(await screen.findByRole('dialog', { name: 'New project' }, SCANNED));
     await back.findByText('Every repository found already belongs to a project. Add one by hand.');
     d.found.push(...PAPER);
     await user.click(back.getByRole('button', { name: 'Run again' }));
-    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, { timeout: 3000 }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, SCANNED));
     expect(prop.getByRole('checkbox', { name: 'Keep paper-fonts (Local)' })).toBeChecked();
     expect(scansOf(d)).toHaveLength(2);
   });
@@ -214,7 +217,7 @@ describe('a scan cut short', () => {
     const { d, user, dialog } = await openNew(PAPER);
     d.options.scanTruncated = true;
     await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
-    await screen.findByRole('dialog', { name: 'Ledge proposal' }, { timeout: 3000 });
+    await screen.findByRole('dialog', { name: 'Ledge proposal' }, SCANNED);
     expect(document.querySelector('.pe-proposal')).toHaveTextContent('Ledge proposes2 repositories on Local. Uncheck what does not fit, then confirm: nothing is created before. · scan limited on Local');
     // A deeper repository may be missing: the folder browser adds it by hand (#22).
     await user.click(screen.getByRole('button', { name: 'Browse the folders' }));
@@ -230,7 +233,7 @@ describe('a scan cut short', () => {
     await user.click(dialog.getByRole('textbox', { name: 'Name' }));
     await user.paste('Communication');
     await user.click(dialog.getByRole('button', { name: 'Search the repositories of “Communication”' }));
-    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, { timeout: 3000 }));
+    const prop = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, SCANNED));
     expect(prop.getByRole('checkbox', { name: 'Keep es-front (Local)' }).closest('li')!.querySelector('.pe-why'))
       .toHaveTextContent('Ledge · Remote gitlab.example.com/communication-platform/es-front close to “communication”');
     expect(prop.getByRole('checkbox', { name: 'Keep es-back (Local)' }).closest('li')!.querySelector('.pe-why'))
@@ -241,12 +244,12 @@ describe('a scan cut short', () => {
     const { d, user, dialog } = await openNew([{ path: '/w/ledge', branch: 'main' }]);
     d.options.scanTruncated = true;
     await user.click(dialog.getByRole('button', { name: 'Let Ledge do it' }));
-    const back = within(await screen.findByRole('dialog', { name: 'New project' }, { timeout: 3000 }));
+    const back = within(await screen.findByRole('dialog', { name: 'New project' }, SCANNED));
     expect(await back.findByText('Every repository found already belongs to a project. Add one by hand. · scan limited on Local')).toBeVisible();
     // Run again, complete: the clause goes.
     d.options.scanTruncated = false;
     await user.click(back.getByRole('button', { name: 'Run again' }));
-    expect(await back.findByText('Every repository found already belongs to a project. Add one by hand.', undefined, { timeout: 3000 })).toBeVisible();
+    expect(await back.findByText('Every repository found already belongs to a project. Add one by hand.', undefined, SCANNED)).toBeVisible();
   });
 
   it('says it in French too', () => {
@@ -260,7 +263,7 @@ describe('the scan with no machine answering', () => {
     render(<LangProvider lang="en"><ProjectDialog projects={PROJECTS} sessions={[]} machines={[machine('local', { ready: false })]} client={silentClient()}
       fleet={{ setProjects: vi.fn() }} projectIdOf={() => null} onClose={vi.fn()} onSaved={vi.fn()} onDeleted={vi.fn()} /></LangProvider>);
     fireEvent.click(await screen.findByRole('button', { name: 'Let Ledge do it' }));
-    const back = within(await screen.findByRole('dialog', { name: 'New project' }, { timeout: 3000 }));
+    const back = within(await screen.findByRole('dialog', { name: 'New project' }, SCANNED));
     expect(await back.findByText('No machine could be scanned.')).toBeVisible();
     expect(back.queryByText('Every repository found already belongs to a project. Add one by hand.')).toBeNull();
     expect(back.getByRole('button', { name: 'Run again' })).toBeVisible();
@@ -302,7 +305,7 @@ describe('a proposal opened by the navigation', () => {
     const kit = fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' });
     render(<LangProvider lang="en"><ProjectDialog proposal={pid} projects={PROJECTS} sessions={[kit]} machines={[machine('local')]} client={{ send: vi.fn(), onMessage: () => () => {} } as unknown as DaemonClient}
       fleet={{ setProjects }} projectIdOf={() => null} onClose={vi.fn()} onSaved={vi.fn()} onDeleted={vi.fn()} /></LangProvider>);
-    const dialog = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, SCANNED));
     expect(dialog.getByRole('textbox', { name: 'Name' })).toHaveValue('Tmp');
     expect(dialog.getByRole('checkbox', { name: 'Keep tmp (Local)' }).closest('li')!.querySelector('.pe-why')).toHaveTextContent('Ledge · Folder opened by Kit');
     expect(dialog.getByRole('checkbox', { name: 'Kit' })).toBeChecked();
@@ -321,7 +324,7 @@ describe('a proposal opened by the navigation', () => {
     const kit = fakeSession('kit', { name: 'Kit', cwd: '/tmp', state: 'waiting_input' });
     const props = { proposal: 'prop-tmp', sessions: [kit], machines: [machine('local')], client: silentClient(), fleet: { setProjects }, projectIdOf: () => null, onClose: vi.fn(), onSaved: vi.fn(), onDeleted: vi.fn() };
     const view = render(<LangProvider lang="en"><ProjectDialog {...props} projects={PROJECTS} /></LangProvider>);
-    const dialog = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Ledge proposal' }, SCANNED));
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     fireEvent.click(dialog.getByRole('button', { name: /^Create the project/ }));
     act(() => { vi.advanceTimersByTime(8000); });

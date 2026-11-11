@@ -141,16 +141,20 @@ export async function closeDaemons(): Promise<void> {
  *  `list` is ignored: the atelier is the only overview (a stored `view: 'list'` is read as the atelier).
  *  Ready once the Atelier counter shows the active sessions, the last project's row is in the sidebar and, with sessions,
  *  the first one is shown on its atelier seat. */
-export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo, daemon, home = false }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo>; daemon?: DaemonInfo; /** Kept for the tests written before lot 12b: the IDE always opens on its Atelier tab. */ home?: boolean } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
-  // The session page's, the New session form's, the project editor's and the Settings page's own chunks are there before a test opens them: they come in the same render, as once preloaded in the app.
+/** The app's lazy chunks, loaded as once preloaded in the app: the session page's, the New session form's, the project
+ *  editor's, the Settings page's, the IDE's (lot 12b: the only interface) and its right panel's chat. A file calls it in a
+ *  `beforeAll` with a long timeout so its first test does not pay their first import, which takes seconds on a loaded machine. */
+export async function preloadChunks(): Promise<void> {
   await loadWorkspace();
   await loadComposer();
   await loadEditor();
   await loadSettings();
-  // The IDE (lot 12b: the only interface): its chunk and the right panel's chat are there before the first render, and the
-  // workspace starts on the Atelier tab, as a first run has it.
   await loadIde();
   await loadChat();
+}
+export async function boot({ sessions = DEFAULT_SESSIONS, projects = PROJECTS, list = false, machines = [{ id: 'local', label: 'Local' }, { id: 'dev', label: 'Dev SSH', ssh: 'dev' }], repoInfo, daemon, home = false }: { sessions?: Session[]; projects?: Projects; list?: boolean; machines?: Machines; repoInfo?: ReadonlyMap<string, RepoInfo>; daemon?: DaemonInfo; /** Kept for the tests written before lot 12b: the IDE always opens on its Atelier tab. */ home?: boolean } = {}): Promise<{ d: MockDaemon; side: ReturnType<typeof within>; view: RenderResult; client: DaemonClient; user: UserEvent }> {
+  await preloadChunks();
+  // The workspace starts on the Atelier tab, as a first run has it.
   seedAtelier();
   const d = await createMockDaemon(); daemons.push(d);
   d.machines(machines);
