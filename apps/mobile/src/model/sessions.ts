@@ -2,7 +2,7 @@ import type { PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
 import type { DotState } from '../ui/kit/marks';
 import { endedAtLabel } from './sessionEnd';
-import { firstLine, requestsOf } from './requests';
+import { requestsOf } from './requests';
 
 /*
  * The Sessions list (docs/mockups/ledge-mobile-refonte/m2-sessions.html §1, Q24, Q25): the filters, the groups by project then by
@@ -86,7 +86,7 @@ export const activeHelpers = (s: PhoneSession): number => s.helpers.filter(h => 
  */
 export function rowLine(s: PhoneSession, f: SessionFilter, now: number = Date.now()): string {
   const L = copy.sessions.line;
-  if (f === 'working') return (s.lastReply && firstLine(s.lastReply.text)) || L.thinking;
+  if (f === 'working') return doingLine(s);
   const ctx = contextPct(s);
   const pct = ctx === undefined ? '' : ` · ${ctx} %`;
   const pending = requestsOf([s])[0];
@@ -100,6 +100,12 @@ export function rowLine(s: PhoneSession, f: SessionFilter, now: number = Date.no
     default: return L.idle + pct;
   }
 }
+
+/**
+ * What an agent at work is doing (m2-toujours.html §2, Q68): `doing`'s label as the PC sends it (a command, a tool and its target,
+ * OMP's intent), with no icon or prefix; between two tools, « Réfléchit… ». Shared by « Au travail » and « En cours » of « À toi ».
+ */
+export const doingLine = (s: Pick<PhoneSession, 'doing'>): string => s.doing?.label || copy.sessions.line.thinking;
 
 /** Its context in percent of its window, when the PC knows it. */
 export const contextPct = (s: PhoneSession): number | undefined => s.context ? Math.round(Math.min(1, s.context.used / s.context.window) * 100) : undefined;

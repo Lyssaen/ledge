@@ -9,7 +9,7 @@ afterEach(() => { localStorage.clear(); });
 
 const ctx = (pct: number) => ({ used: pct * 1000, window: 100_000, at: '2026-10-14T10:00:00.000Z' });
 const fleet = () => snapshot([
-  session('nova', { name: 'Nova', tool: 'codex', project: 'ledge', branch: 'fix/term-webgl', state: 'working', context: ctx(38), lastReply: { text: 'pnpm --filter desktop test term\nsuite', at: '2026-10-14T10:00:00.000Z' } }),
+  session('nova', { name: 'Nova', tool: 'codex', project: 'ledge', branch: 'fix/term-webgl', state: 'working', context: ctx(38), doing: { tool: 'Bash', label: 'pnpm --filter desktop test term', since: '2026-10-14T10:00:00.000Z' } }),
   session('pim', { name: 'Pim', project: 'ledge', branch: 'feat/ide-shell', state: 'waiting_permission', pending: pending({ key: 'kp' }),
     helpers: [{ id: 'h1', kind: 'Explore', task: 'a', state: 'working' }, { id: 'h2', kind: 'Explore', task: 'b', state: 'working' }, { id: 'h3', kind: 'Explore', task: 'c', state: 'exited', finishedAt: '2026-10-14T10:00:00.000Z' }] }),
   session('ida', { name: 'Ida', project: 'ledge', branch: 'mockup', context: ctx(21) }),
