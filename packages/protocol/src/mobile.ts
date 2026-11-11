@@ -54,6 +54,9 @@ export const MobilePairingSchema = z.object({
 });
 export type MobilePairing = z.infer<typeof MobilePairingSchema>;
 
+/** A device's return with its passkey after a reinstall. */
+export const RecoveredSchema = z.object({ at: z.string().datetime(), model: z.string().max(40).optional(), pending: z.literal(true).optional() });
+
 /** What the daemon tells its local fronts about mobile access. Never a token, a device code, a key or a message. */
 export const MobileStateSchema = z.object({
   enabled: z.boolean(),
@@ -66,10 +69,26 @@ export const MobileStateSchema = z.object({
   devices: z.array(z.object({
     id: z.string(), label: z.string(), approvedAt: z.string(), online: z.boolean(), lastSeenAt: z.string().optional(),
     /** Absent from an older daemon; `name` absent: the user gave none, the front derives one from the label. */
-    kind: DeviceKindSchema.optional(), name: z.string().optional()
+    kind: DeviceKindSchema.optional(), name: z.string().optional(),
+    /** Its passkey can bring it back after a reinstall (registered with the PC key's digest, docs/mobile-passkey-recover-contract.md). */
+    recover: z.literal(true).optional(),
+    /** It came back with its passkey: when, on what it says it runs (`iPhone`, `iPad`), and `pending` until « C'était bien moi »
+     *  (`mobile.device.ack` `recovered`). Kept after that, for the « reconnecté avec sa passkey le … » line. */
+    recovered: RecoveredSchema.optional(),
+    /** Another device tried to take its place with its passkey while it was connected; until « Compris » (`mobile.device.ack` `refused`). */
+    refused: z.object({ at: z.string().datetime(), model: z.string().optional() }).optional()
   })),
   pairings: z.array(MobilePairingSchema),
   /** « Taper dans les terminaux depuis le téléphone »: absent from an older daemon, which has no phone terminal. */
-  terminalInput: z.boolean().optional()
+  terminalInput: z.boolean().optional(),
+  /** Passkey recovery on the account: `blocked` after 3 failed verifications, until « Débloquer » (`mobile.recovery.unblock`). */
+  recovery: z.object({ blocked: z.object({ since: z.string().datetime(), failures: z.number().int().min(0) }).optional() }).optional()
 });
 export type MobileState = z.infer<typeof MobileStateSchema>;
+
+/** What a front hears the moment a recovery happens, for its toast: a device `recovered`, an attempt `refused` (it was connected),
+ *  recovery `blocked`. `id` the device concerned (absent for `blocked`). */
+export const MobileRecoveryEventSchema = z.object({
+  event: z.enum(['recovered', 'refused', 'blocked']), id: z.string().optional(), at: z.string().datetime()
+});
+export type MobileRecoveryEvent = z.infer<typeof MobileRecoveryEventSchema>;

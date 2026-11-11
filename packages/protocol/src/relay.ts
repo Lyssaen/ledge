@@ -39,6 +39,30 @@ export const PAIR_LABEL_MAX = 40;
 const KeyB64 = z.string().regex(/^[A-Za-z0-9_-]{87}$/);
 const Nonce = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const Fingerprint = z.string().regex(/^[A-Za-z0-9_-]{22}$/);
+const B64U = z.string().regex(/^[A-Za-z0-9_-]*$/);
+
+/**
+ * Why the PC refused a passkey recovery (`recover_no`), or why the phone stopped before sending (docs/mobile-passkey-recover-contract.md):
+ * - from the phone, before anything is sent: `none` no passkey was used (none, or Face ID cancelled: iOS says the same),
+ *   `old` the passkey predates recovery (no « L1 » in its userHandle), `offline` the PC is not on the relay,
+ *   `otherPc` the passkey was made for another PC key, `timeout` no answer in time;
+ * - from the PC: `revoked` the device was revoked (or is unknown), `connected` the device it names is connected right now,
+ *   `rate` 5 recoveries in the last hour, `blocked` 3 failed verifications (until « Débloquer » on the PC),
+ *   `failed` anything else (a stale or reused nonce, a proof that does not verify): the phone shows it as `timeout`.
+ */
+export const RecoverWhySchema = z.enum(['none', 'old', 'offline', 'otherPc', 'timeout', 'revoked', 'connected', 'rate', 'blocked', 'failed']);
+export type RecoverWhy = z.infer<typeof RecoverWhySchema>;
+/** The reasons the PC itself sends in `recover_no`. */
+export const RecoverRefusalSchema = RecoverWhySchema.extract(['revoked', 'connected', 'rate', 'blocked', 'failed']);
+export type RecoverRefusal = z.infer<typeof RecoverRefusalSchema>;
+/** How long the PC's recovery nonce lives, and so how long the phone waits for an answer before `timeout`. */
+export const RECOVER_TTL_MS = 60_000;
+/** A device model in `recover_start` (`iPhone`, `iPad`…), as short as a pairing label. */
+const ModelLabel = z.string().trim().min(1).max(PAIR_LABEL_MAX);
+/** A WebAuthn assertion as the phone encodes it (the same bounds as the phone protocol's `AssertionSchema`). */
+const RecoverAssertion = z.object({
+  id: B64U.max(1_366), clientDataJSON: B64U.max(4_096), authenticatorData: B64U.max(4_096), signature: B64U.max(1_024)
+}).strict();
 
 /** The content of `body` between the PC and a device; the relay never reads it. */
 export const SealedFrameSchema = z.discriminatedUnion('k', [
@@ -51,7 +75,20 @@ export const SealedFrameSchema = z.discriminatedUnion('k', [
   z.object({ k: z.literal('pair_ok') }),
   z.object({ k: z.literal('pair_no') }),
   z.object({ k: z.literal('denied') }),
-  z.object({ k: z.literal('rekey') })
+  z.object({ k: z.literal('rekey') }),
+  // ── Passkey recovery after a reinstall (unsealed, like pairing: nothing in them lets the relay act) ──
+  /** Phone → PC: the app's new device key `d`, its nonce `n`, and what it runs on (`iPhone`, `iPad`), told to the PC as it is. */
+  z.object({ k: z.literal('recover_start'), d: KeyB64, n: Nonce, model: ModelLabel.optional() }),
+  /** PC → phone: its key `pc`, a one-use nonce `n` (60 s), and its name (`WSL`), for the phone's screens. */
+  z.object({ k: z.literal('recover_offer'), pc: KeyB64, n: Nonce, name: z.string().max(PAIR_LABEL_MAX).optional() }),
+  /** Phone → PC: the discoverable assertion over `recoverChallenge(pc, d, pcNonce, n)`, and its `userHandle` (« L1 » ‖ digest ‖ random). */
+  z.object({ k: z.literal('recover_proof'), assertion: RecoverAssertion, userHandle: B64U.max(128) }),
+  /** PC → phone: the device is back under its new key; `name` the one it keeps. The phone pins the PC key, then says `hello`. */
+  z.object({ k: z.literal('recover_ok'), name: z.string().max(PAIR_LABEL_MAX).optional() }),
+  /** PC → phone: refused. `device` the device the passkey names (`revoked`, `connected`); `revokedAt` when it was revoked (ISO,
+   *  `revoked` within 90 days); `retryInMs` until a recovery is taken again (`rate`). */
+  z.object({ k: z.literal('recover_no'), why: RecoverRefusalSchema, device: z.string().max(PAIR_LABEL_MAX).optional(),
+    revokedAt: z.string().datetime().optional(), retryInMs: z.number().int().min(0).optional() })
 ]);
 export type SealedFrame = z.infer<typeof SealedFrameSchema>;
 

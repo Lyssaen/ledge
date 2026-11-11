@@ -51,3 +51,29 @@ describe('relay frames', () => {
     expect(() => SealedFrameSchema.parse({ k: 'pair_reveal', d: key, n: 'B'.repeat(42) })).toThrow();
   });
 });
+
+describe('passkey recovery frames', () => {
+  const KEY = 'B' + 'A'.repeat(86);
+  const NONCE = 'n'.repeat(43);
+  const ASSERTION = { id: 'cid', clientDataJSON: 'cdj', authenticatorData: 'ad', signature: 'sig' };
+  it('parses each recovery frame with its optional fields', () => {
+    for (const f of [
+      { k: 'recover_start', d: KEY, n: NONCE },
+      { k: 'recover_start', d: KEY, n: NONCE, model: 'iPhone' },
+      { k: 'recover_offer', pc: KEY, n: NONCE, name: 'WSL' },
+      { k: 'recover_proof', assertion: ASSERTION, userHandle: 'TDE' },
+      { k: 'recover_ok', name: 'iPad de G' },
+      { k: 'recover_no', why: 'revoked', device: 'iPhone 12', revokedAt: '2026-11-01T10:00:00.000Z' },
+      { k: 'recover_no', why: 'rate', retryInMs: 2_520_000 },
+      ...(['connected', 'blocked', 'failed'] as const).map(why => ({ k: 'recover_no', why }))
+    ]) expect(SealedFrameSchema.parse(f)).toEqual(f);
+  });
+  it('refuses a reason only the phone gives, a bad key or nonce, a long model, and an assertion with more fields', () => {
+    for (const why of ['none', 'old', 'offline', 'otherPc', 'timeout']) expect(SealedFrameSchema.safeParse({ k: 'recover_no', why }).success).toBe(false);
+    expect(SealedFrameSchema.safeParse({ k: 'recover_start', d: 'short', n: NONCE }).success).toBe(false);
+    expect(SealedFrameSchema.safeParse({ k: 'recover_start', d: KEY, n: 'short' }).success).toBe(false);
+    expect(SealedFrameSchema.safeParse({ k: 'recover_start', d: KEY, n: NONCE, model: 'x'.repeat(PAIR_LABEL_MAX + 1) }).success).toBe(false);
+    expect(SealedFrameSchema.safeParse({ k: 'recover_proof', assertion: { ...ASSERTION, extra: 1 }, userHandle: 'TDE' }).success).toBe(false);
+    expect(SealedFrameSchema.safeParse({ k: 'recover_no', why: 'rate', retryInMs: -1 }).success).toBe(false);
+  });
+});

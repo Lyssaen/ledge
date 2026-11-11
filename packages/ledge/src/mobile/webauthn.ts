@@ -5,7 +5,7 @@ import { createHash, createPublicKey, timingSafeEqual, verify, type KeyObject } 
 
 export interface Rp { rpId: string; origin: string }
 /** A registered passkey as the daemon stores it. Strings are base64url. */
-export interface DeviceCredential { id: string; publicKey: string; alg: -7 | -257; counter: number; rpId: string; transports?: string[] }
+export interface DeviceCredential { id: string; publicKey: string; alg: -7 | -257; counter: number; rpId: string; transports?: string[]; recover?: true }
 export interface CredentialInput { id: string; publicKey: string; alg: -7 | -257; clientDataJSON: string; authenticatorData: string; transports?: string[] }
 export interface AssertionInput { id: string; clientDataJSON: string; authenticatorData: string; signature: string }
 type Fail = { ok: false; why: string };

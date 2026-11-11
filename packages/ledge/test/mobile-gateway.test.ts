@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { b64u, generateIdentity, recoveryUserId } from '@ledge/seal';
 import { ATTACHMENT_MAX, PREVIEW_MAX, padPlain, PAD_TIERS, PLAIN_MAX, SNAPSHOT_BODY_MAX, TOPIC_MAX, PhoneServerMessageSchema, pendingKey, type ClientMessage, type Pending, type ServerMessage, type Session, type Task } from '@ledge/protocol';
 import { hostname } from 'node:os';
 import { broadcastFromUser } from '../src/daemon/broadcast.js';
@@ -714,6 +715,34 @@ describe('phone gateway: device key', () => {
     await flush();
     expect(g.results('dev1').at(-1)).toMatchObject({ status: 'rejected', reason: 'assertion_invalid' });
     expect(g.stored).toEqual([]);
+  });
+
+  it('a passkey registered with a userId made for this PC key can bring the device back: stored `recover`, said in the snapshot', async () => {
+    const pc = await generateIdentity();
+    const g = setup();
+    g.fm.setPcKey(pc.publicKey);
+    const c = await prepare(g);
+    g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: softAuthenticator().create(rp, c.challenge), userId: b64u(await recoveryUserId(pc.publicKey)) });
+    // The digest is WebCrypto's, a few ticks away.
+    await vi.waitFor(() => expect(g.results('dev1').at(-1)).toMatchObject({ status: 'applied' }));
+    expect(g.creds.get('dev1')).toMatchObject({ recover: true });
+    expect(g.got('dev1').filter(m => m.type === 'snapshot').at(-1)).toMatchObject({ device: { confirm: true, recover: true } });
+  });
+
+  it('a userId made for another PC, an old random one, or none: registered as before, without `recover`', async () => {
+    const pc = await generateIdentity();
+    const other = await generateIdentity();
+    for (const userId of [b64u(await recoveryUserId(other.publicKey)), b64u(randomBytes(16)), undefined]) {
+      const g = setup();
+      g.fm.setPcKey(pc.publicKey);
+      const c = await prepare(g);
+      g.send('dev1', { type: 'credential.register', op: randomUUID(), credential: softAuthenticator().create(rp, c.challenge), ...(userId ? { userId } : {}) });
+      await vi.waitFor(() => expect(g.results('dev1').at(-1)).toMatchObject({ status: 'applied' }));
+      expect(g.creds.get('dev1')).not.toHaveProperty('recover');
+      const snap = g.got('dev1').filter(m => m.type === 'snapshot').at(-1);
+      expect(snap).toMatchObject({ device: { confirm: true } });
+      expect(snap?.type === 'snapshot' && snap.device).not.toHaveProperty('recover');
+    }
   });
 
   it('without a secure relay URL there is no challenge and no device check', async () => {

@@ -11,6 +11,9 @@ type Emit = (m: ChatMessage) => void;
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const checkId = (id: string) => { if (!SAFE_ID.test(id)) throw new Error('invalid device id'); };
 
+/** Where a paired device's thread keeps its turns: under the Ledge home, by the device's id. */
+export const deviceChatDir = (home: string, id: string): string => { checkId(id); return join(home, 'mobile', 'chat', id); };
+
 /** A pool of places shared by the threads: `take` is refused once `max` questions run. */
 export function createSlots(max = 3): { take(): boolean; give(): void } {
   let used = 0;
@@ -28,7 +31,7 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
   const devices = new Map<string, Chat>();
   const emitters = new Map<ChatThreadId, Emit>();
   const dropping = new Map<string, Promise<void>>();
-  const deviceHome = (id: string) => join(deps.home, 'mobile', 'chat', id);
+  const deviceHome = (id: string) => deviceChatDir(deps.home, id);
   /** A device keeps its conversations 7 days (M3 Q33), in its own folder: forgetting the device removes them with it. */
   const kept = new Map<string, Conversations>();
   const keptOf = (id: string): Conversations => {
@@ -40,9 +43,15 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
   void readdir(join(deps.home, 'mobile', 'chat')).then(ids => Promise.all(ids.filter(id => SAFE_ID.test(id) && !dropping.has(id)).map(id => keptOf(id).prune())))
     .catch((e: NodeJS.ErrnoException) => { if (e.code !== 'ENOENT') log(`chat conversations not pruned (${e.code ?? e.name})`); });
 
+  /** The devices whose folder is about to move (passkey recovery): no thread opens on them until it is released. */
+  const held = new Map<string, Promise<void>>();
+  /** A hold still stopping the device's question and its writes. */
+  const quieting = new Map<string, Promise<void>>();
+
   const device = (id: string): Chat => {
     checkId(id);
     if (dropping.has(id)) throw new Error('device thread is being dropped');
+    if (held.has(id)) throw new Error('device thread is held');
     let c = devices.get(id);
     if (!c) { c = createChat({ ...rest, home: deviceHome(id), slots, conversations: keptOf(id) }); devices.set(id, c); }
     return c;
@@ -69,15 +78,46 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
       const running = dropping.get(id); if (running) return running;
       const c = devices.get(id);
       devices.delete(id); emitters.delete(`device:${id}`); const k = kept.get(id); kept.delete(id);
+      // Read now: a hold that starts after this drop waits for it instead.
+      const holding = quieting.get(id);
       const p = (async () => {
         try {
           if (c) { for (const t of c.history()) c.cancel(t.qid); await c.idle(); }
           await k?.close();
+          // A hold under way holds the thread and its conversations: their last writes land before the folder goes.
+          await holding;
           await rm(deviceHome(id), { recursive: true, force: true });
         } finally { dropping.delete(id); }
       })();
       dropping.set(id, p);
       return p;
+    },
+    /**
+     * Quiets the device's thread before its folder moves under another id (passkey recovery): its question is stopped, every
+     * write under way lands, its conversations are closed, and no thread opens on it until the returned function is called. The
+     * next look at the device, if it stays, opens a fresh thread from its folder; its emitter is kept for that one.
+     */
+    async hold(id: string): Promise<() => void> {
+      checkId(id);
+      for (let h = held.get(id); h; h = held.get(id)) await h;
+      let open!: () => void;
+      const p = new Promise<void>(r => { open = r; });
+      held.set(id, p);
+      const release = () => { if (held.get(id) === p) held.delete(id); open(); };
+      const quiet = (async () => {
+        await dropping.get(id);
+        const c = devices.get(id); const k = kept.get(id);
+        devices.delete(id); kept.delete(id);
+        if (c) { for (const t of c.history()) c.cancel(t.qid); await c.idle(); }
+        await k?.close();
+      })();
+      // A drop that comes meanwhile (the device revoked) waits for it, not for the release: the recovery's own drop must not wait.
+      const settled = quiet.catch(() => {});
+      quieting.set(id, settled);
+      try { await quiet; }
+      catch (e) { release(); throw e; }
+      finally { if (quieting.get(id) === settled) quieting.delete(id); }
+      return release;
     },
     /** Every thread's queued instructions (each thread's day roll is told to its own emitter), the desktop's first. */
     queuedRelays(): Array<{ thread: ChatThreadId; qid: string; relay: ChatRelay; askedAt: string }> {

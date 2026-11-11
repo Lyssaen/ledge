@@ -39,6 +39,7 @@ import { checklistSummary, toPhoneChecklist } from './project.js';
 import { riskOf } from './risk.js';
 import { CHALLENGE_TTL_MS, type ChallengeStore } from './challenges.js';
 import { challengeOf, verifyAssertion, verifyRegistration, type DeviceCredential, type Rp } from './webauthn.js';
+import { userHandleMatches } from '@ledge/seal';
 
 export interface PhoneGateway {
   /** Passes a message the daemon broadcast to the local fronts on to the devices concerned; anything else is ignored. */
@@ -139,7 +140,7 @@ const ROW_WAIT_MS = 15_000;
 const ROWS_IN_FLIGHT = 8;
 
 export function createPhoneGateway(deps: {
-  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'> & Partial<Pick<MobileService, 'deviceInfo' | 'rename' | 'prefsOf' | 'setPrefs'>>;
+  mobile: Pick<MobileService, 'send' | 'onMessage' | 'state' | 'onChange' | 'revoke' | 'pushOf' | 'setPush' | 'relayPushKey'> & Partial<Pick<MobileService, 'deviceInfo' | 'rename' | 'prefsOf' | 'setPrefs' | 'pcKey'>>;
   /** The relying party of the current relay; none when it is not served over https or from localhost. */
   rp: () => Rp | null;
   challenges: ChallengeStore;
@@ -336,7 +337,7 @@ export function createPhoneGateway(deps: {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, rigRows: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
       ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), ...(deps.usage ? { usage: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}), ...(settings ? { settings: true as const } : {}), ...(projects ? { projectEdit: true as const } : {}), ...(projects && deps.folders ? { projectFolders: true as const } : {}), ...(deps.rigs ? { rigs: true as const } : {}), ...(projects && deps.launch ? { launch: true as const } : {}), ...(deps.forge ? { forge: true as const } : {}), ...(deps.chats ? { conversations: true as const } : {}) },
     ...(projects ? { projects: toPhoneProjects(projects) } : {}),
-    device: { confirm: deps.credential(deviceId) !== null, push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}), id: deviceId, ...ownInfo(deviceId), ...(settings ? { prefs: mobile.prefsOf!(deviceId) } : {}) }
+    device: { confirm: deps.credential(deviceId) !== null, ...(deps.credential(deviceId)?.recover ? { recover: true as const } : {}), push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}), id: deviceId, ...ownInfo(deviceId), ...(settings ? { prefs: mobile.prefsOf!(deviceId) } : {}) }
     };
     // The daemon takes `session.model` and lists an agent's models (#58).
     return deps.models ? { ...message, daemon: { ...message.daemon, models: true } } : message;
@@ -504,8 +505,11 @@ export function createPhoneGateway(deps: {
     return { status: 'rejected', reason: known.success ? known.data : 'invalid' };
   };
 
-  /** The device's passkey, checked over the challenge `confirm.prepare` gave it. The challenge is spent whatever the verdict. */
-  const register = (deviceId: string, msg: Extract<PhoneOperation, { type: 'credential.register' }>): Outcome => {
+  /**
+   * The device's passkey, checked over the challenge `confirm.prepare` gave it. The challenge is spent whatever the verdict. A `userId`
+   * carrying this PC key's digest (« L1 ») marks it as one that can bring the device back after a reinstall (`recover`).
+   */
+  const register = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'credential.register' }>): Promise<Outcome> => {
     const challenge = challengeOf(msg.credential.clientDataJSON);
     const rp = deps.rp();
     const invalid: Outcome = { status: 'rejected', reason: 'assertion_invalid' };
@@ -515,7 +519,10 @@ export function createPhoneGateway(deps: {
     if (verdict !== 'ok' || !rp) return invalid;
     const verified = verifyRegistration(msg.credential, rp, challenge);
     if (!verified.ok) return invalid;
-    deps.setCredential(deviceId, verified.credential);
+    const key = mobile.pcKey?.();
+    const recover = msg.userId !== undefined && key !== undefined && (await userHandleMatches(msg.userId, key)) === 'ok';
+    if (msg.userId !== undefined && !recover) log(`phone: device ${deviceId} registered a passkey not made for this PC key`);
+    deps.setCredential(deviceId, recover ? { ...verified.credential, recover: true } : verified.credential);
     return { status: 'applied' };
   };
 

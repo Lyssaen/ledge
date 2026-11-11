@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, readFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
@@ -197,5 +197,26 @@ describe('chat threads', { timeout: 20_000 }, () => {
     expect(threads.queuedRelays().map(q => [q.thread, q.qid, q.relay.text])).toEqual([['desktop', 'qp', 'from pc'], ['device:d1', 'qd', 'from phone']]);
     expect(threads.queuedRelays().every(q => typeof q.askedAt === 'string')).toBe(true);
     expect(threads.owner('qd')).toBe('device:d1');
+  });
+  it('a device restored under a new id while its thread runs (passkey recovery): the moved folder is kept, the old thread stopped', async () => {
+    const s = setup(); const a = collect();
+    const p = s.threads.device('old').ask('q1', 'x', a.emit);
+    await vi.waitFor(() => expect(s.kids).toHaveLength(1));
+    const from = join(s.home, 'mobile', 'chat', 'old');
+    const to = join(s.home, 'mobile', 'chat', 'new');
+    const day = readFileSync(join(from, 'chat.json'), 'utf8');
+    // What the restore does: the folder moves, then the old id leaves the list and the gateway drops its thread.
+    renameSync(from, to);
+    const d = s.threads.drop('old');
+    await vi.waitFor(() => expect(s.kids[0]!.killed).toBe(true));
+    await p; await d;
+    expect(readFileSync(join(to, 'chat.json'), 'utf8')).toBe(day);
+    expect(existsSync(from)).toBe(false);
+    // The new id's thread resumes from the moved day file.
+    expect(s.threads.peek('new')).toBeUndefined();
+    const b = collect(); const q = s.threads.device('new').ask('q2', 'y', b.emit);
+    await vi.waitFor(() => expect(s.kids).toHaveLength(2));
+    s.end(1); await q;
+    expect(JSON.parse(readFileSync(join(to, 'chat.json'), 'utf8')).sessionId).toBe(JSON.parse(day).sessionId);
   });
 });

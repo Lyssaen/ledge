@@ -1,9 +1,11 @@
 // Mobile access: files, relay link, sign-in, pairing and channels put together, as one state and a set of commands
 // for the local fronts. Nothing secret (relay token, device code, keys, nonces, message texts) reaches the state or the log.
+import { existsSync, renameSync } from 'node:fs';
+import { hostname } from 'node:os';
 import type WebSocket from 'ws';
-import { DEFAULT_DEVICE_PREFS, DeviceNameSchema, DevicePrefsSchema, PushSendResultSchema, SealedFrameSchema, deviceKindOfLabel, type DeviceKind, type DevicePrefs, type PushSend, type PushSendResult, type MobileClientMessage, type MobileConfig, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
+import { DEFAULT_DEVICE_PREFS, DeviceNameSchema, DevicePrefsSchema, PushSendResultSchema, SealedFrameSchema, deviceKindOfLabel, type DeviceKind, type DevicePrefs, type PushSend, type PushSendResult, type MobileClientMessage, type MobileConfig, type MobileRecoveryEvent, type MobileState, type RelayServerMessage, type SealedFrame } from '@ledge/protocol';
 import {
-  clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRelaySession, readRevocations, writeDevices, writeMobileConfig, writeRelaySession, writeRevocations,
+  clearRelaySession, loadPcIdentity, readDevices, readMobileConfig, readRecovery, readRelaySession, readRevocations, writeDevices, writeMobileConfig, writeRecovery, writeRelaySession, writeRevocations,
   MAX_DEVICE_PEERS, type ApprovedDevice, type RelaySession, type Revocation
 } from './files.js';
 import { rpOf, type DeviceCredential } from './webauthn.js';
@@ -11,6 +13,9 @@ import { createRelayLink, type LinkState, type RelayLink, type Schedule } from '
 import { signOut, startSignIn } from './signin.js';
 import { createPairing } from './pairing.js';
 import { createChannels } from './channels.js';
+import { createRecovery } from './recover.js';
+import { deviceChatDir } from '../chat/threads.js';
+import { paths } from '../paths.js';
 import { log } from '../log.js';
 
 /** `resolved`: the device's service worker shows a `resolved` push (it replaces a request's notification). */
@@ -46,6 +51,15 @@ export interface MobileService {
   relayPushKey(): string | null | undefined;
   /** Asks the relay to forward an encrypted push (`POST /push/send`, Bearer PC). Never throws. */
   sendPush(msg: PushSend): Promise<PushSendResult>;
+  /** The PC's mobile public key (base64url), as phones pin it. */
+  pcKey(): string;
+  /** Each passkey recovery event as it happens (for the local fronts' toast); returns the unsubscribe. */
+  onRecovery(fn: (e: MobileRecoveryEvent) => void): () => void;
+  /**
+   * How a passkey recovery quiets a device's chat before its folder moves: `hold` stops its question and waits for every write
+   * under way, so nothing lands in the old path; the returned function lets the thread open again.
+   */
+  holdChats?(hold: (deviceId: string) => Promise<() => void>): void;
   /** Texts opened from approved devices' sealed messages; returns the unsubscribe. */
   onMessage(fn: (deviceId: string, text: string) => void): () => void;
   stop(): Promise<void>;
@@ -92,6 +106,12 @@ export async function createMobileService(opts: {
 
   const changeListeners = new Set<() => void>();
   const messageListeners = new Set<(deviceId: string, text: string) => void>();
+  const recoveryListeners = new Set<(e: MobileRecoveryEvent) => void>();
+  const told = (e: MobileRecoveryEvent) => {
+    for (const fn of recoveryListeners) {
+      try { fn(e); } catch (err) { log(`mobile: recovery listener failed (${(err as Error).message})`); }
+    }
+  };
   const changed = () => {
     if (stopped) return;
     for (const fn of changeListeners) {
@@ -138,12 +158,22 @@ export async function createMobileService(opts: {
     devices: () => devices,
     send: sendFrame,
     onConfirmed(deviceId, peer) {
-      if (devices.some((d) => d.id === deviceId)) {
+      const d0 = devices.find((d) => d.id === deviceId);
+      if (d0) {
         const at = new Date(now()).toISOString();
+        // A device put back with its passkey is back for real once its new key says hello: then Desktop hears it.
+        const back = d0.recovering;
+        const confirmed = (d: ApprovedDevice): ApprovedDevice => {
+          if (!d.recovering) return d;
+          const { recovering, ...rest } = d;
+          return { ...rest, recovered: { at: recovering.at, ...(recovering.model ? { model: recovering.model } : {}), pending: true } };
+        };
         // A peer belongs to the device that confirmed on it last: a browser that lost its keys and paired again keeps its
         // cookie, so the same peer; the old device no longer owns it, and revoking that one must not revoke this peer.
-        try { saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, lastPeer: peer, lastSeenAt: at, peers: withPeer(d, peer) } : withoutPeer(d, peer)))); }
+        let saved = false;
+        try { saveDevices(devices.map((d) => (d.id === deviceId ? confirmed({ ...d, lastPeer: peer, lastSeenAt: at, peers: withPeer(d, peer) }) : withoutPeer(d, peer)))); saved = true; }
         catch (e) { log(`mobile: devices.json not written (${(e as Error).message})`); }
+        if (back && saved) told({ event: 'recovered', id: deviceId, at: back.at });
       }
       pairing.linked(deviceId);
       changed();
@@ -157,11 +187,84 @@ export async function createMobileService(opts: {
     now
   });
 
+  /** What a device is called on the PC's screens and the phone's: its name, else its pairing label. */
+  const shownName = (d: ApprovedDevice) => (d.name ?? d.label).slice(0, 40);
+  const online = (id: string) => linkState.state === 'online' && channels.online().has(id);
+
+  /** Set by the daemon once its chat threads exist; without it (tests, no chat) there is nothing to quiet. */
+  let holdChat: ((deviceId: string) => Promise<() => void>) | null = null;
+  const recovery = createRecovery({
+    pc,
+    hold: (id) => (holdChat ? holdChat(id) : Promise.resolve(() => {})),
+    pcName: () => hostname().slice(0, 40) || undefined,
+    send: sendFrame,
+    rp: () => rpOf(config.relayUrl),
+    byCredential(credentialId) {
+      const rpId = rpOf(config.relayUrl)?.rpId;
+      const d = devices.find((x) => x.credential?.id === credentialId && x.credential.rpId === rpId);
+      return d?.credential ? { id: d.id, name: shownName(d), credential: d.credential } : null;
+    },
+    online,
+    restore(old, next) {
+      const d = devices.find((x) => x.id === old.id);
+      if (!d || !d.credential) throw new Error('no such device');
+      if (d.credential.id !== old.credential.id || d.credential.publicKey !== old.credential.publicKey) throw new Error('its passkey changed');
+      if (devices.some((x) => x.id === next.id)) throw new Error('that key is already approved');
+      const at = new Date(now()).toISOString();
+      // Inherits what the user knows the device by; the push and the peers belonged to the deleted app.
+      const { push: _push, peers: _peers, lastPeer: _last, lastSeenAt: _seen, refused: _refused, ...kept } = d;
+      const entry: ApprovedDevice = {
+        ...kept, id: next.id, publicKey: next.publicKey, lastPeer: next.peer, peers: [next.peer],
+        credential: { ...d.credential, counter: next.counter }, recovering: { at, ...(next.model ? { model: next.model } : {}) }
+      };
+      // The thread's folder first: the old id leaving the list drops its thread, folder included. A folder that cannot be moved
+      // stops the restore with nothing changed, and a list that cannot be written puts the folder back: the thread is never lost.
+      const from = deviceChatDir(paths().dir, old.id);
+      const to = deviceChatDir(paths().dir, next.id);
+      if (existsSync(to)) throw new Error('the new key already has a chat folder');
+      let moved = false;
+      try { renameSync(from, to); moved = true; }
+      catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`its chat was not moved (${(e as NodeJS.ErrnoException).code ?? 'error'})`); }
+      try { saveDevices([...devices.filter((x) => x.id !== old.id).map((x) => withoutPeer(x, next.peer)), entry]); }
+      catch (e) {
+        if (moved) {
+          try { renameSync(to, from); }
+          catch (back) { log(`mobile recovery: chat of ${old.id} left at ${next.id} (${(back as NodeJS.ErrnoException).code ?? 'error'})`); }
+        }
+        throw e;
+      }
+      channels.dropDevice(old.id);
+      // The old app's relay sessions go, as in a revocation, but its passkey lives on in the new entry: no tombstone.
+      const others = new Set(devices.flatMap(peersOf));
+      const peers = peersOf(d).filter((p) => !others.has(p));
+      for (const p of peers) sendFrame(p, { k: 'denied' });
+      void Promise.all(peers.map((p) => revokeOnRelay(p)));
+      // Desktop hears it at the new key's first hello (onConfirmed): a phone that failed to keep the PC's key never says it.
+      changed();
+      return shownName(entry);
+    },
+    refused(id, model) {
+      const at = new Date(now()).toISOString();
+      try { saveDevices(devices.map((x) => (x.id === id ? { ...x, refused: { at, ...(model ? { model } : {}) } } : x))); }
+      catch (e) { log(`mobile: devices.json not written (${(e as Error).message})`); }
+      told({ event: 'refused', id, at });
+      changed();
+    },
+    onBlocked() {
+      told({ event: 'blocked', at: new Date(now()).toISOString() });
+      changed();
+    },
+    file: { read: readRecovery, write: writeRecovery },
+    now,
+    ...(opts.schedule ? { schedule: opts.schedule } : {})
+  });
+
   const onRelayMessage = (m: RelayServerMessage) => {
     switch (m.type) {
       case 'welcome':
         channels.reset();
         pairing.reset();
+        recovery.reset();
         changed();
         return;
       case 'deliver': {
@@ -171,7 +274,9 @@ export async function createMobileService(opts: {
         const r = SealedFrameSchema.safeParse(raw);
         if (!r.success) return;
         // Dispatched synchronously, so the frames of one peer reach their handler in arrival order.
-        if (r.data.k.startsWith('pair_')) {
+        if (r.data.k.startsWith('recover_')) {
+          recovery.receive(m.from, r.data).catch((e: unknown) => log(`mobile recovery: error on peer ${m.from} (${(e as Error).name})`));
+        } else if (r.data.k.startsWith('pair_')) {
           pairing.receive(m.from, r.data).catch((e: unknown) => log(`mobile pairing: error on peer ${m.from} (${(e as Error).name})`));
         } else {
           void channels.receive(m.from, r.data);
@@ -193,7 +298,7 @@ export async function createMobileService(opts: {
     link = null;
     old?.close();
     // Pairings still to decide cannot be answered without a link; channels are reset by the next welcome.
-    if (old) pairing.reset();
+    if (old) { pairing.reset(); recovery.reset(); }
     linkState = { state: 'off' };
     pushKey = undefined; // belongs to the relay of the closed link
   };
@@ -341,6 +446,8 @@ export async function createMobileService(opts: {
     if (!d) return; // already revoked: nothing to do
     saveDevices(devices.filter((x) => x.id !== id));
     log(`mobile: revoked device ${id}`);
+    // Its passkey still opens nothing, but for 90 days a recovery with it hears « révoqué le … » rather than « inconnu ».
+    if (d.credential) recovery.bury(d.credential.id, shownName(d), new Date(now()).toISOString());
     // Removed from the list first: dropDevice then answers the device's next msg with `denied`.
     channels.dropDevice(id);
     // Every peer the device ever confirmed a channel on: an older relay session of it must not stay valid. A peer another
@@ -378,10 +485,12 @@ export async function createMobileService(opts: {
         link: linkState,
         devices: devices.map((d) => ({
           id: d.id, label: d.label, approvedAt: d.approvedAt, online: online.has(d.id), ...(d.lastSeenAt ? { lastSeenAt: d.lastSeenAt } : {}),
-          kind: d.kind ?? deviceKindOfLabel(d.label), ...(d.name ? { name: d.name } : {})
+          kind: d.kind ?? deviceKindOfLabel(d.label), ...(d.name ? { name: d.name } : {}),
+          ...(d.credential?.recover ? { recover: true as const } : {}), ...(d.recovered ? { recovered: d.recovered } : {}), ...(d.refused ? { refused: d.refused } : {})
         })),
         pairings: pairing.views(),
-        terminalInput: config.terminalInput === true
+        terminalInput: config.terminalInput === true,
+        ...(recovery.blocked() ? { recovery: { blocked: recovery.blocked()! } } : {})
       };
     },
 
@@ -429,6 +538,8 @@ export async function createMobileService(opts: {
     },
 
     relayPushKey: () => pushKey,
+
+    pcKey: () => pc.publicKey,
 
     async sendPush(msg) {
       const at = session;
@@ -528,10 +639,34 @@ export async function createMobileService(opts: {
         case 'mobile.device.rename':
           rename(msg.id, msg.name);
           return;
+        case 'mobile.device.ack': {
+          if (!devices.some((d) => d.id === msg.id)) throw new Error('no such device');
+          saveDevices(devices.map((d) => {
+            if (d.id !== msg.id) return d;
+            if (msg.what === 'refused') { const { refused: _r, ...rest } = d; return rest; }
+            if (!d.recovered) return d;
+            const { pending: _p, ...trace } = d.recovered;
+            return { ...d, recovered: trace };
+          }));
+          changed();
+          return;
+        }
+        case 'mobile.recovery.unblock':
+          recovery.unblock();
+          log('mobile recovery: unblocked on the PC');
+          changed();
+          return;
       }
     },
 
     send: (deviceId, text) => channels.send(deviceId, text),
+
+    onRecovery(fn) {
+      recoveryListeners.add(fn);
+      return () => { recoveryListeners.delete(fn); };
+    },
+
+    holdChats(hold) { holdChat = hold; },
 
     onMessage(fn) {
       messageListeners.add(fn);
@@ -543,7 +678,9 @@ export async function createMobileService(opts: {
       cancelSignin();
       closeLink();
       pairing.stop();
+      recovery.stop();
       stopped = true;
+      recoveryListeners.clear();
       changeListeners.clear();
       messageListeners.clear();
     }
