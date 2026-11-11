@@ -236,8 +236,10 @@ export const en: Copy = {
       verbs: {
         'session.model': 'Change', 'session.interrupt': 'Interrupt', 'session.archive': 'Archive', 'session.restore': 'Restore', 'session.resume': 'Resume',
         'session.decide': 'Accept',
-        'task.cancel': 'Drop', 'task.pass': 'Hand over', 'task.answer': 'Answer', 'note.add': 'Add'
+        'task.cancel': 'Drop', 'task.pass': 'Hand over', 'task.answer': 'Answer', 'note.add': 'Add',
+        'rig.act': 'Apply', 'rig.seats': 'Change'
       } as Record<string, string>,
+      verb: (action: string | undefined, v: ActionVars): string | undefined => actionWords.en.verb(action, v),
       apply: 'Apply', deny: 'Deny', ignore: 'Ignore', review: 'Review', retry: 'Retry', running: 'Running…',
       done: (at: string) => `Applied${at ? ` · ${at}` : ''}`, refusedState: 'Refused', denied: (at: string) => `Denial sent${at ? ` · ${at}` : ''}`,
       open: (name: string) => `Open ${name}`,

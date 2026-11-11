@@ -26,7 +26,7 @@ const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString(locale, 
 const lineOf = (r: ActionRowView) => (r.vars && r.action !== undefined ? C.line(r.action, r.vars) : undefined) ?? r.summary;
 const deniedLine = (r: ActionRowView) => (r.vars && r.action === 'session.decide' ? C.line('session.decide', { ...r.vars, decision: 'deny' }) : undefined) ?? lineOf(r);
 const whyOf = (r: ActionRowView) => C.why(r.code ?? (r.state === 'failed' ? 'failed' : undefined), r.action, r.vars ?? {});
-const verbOf = (r: ActionRowView) => (r.action !== undefined ? C.verbs[r.action] : undefined) ?? C.apply;
+const verbOf = (r: ActionRowView) => C.verb(r.action, r.vars ?? {}) ?? (r.action !== undefined ? C.verbs[r.action] : undefined) ?? C.apply;
 
 function Risk({ r }: { r: ActionRowView }) {
   const destructive = r.risk === 'destructive';

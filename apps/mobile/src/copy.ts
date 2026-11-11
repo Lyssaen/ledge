@@ -239,8 +239,11 @@ const fr = {
       verbs: {
         'session.model': 'Changer', 'session.interrupt': 'Interrompre', 'session.archive': 'Archiver', 'session.restore': 'Restaurer', 'session.resume': 'Reprendre',
         'session.decide': 'Accepter',
-        'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais', 'task.answer': 'Répondre', 'note.add': 'Ajouter'
+        'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais', 'task.answer': 'Répondre', 'note.add': 'Ajouter',
+        'rig.act': 'Appliquer', 'rig.seats': 'Changer'
       } as Record<string, string>,
+      /** An OpenRig row's button, its line's verb (M3 Q34); undefined: the action's verb above. */
+      verb: (action: string | undefined, v: ActionVars): string | undefined => actionWords.fr.verb(action, v),
       apply: 'Appliquer', deny: 'Refuser', ignore: 'Ignorer', review: 'Revoir', retry: 'Réessayer', running: 'En cours…',
       done: (at: string) => `Appliquée${at ? ` · ${at}` : ''}`, refusedState: 'Refusée', denied: (at: string) => `Refus envoyé${at ? ` · ${at}` : ''}`,
       open: (name: string) => `Ouvrir ${name}`,

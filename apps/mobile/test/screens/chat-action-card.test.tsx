@@ -25,6 +25,16 @@ const cancel: PhoneChatAction = { action: 'task.cancel', summary: 'Annuler la t�
 const card = () => screen.getByRole('region', { name: /Action proposée|Plan de/ });
 
 describe('the action card', () => {
+  // M3 §5, Q34: an OpenRig row's button is its line's verb; without one, the action's own (Appliquer / Changer).
+  it('an OpenRig row says its verb on its button', () => {
+    open({ actions: [
+      { action: 'rig.act', summary: 'Redémarrer le rig **ledge-dev**', vars: { kind: 'rig.restart', rig: 'ledge-dev' }, risk: 'destructive' },
+      { action: 'rig.act', summary: 'Prendre une action sur **ledge-dev**', vars: { kind: 'rig.unknown', rig: 'ledge-dev' }, risk: 'reversible' }
+    ] });
+    expect(within(card()).getByRole('button', { name: 'Redémarrer…' })).toBeInTheDocument();
+    expect(within(card()).getByRole('button', { name: 'Appliquer…' })).toBeInTheDocument();
+  });
+
   it('draws a cancellation with its risk, and confirms it in a sheet before any check', async () => {
     const t = open({ actions: [cancel] });
     const spy = vi.spyOn(t.store, 'act').mockResolvedValue({ status: 'applied' });
