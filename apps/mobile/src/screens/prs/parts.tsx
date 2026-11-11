@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { PhoneForgeStatus, PipeStatus, PullRequest } from '@ledge/protocol';
 import { copy, locale } from '../../copy';
-import { cliOf, PIPE_DOT } from '../../model/prs';
+import { cliOf, PIPE_DOT, type MergeCondition } from '../../model/prs';
 import { daysAgo } from '../../model/rigs';
 import { Icon } from '../../ui/icons';
 import { Dot } from '../../ui/kit/marks';
@@ -49,7 +49,22 @@ export function dayTime(iso: string, now = new Date()): string {
   return `${d.toLocaleDateString(locale, ago < 7 ? { weekday: 'long' } : { day: 'numeric', month: 'short' })} ${t}`;
 }
 
-/** A request's row: the pipeline's dot, its number and title, then its line and what matters, in words. */
+/** A merge condition's sentence, Desktop's (« Il manque une approbation (0/1). », « Pipeline réussi »); a code the phone does not know, as is. */
+export function condText(c: MergeCondition, host: string): string {
+  if (c.ok) {
+    if (c.key === 'approved') return C.ok.approved(c.given, c.required);
+    return C.ok[c.key];
+  }
+  switch (c.key) {
+    case 'draft': return C.blocker.draft(host);
+    case 'approvals': return C.blocker.approvals(c.given, c.required);
+    case 'changes_requested': return C.blocker.changes_requested(c.who);
+    case 'raw': return c.code;
+    default: return C.blocker[c.key];
+  }
+}
+
+/** A request's row:the pipeline's dot, its number and title, then its line and what matters, in words. */
 export function PrRow({ pr, sub, chips, href, dim = false, selected = false }: {
   pr: PullRequest; sub: string; chips?: ReactNode; href?: string; dim?: boolean; selected?: boolean;
 }) {
