@@ -216,6 +216,41 @@ describe('the forge store', () => {
     expect(t.of('forge.act')).toHaveLength(1);
   });
 
+  it('sends again, to the same process, a run that left on a new link before its snapshot came: it is neither lost nor sent twice', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const ended = t.forge.act(pr().id, { kind: 'comment', body: 'Merci' });
+    await vi.waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    t.deliver(CHALLENGE);
+    // The check is under way when the link drops and comes back; it ends before the new link's snapshot.
+    t.set('pc_offline');
+    t.set('ready');
+    await vi.waitFor(() => expect(t.of('forge.act')).toHaveLength(1));
+    const sent = t.of('forge.act')[0]!;
+    t.deliver(snap(BOOT));
+    expect(t.of('forge.act')).toHaveLength(1);
+    expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'sending', boot: BOOT });
+    expect(t.forge.getState().runs[0]!.lost).toBeUndefined();
+    t.deliver({ type: 'forge.done', op: sent.op, ok: true });
+    expect(await ended).toMatchObject({ phase: 'done', done: { ok: true } });
+  });
+
+  it('shows a lost run’s late result when it comes, but not a refusal its send again got for itself', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = setup();
+    const { ended, sent } = await acted(t, pr().id, { kind: 'comment', body: 'Merci' });
+    vi.advanceTimersByTime(UNCERTAIN_MS + 1);
+    t.forge.resend((await ended).id);
+    await flush();
+    t.deliver({ type: 'operation.result', op: sent.op, status: 'rejected', reason: 'assertion_invalid' } as PhoneServerMessage);
+    t.deliver({ type: 'forge.done', op: sent.op, ok: false, rejected: 'assertion_invalid' });
+    expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+    // The first send's own end, late: it settles the run.
+    t.deliver({ type: 'forge.done', op: sent.op, ok: true });
+    expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'done', done: { ok: true } });
+    expect(t.forge.getState().runs[0]!.lost).toBeUndefined();
+  });
+
   it('takes a refusal of a send again as uncertain, not as the action not done', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const t = setup();
