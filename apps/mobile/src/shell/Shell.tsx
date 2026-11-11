@@ -205,7 +205,12 @@ function Loading() {
  * A tab's page. On a phone: the banner, then the tab's title and what it says, then its content. On a wide screen, the list's
  * head carries the title, the host pill beside it. Before the PC's first state, its outline instead of the content.
  */
-export function TabPage({ title, subtitle, children, bodyClassName = 'flex flex-col gap-3' }: { title: string; subtitle?: string | undefined; children: ReactNode; bodyClassName?: string }) {
+export function TabPage({ title, subtitle, wideSubtitle, children, bodyClassName = 'flex flex-col gap-3' }: {
+  title: string; subtitle?: string | undefined;
+  /** What the list's head says beside the title on a wide screen (« 3 demandes »); only the tabs whose mockup shows it give one. */
+  wideSubtitle?: string | undefined;
+  children: ReactNode; bodyClassName?: string;
+}) {
   const wide = useWide();
   const { pc, look } = useShell();
   const loading = look === 'loading';
@@ -214,6 +219,7 @@ export function TabPage({ title, subtitle, children, bodyClassName = 'flex flex-
       {wide && (
         <div className="pane-head flex h-[58px] flex-none items-center gap-2 border-b border-line pr-1.5 pl-4">
           <h1 className="text-lg font-semibold">{title}</h1>
+          {wideSubtitle && <span className="min-w-0 truncate text-small text-muted">{wideSubtitle}</span>}
           <HostPill />
         </div>
       )}

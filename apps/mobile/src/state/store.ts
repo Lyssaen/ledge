@@ -153,6 +153,8 @@ export interface MobileStore {
    * `daemon.openrig`, an answer to that ask still on its way). Its end lands on the op (`rig`).
    */
   answerAsk(qitemId: string, answer: HumanAnswer, opts?: { assertion?: Assertion }): string | null;
+  /** Sends again, as itself, this phone's answer to the ask `qitemId` whose outcome is unknown: the PC applies it once. False when there is none. */
+  resendAsk(qitemId: string): boolean;
   /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
   /** `userId`: the passkey's `user.id`, base64url (« L1 » ‖ the PC key's digest ‖ random), so the PC marks it `recover`. */
   registerCredential(c: Credential, userId?: string): string | null;
@@ -761,6 +763,13 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       // One answer to an ask at a time: a second tap while the first goes (or may have gone) sends nothing.
       if (Object.values(state.ops).some(o => o.message.type === 'openrig.answer' && o.message.qitemId === qitemId && isLive(o.phase))) return null;
       return write(op => ({ type: 'openrig.answer', op, qitemId, answer, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
+    },
+
+    resendAsk(qitemId) {
+      const mine = (o: Op) => o.phase === 'uncertain' && o.message.type === 'openrig.answer' && o.message.qitemId === qitemId;
+      if (!ready() || !Object.values(state.ops).some(mine)) return false;
+      resend(mine);
+      return true;
     },
 
     answer(id, requestId, answers, opts) {

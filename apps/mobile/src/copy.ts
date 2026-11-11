@@ -76,7 +76,10 @@ const fr = {
     calmHint: 'Aucune session ni aucun rig n’a besoin de ta décision. Les nouvelles demandes arrivent ici, et sur l’écran verrouillé si les notifications sont activées.',
     nothingRunning: 'Aucune session ne travaille non plus pour l’instant.',
     seeSessions: 'Voir les sessions',
-    keys: 'Y / N au clavier'
+    keys: 'Y / N au clavier',
+    /** A request's row on a wide screen (§12): « Pim Autoriser une commande »; a question keeps its pill's word. */
+    line: { permission: 'Autoriser une commande' },
+    openThread: 'Ouvrir le fil'
   },
   /** OpenRig's asks, with Desktop's words (apps/desktop/src/i18n/fr.ts, `asks`), and the device check of an answer (Q63 to Q66). */
   asks: {

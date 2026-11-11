@@ -68,7 +68,9 @@ export function AskCard({ store, ask, end, fresh, ghost, canConfirm, enroll, onG
       assertion = signed;
     }
     const op = store.answerAsk(ask.id, answer, assertion ? { assertion } : {});
-    if (op === null) { setTurning(null); setProblem('notSent'); return; }
+    // From here the op says where the answer stands (`end`): the card is free for the next question, or for « Réessayer ».
+    setTurning(null);
+    if (op === null) { setProblem('notSent'); return; }
     if (answer.kind === 'words' || answer.kind === 'resolve') setComposing(false);
   };
 
@@ -87,7 +89,8 @@ export function AskCard({ store, ask, end, fresh, ghost, canConfirm, enroll, onG
   }
   const retry = (a: HumanAnswer) => { void go(last?.key ?? 'retry', a); };
   if (end.kind === 'uncertain') {
-    return <Receipt tone="warn" title={copy.decide.uncertain} body={A.uncertain} action={{ label: A.retry, onClick: () => retry(end.answer), disabled: !fresh || turning !== null }} />;
+    // It may have arrived: the same operation goes again, never a new answer, and OpenRig says where it stands.
+    return <Receipt tone="warn" title={copy.decide.uncertain} body={A.uncertain} action={{ label: A.retry, onClick: () => { store.resendAsk(ask.id); }, disabled: !fresh }} />;
   }
   if (end.kind === 'failed') {
     const why = end.error === 'openrig_stopped' ? A.stopped : end.error === 'unreachable' ? A.unreachable : end.message ?? end.error;

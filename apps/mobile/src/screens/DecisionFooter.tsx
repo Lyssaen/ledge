@@ -50,6 +50,8 @@ export interface DecisionFooterProps {
   multi?: { missing: number; onSend: () => void; onCancel: () => void } | undefined;
   /** A wide screen (m1-a-toi.html §12): the buttons on one row, and Y / N decide from the keyboard. */
   keys?: boolean;
+  /** The way to the thread, unless the screen's head already gives it (« Ouvrir le fil », §12). */
+  withThread?: boolean;
 }
 
 function reasonText(item: InboxItem, r: Extract<Outcome, { kind: 'rejected' | 'failed' }>['reason']): string {
@@ -72,7 +74,7 @@ function reasonText(item: InboxItem, r: Extract<Outcome, { kind: 'rejected' | 'f
  * footer never offers one it could not honour. A high-impact accept is confirmed with the device when the PC checks it (`RiskConfirm`), else done on the PC.
  */
 export function DecisionFooter(p: DecisionFooterProps) {
-  const { item, outcome, fresh, changed, stillPending, onReread, onDecide, answerable = false, choice = null, onAnswer, answerBlocked = false, onCheck, refused = false, store, deviceConfirm = false, optionReply, multi, keys = false } = p;
+  const { item, outcome, fresh, changed, stillPending, onReread, onDecide, answerable = false, choice = null, onAnswer, answerBlocked = false, onCheck, refused = false, store, deviceConfirm = false, optionReply, multi, keys = false, withThread: threadShown = true } = p;
   const D = copy.decide;
   const [checking, setChecking] = useBusy();
   const platform = usePlatform();
@@ -94,12 +96,13 @@ export function DecisionFooter(p: DecisionFooterProps) {
   });
 
   const thread = <a href={p.threadHref ?? href({ name: 'thread', sessionId: item.sessionId })} className={full('ghost')}>{copy.result.thread(item.botName)}</a>;
-  // The board's order: what to do, then the way to the thread, then what a tap does.
+  // The board's order: what to do, then the way to the thread, then what a tap does. A phone on its side (under 500 px of height)
+  // keeps the request above the buttons: the footer gives up the hint and the thread's line.
   const wrap = (children: ReactNode, hint?: string, withThread = true) => (
-    <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-4">
+    <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-4 phone-side:pb-2">
       {children}
-      {withThread && thread}
-      {hint && <p className="text-center text-meta text-muted">{hint}</p>}
+      {withThread && threadShown && <div className="phone-side:hidden">{thread}</div>}
+      {hint && <p className="text-center text-meta text-muted phone-side:hidden">{hint}</p>}
     </footer>
   );
 
@@ -134,14 +137,14 @@ export function DecisionFooter(p: DecisionFooterProps) {
       <span className="font-mono text-small text-muted">{copy.atoi.keys}</span>
     </div>
   ) : (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex gap-2.5">
+    <div className="flex flex-col gap-2.5 phone-side:flex-row">
+      <div className="flex gap-2.5 phone-side:flex-[2]">
         <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={half()}>{D.deny}</button>
         {onPc
           ? <OnPc />
           : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={half('primary')}>{D.allow}</button>}
       </div>
-      {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={full('ghost')}>{copy.atoi.always}</button>}
+      {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={buttonClass({ variant: 'ghost', block: true, className: 'phone-side:w-auto phone-side:flex-1' })}>{copy.atoi.always}</button>}
     </div>
   );
   const linkHint = !fresh ? D.offlineHint : optionReply ? (confirmable ? D.answerHint : D.onPcHint) : multi ? D.answerHint : onPc && !answerable && !confirmable ? D.onPcHint : answerable ? D.answerHint : D.hint;

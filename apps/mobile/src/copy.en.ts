@@ -77,7 +77,9 @@ export const en: Copy = {
     calmHint: 'No session and no rig needs your decision. New requests appear here, and on the lock screen if notifications are on.',
     nothingRunning: 'No session is working right now either.',
     seeSessions: 'See the sessions',
-    keys: 'Y / N on the keyboard'
+    keys: 'Y / N on the keyboard',
+    line: { permission: 'Allow a command' },
+    openThread: 'Open the thread'
   },
   /** OpenRig's asks, with Desktop's words (apps/desktop/src/i18n/en.ts, `asks`), and the device check of an answer (Q63 to Q66). */
   asks: {

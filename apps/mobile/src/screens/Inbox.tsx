@@ -234,7 +234,7 @@ function WideList({ update, state, items, asks, working, showRigs, chipBar, empt
   const route = useRoute();
   const offline = !state.fresh;
   return (
-    <TabPage title={copy.inbox.title} subtitle={subtitle}>
+    <TabPage title={copy.inbox.title} subtitle={subtitle} wideSubtitle={subtitle}>
       {update}
       {chipBar}
       {empty}
@@ -245,7 +245,7 @@ function WideList({ update, state, items, asks, working, showRigs, chipBar, empt
               key={idOf(i)} href={href({ name: 'request', sessionId: i.sessionId, key: i.key })} stale={offline}
               selected={route.name === 'request' && route.sessionId === i.sessionId}
               lead={<RuntimeTag tool={i.tool} />}
-              title={<><b className="font-semibold">{i.botName}</b> {i.risk === 'high' ? copy.risk.badge : copy.atoi.pill[i.kind]}</>}
+              title={<><b className="font-semibold">{i.botName}</b> {i.risk === 'high' ? copy.risk.badge : i.kind === 'permission' ? copy.atoi.line.permission : copy.atoi.pill[i.kind]}</>}
               sub={firstLine(i.kind === 'permission' ? (i.body ?? i.text) : headline(i))}
               meta={ageLabel(i.since, now)}
             />

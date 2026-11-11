@@ -101,14 +101,15 @@ export function SessionCard(p: SessionCardProps) {
   // ── The card ──
   const sending = outcome.kind === 'sending';
   const live = fresh && !changed && !sending && !checking;
+  // The request this card shows, named in every answer: a newer one that took its place on the PC is never decided by this tap.
+  const expect = { key: item.key, kind: item.kind, text: item.text };
   const send = (s: Sent) => {
     setSent(s); setProblem(null);
-    const op = s.kind === 'decide' ? store.decide(item.sessionId, s.decision) : store.reply(item.sessionId, s.text);
+    const op = s.kind === 'decide' ? store.decide(item.sessionId, s.decision, { expect }) : store.reply(item.sessionId, s.text, { expect });
     setRefused(op === null);
   };
   const confirmAccept = async () => {
     if (!live) return;
-    const expect = { key: item.key, kind: item.kind, text: item.text };
     setChecking(true); setProblem(null);
     const signed = await check({ purpose: 'decide', id: item.sessionId, expect });
     setChecking(false);

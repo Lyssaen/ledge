@@ -21,6 +21,8 @@ import { MultiQuestionForm, QuestionForm } from './QuestionForm';
 import { Result } from './Result';
 import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
+import { DetailHeader, kitButtonClass } from '../ui/kit/Controls';
+import { Pill } from '../ui/kit/marks';
 
 function Lost({ onReconnect }: { onReconnect?: (() => void) | undefined }) {
   const [busy, setBusy] = useBusy();
@@ -176,7 +178,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   const optionsLive = fresh && !changed && item !== undefined && outcome.kind !== 'sending' && outcome.kind !== 'uncertain' && (canConfirm || !guarded);
   // An option is answered by its 1-based position: a label could be a digit read as another option, or appear twice.
   const tapOption = (i: number) => {
-    if (guarded) { setPicked(i); setRefused(false); } else setRefused(!store.reply(sessionId, String(i + 1)));
+    if (guarded) { setPicked(i); setRefused(false); } else setRefused(!store.reply(sessionId, String(i + 1), { expect }));
   };
   const optionList = (
     <ul aria-label={copy.answers.legend} className="my-3.5 flex list-none flex-col gap-2 p-0">
@@ -199,25 +201,39 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   const busy = outcome.kind === 'sending' || outcome.kind === 'uncertain';
 
   const send = () => {
-    if (choosingOther) { if (free.problem === null) setRefused(!store.reply(sessionId, free.text)); }
-    else if (choice !== null && choice < options.length) setRefused(!store.reply(sessionId, String(choice + 1)));
+    if (choosingOther) { if (free.problem === null) setRefused(!store.reply(sessionId, free.text, { expect })); }
+    else if (choice !== null && choice < options.length) setRefused(!store.reply(sessionId, String(choice + 1), { expect }));
   };
+
+  const threadHref = panel ? href({ name: 'atelier', sessionId }) : href({ name: 'thread', sessionId });
+  // A wide screen's « À toi » (m1-a-toi.html §12): the head says who asks and where, with its pill and « Ouvrir le fil ».
+  const paneHead = keys && !panel && (
+    <DetailHeader
+      back={<span className="w-2.5" />} tool={req.tool} name={req.botName}
+      dot={req.kind === 'permission' ? 'perm' : req.kind === 'question' ? 'ask' : 'work'}
+      sub={[req.repo, req.branch].filter(Boolean).join(' · ')}
+      more={<>
+        {req.risk === 'high' ? <Pill tone="risk">{copy.risk.badge}</Pill> : <Pill tone={req.kind === 'question' ? 'ask' : req.kind === 'permission' ? 'perm' : 'plain'}>{copy.atoi.pill[req.kind]}</Pill>}
+        <a href={threadHref} className={kitButtonClass({ size: 'sm', className: 'ml-1' })}><Icon name="terminal" className="size-4" />{copy.atoi.openThread}</a>
+      </>}
+    />
+  );
 
   return (
     <>
-      {header(copy.detail.heading[req.kind])}
+      {paneHead || header(copy.detail.heading[req.kind])}
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
-        <div className="mt-4 flex items-start gap-3 rounded-card border border-line bg-surface p-3.5">
+        {!paneHead && <div className="mt-4 flex items-start gap-3 rounded-card border border-line bg-surface p-3.5">
           <MobileBot tool={req.tool} seed={req.sessionId} state={state.sessions.get(sessionId)?.state ?? 'idle'} frozen={!fresh} />
           <div className="min-w-0 flex-1">
             <strong className="block text-body [overflow-wrap:anywhere]">{req.task}</strong>
             <p className="mt-0.5 text-meta text-muted">{req.botName} · {copy.tools[req.tool]}</p>
             <p className="mt-0.5 text-meta [overflow-wrap:anywhere] text-muted">{req.repo}{req.branch && <> · <code className={`font-mono text-[.9em] ${req.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{req.branch}</code></>}</p>
           </div>
-        </div>
+        </div>}
         <div className="mt-[22px] mb-3">
           <Badge kind={req.kind} risk={req.risk} />
-          <h1 className="mt-2.5 text-display leading-[1.25] font-semibold tracking-[-1px] [overflow-wrap:anywhere]">{req.kind === 'permission' ? copy.detail.commandTitle : headline(req)}</h1>
+          <h1 className={`mt-2.5 text-display leading-[1.25] font-semibold tracking-[-1px] [overflow-wrap:anywhere] ${req.kind === 'permission' ? 'phone-side:hidden' : ''}`}>{req.kind === 'permission' ? copy.detail.commandTitle : headline(req)}</h1>
         </div>
         {isQuestion ? (
           <>
@@ -260,8 +276,8 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
         {!fresh && outcome.kind !== 'uncertain' && <div className="mt-4"><Lost onReconnect={onReconnect} /></div>}
       </main>
       <DecisionFooter
-        item={req} outcome={outcome} fresh={fresh} changed={changed} stillPending={item !== undefined} {...(panel ? { threadHref: href({ name: 'atelier', sessionId }) } : {})}
-        onReread={() => { setChanged(false); setChoice(null); setPicked(null); setRefused(false); }} onDecide={d => setRefused(!store.decide(sessionId, d))}
+        item={req} outcome={outcome} fresh={fresh} changed={changed} stillPending={item !== undefined} threadHref={threadHref} withThread={!paneHead}
+        onReread={() => { setChanged(false); setChoice(null); setPicked(null); setRefused(false); }} onDecide={d => setRefused(!store.decide(sessionId, d, { expect }))}
         answerable={answerable} choice={choosingOther ? options.length : choice} onAnswer={send}
         answerBlocked={choosingOther ? free.problem !== null : choice === null || choice >= options.length}
         onCheck={onReconnect} refused={refused} store={store} deviceConfirm={state.device?.confirm === true}
