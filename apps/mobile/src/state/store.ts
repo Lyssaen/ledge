@@ -241,6 +241,12 @@ export interface MobileStore {
   launchSession(launch: PhoneLaunch): Promise<LaunchStart>;
   /** « Réessayer » after no answer: the same launch again, same op and assertion, so the PC never starts two (contract §6). False when it cannot go. */
   launchAgain(op: string): boolean;
+  /**
+   * Whether `launchAgain` may send this launch now: the PC's current boot is known (a snapshot since the link came back) and
+   * `resendable` allows it. A launch the PC received before it restarted, or one past the replay window, may have started a
+   * session that nothing reports now: sent again, the new process would refuse it as if the first had been refused.
+   */
+  canLaunchAgain(op: string): boolean;
   /** Closes the turn's sessions (`rows`, or all of them), after the device's confirmation. (Not `close`: that stops the store.) */
   closeSessions(qid: string, rows?: number[]): Promise<ChatAction>;
   /** Applies rows of the turn's generic card (action registry spec §9.2), in order; the device's check first when one of them
@@ -1084,9 +1090,14 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       return op === null ? { status: 'failed' } : { status: 'sent', op };
     },
 
+    canLaunchAgain(op) {
+      const o = state.ops[op];
+      return !closed && ready() && state.fresh && !!o && o.message.type === 'session.launch' && resendable(o, boot);
+    },
+
     launchAgain(op) {
       const o = state.ops[op];
-      if (closed || !ready() || !o || o.message.type !== 'session.launch' || !isLive(o.phase)) return false;
+      if (!o || !store.canLaunchAgain(op)) return false;
       patchOp(op, x => ({ ...x, phase: 'sending' }));
       send(o.message);
       arm(op);

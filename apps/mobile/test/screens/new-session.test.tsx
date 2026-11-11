@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLang } from '../../src/copy';
 import { getAssertion, platformAvailable } from '../../src/link/webauthn';
 import { LAUNCH_TIMEOUT_MS, NewSession } from '../../src/screens/NewSession';
+import { RESEND_MAX_MS } from '../../src/state/operations';
 import { Sessions } from '../../src/screens/Sessions';
 import { Thread } from '../../src/screens/Thread';
 import { session } from '../model/fixtures';
@@ -22,10 +23,10 @@ const FOLDERS = [
   { machine: 'legion', label: 'Legion', path: '/home/u/ledge-legion' }
 ];
 
-type Pc = { launch?: boolean; confirm?: boolean; sessions?: PhoneSession[] };
+type Pc = { launch?: boolean; confirm?: boolean; sessions?: PhoneSession[]; boot?: string };
 const snap = (o: Pc = {}) => ({
   ...snapshot(o.sessions ?? []),
-  daemon: { version: '0.30.0', name: 'WSL', models: true, projectFolders: true, ...(o.launch === false ? {} : { launch: true }) },
+  daemon: { version: '0.30.0', name: 'WSL', models: true, projectFolders: true, ...(o.launch === false ? {} : { launch: true }), ...(o.boot ? { boot: o.boot } : {}) },
   device: { confirm: o.confirm ?? true },
   projects: [{ id: 'ledge', name: 'ledge', color: 'blue' }, { id: 'billing', name: 'billing-api', color: 'green' }]
 }) as PhoneServerMessage;
@@ -265,6 +266,54 @@ describe('« Nouvelle session » (m2-sessions.html §9)', () => {
     expect(t.of('session.launch')[1]).toEqual(m);
     expect(t.of('confirm.prepare')).toHaveLength(1);
     expect(button()).toHaveTextContent('Lancement…');
+  });
+
+  describe('a launch the PC took, then lost with its answer, is never presented as refused (review 688eb599)', () => {
+    /** Sent and received under `b1`, the link lost before the outcome, back on a PC that booted `boot`. */
+    async function lostAfterReceipt(boot: string) {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const t = opened({ boot: 'b1' });
+      type('Corrige les tests');
+      const m = await launched(t);
+      act(() => t.deliver({ type: 'operation.result', op: m.op, status: 'received' } as PhoneServerMessage));
+      act(() => t.set('pc_offline'));
+      act(() => t.set('ready'));
+      act(() => t.deliver(snap({ boot })));
+      act(() => { vi.advanceTimersByTime(LAUNCH_TIMEOUT_MS + 100); });
+      expect(screen.getByText('Le démarrage n’a pas répondu.')).toBeInTheDocument();
+      return { t, m };
+    }
+
+    it('the PC restarted: the same launch is not sent again, no new one is checked, no Réessayer', async () => {
+      const { t } = await lostAfterReceipt('b2');
+      expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+      expect(t.of('session.launch')).toHaveLength(1);
+      expect(t.of('confirm.prepare')).toHaveLength(1);
+      expect(screen.queryByText(/Démarrage refusé/)).not.toBeInTheDocument();
+    });
+
+    it('control: the same PC process, Réessayer sends the same launch again', async () => {
+      const { t, m } = await lostAfterReceipt('b1');
+      fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+      expect(t.of('session.launch').at(-1)).toEqual(m);
+      expect(t.of('confirm.prepare')).toHaveLength(1);
+    });
+
+    it('past the replay window, Réessayer neither sends it again nor checks a new one, and goes', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const t = opened({ boot: 'b1' });
+      type('Corrige les tests');
+      const m = await launched(t);
+      act(() => t.deliver({ type: 'operation.result', op: m.op, status: 'received' } as PhoneServerMessage));
+      act(() => { vi.advanceTimersByTime(LAUNCH_TIMEOUT_MS + 100); });
+      expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(RESEND_MAX_MS); });
+      fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
+      expect(t.of('session.launch')).toHaveLength(1);
+      expect(t.of('confirm.prepare')).toHaveLength(1);
+      expect(screen.getByText('Le démarrage n’a pas répondu.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+    });
   });
 
   it('in English, Desktop’s words', () => {

@@ -146,10 +146,18 @@ export function NewSession({ store, storage }: { store: MobileStore; storage?: S
     else setOutcome({ kind: 'refused', reason: r.reason });
   };
   // « Réessayer » after no answer sends the same op again (contract §6); any other retry checks again, as a new launch.
+  // A launch that cannot go again (the PC restarted since it took it, or the replay window is over) is never replaced by a
+  // new one: the first may be running. Its receipt stays, without Réessayer.
   const again = (o: Outcome) => {
-    if (o.kind === 'timeout' && o.op && store.launchAgain(o.op)) { setOp(o.op); setTries(n => n + 1); setBusy(true); setOutcome(null); return; }
+    if (o.kind === 'timeout' && o.op) {
+      if (store.launchAgain(o.op)) { setOp(o.op); setTries(n => n + 1); setBusy(true); setOutcome(null); return; }
+      const held = store.getState().ops[o.op];
+      if (held && isLive(held.phase)) { setOutcome({ ...o }); return; }
+    }
     void launch();
   };
+  /** A receipt without « Réessayer »: a launch of unknown outcome that may not be sent again. */
+  const stuck = (o: Outcome) => o.kind === 'timeout' && o.op !== null && !!state.ops[o.op] && isLive(state.ops[o.op]!.phase) && !store.canLaunchAgain(o.op);
 
   const agent = copy.tools[tool];
   const offline = !state.fresh;
@@ -229,7 +237,7 @@ export function NewSession({ store, storage }: { store: MobileStore; storage?: S
         </Field>
       </main>
       <div className="bleed flex flex-none flex-col gap-1.5 border-t border-line bg-bg px-3.5 pt-2.5 pb-[calc(14px+var(--foot-inset))]">
-        {shown && <OutcomeReceipt outcome={shown} agent={agent} machine={machine} onRetry={() => again(shown)} />}
+        {shown && <OutcomeReceipt outcome={shown} agent={agent} machine={machine} onRetry={stuck(shown) ? null : () => again(shown)} />}
         {missing ? (
           <>
             <button type="button" disabled className={kitButtonClass({ variant: 'primary', className: 'w-full' })}>{missing.label}</button>
@@ -327,9 +335,9 @@ function MenuRow({ on, disabled = false, onClick, lead, text, sub }: { on: boole
 }
 
 /** One receipt per end (m2-lancement.html §2, M2 §9): a title, what was kept or what to do, and the action that helps. */
-function OutcomeReceipt({ outcome, agent, machine, onRetry }: { outcome: Outcome; agent: string; machine: string; onRetry: () => void }) {
-  const retry = { label: L.retry, onClick: onRetry };
-  if (outcome.kind === 'timeout') return <Receipt tone="warn" title={L.timeout} body={L.timeoutBody} action={retry} />;
+function OutcomeReceipt({ outcome, agent, machine, onRetry }: { outcome: Outcome; agent: string; machine: string; onRetry: (() => void) | null }) {
+  const retry = { label: L.retry, onClick: onRetry ?? (() => {}) };
+  if (outcome.kind === 'timeout') return <Receipt tone="warn" title={L.timeout} body={L.timeoutBody} {...(onRetry ? { action: retry } : {})} />;
   if (outcome.kind === 'failed') return <Receipt tone="fail" title={L.failed(agent)} body={L.failedBody(agent)} action={retry} />;
   const R = L.refused;
   switch (outcome.reason) {
