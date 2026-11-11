@@ -237,7 +237,8 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
         return;
       case 'rigs.goals':
         answered('goals');
-        goalsAsked = wantGoals;
+        // An answer that failed leaves the goals to ask again (« Réessayer »).
+        goalsAsked = wantGoals && !m.error;
         set({ goals: m.error ? { ...state.goals, loading: false, error: m.error } : { data: { goals: m.goals, partial: !!m.partial }, loading: false, at: new Date().toISOString() } });
         return;
       case 'operation.result': {

@@ -253,7 +253,15 @@ export function useLongPress(onLong: (() => void) | undefined, ms = 500) {
       timer.current = setTimeout(() => { fired.current = true; onLong(); }, ms);
     },
     onPointerUp: stop, onPointerLeave: stop, onPointerCancel: stop,
-    onContextMenu: (e: { preventDefault(): void }) => { e.preventDefault(); stop(); fired.current = true; onLong(); },
+    // A right click opens it at once; after a long press some browsers send it too, and it is not opened twice.
+    onContextMenu: (e: { preventDefault(): void }) => {
+      e.preventDefault();
+      const touch = !!timer.current;
+      stop();
+      if (!fired.current) onLong();
+      // A finger still down: the click on release is not a tap. A mouse sends no click after it.
+      if (touch) fired.current = true;
+    },
     /** True once: the click after a long press is not a tap. */
     swallow: () => { const f = fired.current; fired.current = false; return f; }
   };

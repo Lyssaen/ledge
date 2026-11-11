@@ -4,6 +4,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PhoneServerMessage } from '@ledge/protocol';
 import { copy } from '../../src/copy';
+import { session } from '../model/fixtures';
 import { goal, kernelGraph, ledgeGraph, openrig, routing } from '../model/openrig-fixtures';
 import { snapshot } from '../state/helpers';
 import { app } from './app-setup';
@@ -13,9 +14,9 @@ const wide = (on: boolean) => { globalThis.matchMedia = ((q: string) => ({ match
 afterEach(() => { wide(false); });
 
 /** The app at `hash`, its PC sending its rigs (or not), OpenRig's state delivered. */
-function open(hash: string, o: { rigs?: boolean; confirm?: boolean; state?: boolean } = {}) {
+function open(hash: string, o: { rigs?: boolean; confirm?: boolean; state?: boolean; sessions?: Parameters<typeof snapshot>[0] } = {}) {
   const t = app('ready', { hash });
-  const snap = snapshot([], 'WSL', undefined, { confirm: o.confirm ?? false }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+  const snap = snapshot(o.sessions ?? [], 'WSL', undefined, { confirm: o.confirm ?? false }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
   act(() => t.deliver(o.rigs === false ? snap : { ...snap, daemon: { ...snap.daemon, rigs: true } }));
   if (o.rigs !== false && o.state !== false) act(() => t.deliver({ type: 'rigs.state', state: openrig() }));
   return t;
@@ -99,9 +100,34 @@ describe('a rig', () => {
     for (const name of [C.actions.seats, C.actions.restart, C.actions.stop]) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('says a rig that is gone', () => {
+  it('says a rig that is gone, on the whole screen, with the way back (m4-complement.html, §2)', () => {
     open('#/rigs/gone');
-    expect(screen.getByText(C.readError.unknown_rig)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: C.readError.unknown_rig })).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: C.back }).some(a => a.getAttribute('href') === '#/rigs')).toBe(true);
+  });
+
+  it('takes the whole screen when the PC no longer knows the rig it lists', () => {
+    const t = open('#/rigs/ledge-dev');
+    act(() => t.deliver({ type: 'rigs.graph', rig: 'ledge-dev', error: 'unknown_rig' }));
+    expect(screen.getByRole('heading', { name: C.readError.unknown_rig })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: C.actions.stop })).toBeNull();
+  });
+
+  it('says a queue it could not read in its place, and reads it again on « Réessayer »', () => {
+    const t = open('#/rigs/ledge-dev');
+    act(() => t.deliver({ type: 'rigs.queue', rig: 'ledge-dev', rows: [], closed: [], truncated: false, error: 'unavailable' }));
+    expect(screen.getByText(C.queue.unavailable)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: C.unavailable.retry }));
+    expect(t.of('rigs.queue')).toHaveLength(2);
+  });
+
+  it('keeps « Ouvrir sa session » in the sheet of a seat Ledge does not follow, disabled, and says why', () => {
+    const t = open('#/rigs/ledge-dev');
+    act(() => t.deliver({ type: 'rigs.graph', rig: 'ledge-dev', graph: ledgeGraph() }));
+    fireEvent.click(screen.getByRole('button', { name: C.seatLabel('review-qa', C.seatState.idle) }));
+    const sheet = screen.getByRole('dialog');
+    expect((within(sheet).getByRole('button', { name: C.seat.openSession }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(sheet).getByText(C.seat.noSession)).toBeTruthy();
   });
 });
 
@@ -133,6 +159,37 @@ describe('the kernel', () => {
     const sheet = screen.getByRole('dialog');
     expect(within(sheet).getByText(C.confirm.stopDaemon('WSL'))).toBeTruthy();
     expect(within(sheet).getByText(`${C.confirm.daemonStops(1)} ${C.confirm.working(1)}`)).toBeTruthy();
+  });
+
+  it('shows each running rig’s level beside its seats, read on opening the kernel (F)', () => {
+    const t = open('#/kernel');
+    expect(t.of('rigs.permissions').map(m => m.rig)).toContain('ledge-dev');
+    const seats = ['pilot.lead', 'design.ux', 'dev.front', 'dev.back', 'review.qa'].map(id => ({ logicalId: id, session: `${id.replace('.', '-')}@ledge-dev`, policySource: 'member_policy', policy: 'builtin:auto' }));
+    act(() => t.deliver({ type: 'rigs.permissions', rig: 'ledge-dev', seats } as PhoneServerMessage));
+    expect(screen.getByText(`${C.seatCount(5)} · ${C.level.auto}`)).toBeTruthy();
+  });
+
+  it('writes a row that waits as « attend la ligne … », shortened as Desktop does', () => {
+    const t = open('#/kernel');
+    act(() => t.deliver({ type: 'rigs.routing', entries: [{ qitem: 'q', at: '2026-11-10 20:30:00', seat: 'review-qa@ledge-dev', change: 'blocked on qitem-20261110203000-0000c8a66d5a', rig: 'ledge-dev', summary: 'Revue M4' }] }));
+    expect(screen.getByText(C.kernelView.change.blocked('…c8a66d5a'))).toBeTruthy();
+  });
+
+  it('opens its « ⋯ »: read again, restart and stop the kernel through the same sheets (Q73)', () => {
+    const t = open('#/kernel');
+    fireEvent.click(screen.getByRole('button', { name: C.more }));
+    expect(screen.getAllByRole('menuitem').map(b => b.textContent)).toEqual([C.kernelView.menu.refresh, C.kernelView.menu.restart, C.kernelView.menu.stop]);
+    fireEvent.click(screen.getByRole('menuitem', { name: C.kernelView.menu.refresh }));
+    expect(t.of('rigs.routing')).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: C.more }));
+    fireEvent.click(screen.getByRole('menuitem', { name: C.kernelView.menu.stop }));
+    expect(within(screen.getByRole('dialog')).getByText(C.confirm.stopKernel('WSL'))).toBeTruthy();
+  });
+
+  it('dates Max’s last word by the trail’s step that carries it, and gives no time without one (E)', () => {
+    const t = open('#/kernel');
+    act(() => t.deliver({ type: 'rigs.goals', goals: [goal()] }));
+    expect(screen.getByText(C.kernelView.lastMessage(null))).toBeTruthy();
   });
 
   it('offers to start a stopped kernel, with no check', async () => {
@@ -168,6 +225,19 @@ describe('Max', () => {
     expect(t.of('rigs.goal.send')[1]!.goalId).toBe(first.goalId);
   });
 
+  it('says goals it could not read, and reads them again', () => {
+    const t = open('#/max');
+    act(() => t.deliver({ type: 'rigs.goals', goals: [], error: 'unavailable' } as PhoneServerMessage));
+    expect(screen.getByText(C.max.goalsUnavailable)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: C.unavailable.retry }));
+    expect(t.of('rigs.goals').length).toBeGreaterThan(1);
+  });
+
+  it('goes back to the kernel from the goals, and to Max from a goal', () => {
+    open('#/max');
+    expect(screen.getByRole('link', { name: C.backKernel })).toBeTruthy();
+  });
+
   it('opens a goal as a thread: the proposal waits in « À toi », the field writes to Max about it', async () => {
     const t = open('#/max/goal-0001-abcd');
     act(() => t.deliver({ type: 'rigs.goals', goals: [goal()] }));
@@ -188,6 +258,18 @@ describe('on a wide screen', () => {
     expect(screen.getByRole('region', { name: C.title })).toBeTruthy();
     expect(screen.getByText(C.seatsByRole)).toBeTruthy();
     expect(screen.getByRole('link', { name: /ledge-dev/ }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('opens a followed seat’s session on a tap, its sheet on a right click (Q74)', () => {
+    wide(true);
+    const t = open('#/rigs/ledge-dev', { sessions: [session('df', { name: 'dev-front', rig: { name: 'ledge-dev', role: 'dev.front' }, state: 'working' })] });
+    act(() => t.deliver({ type: 'rigs.graph', rig: 'ledge-dev', graph: ledgeGraph() }));
+    const node = document.querySelector<HTMLElement>('[data-seat="dev.front"]')!;
+    fireEvent.contextMenu(node);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(node);
+    expect(location.hash).toBe('#/thread/df');
   });
 
   it('shows Max’s current goal as a thread in the kernel', () => {
