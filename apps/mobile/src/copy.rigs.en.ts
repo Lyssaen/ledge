@@ -42,7 +42,7 @@ export const rigsEn: RigsCopy = {
   more: 'More actions',
   tiles: { seats: 'Seats', permissions: 'Permissions', snapshot: 'Snapshot' },
   level: { auto: 'Auto', standard: 'Standard', open: 'Open', yolo: 'YOLO', locked: 'Locked', spec: 'Spec', mixed: 'Mixed' },
-  waits: { question: (seat: string) => ['', seat, ' asks you a question'] as const, permission: (seat: string) => ['', seat, ' asks for your permission'] as const, see: 'See' },
+  waits: { question: (seat: string): [string, string, string] => ['', seat, ' asks you a question'], permission: (seat: string): [string, string, string] => ['', seat, ' asks for your permission'], see: 'See' },
   topology: 'Topology',
   topologyHint: 'tap a seat',
   topologyStopped: 'the seats start with the rig',

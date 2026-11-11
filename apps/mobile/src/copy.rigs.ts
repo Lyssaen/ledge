@@ -44,7 +44,7 @@ export const rigsFr = {
   more: 'Plus d\'actions',
   tiles: { seats: 'Sièges', permissions: 'Permissions', snapshot: 'Snapshot' },
   level: { auto: 'Auto', standard: 'Standard', open: 'Ouvert', yolo: 'YOLO', locked: 'Verrouillé', spec: 'Spec', mixed: 'Mixte' },
-  waits: { question: (seat: string) => ['Une question de ', seat, ' t\'attend'] as const, permission: (seat: string) => ['Une autorisation de ', seat, ' t\'attend'] as const, see: 'Voir' },
+  waits: { question: (seat: string): [string, string, string] => ['Une question de ', seat, ' t\'attend'], permission: (seat: string): [string, string, string] => ['Une autorisation de ', seat, ' t\'attend'], see: 'Voir' },
   topology: 'Topologie',
   topologyHint: 'appuie sur un siège',
   topologyStopped: 'les sièges démarrent avec le rig',
