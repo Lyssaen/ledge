@@ -296,7 +296,7 @@ export const en: Copy = {
     foot: (bot: string) => `${bot}'s state`,
     requestBelow: 'Request below',
     keysHint: 'Enter sends, Shift+Enter starts a new line',
-    contextLabel: (pct: number) => `Context used: ${pct}%`,
+    contextLabel: (pct: number) => `Context used: ${pct} %`,
     folder: (name: string) => `Folder ${name}`,
     sheet: {
       label: (bot: string) => `Actions for ${bot}`,
