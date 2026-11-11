@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type PhoneFolder, type ProjectColor, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice, type PhoneHarnessUsage, type HumanAsk
+  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice, type PhoneHarnessUsage, type HumanAsk, type HumanAnswer, type HumanChannel
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -71,6 +71,9 @@ export interface MobileState {
   usageAlert: number | null;
   /** What OpenRig on this PC asks the person (`openrig.asks`, `daemon.openrig`): null until it sends them. Never cached. */
   asks: HumanAsk[] | null;
+  /** Whether OpenRig can reach the person through Ledge, as the last `openrig.asks` said; null until then. `partial`: a read failed, the
+   *  list may miss some; `truncated`: the PC left the least pressing out to fit the phone's message. Never cached. */
+  asksChannel: { channel: HumanChannel; partial: boolean; truncated: boolean } | null;
 }
 
 /** The request a challenge is asked for, as `session.decide` names it. */
@@ -89,7 +92,9 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
   /** Deleting a project (`project.delete`), bound to it and to where its agents go. */
   | { purpose: 'project'; project: string; moveTo: string | null }
   /** Adding a folder of this PC to a project (`project.folder.add`), bound to both. */
-  | { purpose: 'folder'; project: string; path: string };
+  | { purpose: 'folder'; project: string; path: string }
+  /** An answer to an OpenRig ask (`openrig.answer`), bound to that row and that exact answer. */
+  | { purpose: 'rig'; qitem: string; answer: HumanAnswer };
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
 export const PREPARE_MS = 10_000;
@@ -142,6 +147,14 @@ export interface MobileStore {
   dismissPc(): void;
   /** Answers the questions of OMP's dialog `requestId` together, or declines it (`cancel`). The op's id, or null when nothing was sent. */
   answer(id: string, requestId: string, answers: Answer[], opts: { expect: PhoneExpect; cancel?: boolean }): string | null;
+  /**
+   * Answers an OpenRig ask (`openrig.answer`): a choice, words, « Vu », or the words that settle a row parked on the person. Every answer
+   * but « Vu » carries the device's assertion over that exact answer. The op's id, or null when nothing was sent (not ready, a PC without
+   * `daemon.openrig`, an answer to that ask still on its way). Its end lands on the op (`rig`).
+   */
+  answerAsk(qitemId: string, answer: HumanAnswer, opts?: { assertion?: Assertion }): string | null;
+  /** Sends again, as itself, this phone's answer to the ask `qitemId` whose outcome is unknown: the PC applies it once. False when there is none. */
+  resendAsk(qitemId: string): boolean;
   /** Registers the passkey with the PC. The op's id, or null when nothing was sent. */
   /** `userId`: the passkey's `user.id`, base64url (« L1 » ‖ the PC key's digest ‖ random), so the PC marks it `recover`. */
   registerCredential(c: Credential, userId?: string): string | null;
@@ -273,6 +286,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     usage: null,
     usageAlert: null,
     asks: null,
+    asksChannel: null,
     checklists: new Map(),
     pc: null
   };
@@ -504,8 +518,14 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         set({ tasks: new Map(m.tasks.map(x => [x.id, x])) });
         return;
       case 'openrig.asks':
-        set({ asks: m.asks });
+        set({ asks: m.asks, asksChannel: { channel: m.channel, partial: m.partial === true, truncated: m.truncated === true } });
         break;
+      case 'openrig.answered': {
+        // The answer's end comes before (or with) its operation's result: kept on the op, whatever its phase.
+        const { type: _t, op: _o, qitemId: _q, ...end } = m;
+        patchOp(m.op, o => ({ ...o, rig: end }));
+        return;
+      }
       case 'usage.state':
         set({ usage: m.harnesses, usageAlert: m.prefs.alert });
         return;
@@ -698,7 +718,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     previewsDirty = false;
     clearLastState(storage);
     clearOps(storage);
-    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, projects: [], fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {}, folderListing: null, recentFolders: null, projectFolders: {}, usage: null, usageAlert: null, asks: null });
+    set({ sessions: new Map(), threads: new Map(), previews: new Map(), capabilities: null, device: null, daemon: null, projects: [], fresh: false, syncedAt: null, ops: {}, tasks: new Map(), checklists: new Map(), pc: null, models: {}, commands: {}, rigRows: {}, modelFailures: {}, folderListing: null, recentFolders: null, projectFolders: {}, usage: null, usageAlert: null, asks: null, asksChannel: null });
     modelAsks.clear(); commandAsks.clear(); rigAsks.clear();
     stopPcWatch();
   }
@@ -736,6 +756,20 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
       if (!opts.expect && s.pending && !s.pending.key) return null;
       const expect = opts.expect ?? (s.pending ? expectOf(s.pending) : null);
       return write(op => ({ type: 'session.reply', op, id, text, ...(opts.attachments?.length ? { attachments: opts.attachments } : {}), expect, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
+    },
+
+    answerAsk(qitemId, answer, opts = {}) {
+      if (!state.daemon?.openrig) return null;
+      // One answer to an ask at a time: a second tap while the first goes (or may have gone) sends nothing.
+      if (Object.values(state.ops).some(o => o.message.type === 'openrig.answer' && o.message.qitemId === qitemId && isLive(o.phase))) return null;
+      return write(op => ({ type: 'openrig.answer', op, qitemId, answer, ...(opts.assertion ? { assertion: opts.assertion } : {}) }));
+    },
+
+    resendAsk(qitemId) {
+      const mine = (o: Op) => o.phase === 'uncertain' && o.message.type === 'openrig.answer' && o.message.qitemId === qitemId;
+      if (!ready() || !Object.values(state.ops).some(mine)) return false;
+      resend(mine);
+      return true;
     },
 
     answer(id, requestId, answers, opts) {

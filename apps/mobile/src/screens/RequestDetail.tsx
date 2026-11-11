@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { copy } from '../copy';
 import { consequenceFor, lowRiskNoticeFor } from '../model/consequence';
 import { checkFreeAnswer } from '../model/freeAnswer';
+import { RECEIPT_MS } from '../model/atoi';
 import { outcomeFor } from '../model/requestOutcome';
 import { ageLabel, headline, requestsOf, type InboxItem } from '../model/requests';
 import { href } from '../router';
@@ -20,6 +21,8 @@ import { MultiQuestionForm, QuestionForm } from './QuestionForm';
 import { Result } from './Result';
 import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
+import { DetailHeader, kitButtonClass } from '../ui/kit/Controls';
+import { Pill } from '../ui/kit/marks';
 
 function Lost({ onReconnect }: { onReconnect?: (() => void) | undefined }) {
   const [busy, setBusy] = useBusy();
@@ -60,7 +63,18 @@ function PanelHeader({ title, panel }: { title: string; panel: RequestPanel }) {
   );
 }
 
-export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel }: { store: MobileStore; sessionId: string; requestKey: string; onReconnect?: () => void; panel?: RequestPanel }) {
+
+/** The `phone-side` variant of styles.css: a phone on its side. */
+const PHONE_SIDE = '(orientation: landscape) and (max-height: 500px)';
+/** What the person does to a page that ends its placing: they took it over. */
+const HANDS = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
+export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel, onSettled, keys = false }: {
+  store: MobileStore; sessionId: string; requestKey: string; onReconnect?: () => void; panel?: RequestPanel;
+  /** A wide screen's « À toi »: Y / N decide from the keyboard, said in the footer. */
+  keys?: boolean;
+  /** A wide screen's « À toi » (m1-a-toi.html §12): once decided or handled elsewhere, the receipt shows for a while, then this (the next request). */
+  onSettled?: () => void;
+}) {
   const state = useMobile(store);
   const now = useNow();
   const { fresh, ops, capabilities } = state;
@@ -111,6 +125,48 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   const settled = outcome.kind === 'applied' || (item === undefined && !(outcome.kind === 'sending' || outcome.kind === 'uncertain' || outcome.kind === 'rejected' || outcome.kind === 'failed' || outcome.kind === 'changed') && fresh);
   const back = panel?.onBack;
   useEffect(() => { if (settled && back) back(); }, [settled, back]);
+  const settledRef = useRef(onSettled);
+  settledRef.current = onSettled;
+  useEffect(() => {
+    if (!settled || !settledRef.current) return;
+    const t = setTimeout(() => settledRef.current?.(), RECEIPT_MS);
+    return () => clearTimeout(t);
+  }, [settled]);
+  // A phone on its side (under 500 px of height) opens the request scrolled so its command sits whole just above the footer, or
+  // starts at the top when it is taller than the room; the session and the pill stay above, a scroll up (design-ux 69be1d14, Q69).
+  // The elements as state: the effect below runs again when they appear or change, and cleans up what that run set up.
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const [commandBox, setCommandBox] = useState<HTMLDivElement | null>(null);
+  // The page settles after its first paint (the footer, a whole body asked again): placed again at each size change, until the
+  // person scrolls or touches it themselves. Turning the phone on its side, from portrait or back to it, places it anew; a request
+  // replaced in place starts over (review-qa).
+  useLayoutEffect(() => {
+    const main = scroller, box = commandBox;
+    const side = globalThis.matchMedia?.(PHONE_SIDE);
+    if (!main || !box || !side) return;
+    let taken = false;
+    const place = () => {
+      if (taken || !side.matches) return;
+      const cmd = box.firstElementChild ?? box;
+      const room = main.getBoundingClientRect(), at = cmd.getBoundingClientRect();
+      const top = at.top - room.top + main.scrollTop;
+      const pad = parseFloat(getComputedStyle(main).paddingBottom) || 0;
+      main.scrollTop = at.height > main.clientHeight - pad ? top : Math.max(0, top + at.height - (main.clientHeight - pad));
+    };
+    const turned = () => { if (side.matches) { taken = false; place(); } };
+    const took = () => { taken = true; };
+    place();
+    const watch = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
+    watch?.observe(main);
+    watch?.observe(box);
+    side.addEventListener?.('change', turned);
+    for (const e of HANDS) main.addEventListener(e, took, { passive: true });
+    return () => {
+      watch?.disconnect();
+      side.removeEventListener?.('change', turned);
+      for (const e of HANDS) main.removeEventListener(e, took);
+    };
+  }, [key, scroller, commandBox]);
   const header = (title: string) => (panel ? <PanelHeader title={title} panel={panel} /> : <BackHeader title={title} fallback={backRoute} label={copy.detail.back} link={link} />);
 
   if (outcome.kind === 'applied') return <Result store={store} title={resultTitle(outcome)} body={copy.result.body} item={last.current} final />;
@@ -162,7 +218,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   const optionsLive = fresh && !changed && item !== undefined && outcome.kind !== 'sending' && outcome.kind !== 'uncertain' && (canConfirm || !guarded);
   // An option is answered by its 1-based position: a label could be a digit read as another option, or appear twice.
   const tapOption = (i: number) => {
-    if (guarded) { setPicked(i); setRefused(false); } else setRefused(!store.reply(sessionId, String(i + 1)));
+    if (guarded) { setPicked(i); setRefused(false); } else setRefused(!store.reply(sessionId, String(i + 1), { expect }));
   };
   const optionList = (
     <ul aria-label={copy.answers.legend} className="my-3.5 flex list-none flex-col gap-2 p-0">
@@ -185,25 +241,39 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   const busy = outcome.kind === 'sending' || outcome.kind === 'uncertain';
 
   const send = () => {
-    if (choosingOther) { if (free.problem === null) setRefused(!store.reply(sessionId, free.text)); }
-    else if (choice !== null && choice < options.length) setRefused(!store.reply(sessionId, String(choice + 1)));
+    if (choosingOther) { if (free.problem === null) setRefused(!store.reply(sessionId, free.text, { expect })); }
+    else if (choice !== null && choice < options.length) setRefused(!store.reply(sessionId, String(choice + 1), { expect }));
   };
+
+  const threadHref = panel ? href({ name: 'atelier', sessionId }) : href({ name: 'thread', sessionId });
+  // A wide screen's « À toi » (m1-a-toi.html §12): the head says who asks and where, with its pill and « Ouvrir le fil ».
+  const paneHead = keys && !panel && (
+    <DetailHeader
+      back={<span className="w-2.5" />} tool={req.tool} name={req.botName}
+      dot={req.kind === 'permission' ? 'perm' : req.kind === 'question' ? 'ask' : 'work'}
+      sub={[req.repo, req.branch].filter(Boolean).join(' · ')}
+      more={<>
+        {req.risk === 'high' ? <Pill tone="risk">{copy.risk.badge}</Pill> : <Pill tone={req.kind === 'question' ? 'ask' : req.kind === 'permission' ? 'perm' : 'plain'}>{copy.atoi.pill[req.kind]}</Pill>}
+        <a href={threadHref} className={kitButtonClass({ size: 'sm', className: 'ml-1' })}><Icon name="terminal" className="size-4" />{copy.atoi.openThread}</a>
+      </>}
+    />
+  );
 
   return (
     <>
-      {header(copy.detail.heading[req.kind])}
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
-        <div className="mt-4 flex items-start gap-3 rounded-card border border-line bg-surface p-3.5">
+      {paneHead || header(copy.detail.heading[req.kind])}
+      <main ref={setScroller} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
+        {!paneHead && <div className="mt-4 flex items-start gap-3 rounded-card border border-line bg-surface p-3.5">
           <MobileBot tool={req.tool} seed={req.sessionId} state={state.sessions.get(sessionId)?.state ?? 'idle'} frozen={!fresh} />
           <div className="min-w-0 flex-1">
             <strong className="block text-body [overflow-wrap:anywhere]">{req.task}</strong>
             <p className="mt-0.5 text-meta text-muted">{req.botName} · {copy.tools[req.tool]}</p>
             <p className="mt-0.5 text-meta [overflow-wrap:anywhere] text-muted">{req.repo}{req.branch && <> · <code className={`font-mono text-[.9em] ${req.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{req.branch}</code></>}</p>
           </div>
-        </div>
+        </div>}
         <div className="mt-[22px] mb-3">
           <Badge kind={req.kind} risk={req.risk} />
-          <h1 className="mt-2.5 text-display leading-[1.25] font-semibold tracking-[-1px] [overflow-wrap:anywhere]">{req.kind === 'permission' ? copy.detail.commandTitle : headline(req)}</h1>
+          <h1 className={`mt-2.5 text-display leading-[1.25] font-semibold tracking-[-1px] [overflow-wrap:anywhere] ${req.kind === 'permission' ? 'phone-side:hidden' : ''}`}>{req.kind === 'permission' ? copy.detail.commandTitle : headline(req)}</h1>
         </div>
         {isQuestion ? (
           <>
@@ -218,7 +288,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
           </>
         ) : (
           <>
-            <Command text={req.body ?? req.text} />
+            <div ref={setCommandBox}><Command text={req.body ?? req.text} /></div>
             {optionMode && optionList}
             {!optionMode && options.length > 0 && (
               <ul aria-label={copy.detail.options} className="my-3.5 flex list-none flex-col gap-2 p-0">
@@ -246,13 +316,14 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
         {!fresh && outcome.kind !== 'uncertain' && <div className="mt-4"><Lost onReconnect={onReconnect} /></div>}
       </main>
       <DecisionFooter
-        item={req} outcome={outcome} fresh={fresh} changed={changed} stillPending={item !== undefined} {...(panel ? { threadHref: href({ name: 'atelier', sessionId }) } : {})}
-        onReread={() => { setChanged(false); setChoice(null); setPicked(null); setRefused(false); }} onDecide={d => setRefused(!store.decide(sessionId, d))}
+        item={req} outcome={outcome} fresh={fresh} changed={changed} stillPending={item !== undefined} threadHref={threadHref} withThread={!paneHead}
+        onReread={() => { setChanged(false); setChoice(null); setPicked(null); setRefused(false); }} onDecide={d => setRefused(!store.decide(sessionId, d, { expect }))}
         answerable={answerable} choice={choosingOther ? options.length : choice} onAnswer={send}
         answerBlocked={choosingOther ? free.problem !== null : choice === null || choice >= options.length}
         onCheck={onReconnect} refused={refused} store={store} deviceConfirm={state.device?.confirm === true}
         optionReply={optionMode ? { canConfirm: guarded ? canConfirm : true, picked: guarded ? picked : null, onBack: () => setPicked(null), onReply: (a, expect) => picked === null ? null : store.reply(sessionId, String(picked + 1), { assertion: a, expect }) } : undefined}
         multi={askQuestions ? { missing, onSend: () => sendAnswers(false), onCancel: () => sendAnswers(true) } : undefined}
+        keys={keys}
       />
     </>
   );

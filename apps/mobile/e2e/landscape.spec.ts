@@ -44,7 +44,40 @@ test('in landscape the app spans the whole width with its tabs on the left', asy
   await page.getByRole('link', { name: /pnpm test/ }).click();
   await expect(page.getByRole('button', { name: copy.decide.allow })).toBeEnabled();
   await shot(page, 'request', browserName);
+  // One pane with the rail, the command in view above the buttons (the user's « A », 2026-11-11 09:06Z): the request opens scrolled
+  // to it, the session above a scroll up (design-ux 69be1d14).
+  const shown = page.getByText('pnpm test', { exact: true }).first();
+  await expect(shown).toBeInViewport({ ratio: 1 });
+  const command = (await shown.boundingBox())!;
+  const allow = (await page.getByRole('button', { name: copy.decide.allow }).boundingBox())!;
+  expect.soft(command.y).toBeGreaterThanOrEqual(0);
+  expect.soft(command.y + command.height).toBeLessThanOrEqual(allow.y);
+  expect.soft(allow.y + allow.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  // What « Toujours » grants stays, whole, in the hint's place under the buttons (Q67, design-ux c8cef0d4).
+  const grants = page.getByText(copy.atoi.scope.project);
+  await expect.soft(grants).toBeInViewport({ ratio: 1 });
+  expect.soft((await grants.boundingBox())!.height).toBeLessThanOrEqual(2 * 16 + 1);
+  await expect.soft(page.getByText(copy.decide.hint)).toBeHidden();
   expect.soft(await width()).toBe(page.viewportSize()!.width);
+
+  // Turned to portrait and on its side again, or opened in portrait then turned: the command comes back above the buttons (review-qa).
+  const allowButton = page.getByRole('button', { name: copy.decide.allow });
+  const placed = async () => {
+    await expect(shown).toBeInViewport({ ratio: 1 });
+    const c = (await shown.boundingBox())!, a = (await allowButton.boundingBox())!;
+    expect.soft(c.y + c.height).toBeLessThanOrEqual(a.y);
+  };
+  const side = page.viewportSize()!;
+  const upright = { width: side.height, height: side.width };
+  await page.setViewportSize(upright);
+  await page.setViewportSize(side);
+  await placed();
+  await page.goBack();
+  await page.setViewportSize(upright);
+  await page.getByRole('link', { name: /pnpm test/ }).click();
+  await expect(allowButton).toBeEnabled();
+  await page.setViewportSize(side);
+  await placed();
 
   await page.goBack();
   // A desktop window is a wide screen: the list keeps its rail and a pane beside it (tablet.spec.ts).

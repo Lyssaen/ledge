@@ -47,6 +47,75 @@ const fr = {
     emptyFilterHint: 'Les autres demandes restent dans « Tout ».',
     offlineNote: 'Tu peux consulter les demandes. Aucune décision ne sera envoyée hors connexion.'
   },
+  /** « À toi » (docs/mockups/ledge-mobile-refonte/m1-a-toi.html, 3228f5ed; m1-reponses-rig.html, adf70443): cards decided in the list, receipts. */
+  atoi: {
+    count: (n: number) => (n === 1 ? '1 demande' : `${n} demandes`),
+    pill: { permission: 'autorisation', question: 'question', plan: 'plan', diff: 'modifications' },
+    allow: 'Autoriser', deny: 'Refuser', always: 'Toujours dans ce projet',
+    readAll: 'Tout lire', other: 'Autre réponse…',
+    sendHint: (bot: string) => `Ta réponse à ${bot} · Entrée envoie`,
+    /** A card as a screen reader names it: « Autorisation de Pim, ledge ». */
+    region: (what: string, who: string, where: string) => `${what} de ${who}${where ? `, ${where}` : ''}`,
+    kindName: { permission: 'Autorisation', question: 'Question', plan: 'Plan', diff: 'Modifications', rig: 'Demande' },
+    requests: 'Demandes', rigs: 'Rigs OpenRig', working: 'En cours',
+    more: (n: number) => `Voir les ${n} autres`,
+    receipt: {
+      allowed: (who: string) => `Autorisée · ${who}`, denied: (who: string) => `Refusée · ${who}`,
+      allowedBody: 'Le terminal a reçu ta décision', deniedBody: 'La commande n’a pas été lancée',
+      answered: (answer: string, who: string) => `Répondu : ${answer} · ${who}`,
+      sentTo: (who: string) => `Envoyé à ${who}`, seen: 'Vu',
+      thread: 'Voir le fil',
+      what: (who: string, what: string) => `${who} · ${what}`,
+      retry: 'Réessayer', check: 'Vérifier',
+      uncertainBody: 'La décision a peut-être été reçue. Vérifie avant de recommencer.',
+      decidedAt: (who: string, what: 'accept' | 'deny' | 'always', time: string) => `${who} · ${what === 'deny' ? 'Refusée' : 'Acceptée'} à ${time}. Aucune nouvelle décision n’a été envoyée.`,
+      answeredAt: (who: string, time: string, draft: boolean) => `${who} · Répondue à ${time}. ${draft ? 'Ton brouillon n’a pas été envoyé.' : 'Aucune nouvelle réponse n’a été envoyée.'}`,
+      gone: (who: string, draft: boolean) => `${who}.${draft ? ' Ton brouillon n’a pas été envoyé.' : ''}`
+    },
+    noRequest: 'Rien ne t’attend.',
+    calmHint: 'Aucune session ni aucun rig n’a besoin de ta décision. Les nouvelles demandes arrivent ici, et sur l’écran verrouillé si les notifications sont activées.',
+    nothingRunning: 'Aucune session ne travaille non plus pour l’instant.',
+    seeSessions: 'Voir les sessions',
+    keys: 'Y / N au clavier',
+    /** A request's row on a wide screen (§12): « Pim Autoriser une commande »; a question keeps its pill's word. */
+    line: { permission: 'Autoriser une commande' },
+    openThread: 'Ouvrir le fil',
+    /** What « Toujours » grants (m2-toujours.html §1, Q67): the button by scope, and the line under the buttons in the full request. */
+    alwaysSession: 'Toujours pour cette session', approveAuto: 'Approuver en mode auto',
+    scope: {
+      project: 'Claude Code enregistre la règle dans les réglages du projet : elle vaut aussi pour ses prochaines sessions dans ce projet.',
+      edits: 'Claude Code acceptera toutes les modifications suivantes de cette session sans te les demander.',
+      session: 'L’agent ne redemande plus pour cette commande ou ces fichiers jusqu’à la fin de la session.',
+      plan: 'Claude Code passe en mode auto : il répond seul aux demandes suivantes, commandes comprises.'
+    }
+  },
+  /** OpenRig's asks, with Desktop's words (apps/desktop/src/i18n/fr.ts, `asks`), and the device check of an answer (Q63 to Q66). */
+  asks: {
+    pill: { decision: 'décision', question: 'question', update: 'nouvelle', parked: 'en attente de toi' } as Record<'decision' | 'question' | 'update' | 'parked', string>,
+    priority: { urgent: 'urgent', critical: 'critique' } as Record<'urgent' | 'critical', string>,
+    recommended: 'recommandé',
+    readAll: 'Tout lire', details: 'Détails', source: 'Source',
+    answerOther: 'Répondre autrement…', answerParked: 'Répondre…', writeAnswer: 'Écrire la réponse…',
+    placeholder: 'Ta réponse, en quelques mots…', placeholderParked: (seat: string) => `Ce que ${seat} doit faire…`,
+    send: 'Envoyer', cancel: 'Annuler', seen: 'Vu',
+    progress: (n: number, total: number) => `${n}/${total} répondues · la réponse part à la dernière`,
+    notSent: (why: string) => `Pas envoyée : ${why}`, retry: 'Réessayer',
+    uncertain: 'Envoi incertain : la réponse est peut-être partie. Réessayer ne l’enverra pas deux fois.',
+    settlesAll: 'Cette réponse règle toute la demande, y compris les questions sans réponse.',
+    stopped: 'OpenRig est arrêté', unreachable: 'OpenRig ne répond pas',
+    already: 'Déjà réglée ailleurs',
+    partial: 'Liste peut-être incomplète : OpenRig n’a pas répondu à la dernière lecture.',
+    confirmHint: 'Ta réponse se confirme avec Face ID.', confirmHintDevice: 'Ta réponse se confirme avec ton appareil.',
+    sendCheck: 'Envoyer avec Face ID', sendDevice: 'Envoyer avec mon appareil',
+    needsDevice: 'Une réponse à un rig se confirme avec cet appareil. Tu peux la donner sur le PC.',
+    channel: {
+      no_person: { title: 'Ledge n’est pas encore le canal humain d’OpenRig.', body: 'Les rigs passent encore par Max, ou par le TUI du kernel. Leurs demandes n’arrivent pas ici.' },
+      openrig_stopped: { title: 'OpenRig est arrêté : les rigs ne peuvent pas t’écrire.', body: 'Les sessions de tes projets passent toujours par ici.' },
+      unreachable: { title: 'OpenRig ne répond pas.', body: '' },
+      no_default: { title: 'OpenRig a plusieurs personnes, et aucune n’est désignée par défaut.', body: 'Ses demandes n’arrivent donc pas ici.' },
+      not_installed: { title: (machine: string) => `OpenRig n’est pas installé sur ${machine}.`, body: 'Les sessions de tes projets passent toujours par ici.' }
+    }
+  },
   nav: {
     label: 'Navigation principale',
     /** The five tabs, the rail's Atelier and Réglages (docs/mockups/ledge-mobile-refonte/m0-socle.html, §1 and §2). */
@@ -278,7 +347,7 @@ const fr = {
     destination: 'Destination'
   },
   decide: {
-    deny: 'Refuser', allow: 'Autoriser une fois',
+    deny: 'Refuser', allow: 'Autoriser',
     onPc: 'À accepter sur le PC',
     onPcHint: 'Une demande à impact élevé s’accepte sur le PC. Tu peux la refuser d’ici.',
     hint: 'La décision sera transmise immédiatement au PC.',
@@ -686,6 +755,9 @@ const fr = {
     go: 'Confirmer avec mon appareil', goApple: 'Autoriser avec Face ID',
     preparing: 'Préparation de la vérification…',
     asking: 'Vérification en cours sur cet appareil…',
+    /** Under a card's spinning button (m1-a-toi.html §4). */
+    askingNote: 'Vérification en cours sur cet appareil… Elle confirme ton identité, pas la sûreté de la commande.',
+    checking: 'Vérification…',
     cancelled: 'Vérification annulée. Rien n’a été envoyé.',
     expired: 'La vérification a expiré. Recommence.',
     failed: 'La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessaie.',
@@ -703,6 +775,8 @@ const fr = {
     title: 'Protéger les accords',
     body: 'Face ID ou le code de cet appareil sera demandé pour autoriser une commande à impact élevé.',
     go: 'Protéger les accords', later: 'Plus tard',
+    /** From a card that cannot be accepted here (m1-a-toi.html §4). */
+    link: 'Protéger les accords avec cet appareil',
     done: 'Protégés par cet appareil', row: 'Accords à impact élevé',
     unsupported: 'Cet appareil ne peut pas protéger les accords.'
   },

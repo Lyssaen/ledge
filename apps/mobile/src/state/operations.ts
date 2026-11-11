@@ -1,6 +1,6 @@
 // The phone's own operations (a decision, a reply, an interrupt): each named by a uuid it made, so sending it again
 // after a lost connection is recognised by the PC, which replays the result it already gave.
-import { OperationReasonSchema, PhoneClientMessageSchema, type CloseHow, type OperationReason, type PhoneClientMessage } from '@ledge/protocol';
+import { OperationReasonSchema, PhoneClientMessageSchema, type CloseHow, type OperationReason, type PhoneClientMessage, type PhoneServerMessage } from '@ledge/protocol';
 import { z } from 'zod';
 import { localStore } from './storage';
 
@@ -31,6 +31,8 @@ export interface Op {
    * one the spawn is about to give its new `startedAt`, which `adoptRuns` then keeps in place of the interim one.
    */
   starting?: true;
+  /** An `openrig.answer`'s end, as `openrig.answered` said it (not kept across a reload). */
+  rig?: Omit<Extract<PhoneServerMessage, { type: 'openrig.answered' }>, 'type' | 'op' | 'qitemId'>;
   /** When the phone first sent it. */
   at: string;
   /** The PC said `received` (or a final status): it may have applied the op. Absent on an op that never got that far. */
@@ -50,12 +52,13 @@ export const UNCERTAIN_MS = 10_000;
  * they carry the endpoint (a secret). A chat relay, launch or close: after a reload nothing leaves without a new gesture.
  * An update or a restart of
  * the PC's daemon: it carries an assertion, and a gesture made before a reload is not repeated after it. A model change too: a choice
- * made before a reload is not applied after it, on a session that may have moved on. A session's close or resume: an assertion too.
+ * made before a reload is not applied after it, on a session that may have moved on. A session's close or resume: an assertion too. An answer to an OpenRig ask: an assertion too, and its end comes as `openrig.answered`.
  * A setting: the screen that sent it says how it ended; after a reload the PC's own value shows.
  */
 const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'device.rename' || m.type === 'device.prefs' || m.type === 'context.set' || m.type.startsWith('project.') || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.relay.cancel' || m.type === 'chat.launch' || m.type === 'chat.close'
   || m.type === 'chat.task' || m.type === 'task.seen'
-  || m.type === 'daemon.update' || m.type === 'daemon.restart' || m.type === 'session.model' || m.type === 'session.close' || m.type === 'session.resume';
+  || m.type === 'daemon.update' || m.type === 'daemon.restart' || m.type === 'session.model' || m.type === 'session.close' || m.type === 'session.resume'
+  || m.type === 'openrig.answer';
 
 export const isLive = (p: OpPhase) => p === 'sending' || p === 'uncertain';
 

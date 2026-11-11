@@ -18,6 +18,8 @@ export interface InboxItem {
   /** The session's last activity: the PC does not say when the request itself came. */
   since: string;
   text: string;
+  /** The agent's own tool behind the request (`Bash`, `Edit`…): what « Toujours » grants depends on it. */
+  pendingTool?: string;
   body?: string;
   /** `body` was shortened; the whole one is asked with `session.pending`. */
   cut?: true;
@@ -46,7 +48,7 @@ export function requestsOf(sessions: PhoneSession[]): InboxItem[] {
       filter: p.kind === 'question' ? 'question' : 'permission',
       task: s.topic ?? s.project, botName: s.name, tool: s.tool, repo: s.repo ?? s.project,
       ...(s.branch ? { branch: s.branch } : {}), ...(s.worktree ? { worktree: true } : {}),
-      since: s.lastActivityAt, text: p.text,
+      since: s.lastActivityAt, text: p.text, ...(p.tool ? { pendingTool: p.tool } : {}),
       ...(p.body !== undefined ? { body: p.body } : {}), ...(p.cut ? { cut: true as const } : {}),
       ...(p.options ? { options: p.options } : {}), ...(p.optionDetails ? { optionDetails: p.optionDetails } : {}),
       source: p.source, ...(p.questions ? { questions: p.questions } : {}), ...(p.requestId ? { requestId: p.requestId } : {}),

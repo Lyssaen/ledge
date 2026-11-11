@@ -30,7 +30,7 @@ describe('a high-impact request', () => {
 
   it('a PC asking for its own confirmation says the same', () => {
     const t = opened();
-    fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser' }));
     act(() => t.deliver({ type: 'operation.result', op: t.of('session.decide')[0]!.op, status: 'rejected', reason: 'confirm_required' }));
     expect(screen.getByText('À accepter sur le PC')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Autoriser/ })).not.toBeInTheDocument();

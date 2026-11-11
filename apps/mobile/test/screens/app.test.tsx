@@ -60,7 +60,7 @@ describe('the app', () => {
   it('a request replaced in place keeps « mise à jour » when the app renders the new address again', () => {
     const t = app('ready', { hash: '#/request/a/k1' });
     act(() => t.deliver(snapshot([session('a', { state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm test' }) })])));
-    fireEvent.click(screen.getByRole('button', { name: 'Autoriser une fois' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser' }));
     const op = t.of('session.decide')[0]!.op;
     act(() => t.deliver({ type: 'operation.result', op, status: 'rejected', reason: 'stale' }));
     act(() => t.deliver({ type: 'session.pending', id: 'a', pending: pending({ key: 'p2', text: 'pnpm build' }) }));

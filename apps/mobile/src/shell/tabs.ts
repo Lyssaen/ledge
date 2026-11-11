@@ -12,7 +12,7 @@ export const PHONE_TABS = ['atoi', 'sessions', 'prs', 'rigs', 'chat'] as const s
 /** The tab a screen belongs to: a request to À toi, a thread or a terminal to Sessions; none for Réglages. */
 export function tabOf(r: Route): Tab | null {
   switch (r.name) {
-    case 'atoi': case 'request': return 'atoi';
+    case 'atoi': case 'request': case 'ask': return 'atoi';
     case 'sessions': case 'thread': case 'terminal': return 'sessions';
     case 'prs': case 'rigs': case 'chat': return r.name;
     case 'atelier': return 'atelier';

@@ -66,4 +66,16 @@ test('on an iPad the list and the request sit side by side, either way up', asyn
   await expect(agent).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.split-detail header')).toBeVisible();
   await shot(page, 'thread', browserName);
+
+  // « À toi » from the keyboard (m1-a-toi.html §12): the tab comes back on the request it was left on; ↓ stays on the only one,
+  // Y allows it, its receipt shows, then the pane moves on; with none left, « Choisis une demande ».
+  await page.getByRole('navigation', { name: copy.nav.label }).getByRole('link', { name: copy.nav.atoi }).click();
+  await page.keyboard.press('ArrowDown');
+  await expect(row).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByText(copy.atoi.keys)).toBeVisible();
+  await shot(page, 'request-keys', browserName);
+  await page.keyboard.press('y');
+  await expect(page.getByText(copy.result.allowed)).toBeVisible();
+  await expect.poll(() => h.daemon.typed.length).toBe(1);
+  await expect(page.getByRole('heading', { name: copy.split.request.title })).toBeVisible({ timeout: 10_000 });
 });
