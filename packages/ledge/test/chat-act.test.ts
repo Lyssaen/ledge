@@ -91,6 +91,14 @@ describe('actFromChat (spec 2026-10-26 action registry §9.2)', () => {
     const g = deps(gone, { resolve: () => ({ refused: 'unknown session a', code: 'unknown' as const }) });
     expect(await actFromChat(g.d, 'q1')).toEqual({ done: [], failed: [{ row: 0, message: 'unknown session a', refused: true }] });
     expect(gone.rows[0]).toMatchObject({ state: 'refused', error: 'unknown session a', code: 'unknown' });
+    expect(gone.rows[0]).not.toHaveProperty('vars');
+  });
+  it('an OpenRig row gone since the card keeps its words and says what is gone (missing), for the card to name that cause', async () => {
+    const vars = { rig: 'ledge-dev', role: 'dev.back', count: '1', from: '2' };
+    const c = card([row('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, { vars })]);
+    const { d } = deps(c, { resolve: () => ({ refused: 'unknown rig ledge-dev', code: 'unknown' as const, missing: 'rig' as const }) });
+    await actFromChat(d, 'q1');
+    expect(c.rows[0]).toMatchObject({ state: 'refused', code: 'unknown', vars: { ...vars, missing: 'rig' } });
   });
   it('a changed target is refused with the code changed, a failure sent with failed', async () => {
     const c = card([row('session.interrupt', { session: 'a' })]);

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page, WebSocketRoute } from '@playwright/test';
-import type { RigGraph, RigRow, RigSeatPermission, RigSnapshot, BrowserLive, HumanAsk, HumanChannel, OpenRigAnswered, OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, SlashCommand, Recent, Session, ThreadItem, Tool, UsageStateMessage, PullRequest, ForgeStatus, PrDetail, ForgeAction, FollowedSession, Task } from '@ledge/protocol';
+import type { RigGraph, RigRow, RigSeatPermission, RigSnapshot, BrowserLive, HumanAsk, HumanChannel, OpenRigAnswered, OpenRigState, RigSpec, RoleDetail, RoleSummary, ChatAction, ChatProjectProposal, ChatProposal, ChatStep, ChatTurn, ClientMessage, DaemonInfo, FoundRepo, IslandPrefs, Machines, ModelChoice, Projects, SlashCommand, Recent, Session, ThreadItem, Tool, UsageStateMessage, PullRequest, ForgeStatus, PrDetail, ForgeAction, FollowedSession, Task } from '@ledge/protocol';
 
 /** How long a launched session stays `starting` in the fake daemon before it is `working`. */
 export const LAUNCH_SETTLE_MS = 1500;
@@ -15,7 +15,7 @@ export function session(id: string, extra: Partial<Session> = {}): Session {
 export interface Folder { parent: string | null; entries: string[]; repos?: { name: string; branch: string }[] }
 
 /** Ledge's scripted answer to every `chat.ask`: what it read, its text, the session it proposes to start. */
-export interface ChatReply { steps?: ChatStep[]; text: string; proposal?: ChatProposal; projectProposal?: ChatProjectProposal }
+export interface ChatReply { steps?: ChatStep[]; text: string; proposal?: ChatProposal; projectProposal?: ChatProjectProposal; /** The generic card's rows (spec §9.2), as the daemon sends them. */ actions?: ChatAction[] }
 
 /** A machine's answer to `repos.scan`: its repositories, or the fleet's `error` for a machine it cannot ask. */
 export type Found = { repos: FoundRepo[]; truncated?: boolean } | 'offline' | 'outdated';
@@ -184,10 +184,10 @@ export async function fakeDaemon(page: Page, initial: Session[], extras: { machi
         const reply = extras.chat ?? { text: 'Nothing to report.' };
         const steps = reply.steps ?? [];
         const at = new Date().toISOString();
-        turns.set(msg.qid, { qid: msg.qid, question: msg.text, askedAt: at, steps, answer: reply.text, answeredAt: at, ...(reply.proposal ? { proposal: reply.proposal } : {}), ...(reply.projectProposal ? { projectProposal: reply.projectProposal } : {}) });
+        turns.set(msg.qid, { qid: msg.qid, question: msg.text, askedAt: at, steps, answer: reply.text, answeredAt: at, ...(reply.proposal ? { proposal: reply.proposal } : {}), ...(reply.projectProposal ? { projectProposal: reply.projectProposal } : {}), ...(reply.actions ? { actions: reply.actions } : {}) });
         for (const step of steps) ws.send(JSON.stringify({ type: 'chat.step', qid: msg.qid, step }));
         ws.send(JSON.stringify({ type: 'chat.delta', qid: msg.qid, text: reply.text }));
-        ws.send(JSON.stringify({ type: 'chat.done', qid: msg.qid, text: reply.text, at, ...(reply.proposal ? { proposal: reply.proposal } : {}), ...(reply.projectProposal ? { projectProposal: reply.projectProposal } : {}) }));
+        ws.send(JSON.stringify({ type: 'chat.done', qid: msg.qid, text: reply.text, at, ...(reply.proposal ? { proposal: reply.proposal } : {}), ...(reply.projectProposal ? { projectProposal: reply.projectProposal } : {}), ...(reply.actions ? { actions: reply.actions } : {}) }));
       }
       if (msg.type === 'session.launch' && extras.launches !== 'manual') {
         const id = `launched-${++launches}`;

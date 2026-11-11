@@ -234,6 +234,22 @@ describe('rig.act and rig.seats', () => {
     expect(code('rig.seats', { rig: 'ledge-dev', role: 'qa.review', count: 1 }, c)).toBe('unknown');
     expect(code('rig.seats', { rig: 'idle', role: 'dev.back', count: 2 }, c)).toBe('not_running');
   });
+  it('an unknown OpenRig row says what is gone (missing), so the card names that cause: OpenRig, the rig, or the role\'s seats', () => {
+    const missing = (id: ActionId, args: unknown, c: ReturnType<typeof ctx>) => {
+      const r = resolveAction(id, actionById(id)!.args.parse(args), c);
+      return 'refused' in r ? [r.code, r.missing] : ['resolved'];
+    };
+    const c = withRigs();
+    expect(missing('rig.act', { kind: 'rig.stop', rig: 'nope' }, c)).toEqual(['unknown', 'rig']);
+    expect(missing('rig.act', { kind: 'kernel.start' }, ctx())).toEqual(['unknown', 'openrig']);
+    expect(missing('rig.act', { kind: 'rig.start', rig: 'ledge-dev' }, withRigs({ installed: false }))).toEqual(['unknown', 'openrig']);
+    // A rig gone under a seat change is the rig, not its role.
+    expect(missing('rig.seats', { rig: 'nope', role: 'dev.back', count: 1 }, c)).toEqual(['unknown', 'rig']);
+    expect(missing('rig.seats', { rig: 'ledge-dev', role: 'qa.review', count: 1 }, c)).toEqual(['unknown', 'role']);
+    expect(missing('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, ctx())).toEqual(['unknown', 'openrig']);
+    // Other refusals name nothing.
+    expect(missing('rig.act', { kind: 'rig.stop', rig: 'idle' }, c)).toEqual(['not_running', undefined]);
+  });
   it('each row carries what a phone writes its line with (M3 Q34), and an irreversible one the seats it stops (Q35)', () => {
     const c = withRigs({ rigs: [...RIGS.rigs, { id: 'k', name: 'kernel', status: 'running', lifecycleState: 'running', seats: 2, running: 2, attention: 0, uptime: '1h', snapshot: null,
       nodes: [{ ...seat('ops.operator'), session: 'operator-agent@kernel' }, { ...seat('ops.advisor'), session: 'advisor-agent@kernel' }] }] });

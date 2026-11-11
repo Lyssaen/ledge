@@ -79,6 +79,7 @@ export const lineOf = (r: ActionRowView, c: ActionCopy): string =>
 /** Why a row was refused or failed, in the front's words. */
 export const whyOf = (r: ActionRowView, c: ActionCopy): string =>
   plain(c.words.why(r.code ?? (r.state === 'failed' ? 'failed' : undefined), r.action, r.vars ?? {}));
-/** The button of a row: its action's verb, « Refuser » for a denial, « Appliquer » for an action the front does not know. */
+/** The button of a row: its own verb (an OpenRig row's line), else its action's, « Refuser » for a denial, « Appliquer » for
+ *  an action the front does not know. */
 export const verbOf = (r: ActionRowView, c: ActionCopy): string =>
-  (r.decision === 'deny' ? c.deny : (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);
+  (r.decision === 'deny' ? c.deny : c.words.verb(r.action, r.vars ?? {}) ?? (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);
