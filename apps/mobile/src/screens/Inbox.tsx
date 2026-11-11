@@ -8,6 +8,7 @@ import { doingLine } from '../model/sessions';
 import { indicators } from '../model/usage';
 import { href, useRoute } from '../router';
 import { TabPage } from '../shell/Shell';
+import type { ForgeStore } from '../state/forge';
 import { useMobile, type MobileState, type MobileStore } from '../state/store';
 import { Icon } from '../ui/icons';
 import { Box, EmptyState, Line } from '../ui/kit/Box';
@@ -21,6 +22,7 @@ import { useSticky } from './atoi/Receipt';
 import { SessionCard } from './atoi/SessionCard';
 import { usePlatform } from './device';
 import { UpdateCard } from './Enroll';
+import { AtoiPrs } from './prs/forgeMarks';
 
 export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
 
@@ -91,9 +93,10 @@ function Working({ sessions, threshold, now, stale }: { sessions: PhoneSession[]
 /**
  * « À toi » (docs/mockups/ledge-mobile-refonte/m1-a-toi.html, 3228f5ed; m1-reponses-rig.html, 7aa3ec6e). On a phone: the sessions'
  * requests as cards decided in place, OpenRig's asks under « Rigs OpenRig », then the sessions at work; nothing waiting, a calm
- * state. On a wide screen (§12): the same groups as compact rows, the one chosen opened on the right.
+ * state, then the requests that need a look (MR et PR, M5 §9). On a wide screen (§12): the same groups as compact rows, the one
+ * chosen opened on the right.
  */
-export function Inbox({ store, onReconnect }: { store: MobileStore; onReconnect?: () => void }) {
+export function Inbox({ store, onReconnect, forge }: { store: MobileStore; onReconnect?: () => void; forge?: ForgeStore | null }) {
   const state = useMobile(store);
   const wide = useWide();
   const platform = usePlatform();
@@ -222,6 +225,7 @@ export function Inbox({ store, onReconnect }: { store: MobileStore; onReconnect?
           <Working sessions={working} threshold={threshold} now={now} stale={offline} />
         </>
       )}
+      {f === 'all' && <AtoiPrs forge={forge} mobile={state} />}
       {offline && <p className="text-small text-muted">{copy.inbox.offlineNote}</p>}
     </TabPage>
   );

@@ -309,7 +309,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     };
     const prsList = prsOn ? <PrsList forge={forge} store={store} /> : <Prs />;
     const prView = prsOn && route.name === 'pr' ? <PrView key={route.id} id={route.id} forge={forge} store={store} /> : null;
-    const inbox = <Inbox store={store} onReconnect={retry} />;
+    const inbox = <Inbox store={store} onReconnect={retry} forge={forge} />;
     const sessions = <Sessions store={store} filter={route.name === 'sessions' ? route.filter : undefined} />;
     // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
     const chatOn = !!mobile.device?.chat || (!mobile.fresh && !mobile.device);
@@ -333,7 +333,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           case 'ask': return <Split list={inbox} detail={<AskDetail key={route.id} store={store} id={route.id} onDone={moveOn({ name: 'ask', id: route.id })} />} />;
           case 'request': return <Split list={inbox} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} onSettled={moveOn({ name: 'request', sessionId: route.sessionId, key: route.key })} keys />} />;
           case 'sessions': return <Split list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
-          case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
+          case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} forge={forge} />} />;
           // « Nouvelle session » opens beside the list, like a session (Q82, validated by the user 2026-11-11).
           case 'launch': return <Split list={sessions} detail={<NewSession store={store} storage={storage} />} />;
           case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
@@ -369,7 +369,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       // The Ledge tab brings its own head (m3-chat.html §1): Ledge, the host, its conversation buttons and Réglages.
       case 'chat': return framed(chat, !chatOn);
       case 'connection': return framed(connection, false);
-      case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />, false);
+      case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} forge={forge} />, false);
       case 'terminal': return framed(<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />, false);
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
       case 'ask': return framed(<AskDetail key={route.id} store={store} id={route.id} />, false);
