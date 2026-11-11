@@ -287,6 +287,13 @@ export const en: Copy = {
       idle: 'They are all available or ended.'
     },
     seeWaiting: 'See waiting',
+    mode: { label: 'Sessions view', list: 'List', atelier: 'Atelier' },
+    groupBy: { label: 'Group by', projects: 'Projects', rigs: 'Rigs' },
+    helpersHide: 'Hide sub-agents', helpersShow: 'Show sub-agents',
+    outsideRig: 'Outside a rig', rigTag: 'rig', kernelTag: 'OpenRig',
+    seats: (n: number) => (n === 1 ? '1 seat' : `${n} seats`),
+    deskTitle: 'Ledge’s desk',
+    seatOf: (role: string, rig: string) => `seat ${role} · ${rig}`,
     view: { label: 'Session view', thread: 'Thread', terminal: 'Terminal' },
     more: 'More actions',
     moreOf: (bot: string) => `More actions for ${bot}`,
@@ -544,7 +551,7 @@ export const en: Copy = {
     }
   },
   terminal: {
-    title: (bot: string) => `${bot}’s terminal`, back: 'Back to the thread',
+    back: 'Back to the thread',
     live: 'Read only · live', waiting: 'Read only · waiting', offline: 'Read only · last known state',
     smaller: 'Smaller text', larger: 'Larger text',
     output: 'Terminal output, horizontal scrolling', empty: 'No output yet.', unknown: 'This session no longer exists on the PC.',

@@ -292,6 +292,14 @@ const fr = {
       idle: 'Elles sont toutes disponibles ou terminées.'
     },
     seeWaiting: 'Voir en attente',
+    /** The Atelier on a phone (§7, QUESTIONS.md « M2b · L'Atelier sur téléphone ») and a seat's long press (§8). */
+    mode: { label: 'Affichage des sessions', list: 'Liste', atelier: 'Atelier' },
+    groupBy: { label: 'Regrouper par', projects: 'Projets', rigs: 'Rigs' },
+    helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents',
+    outsideRig: 'Hors rig', rigTag: 'rig', kernelTag: 'OpenRig',
+    seats: (n: number) => (n === 1 ? '1 siège' : `${n} sièges`),
+    deskTitle: 'Bureau de Ledge',
+    seatOf: (role: string, rig: string) => `siège ${role} · ${rig}`,
     /** A session's screen (m2-sessions.html §3 to §5): its head, its folded tools, its foot and « Plus d'actions ». */
     view: { label: 'Vue de la session', thread: 'Fil', terminal: 'Terminal' },
     more: 'Plus d’actions',
@@ -552,7 +560,7 @@ const fr = {
     }
   },
   terminal: {
-    title: (bot: string) => `Terminal de ${bot}`, back: 'Retour au fil',
+    back: 'Retour au fil',
     live: 'Lecture seule · en direct', waiting: 'Lecture seule · en attente', offline: 'Lecture seule · dernier état connu',
     smaller: 'Réduire le texte', larger: 'Agrandir le texte',
     output: 'Sortie du terminal, défilement horizontal', empty: 'Aucune sortie pour le moment.', unknown: 'Cette session n’existe plus sur le PC.',

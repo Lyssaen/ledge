@@ -59,6 +59,40 @@ export function sessionGroups(sessions: readonly PhoneSession[], f: SessionFilte
   return [...projects.values(), ...rigs.values()].map(sorted);
 }
 
+/** The phone's Atelier (m2-sessions.html §7): by project (then OpenRig's rigs, as the list), or by rig then « Hors rig ». */
+export type Grouping = 'projects' | 'rigs';
+export const GROUPINGS: readonly Grouping[] = ['projects', 'rigs'];
+
+export interface Island {
+  id: string;
+  /** `outside` gathers every session out of a rig, when grouped by rig. */
+  kind: SessionGroup['kind'] | 'outside';
+  name: string;
+  sessions: PhoneSession[];
+}
+
+export function islands(sessions: readonly PhoneSession[], by: Grouping): Island[] {
+  const groups = sessionGroups(sessions, 'all');
+  if (by === 'projects') return groups;
+  const outside = sessions.filter(s => !s.rig).map((s, i) => [s, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([s]) => s);
+  return [...groups.filter(g => g.kind === 'rig'), ...(outside.length ? [{ id: 'outside', kind: 'outside' as const, name: copy.sessions.outsideRig, sessions: outside }] : [])];
+}
+
+/** A project's island shows its most pressing request, red then amber, and nothing without one (design-ux, 6e8d4bba, point 3). */
+export function islandDot(island: Island): 'perm' | 'ask' | null {
+  if (island.kind !== 'project') return null;
+  const dots = island.sessions.map(dotOf);
+  return dots.includes('perm') ? 'perm' : dots.includes('ask') ? 'ask' : null;
+}
+
+/** A sub-agent's small seat: its own state's dot, grey once it finished. */
+export function helperDot(h: PhoneSession['helpers'][number]): DotState {
+  if (h.finishedAt !== undefined || h.state === 'exited') return 'done';
+  if (h.state === 'waiting_permission') return 'perm';
+  if (h.state === 'waiting_input') return 'ask';
+  return h.state === 'working' ? 'work' : 'idle';
+}
+
 /** How many sessions each filter holds, for its chip. */
 export const filterCounts = (sessions: readonly PhoneSession[]): Record<SessionFilter, number> => ({
   all: sessions.length,

@@ -62,13 +62,17 @@ const Menu = ({ children }: { children: ReactNode }) => <div className="flex fle
  * session, in one sheet. Modèle et effort, Plan de travail, Interrompre, Écrire au groupe, then Fermer in red. A line that is
  * off keeps its place and says why. « Redémarrer le siège » is not in M2.
  */
-export function SessionMore({ store, session, closable, closing, onClose, onModel, onCloseSession, display }: {
+export function SessionMore({ store, session, closable, closing, onClose, onModel, onCloseSession, display, lead, who }: {
   store: MobileStore; session: PhoneSession;
   /** The PC can close this session from a phone (`daemon.sessionClose`, launched by Ledge). */ closable: boolean;
   /** A close is under way: « Fermer » says so and does nothing. */ closing: boolean;
   onClose: () => void; onModel: () => void; onCloseSession: () => void;
   /** The terminal view is open: « Affichage » and its value (Lisible, Ajusté), a tap switching it (QUESTIONS.md, « M2b · Le terminal » 5). */
   display?: { value: string; onToggle: () => void } | undefined;
+  /** A long press in Sessions (§8): « Ouvrir le fil », « Ouvrir le terminal » before the rest. */
+  lead?: readonly { icon: IconName; label: string; onClick: () => void }[] | undefined;
+  /** What the head says after the name, in place of the project and the branch (« siège dev.front · ledge-dev », §8). */
+  who?: string | undefined;
 }) {
   const state = useMobile(store);
   const now = useNow();
@@ -103,7 +107,7 @@ export function SessionMore({ store, session, closable, closing, onClose, onMode
   const group = groupOf(session, state.sessions.values());
   const canGroup = !!state.daemon?.broadcast && group.ids.length > 1;
 
-  const where = [session.project, session.branch].filter(Boolean).join(' · ');
+  const where = who ?? [session.project, session.branch].filter(Boolean).join(' · ');
   return (
     <Sheet labelledBy={titleId} onClose={onClose}>
       <h2 id={titleId} aria-label={S.sheet.label(name)} className="flex min-w-0 items-center gap-2">
@@ -120,6 +124,7 @@ export function SessionMore({ store, session, closable, closing, onClose, onMode
         <GroupWrite store={store} label={group.name} ids={group.ids} offline={!fresh} startOpen onCancel={() => setPane('menu')} />
       ) : (
         <>
+          {lead && lead.length > 0 && <Menu>{lead.map(l => <Item key={l.label} icon={l.icon} label={l.label} onClick={l.onClick} />)}</Menu>}
           <Menu>
             <Item icon="cpu" label={copy.model.title} why={off} right={model || null} onClick={off || !fresh ? undefined : onModel} />
             {display && <Item icon="terminal" label={copy.terminal.live2.view} right={display.value} onClick={display.onToggle} />}

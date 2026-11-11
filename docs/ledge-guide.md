@@ -319,7 +319,9 @@ Ce qui attend l'utilisateur, tranchable sur place. Les demandes des sessions en 
 
 ### Sessions (`sessions`)
 
-Les sessions groupées par projet, puis par rig OpenRig. Les filtres en haut : « Toutes », « En attente » et « Au travail », chacun avec son compte. Une ligne donne le point d'état de la session, son outil, son nom et ce qu'elle fait ; elle dit « Fermeture… » pendant qu'elle se ferme depuis ce téléphone. Toucher une ligne ouvre le fil de la session. Sur une tablette, la liste reste à gauche et le fil s'ouvre à droite.
+Les sessions groupées par projet, puis par rig OpenRig. Les filtres en haut : « Toutes », « En attente » et « Au travail », chacun avec son compte. Une ligne donne le point d'état de la session, son outil, son nom et ce qu'elle fait ; elle dit « Fermeture… » pendant qu'elle se ferme depuis ce téléphone. Toucher une ligne ouvre le fil de la session ; un appui long ouvre ses actions : « Ouvrir le fil », « Ouvrir le terminal », puis celles de « Plus d'actions ». Sur une tablette, la liste reste à gauche et le fil s'ouvre à droite.
+
+Sur un téléphone, « Liste · Atelier » à côté du titre montre les agents en îlots : un îlot par projet puis par rig, ou, avec « Rigs », les rigs puis « Hors rig ». Chaque agent est un siège avec son point d'état ; ses sous-agents sont de petits sièges en pointillés, que l'œil masque (leur nombre revient alors sur l'agent, « +2 »). Toucher un siège ouvre le fil, un appui long ses actions. En bas, le bureau de Ledge ouvre l'onglet Ledge. Le téléphone garde ces choix.
 
 ### MR et PR (`prs`)
 
@@ -363,7 +365,7 @@ Les échanges avec un agent et le champ pour lui écrire. Le fil s'ouvre en bas,
 
 ### Terminal (`terminal`)
 
-Le terminal d'un agent, en direct et en couleurs, à la taille du PC : « Lisible » (suit le curseur) ou « Ajusté » (toute la largeur), pincer pour zoomer. « Interrompre » reste là. « Prendre la main » (passkey de l'appareil, et le réglage « Taper dans les terminaux depuis le téléphone » activé sur le PC) ouvre le clavier avec une rangée de touches : Échap, Tab, Ctrl et Alt collants, flèches, ↵, ^C, Coller et « Ligne » pour la dictée. La main est rendue après 5 minutes sans frappe, au bout de 30 minutes, ou dès que l'appli passe en arrière-plan. Sans ce réglage, le terminal reste en lecture seule.
+Le terminal d'un agent, en direct et en couleurs, à la taille du PC, sous le même en-tête que le fil. Le bandeau donne le projet, l'état (« Lecture seule · en direct », « Au clavier ») et la taille du PC. « Affichage », dans « Plus d'actions », passe de « Lisible » (suit le curseur) à « Ajusté » (toute la largeur) ; on pince pour zoomer. « Interrompre » est dans « Plus d'actions ». « Prendre la main » (passkey de l'appareil, et le réglage « Taper dans les terminaux depuis le téléphone » activé sur le PC) ouvre le clavier avec une rangée de touches : Échap, Tab, Ctrl et Alt collants, flèches, ↵, ^C, Coller et « Ligne » pour la dictée, que « Taper ↵ » envoie. Quand une autorisation attend et que l'écran montre son choix numéroté, des touches en ambre (« 1 Oui », « 2 Toujours », « 3 Non ») tapent son chiffre. La main est rendue après 5 minutes sans frappe, au bout de 30 minutes, ou dès que l'appli passe en arrière-plan ; la dernière minute est décomptée dans le bandeau. Sans ce réglage, le terminal reste en lecture seule.
 
 ### Demande (`request`)
 

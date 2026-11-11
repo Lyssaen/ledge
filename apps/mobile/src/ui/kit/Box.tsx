@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { DOMAttributes, ReactNode } from 'react';
 import { Dot, type DotState } from './marks';
 
 /*
@@ -40,11 +40,13 @@ export function Box({ title, dot, count, sub, tone, none, label, children }: {
  * A list row: its dot, runtime tag, two lines and a meta on the right. `selected`: the one opened beside the list. `stale`:
  * the last known state, dimmed (offline). A row with `href` is a link.
  */
-export function Line({ lead, title, sub, subTone, meta, metaWarn = false, selected = false, stale = false, href, children }: {
+export function Line({ lead, title, sub, subTone, meta, metaWarn = false, selected = false, stale = false, pressed = false, href, press, children }: {
   lead?: ReactNode; title: ReactNode; sub?: ReactNode; subTone?: 'perm'; meta?: ReactNode; metaWarn?: boolean;
   selected?: boolean; stale?: boolean; href?: string; children?: ReactNode;
+  /** A long press's handlers on the row's link (m2-sessions.html §8), and the ring while its actions are open. */
+  press?: DOMAttributes<HTMLAnchorElement>; pressed?: boolean;
 }) {
-  const className = `flex min-h-[52px] items-center gap-2 border-b border-line px-3 py-1.5 text-[13.5px] last:border-b-0 ${stale ? 'opacity-60' : ''} ${selected ? 'bg-secondary shadow-[inset_2px_0_0_var(--color-primary)]' : ''}`;
+  const className = `flex min-h-[52px] items-center gap-2 border-b border-line px-3 py-1.5 text-[13.5px] last:border-b-0 ${stale ? 'opacity-60' : ''} ${selected ? 'bg-secondary shadow-[inset_2px_0_0_var(--color-primary)]' : ''} ${pressed ? 'shadow-[inset_0_0_0_2px_var(--color-ring)]' : ''}`;
   const body = (
     <>
       {lead}
@@ -57,7 +59,7 @@ export function Line({ lead, title, sub, subTone, meta, metaWarn = false, select
     </>
   );
   return href
-    ? <a href={href} aria-current={selected ? 'page' : undefined} className={className}>{body}</a>
+    ? <a href={href} aria-current={selected ? 'page' : undefined} className={className} {...press}>{body}</a>
     : <div className={className}>{body}</div>;
 }
 

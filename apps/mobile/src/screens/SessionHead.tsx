@@ -1,5 +1,6 @@
 import type { PhoneSession } from '@ledge/protocol';
 import { useState } from 'react';
+import { navigate } from '../router';
 import { copy } from '../copy';
 import { closeHeld } from '../model/sessionEnd';
 import { dotOf } from '../model/sessions';
@@ -52,5 +53,31 @@ export function SessionHead({ store, session, current, onLeave, onReconnect, dis
       {model && modelSwitchable(state.daemon, session) && <ChangeSheet store={store} session={session} onClose={() => setModel(false)} />}
       {closing && <EndSheet store={store} session={session} mode="close" onClose={() => setClosing(false)} onSent={() => setClosing(false)} onReconnect={onReconnect} />}
     </>
+  );
+}
+
+/**
+ * A long press on a seat of the Atelier or a row of the list (m2-sessions.html §8, Q22): « Plus d'actions » led by « Ouvrir le
+ * fil » and « Ouvrir le terminal », and the sheets it opens. A rig's seat says « siège dev.front · ledge-dev », a session its project.
+ */
+export function SessionActions({ store, session, onDone }: { store: MobileStore; session: PhoneSession; onDone: () => void }) {
+  const state = useMobile(store);
+  const now = useNow();
+  const [pane, setPane] = useState<'menu' | 'model' | 'close'>('menu');
+  const closable = !!state.daemon?.sessionClose && !session.readOnly;
+  const shut = closeHeld(session, state.ops, state.daemon?.boot ?? null, now);
+  const who = session.rig ? copy.sessions.seatOf(session.rig.role ?? session.name, session.rig.name) : session.project;
+  const go = (r: Parameters<typeof navigate>[0]) => { onDone(); navigate(r); };
+  if (pane === 'model') return modelSwitchable(state.daemon, session) ? <ChangeSheet store={store} session={session} onClose={onDone} /> : null;
+  if (pane === 'close') return <EndSheet store={store} session={session} mode="close" onClose={onDone} onSent={onDone} />;
+  return (
+    <SessionMore
+      store={store} session={session} closable={closable} closing={shut} onClose={onDone} who={who}
+      onModel={() => setPane('model')} onCloseSession={() => setPane('close')}
+      lead={[
+        { icon: 'sessions', label: copy.atoi.openThread, onClick: () => go({ name: 'thread', sessionId: session.id }) },
+        { icon: 'terminal', label: copy.thread.terminal(session.name), onClick: () => go({ name: 'terminal', sessionId: session.id }) }
+      ]}
+    />
   );
 }

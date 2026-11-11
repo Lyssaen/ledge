@@ -211,8 +211,10 @@ function Loading() {
  * A tab's page. On a phone: the banner, then the tab's title and what it says, then its content. On a wide screen, the list's
  * head carries the title, the host pill beside it. Before the PC's first state, its outline instead of the content.
  */
-export function TabPage({ title, subtitle, wideSubtitle, children, bodyClassName = 'flex flex-col gap-3', offlineBody, heading = true }: {
+export function TabPage({ title, subtitle, wideSubtitle, actions, children, bodyClassName = 'flex flex-col gap-3', offlineBody, heading = true }: {
   title: string; subtitle?: string | undefined;
+  /** On a phone, what the title's line carries on its right (Sessions: Liste · Atelier, m2-sessions.html §1, §7). */
+  actions?: ReactNode;
   /** What the list's head says beside the title on a wide screen (« 3 demandes »); only the tabs whose mockup shows it give one. */
   wideSubtitle?: string | undefined;
   children: ReactNode; bodyClassName?: string;
@@ -239,6 +241,7 @@ export function TabPage({ title, subtitle, wideSubtitle, children, bodyClassName
           <div className="flex flex-none items-baseline gap-2">
             <h1 className="text-[22px] leading-7 font-semibold tracking-[-.02em]">{title}</h1>
             {(loading || subtitle) && <span className="min-w-0 truncate text-[12.5px] text-muted">{loading ? copy.link.connecting(hostName(pc)) : subtitle}</span>}
+            {actions && <span className="ml-auto flex flex-none items-center gap-2 self-center">{actions}</span>}
           </div>
         )}
         {loading ? <Loading /> : <div className={`flex-none ${bodyClassName}`}>{children}</div>}
