@@ -2,9 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { setCodecForTests } from '@ledge/ui/images';
 import { describe, expect, it } from 'vitest';
 import { copy } from '../../src/copy';
-import { Agents } from '../../src/screens/Agents';
 import { Chat } from '../../src/screens/Chat';
-import { Inbox } from '../../src/screens/Inbox';
 import { session } from '../model/fixtures';
 import { chat, snapshot } from '../state/helpers';
 import { app } from './app-setup';
@@ -23,34 +21,25 @@ const type = (text: string) => fireEvent.change(screen.getByLabelText('Question 
 const send = () => fireEvent.click(screen.getByRole('button', { name: 'Envoyer la question' }));
 
 describe('the tab bar', () => {
-  it('has two tabs without device.chat, in the inbox and in the agents', () => {
-    const t = setup();
-    t.deliver(snapshot([session('a')]));
-    const { unmount } = render(<Inbox store={t.store} />);
-    expect(within(nav()).getAllByRole('link')).toHaveLength(2);
-    unmount();
-    render(<Agents store={t.store} />);
-    expect(within(nav()).getAllByRole('link')).toHaveLength(2);
-  });
-
-  it('has three tabs with device.chat: Ledge, À traiter, Agents', () => {
-    const t = setup();
-    t.deliver(snapshot([session('a')], 'Atelier', undefined, ON));
-    const { unmount } = render(<Inbox store={t.store} />);
-    expect(within(nav()).getAllByRole('link')).toHaveLength(3);
-    expect(within(nav()).getAllByRole('link').map(a => a.textContent?.replace(/\d+$/, ''))).toEqual(['Ledge', 'À traiter', 'Agents']);
-    expect(within(nav()).getAllByRole('link')[0]).toHaveAccessibleName('Ledge');
-    expect(within(nav()).getByRole('link', { name: 'Ledge' })).toHaveAttribute('href', '#/chat');
-    unmount();
-    render(<Agents store={t.store} />);
-    expect(within(nav()).getAllByRole('link')).toHaveLength(3);
-  });
-
-  it('#/chat goes back to the inbox without device.chat', async () => {
-    const a = app('ready', { hash: '#/chat' });
+  it('has the same five tabs whether the PC offers the chat or not, Ledge last', () => {
+    const tabs = () => within(nav()).getAllByRole('link').map(a => a.textContent?.replace(/\d+$/, ''));
+    const five = [copy.nav.atoi, copy.nav.sessions, copy.nav.prs, copy.nav.rigs, copy.nav.chat];
+    const a = app('ready', { hash: '#/' });
     act(() => a.deliver(snapshot([session('a')])));
-    expect(screen.getByRole('heading', { name: 'À traiter' })).toBeInTheDocument();
-    await waitFor(() => expect(globalThis.location.hash).toBe('#/'));
+    expect(tabs()).toEqual(five);
+    act(() => a.deliver(snapshot([session('a')], 'Atelier', undefined, ON)));
+    expect(tabs()).toEqual(five);
+    expect(within(nav()).getByRole('link', { name: copy.nav.chat })).toHaveAttribute('href', '#/chat');
+  });
+
+  it('#/chat without device.chat says the PC does not offer it, with no field, and stays there', () => {
+    const a = app('ready', { hash: '#/chat' });
+    act(() => a.deliver(snapshot([session('a')], 'WSL')));
+    expect(screen.getByRole('heading', { name: copy.chat.unavailable.title('WSL') })).toBeInTheDocument();
+    expect(screen.getByText(copy.chat.unavailable.body)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: copy.chat.unavailable.seeAtoi })).toHaveAttribute('href', '#/');
+    expect(screen.queryByLabelText('Question pour Ledge')).toBeNull();
+    expect(globalThis.location.hash).toBe('#/chat');
   });
 
   it('opens the chat at #/chat with device.chat', () => {
@@ -136,7 +125,7 @@ describe('the chat screen', () => {
     act(() => t.set('pc_offline'));
     type('Une question');
     expect(screen.getByRole('button', { name: 'Envoyer la question' })).toBeDisabled();
-    expect(screen.getByText('Hors ligne : posez la question quand le PC sera joignable.')).toBeInTheDocument();
+    expect(screen.getByText('Hors ligne : pose la question quand le PC sera joignable.')).toBeInTheDocument();
     expect(t.of('chat.ask')).toHaveLength(0);
   });
 

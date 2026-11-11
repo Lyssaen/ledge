@@ -111,7 +111,7 @@ export function ProtectStep({ store, onDone }: { store: MobileStore; onDone: () 
   const e = useEnroll(store);
   const [shown, setShown] = useState(false);
   useEffect(() => { if (e.offered) setShown(true); }, [e.offered]);
-  const inbox = href({ name: 'inbox' });
+  const inbox = href({ name: 'atoi' });
   if (!shown) return <a href={inbox} onClick={onDone} className={PRIMARY}>{copy.compare.seePending}</a>;
   if (e.registered) {
     return (

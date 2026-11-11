@@ -44,7 +44,7 @@ function Row({ label, w, now, alert }: { label: string; w: UsageWindow; now: num
       <span>{label}</span>
       <UsageGauge pct={w.pct} alert={alert} />
       <span className="truncate font-mono text-[12px]">
-        <b className={`font-medium ${TONE_TEXT[tone]}`}>{w.pct} %</b>
+        <b className={`font-medium ${TONE_TEXT[tone]}`}>{copy.percent(w.pct)}</b>
         {at && <small className="ml-1.5 text-[11px] text-muted">{reached(w) ? (w.resetsAt && resetIsDate(w.resetsAt, now) ? P.resumesOn(at) : P.resumes(at)) : `↺ ${at}`}</small>}
       </span>
     </div>

@@ -67,7 +67,7 @@ describe('a high-impact request with a device check', () => {
     const t = await guarded();
     expect(t.of('confirm.prepare')).toMatchObject([{ purpose: 'decide', id: 'a', expect: { text: 'git push --force origin main', kind: 'permission' } }]);
     expect(screen.getByRole('heading', { name: 'Confirmer l’autorisation' })).toBeInTheDocument();
-    expect(screen.getByText(/Une vérification sur votre appareil sera demandée/)).toBeInTheDocument();
+    expect(screen.getByText(/Une vérification sur ton appareil sera demandée/)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
     await waitFor(() => expect(t.of('session.decide')).toHaveLength(1));
     expect(getAssertion).toHaveBeenCalledWith({ challenge: 'Y2hhbGw', rpId: 'relay.example', credentialId: 'AQ' });
@@ -97,7 +97,7 @@ describe('a high-impact request with a device check', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
     await waitFor(() => expect(t.of('session.decide')).toHaveLength(1));
     act(() => t.deliver({ type: 'operation.result', op: t.of('session.decide')[0]!.op, status: 'rejected', reason: 'assertion_expired' }));
-    expect(await screen.findByText('La vérification a expiré. Recommencez.')).toBeInTheDocument();
+    expect(await screen.findByText('La vérification a expiré. Recommence.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(2));
     act(() => t.deliver(challenge));
@@ -110,7 +110,7 @@ describe('a high-impact request with a device check', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Confirmer avec mon appareil' }));
     await waitFor(() => expect(t.of('session.decide')).toHaveLength(1));
     act(() => t.deliver({ type: 'operation.result', op: t.of('session.decide')[0]!.op, status: 'rejected', reason }));
-    expect(await screen.findByText('La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessayez.')).toBeInTheDocument();
+    expect(await screen.findByText('La vérification de l’appareil n’a pas abouti. Rien n’a été envoyé. Réessaie.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
   });
 
@@ -186,7 +186,7 @@ describe('a high-impact request with a device check', () => {
     it('to a low request: nothing is confirmed, the request is said to have changed', async () => {
       const { onConfirm } = await gesture(pending({ key: 'p2', text: 'ls src', risk: 'low' }));
       expect(onConfirm).not.toHaveBeenCalled();
-      expect(screen.getByText('La demande a été mise à jour. Relisez-la avant de décider.')).toBeInTheDocument();
+      expect(screen.getByText('La demande a été mise à jour. Relis-la avant de décider.')).toBeInTheDocument();
     });
 
     it('to another high request: nothing is confirmed', async () => {

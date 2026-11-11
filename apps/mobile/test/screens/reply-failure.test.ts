@@ -9,7 +9,7 @@ const refused = (reason: OperationReason): Op => ({ op: 'o', message: { type: 's
 describe('why a reply with images did not go', () => {
   it('an image the PC no longer has is said so, and is not an unreachable PC', () => {
     expect(replyFailure(refused('attachment_missing')).body).toBe(copy.thread.composer.imageGone);
-    expect(copy.thread.composer.imageGone).toBe('Une image n’est plus disponible : retirez-la et recollez-la. Votre brouillon est conservé.');
+    expect(copy.thread.composer.imageGone).toBe('Une image n’est plus disponible : retire-la et recolle-la. Ton brouillon est conservé.');
   });
   it('an agent that cannot take images now gives the dialog wording', () => {
     expect(replyFailure(refused('attachments_not_accepted')).body).toBe(copy.images.dialog);

@@ -54,7 +54,7 @@ test('the terminal streams at the PC\'s size, then types after the passkey', asy
     await page.getByRole('button', { name: copy.enroll.go }).click();
     await expect(page.getByText(copy.enroll.done)).toBeVisible();
     await page.getByRole('link', { name: copy.compare.seePending }).click();
-    await page.getByRole('link', { name: copy.nav.agents, exact: true }).click();
+    await page.getByRole('link', { name: copy.nav.sessions, exact: true }).click();
     await page.getByRole('link', { name: /Pagination de \/invoices/ }).click();
     await page.getByRole('link', { name: copy.thread.terminal('Otto') }).click();
   });

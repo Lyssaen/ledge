@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { CONTEXT_NEAR, CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN, DEFAULT_DEVICE_PREFS, type DevicePrefs, type MutableNotification, type Tool } from '@ledge/protocol';
-import { copy } from '../copy';
+import { copy, locale } from '../copy';
 import { setReducedMotion, useReducedMotion } from '../motion';
 import { useMobile, type MobileStore } from '../state/store';
 import { FIELD } from '../ui/field';
@@ -9,7 +9,7 @@ import { Switch } from '../ui/Switch';
 import { useNow } from '../useNow';
 
 const S = copy.settings;
-const CARD = 'flex flex-col rounded-control border border-line bg-surface text-body';
+const CARD = 'flex flex-col rounded-[10px] border border-line bg-surface text-body';
 const ROW = 'flex flex-col gap-1 border-b border-line px-4 py-3 last:border-b-0';
 /** « Contexte max »: 50 % to 95 %, by 5, as the desktop offers it. */
 export const NEARS = Array.from({ length: Math.round((CONTEXT_NEAR_MAX - CONTEXT_NEAR_MIN) * 20) + 1 }, (_, i) => Math.round((CONTEXT_NEAR_MIN + i * 0.05) * 100));
@@ -43,10 +43,10 @@ export function pauseEnd(kind: 'hour' | 'four' | 'morning', at: Date): Date {
 
 /** The end of a pause as the user reads it: its time, « demain » before it when it is not today. */
 export function shownUntil(until: Date, now: Date): string {
-  const time = until.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const time = until.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   if (until.toDateString() === now.toDateString()) return time;
   const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
-  return until.toDateString() === tomorrow.toDateString() ? S.tomorrow(time) : `${until.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} ${time}`;
+  return until.toDateString() === tomorrow.toDateString() ? S.tomorrow(time) : `${until.toLocaleDateString(locale, { day: 'numeric', month: 'short' })} ${time}`;
 }
 
 /**
@@ -133,12 +133,12 @@ export function LedgePrefs({ store }: { store: MobileStore }) {
   const tool: ToolChoice = p.prefs.chatTool ?? 'pc';
   return (
     <section aria-labelledby="ledge-title" className="flex flex-col gap-2.5">
-      <h2 id="ledge-title" className="text-body text-muted">{S.ledge}</h2>
+      <h2 id="ledge-title" className="text-small font-medium text-muted">{S.ledge}</h2>
       <div className={CARD}>
         <Row label={S.context} hint={S.contextHint}>
           {d => (
             <select className={`${FIELD} w-auto`} aria-label={S.context} aria-describedby={d} disabled={!state.fresh || near !== null} value={shownNear} onChange={e => chooseNear(Number(e.target.value))}>
-              {NEARS.map(n => <option key={n} value={n}>{n} %</option>)}
+              {NEARS.map(n => <option key={n} value={n}>{copy.percent(n)}</option>)}
             </select>
           )}
         </Row>
@@ -177,7 +177,7 @@ export function ManagedOnPc({ store }: { store: MobileStore }) {
   const daemon = useMobile(store).daemon;
   return (
     <section aria-labelledby="managed-title" className="flex flex-col gap-2.5">
-      <h2 id="managed-title" className="text-body text-muted">{S.managed}</h2>
+      <h2 id="managed-title" className="text-small font-medium text-muted">{S.managed}</h2>
       {daemon?.terminal && (
         <dl className={CARD}>
           <div className="flex items-baseline justify-between gap-4 px-4 py-3">

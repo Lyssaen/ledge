@@ -308,18 +308,26 @@ Y renvoyer l'utilisateur pour lancer ou relancer une équipe OpenRig avec des r�
 
 ## Ledge mobile
 
-Une application web pour le téléphone, avec trois onglets en bas : « À traiter », « Agents », « Ledge ». Pour la lier :
+Une application web pour le téléphone et la tablette. Sur le téléphone, cinq onglets fixes en bas : « À toi », « Sessions », « MR/PR », « Rigs », « Ledge » ; l'en-tête porte le nom du PC (sa pastille, verte quand il répond, ambre « hors ligne » sinon, qui ouvre Réglages › Connexion) et la roue dentée des Réglages. Sur une tablette, ces onglets forment un rail à gauche, avec « Atelier » quand le PC le propose, puis « Ledge » et « Réglages » en bas ; chaque onglet s'ouvre en deux volets, la liste à gauche et ce qu'elle ouvre à droite. L'application s'ouvre sur « À toi ». Quand le PC ou le relais ne répond plus, un bandeau le dit en tête de chaque onglet, avec « Réessayer », et le dernier état connu reste affiché, sans action possible. Pour la lier :
 1. Sur le PC, dans Réglages › Accès mobile, activer l'accès, choisir le relais et se connecter avec GitHub.
 2. Sur le téléphone, ouvrir l'adresse du relais et se connecter avec le même compte.
 3. Comparer le code affiché sur les deux appareils et approuver sur le PC.
 
-### À traiter (`inbox`)
+### À toi (`atoi`)
 
-Les demandes en attente, les plus anciennes d'abord, filtrées par type (autorisations, questions, tâches). « Examiner » ouvre une demande. « Vous êtes à jour » quand rien n'attend.
+Les demandes en attente, les plus anciennes d'abord, filtrées par type (autorisations, questions, tâches). « Examiner » ouvre une demande. « Tu es à jour » quand rien n'attend. Le badge de l'onglet compte les autorisations en rouge, sinon les questions en ambre.
 
-### Agents (`agents`)
+### Sessions (`sessions`)
 
 Les sessions par projet. Une session ouvre son fil.
+
+### MR et PR (`prs`)
+
+Les MR et PR des branches des sessions et des sièges. Le PC ne les transmet pas encore au téléphone : l'onglet le dit, en attendant une prochaine version de Ledge sur le PC.
+
+### Rigs (`rigs`)
+
+Les rigs OpenRig, leurs sièges et leur file. Le PC ne les transmet pas encore au téléphone : l'onglet le dit, et renvoie à « À toi », où leurs demandes arrivent déjà.
 
 ### Atelier (`atelier`)
 
@@ -327,7 +335,7 @@ Sur iPad seulement, avec un PC qui le propose : l'Atelier de Ledge Desktop, ses 
 
 ### Ledge (`chat`)
 
-Le chat de Ledge sur le téléphone, avec « Le point ». Les cartes proposent une session ou une tâche. Cette conversation est propre au téléphone.
+Le chat de Ledge sur le téléphone, avec « Le point ». Les cartes proposent une session ou une tâche. Cette conversation est propre au téléphone. Avec un PC qui ne propose pas le chat à l'appareil, l'onglet le dit, sans champ, et renvoie à « À toi ».
 
 ### Fil d'une session (`thread`)
 
@@ -343,9 +351,9 @@ Une demande seule : autorisation, question, plan ou modifications. On l'approuve
 
 ### Réglages (`connection`)
 
-S'ouvre depuis la roue dentée en en-tête. Dans l'ordre :
+S'ouvre depuis la roue dentée en en-tête (par-dessus l'onglet courant, qui reste allumé), ou depuis « Réglages » en bas du rail sur tablette. Dans l'ordre :
 - **Cet appareil :** son nom (« Renommer »).
-- **Apparence :** le thème, et « Réduire les animations », propres à cet appareil.
+- **Apparence :** le thème, la langue (Français ou English ; français par défaut, appliquée tout de suite) et « Réduire les animations », propres à cet appareil.
 - **Notifications sur cet appareil :** l'interrupteur principal ; une fois activées, « Agent terminé », « Réponse de Ledge » et « Décision à prendre » se coupent une à une, et « Pause » (1 h, 4 h, jusqu'à demain 8 h) les suspend toutes. Les demandes d'accord et les questions préviennent toujours, sauf pendant une pause.
 - **Ledge :** « Contexte max » (le seuil partagé avec le PC, comme Réglages › Général sur le desktop) et « Agent du chat » (l'agent qui répond aux questions posées depuis cet appareil ; « PC » : le même que le chat du PC).
 - **Projets :** la liste dans son ordre, chaque projet avec sa couleur et ses agents. Monter ou descendre un projet, « Modifier » (nom, couleur), « Nouveau projet » (un projet vide), et « Supprimer le projet… » avec la passkey de l'appareil : ses agents, ses dossiers et ses règles vont sans projet ou vers un autre projet. « Dossiers… » liste les dossiers du projet (« Retirer ») ; « Ajouter un dossier » parcourt les dossiers du PC, ses dossiers récents en tête, et ajoute celui affiché avec la passkey de l'appareil. Les dossiers d'un serveur et les règles de rangement se règlent sur le desktop.
@@ -367,7 +375,7 @@ Ces écrans ne sont pas des adresses : l'application les montre d'elle-même, se
 | Il veut… | Écran |
 |---|---|
 | répondre à un agent, voir ses modifications | Session et Modifications (desktop), Demande ou Fil (mobile) |
-| voir ce qui l'attend, faire le point sur la journée | vue et page « À toi » (desktop), À traiter (mobile) |
+| voir ce qui l'attend, faire le point sur la journée | vue et page « À toi » (desktop), onglet À toi (mobile) |
 | lancer une session lui-même | Nouvelle session (`N`, `Ctrl+Alt+N`) |
 | créer, modifier ou supprimer un projet, lui ajouter un dossier | Réglages › Projets (desktop ou mobile), ou le menu d'un projet dans la vue Projets ; les dossiers d'un serveur sur le desktop |
 | choisir les notifications d'un téléphone, les mettre en pause | Réglages (mobile) › Notifications sur cet appareil |

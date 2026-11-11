@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initTheme, readChoice, setTheme } from '../src/theme';
 import { MemoryStorage, snapshot } from './state/helpers';
@@ -59,12 +59,16 @@ describe('theme', () => {
     initTheme(new MemoryStorage());
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(snapshot([], 'PC-Desan')));
-    const group = screen.getByRole('group', { name: 'Apparence' });
-    expect(screen.getAllByRole('radio').map(r => r.parentElement?.textContent)).toEqual(['Système', 'Clair', 'Sombre']);
+    // Its row is titled « Thème », the language's row follows (m0-langue.html, §1).
+    const group = screen.getByRole('group', { name: 'Thème' });
+    expect(within(group).getAllByRole('radio').map(r => r.parentElement?.textContent)).toEqual(['Système', 'Clair', 'Sombre']);
     expect(screen.getByRole('radio', { name: 'Système' })).toBeChecked();
     fireEvent.click(screen.getByRole('radio', { name: 'Clair' }));
     expect(screen.getByRole('radio', { name: 'Clair' })).toBeChecked();
     expect(root().dataset.theme).toBe('light');
     expect(group).toBeInTheDocument();
+    // Both rows sit at their natural width, on the left, as the mockup draws them (review qitem-20261110202518-91216702).
+    expect(group).toHaveAttribute('data-fit', 'true');
+    expect(screen.getByRole('group', { name: 'Langue' })).toHaveAttribute('data-fit', 'true');
   });
 });

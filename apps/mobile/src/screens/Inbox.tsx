@@ -1,26 +1,23 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import type { PhoneSession, PhoneTask } from '@ledge/protocol';
-import { copy } from '../copy';
+import { copy, locale } from '../copy';
 import { ageLabel, filterItems, headline, requestsOf, type Filter, type InboxItem } from '../model/requests';
 import { href, useRoute } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
 import { Badge } from '../ui/Badge';
-import { Header, linkView } from '../ui/Header';
 import { Mascot, MobileBot } from '../ui/MobileBot';
-import { OfflineBanner } from '../ui/Notice';
-import { TabBar } from '../ui/TabBar';
+import { TabPage } from '../shell/Shell';
 import { closedTasks } from '../model/tasks';
 import { navigate } from '../router';
 import { buttonClass, chipClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 import { Tag } from '../ui/Tag';
-import { useAtelierTab } from '../ui/layout';
 
 type InboxFilter = Filter | 'tasks';
 const FILTERS: InboxFilter[] = ['all', 'permission', 'question', 'tasks'];
 
-export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '';
+export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
 
 function Row({ item, session, now, offline }: { item: InboxItem; session: PhoneSession | undefined; now: number; offline: boolean }) {
   const route = useRoute();
@@ -65,12 +62,11 @@ function TaskRow({ task, now, onSee }: { task: PhoneTask; now: number; onSee: ()
 }
 
 /**
- * « À traiter »: the requests waiting on the PC, the oldest first. Offline, the last known ones, said to be so: by
- * `notice` when given (the PC off the relay), else by the banner.
+ * « À toi »: the requests waiting on the PC, the oldest first. Offline, the last known ones, said to be so by the shell's
+ * banner (shell/Shell.tsx) and the subtitle.
  */
-export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onReconnect?: () => void; notice?: ReactNode }) {
+export function Inbox({ store }: { store: MobileStore }) {
   const state = useMobile(store);
-  const atelierTab = useAtelierTab(state.daemon);
   const [filter, setFilter] = useState<InboxFilter>('all');
   const now = useNow();
   const all = requestsOf([...state.sessions.values()]);
@@ -83,10 +79,7 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
   // Offline before any state was received: no time to give, so no separator either.
   const subtitle = offline ? (state.syncedAt ? copy.link.lastKnownAt(clock(state.syncedAt)) : copy.inbox.lastKnown) : closed.length ? copy.inbox.subtitleTasks(all.length, closed.length) : copy.inbox.subtitle(all.length);
   return (
-    <>
-      <Header title={copy.inbox.title} subtitle={subtitle} link={linkView(state)} />
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
-        {offline && <div className="mb-3">{notice ?? <OfflineBanner onReconnect={onReconnect} />}</div>}
+    <TabPage title={copy.inbox.title} subtitle={subtitle} bodyClassName="pb-1">
         <div role="group" aria-label={copy.inbox.filtersLabel} className="mb-1.5 flex gap-1">
           {FILTERS.map(f => (
             <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className={chipClass(filter === f)}>{copy.inbox.filters[f]}</button>
@@ -102,12 +95,10 @@ export function Inbox({ store, onReconnect, notice }: { store: MobileStore; onRe
             {!waiting && <div aria-hidden="true"><Mascot size={96} frozen={offline} /></div>}
             <h2 className="text-heading leading-[1.3] tracking-[-.5px]">{waiting ? copy.inbox.emptyFilter : copy.inbox.upToDate}</h2>
             <p className="max-w-[260px] text-body text-muted">{waiting ? copy.inbox.emptyFilterHint : copy.inbox.upToDateHint}</p>
-            {!waiting && <a href={href({ name: 'agents' })} className={buttonClass({ size: 'sm', className: 'mt-1' })}>{copy.inbox.seeAgents}<Icon name="chevron" /></a>}
+            {!waiting && <a href={href({ name: 'sessions' })} className={buttonClass({ size: 'sm', className: 'mt-1' })}>{copy.inbox.seeAgents}<Icon name="chevron" /></a>}
           </div>
         )}
         {offline && <p className="mt-4 text-small text-muted">{copy.inbox.offlineNote}</p>}
-      </main>
-      <TabBar count={all.length + closed.length} chat={!!state.device?.chat} atelier={atelierTab} />
-    </>
+    </TabPage>
   );
 }

@@ -5,18 +5,14 @@ import { agentsOf, type AgentRow } from '../model/agents';
 import { indicators } from '../model/usage';
 import { closingHere, endedAtLabel } from '../model/sessionEnd';
 import { useNow } from '../useNow';
-import { requestsOf } from '../model/requests';
 import { href, useRoute } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
-import { Header, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
-import { OfflineBanner } from '../ui/Notice';
 import { Button } from '../ui/Button';
 import { Tag } from '../ui/Tag';
-import { TabBar } from '../ui/TabBar';
-import { closedTasks } from '../model/tasks';
+import { TabPage } from '../shell/Shell';
+import { clock } from './Inbox';
 import { Icon } from '../ui/icons';
-import { useAtelierTab } from '../ui/layout';
 
 /** A session's line of indicators (docs/mockups/ledge-harness-usage.html, phone 2): model · effort · context · duration, what is
  *  not known left out; then its relief. The context in amber past « Contexte max ». */
@@ -118,20 +114,16 @@ export function GroupWrite({ store, label, ids, offline }: { store: MobileStore;
 }
 
 /** Every session of the PC, by repository, each opening its thread. */
-export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect?: () => void }) {
+export function Agents({ store }: { store: MobileStore }) {
   const state = useMobile(store);
-  const atelierTab = useAtelierTab(state.daemon);
   const now = useNow();
   const sessions = [...state.sessions.values()];
   const groups = agentsOf(sessions);
   const closing = new Set(sessions.filter(s => closingHere(s, state.ops, now)).map(s => s.id));
   const offline = !state.fresh;
-  const subtitle = offline ? copy.agents.offline : copy.agents.subtitle(sessions.length, groups.length);
+  const subtitle = offline ? (state.syncedAt ? copy.link.lastKnownAt(clock(state.syncedAt)) : copy.agents.offline) : copy.agents.subtitle(sessions.length, groups.length);
   return (
-    <>
-      <Header title={copy.agents.title} subtitle={subtitle} link={linkView(state)} />
-      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[22px]">
-        {offline && <div className="mb-3"><OfflineBanner onReconnect={onReconnect} /></div>}
+    <TabPage title={copy.agents.title} subtitle={subtitle} bodyClassName="pb-1">
         {groups.map(g => (
           // Two groups can share a name (a repository and a project); a session belongs to one group only.
           <section key={g.rows[0]!.sessionId} aria-label={g.label}>
@@ -150,8 +142,6 @@ export function Agents({ store, onReconnect }: { store: MobileStore; onReconnect
             <p className="max-w-[260px] text-body text-muted">{copy.agents.emptyHint}</p>
           </div>
         )}
-      </main>
-      <TabBar count={requestsOf(sessions).length + closedTasks(state.tasks.values()).length} active="agents" chat={!!state.device?.chat} atelier={atelierTab} />
-    </>
+    </TabPage>
   );
 }

@@ -57,7 +57,7 @@ test('a session closed from its page with the passkey, read as ended in the list
     await expect(page.getByText(copy.enroll.done)).toBeVisible();
     expect(h.daemon.device?.registered).toBe(true);
     await page.getByRole('link', { name: copy.compare.seePending }).click();
-    await page.getByRole('link', { name: copy.nav.agents, exact: true }).click();
+    await page.getByRole('link', { name: copy.nav.sessions, exact: true }).click();
     await page.getByRole('link', { name: /Pagination de \/invoices/ }).click();
   });
 

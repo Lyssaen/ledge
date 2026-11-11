@@ -175,7 +175,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
       <>
         <header className="flex-none border-b border-line pt-2 pb-3">
           <div className="flex items-center gap-2.5">
-            {!panel && <BackLink fallback={{ name: 'agents' }} label={copy.thread.back} />}
+            {!panel && <BackLink fallback={{ name: 'sessions' }} label={copy.thread.back} />}
             <span className="min-w-0 flex-1 truncate">{copy.thread.title}</span>
             <LinkStatus link={linkView(state)} />
             {panel && <button type="button" onClick={panel.onClose} aria-label={copy.atelier.closePanel} title={copy.atelier.closeTitle} className={iconButtonClass({})}><Icon name="close" /></button>}
@@ -223,7 +223,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
     <>
       <header className="flex-none border-b border-line pt-2 pb-3 phone-side:pt-1 phone-side:pb-2">
         <div className="flex items-center gap-2.5">
-          {!panel && <BackLink fallback={{ name: 'agents' }} label={copy.thread.back} />}
+          {!panel && <BackLink fallback={{ name: 'sessions' }} label={copy.thread.back} />}
           <MobileBot tool={session.tool} seed={session.id} state={session.state} frozen={!fresh} />
           <div className="min-w-0 flex-1">
             <h1 className="text-title leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere] phone-side:truncate phone-side:text-base">{omp ? session.name : session.topic ?? session.project}</h1>

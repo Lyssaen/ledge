@@ -1,5 +1,5 @@
 import type { PhoneRigRow, PhoneSession, RigInfo, ThreadItem as PcItem } from '@ledge/protocol';
-import { copy } from '../copy';
+import { copy, locale } from '../copy';
 
 /**
  * OpenRig's blocks in a seat's thread, as the phone shows them (docs/mockups/openrig-messages, section « Téléphone »). The
@@ -62,7 +62,7 @@ export function refusalLog(raw: string, passedAt: string): string {
 }
 
 /** A time as the phone says it (local, `19:01`). */
-export const clock = (iso: string): string => new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+export const clock = (iso: string): string => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
 /** An item's OpenRig element, or undefined when it has no `rig` (it stays as the phone showed it before). */
 export function rigElement(i: PcItem, sessions: ReadonlyMap<string, PhoneSession>, cut: boolean): RigElement | undefined {

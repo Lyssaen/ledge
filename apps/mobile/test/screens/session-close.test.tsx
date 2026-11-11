@@ -71,7 +71,7 @@ describe('the close sheet', () => {
     expect(within(dialog()).getByText(/Ledge quitte l’agent proprement, comme \/exit/)).toBeInTheDocument();
     expect(within(dialog()).queryByText('Ce que la fermeture coupe')).not.toBeInTheDocument();
     expect(within(dialog()).queryByText(/Si l’agent ne répond pas/)).not.toBeInTheDocument();
-    expect(within(dialog()).getByText('Une vérification sur votre appareil sera demandée.')).toBeInTheDocument();
+    expect(within(dialog()).getByText('Une vérification sur ton appareil sera demandée.')).toBeInTheDocument();
     expect(within(dialog()).getByRole('button', { name: 'Préparation de la vérification…' })).toBeDisabled();
     await sheetReady(t);
     expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'close', id: 'a' }]);
@@ -84,7 +84,7 @@ describe('the close sheet', () => {
     fireEvent.click(closeButton());
     const cuts = within(dialog()).getByText('Ce que la fermeture coupe').parentElement!;
     expect(within(cuts).getAllByRole('listitem').map(li => li.textContent)).toEqual(['Le tour en cours de Nova sera interrompu. Ce qui est déjà fait reste fait.', 'La demande en attente sera refusée.', '2 sous-agents s’arrêtent avec la session.']);
-    expect(within(dialog()).getByText('Si l’agent ne répond pas, Ledge ferme son terminal de force. Une vérification sur votre appareil sera demandée.')).toBeInTheDocument();
+    expect(within(dialog()).getByText('Si l’agent ne répond pas, Ledge ferme son terminal de force. Une vérification sur ton appareil sera demandée.')).toBeInTheDocument();
   });
 
   it('says Face ID on an iPhone', async () => {
@@ -122,7 +122,7 @@ describe('the close sheet', () => {
     t.set('pc_offline');
     fireEvent.click(closeButton());
     expect(within(dialog()).getByText('PC injoignable')).toBeInTheDocument();
-    expect(within(dialog()).getByText('Reconnectez-vous pour fermer Nova. Rien n’a été envoyé.')).toBeInTheDocument();
+    expect(within(dialog()).getByText('Reconnecte-toi pour fermer Nova. Rien n’a été envoyé.')).toBeInTheDocument();
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Reconnecter' }));
     expect(onReconnect).toHaveBeenCalledOnce();
     expect(t.of('confirm.prepare')).toEqual([]);
@@ -137,7 +137,7 @@ describe('the close sheet', () => {
     const t = opened(nova(), { confirm: false });
     fireEvent.click(closeButton());
     expect(within(dialog()).getByText('Vérification impossible')).toBeInTheDocument();
-    expect(within(dialog()).getByText('Protégez d’abord vos accords depuis Réglages. Vous pouvez aussi fermer Nova sur le PC.')).toBeInTheDocument();
+    expect(within(dialog()).getByText('Protège d’abord tes accords depuis Réglages. Tu peux aussi fermer Nova sur le PC.')).toBeInTheDocument();
     expect(within(dialog()).getByRole('link', { name: 'Ouvrir Réglages' })).toHaveAttribute('href', '#/connection');
     expect(t.of('confirm.prepare')).toEqual([]);
   });
@@ -189,7 +189,7 @@ describe('a close from the phone, as the page follows it', () => {
     result(t, 'session.close', 'failed');
     const alert = screen.getByRole('alert');
     expect(within(alert).getByText('Nova n’a pas été fermée')).toBeInTheDocument();
-    expect(within(alert).getByText('Le PC n’a pas pu arrêter l’agent. Vérifiez sur le PC, ou réessayez.')).toBeInTheDocument();
+    expect(within(alert).getByText('Le PC n’a pas pu arrêter l’agent. Vérifie sur le PC, ou réessaie.')).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveValue('Ajoute un test');
     fireEvent.click(within(alert).getByRole('button', { name: 'Réessayer' }));
     expect(dialog()).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe('a close from the phone, as the page follows it', () => {
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Fermer avec mon appareil' }));
     await waitFor(() => expect(t.of('session.close')).toHaveLength(1));
     result(t, 'session.close', 'rejected', { reason: 'read_only' });
-    expect(within(screen.getByRole('alert')).getByText('Elle a été démarrée hors de Ledge : fermez-la dans son terminal sur le PC.')).toBeInTheDocument();
+    expect(within(screen.getByRole('alert')).getByText('Elle a été démarrée hors de Ledge : ferme-la dans son terminal sur le PC.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
   });
 
@@ -259,7 +259,7 @@ describe('« Reprendre » an ended session', () => {
 
   it('an older PC: the conversation is kept, resumed from the PC', () => {
     opened(nova({ state: 'exited' }), { old: true });
-    expect(screen.getByText('Sa conversation est gardée : reprenez-la depuis le PC.')).toBeInTheDocument();
+    expect(screen.getByText('Sa conversation est gardée : reprends-la depuis le PC.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reprendre Nova' })).not.toBeInTheDocument();
   });
 });

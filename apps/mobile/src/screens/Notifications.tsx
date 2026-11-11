@@ -75,7 +75,7 @@ export function NotifyStep({ store, onDone, fetchImpl }: { store: MobileStore; o
   const n = useNotifications(store, fetchImpl);
   const fresh = useMobile(store).fresh;
   const go = () => {
-    void n.enable().then(r => { if (r === 'on') { navigate({ name: 'inbox' }); onDone(); } });
+    void n.enable().then(r => { if (r === 'on') { navigate({ name: 'atoi' }); onDone(); } });
   };
   return (
     <>
@@ -85,7 +85,7 @@ export function NotifyStep({ store, onDone, fetchImpl }: { store: MobileStore; o
         {n.problem && <Notice title={n.problem} tone="warning" role="alert" />}
         <button type="button" disabled={n.busy || !fresh} onClick={go} className={PRIMARY}>{n.busy ? N.working : fresh ? N.enable : N.waiting}</button>
       </section>
-      <a href={href({ name: 'inbox' })} onClick={onDone} className={OUTLINE}>{N.later}</a>
+      <a href={href({ name: 'atoi' })} onClick={onDone} className={OUTLINE}>{N.later}</a>
     </>
   );
 }

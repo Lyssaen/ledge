@@ -105,7 +105,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   }, [outcome.kind, next, sessionId]);
 
   const link = linkView(state);
-  const backRoute = { name: 'inbox' } as const;
+  const backRoute = { name: 'atoi' } as const;
   // In the panel (design-ux 12:17Z), a decision applied gives the thread back, which says what was decided; so does a request handled
   // elsewhere, but only from the PC's state now (offline, a request gone is never said handled). Every other outcome stays here.
   const settled = outcome.kind === 'applied' || (item === undefined && !(outcome.kind === 'sending' || outcome.kind === 'uncertain' || outcome.kind === 'rejected' || outcome.kind === 'failed' || outcome.kind === 'changed') && fresh);

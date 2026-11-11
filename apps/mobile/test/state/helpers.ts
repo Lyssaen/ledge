@@ -25,7 +25,12 @@ export function fakeLink(initial: LinkState = 'ready') {
   let pairingState: PairingState | null = null;
   let pinned: PinnedPc | null = null;
   let received: string | null = null;
-  let reach: Reach = 'pc_online';
+  // As the real link: a PC off the relay is out of reach, a ready one is on it (setReach says which side when it matters).
+  let reach: Reach = state === 'pc_offline' ? 'pc_offline' : 'pc_online';
+  const align = () => {
+    if (state === 'pc_offline' && reach === 'pc_online') reach = 'pc_offline';
+    if (state === 'ready') reach = 'pc_online';
+  };
   const notify = () => { for (const f of [...listeners]) f(); };
   const pairing: Pairing = {
     async receive() {},
@@ -65,7 +70,7 @@ export function fakeLink(initial: LinkState = 'ready') {
     /** The messages of one type sent so far. */
     of<T extends PhoneClientMessage['type']>(type: T) { return sent.filter((m): m is Extract<PhoneClientMessage, { type: T }> => m.type === type); },
     calls,
-    set(s: LinkState) { state = s; notify(); },
+    set(s: LinkState) { state = s; align(); notify(); },
     /** The pairing under way as the link would show it; null for none. */
     setPairing(s: PairingState | null) { pairingState = s; notify(); },
     setPinned(pc: PinnedPc | null) { pinned = pc; notify(); },

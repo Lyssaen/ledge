@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { requestsOf } from '../../src/model/requests';
+import { atoiBadge } from '../../src/shell/tabs';
 import type { PhoneChatAction, PhoneTask } from '@ledge/protocol';
 import { copy } from '../../src/copy';
 import { closedTasks, openDecisions, openTasks } from '../../src/model/tasks';
@@ -53,8 +55,8 @@ describe('the decisions a session puts to the user', () => {
     const given = within(within(point).getByRole('group', { name: 'Confiées par Ledge' }));
     expect(given.getByText('t91b0d4')).toBeInTheDocument();
     expect(given.queryByText('t5d6e7f')).toBeNull();
-    // The inbox badge counts only what « À traiter » shows: no decision there.
-    expect(within(screen.getByRole('navigation')).queryByText('1')).toBeNull();
+    // The badge of « À toi » counts only its requests: no decision there.
+    expect(atoiBadge(requestsOf([...t.store.getState().sessions.values()]))).toBeNull();
   });
 
   it('« Répondre » puts the start of the question in the chat\'s field, the caret after it, and sends nothing', async () => {
@@ -158,6 +160,6 @@ describe('the task.answer card', () => {
 
   it('a task that is not a decision: says so in the user\'s words', () => {
     open({ ...answer, state: 'refused', code: 'not_decision' });
-    expect(screen.getByRole('alert').textContent).toBe('Refusée : la tâche « Fusionner feat/roles ? » n’est pas une décision qui vous est posée. Rien n’a été envoyé.');
+    expect(screen.getByRole('alert').textContent).toBe('Refusée : la tâche « Fusionner feat/roles ? » n’est pas une décision qui t’est posée. Rien n’a été envoyé.');
   });
 });

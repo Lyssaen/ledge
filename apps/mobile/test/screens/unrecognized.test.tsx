@@ -26,9 +26,9 @@ describe('the PC no longer knows this phone', () => {
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Refaire la liaison', 'Se déconnecter']);
   });
 
-  it('before the PC was named: « Votre PC »', () => {
+  it('before the PC was named: « Ton PC »', () => {
     app('denied');
-    expect(screen.getByRole('heading', { name: 'Votre PC ne reconnaît plus cet appareil' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Ton PC ne reconnaît plus cet appareil' })).toBeInTheDocument();
   });
 
   it('erases nothing and starts no pairing until the user chooses', () => {

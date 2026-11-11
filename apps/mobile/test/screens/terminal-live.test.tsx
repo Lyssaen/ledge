@@ -195,7 +195,7 @@ describe('the live terminal screen', () => {
     expect(screen.getByText('En direct · lecture seule')).toBeInTheDocument();
     expect(screen.getByText('billing-api · 200 × 50, taille du PC')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Prendre la main/ })).toBeNull();
-    expect(screen.getByText(/activez « Taper dans les terminaux depuis un appareil lié »/)).toBeInTheDocument();
+    expect(screen.getByText(/active « Taper dans les terminaux depuis un appareil lié »/)).toBeInTheDocument();
     view.unmount();
     expect(t.of('term.close')).toEqual([{ type: 'term.close', tid: TID }]);
     expect(t.xt.calls).toContain('dispose');
@@ -212,7 +212,7 @@ describe('the live terminal screen', () => {
     expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'terminal', id: 'a' }]);
     // The PC gives the hand (the passkey's own path is RiskConfirm's, tested there).
     act(() => t.deliver({ type: 'term.held', tid: TID, until: new Date(Date.now() + 1_800_000).toISOString() }));
-    expect(screen.getByText('Vous tapez dans Kai')).toBeInTheDocument();
+    expect(screen.getByText('Tu tapes dans Kai')).toBeInTheDocument();
     expect(t.xt.calls).toContain('input true');
     fireEvent.click(screen.getByRole('button', { name: 'Contrôle' }));
     expect(screen.getByRole('button', { name: 'Contrôle, armé' })).toHaveAttribute('aria-pressed', 'true');

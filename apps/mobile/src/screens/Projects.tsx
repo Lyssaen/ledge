@@ -123,7 +123,7 @@ function DeleteSheet({ store, project, projects, agents, onClose }: { store: Mob
       {error && <p role="alert" className="text-small text-danger-fg">{error}</p>}
       <div className="flex gap-2">
         <Button variant="ghost" className="flex-1" disabled={busy} onClick={onClose}>{P.cancel}</Button>
-        <Button variant="brand" className="flex-[2]" disabled={busy || !canConfirm} onClick={go}>{P.confirmDelete}</Button>
+        <Button variant="primary" className="flex-[2]" disabled={busy || !canConfirm} onClick={go}>{P.confirmDelete}</Button>
       </div>
     </Sheet>
   );
@@ -271,8 +271,8 @@ export function ProjectsSection({ store }: { store: MobileStore }) {
   };
   return (
     <section aria-labelledby="projects-title" className="flex flex-col gap-2.5">
-      <h2 id="projects-title" className="text-body text-muted">{P.title}</h2>
-      <ul className="flex flex-col rounded-control border border-line bg-surface text-body">
+      <h2 id="projects-title" className="text-small font-medium text-muted">{P.title}</h2>
+      <ul className="flex flex-col rounded-[10px] border border-line bg-surface text-body">
         {projects.length === 0 && <li className="px-4 py-3 text-muted">{P.none}</li>}
         {projects.map((p, i) => (
           <li key={p.id} className="flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">

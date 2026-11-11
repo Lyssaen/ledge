@@ -61,7 +61,7 @@ describe('the « / » list on the phone', () => {
     expect(screen.getByText('Aucune commande « /zzz ». Elle partira comme un message à Kai.')).toBeInTheDocument();
     t.type('/config');
     fireEvent.click(screen.getByRole('button', { name: /config key=value/ }));
-    expect(screen.getByText('Sans argument, /config ouvre un panneau du terminal : donnez-lui un argument.')).toBeInTheDocument();
+    expect(screen.getByText('Sans argument, /config ouvre un panneau du terminal : donne-lui un argument.')).toBeInTheDocument();
     act(() => t.deliver({ type: 'session.commands.listing', id: 'a', commands: [], error: true }));
     t.type('/co');
     expect(screen.getByText(/^Liste des commandes indisponible\./)).toBeInTheDocument();

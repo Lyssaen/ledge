@@ -1,5 +1,10 @@
 import { ICONS as SHARED } from '@ledge/ui/ui/icons';
 
+/** A circle and a rounded rectangle as path data, so the mockups' shapes (docs/mockups/ledge-mobile-refonte/refonte.js) draw here. */
+const circle = (cx: number, cy: number, r: number) => `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
+const rect = (x: number, y: number, w: number, h: number, r: number) =>
+  `M${x + r} ${y}h${w - 2 * r}a${r} ${r} 0 0 1 ${r} ${r}v${h - 2 * r}a${r} ${r} 0 0 1 ${-r} ${r}h${-(w - 2 * r)}a${r} ${r} 0 0 1 ${-r} ${-r}v${-(h - 2 * r)}a${r} ${r} 0 0 1 ${r} ${-r}z`;
+
 /** The phone's line icons (24 px grid, currentColor): the desktop's glyphs where they exist, the phone's own after. */
 export const ICONS = {
   back: SHARED.chevronLeft.d,
@@ -25,12 +30,21 @@ export const ICONS = {
   warning: ['m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3', 'M12 9v4', 'M12 17h.01'],
   edit: ['M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7', 'M18.38 2.62a2.12 2.12 0 1 1 3 3L12.36 14.64a2 2 0 0 1-.85.51l-2.87.84.84-2.87a2 2 0 0 1 .5-.85z'],
   spinner: ['M21 12a9 9 0 1 1-6.22-8.56'],
-  inbox: ['M22 12h-6l-2 3h-4l-2-3H2', 'M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1Z'],
-  /** The desktop's (apps/desktop/src/shell/icons.ts): a speech bubble for the chat with Ledge, a grid for the agents. */
-  chat: ['M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 8.7 3.9a8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z'],
-  grid: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M3 14h7v7H3z', 'M14 14h7v7h-7z'],
-  /** The Atelier's tab (docs/mockups/ledge-ipad-atelier.html): a house. */
-  atelier: ['M3 10.5 12 4l9 6.5', 'M5 9.5V20h14V9.5', 'M9 20v-5h6v5'],
+  /** The five tabs and the rail (docs/mockups/ledge-mobile-refonte/m0-socle.html, §1 and §2). */
+  inbox: ['M4 13l3-8h10l3 8v6H4z', 'M4 13h5l1 2h4l1-2h5'],
+  sessions: [rect(3, 4, 18, 16, 2), 'M7 9h10M7 13h6'],
+  pr: [circle(6, 5, 2.2), circle(6, 19, 2.2), circle(18, 19, 2.2), 'M6 7.2v9.6M18 16.8V10a3 3 0 0 0-3-3h-4', 'M13 5l-2 2 2 2'],
+  rigs: [circle(6, 6, 2.5), circle(18, 6, 2.5), circle(12, 18, 2.5), 'M8 7.5l3 8M16 7.5l-3 8M8.5 6h7'],
+  ledge: [rect(4, 8, 16, 12, 3), 'M12 8V4.5', circle(9, 14, 1), circle(15, 14, 1)],
+  search: [circle(11, 11, 7), 'M20 20l-4-4'],
+  more: [circle(12, 5, 1.4), circle(12, 12, 1.4), circle(12, 19, 1.4)],
+  send: ['M12 19V5M5 12l7-7 7 7'],
+  /** The shell's banners (§4): the PC not answering, the relay out of reach, « Réessayer ». */
+  wifioff: ['M12 20h.01M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 5.2-2.7M19 12.9a10 10 0 0 0-1.9-1.3M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8A15 15 0 0 0 10.7 5M2 2l20 20'],
+  cloud: ['M2 2l20 20M5.8 5.8A7 7 0 0 0 7 20h10a5 5 0 0 0 2.6-.7M20.8 16.4A5 5 0 0 0 17 10h-1.3A7 7 0 0 0 10 5.1'],
+  refresh: ['M3 12a9 9 0 0 1 15.7-6L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.7 6L3 16M3 21v-5h5'],
+  /** The Atelier's entry in the rail (m0-socle.html, §2): a table and its two seats. */
+  atelier: [rect(3, 10, 18, 5, 1), circle(7, 6, 2), circle(17, 6, 2), 'M6 15v4M18 15v4'],
   /** A clipboard with a check: an agent's checklist. */
   plan: ['M9 4h6v3H9z', 'M7 5H5v16h14V5h-2', 'm9 12 1.5 1.5L14 10', 'M9 17h6'],
   keyboard: ['M3 7h18v10H3z', 'M7 11h.01', 'M11 11h.01', 'M15 11h.01', 'M8 14h8'],

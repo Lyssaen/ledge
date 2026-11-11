@@ -72,7 +72,7 @@ describe('« Le point »', () => {
   });
 
   it.each([
-    ['expired', 'Lecture impossible : reconnectez Claude Code sur le PC.'],
+    ['expired', 'Lecture impossible : reconnecte Claude Code sur le PC.'],
     ['stale', copy.chat.point.stale('12 min')],
     ['unreachable', copy.chat.point.unreach('25 min')]
   ] as const)('%s', (status, text) => {
@@ -143,10 +143,10 @@ describe('Cursor Agent in « Le point »', () => {
   });
 
   it('expired says Codex', () => {
-    expect(within(point([claude({ harness: 'codex', status: 'expired', windows: [] })])).getByText('Lecture impossible : reconnectez Codex sur le PC.')).toBeTruthy();
+    expect(within(point([claude({ harness: 'codex', status: 'expired', windows: [] })])).getByText('Lecture impossible : reconnecte Codex sur le PC.')).toBeTruthy();
   });
 
   it('expired says Cursor Agent', () => {
-    expect(within(point([cursor({ status: 'expired', windows: [] })])).getByText('Lecture impossible : reconnectez Cursor Agent sur le PC.')).toBeTruthy();
+    expect(within(point([cursor({ status: 'expired', windows: [] })])).getByText('Lecture impossible : reconnecte Cursor Agent sur le PC.')).toBeTruthy();
   });
 });

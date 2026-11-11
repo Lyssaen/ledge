@@ -55,7 +55,7 @@ for (const theme of ['dark', 'light'] as const) {
     await limits.scrollIntoViewIfNeeded();
     await shot(page, `point-${theme}`);
     // 2 · Agents: one line of indicators.
-    await nav(page).getByRole('link', { name: copy.nav.agents }).click();
+    await nav(page).getByRole('link', { name: copy.nav.sessions }).click();
     await expect(page.locator('[data-indicators]').first()).toContainText('Opus 5.5 · élevé · contexte 46 %');
     await shot(page, `agents-${theme}`);
     // 3 · The thread's chips.

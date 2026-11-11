@@ -99,7 +99,7 @@ export function PcSection({ store, appVersion }: { store: MobileStore; appVersio
   const retry = () => { store.dismissPc(); if (run?.action === 'restart' || appVersion) setAsking(run?.action ?? 'restart'); };
   return (
     <section aria-labelledby="pc-title" className="flex flex-col gap-2.5">
-      <h2 id="pc-title" className="text-body text-muted">{P.title}</h2>
+      <h2 id="pc-title" className="text-small font-medium text-muted">{P.title}</h2>
       {run ? <RunCard store={store} run={run} fresh={state.fresh} from={daemon.version} onRetry={retry} /> : behind && (daemon.update ? (
         <div className={`${CARD} border-input`}>
           <div className="flex flex-col"><strong className="text-body">{P.behind}</strong><span className="font-mono text-small text-muted">{P.versions(daemon.version, appVersion)}</span></div>

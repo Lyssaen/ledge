@@ -14,13 +14,13 @@ describe('signing in', () => {
 
   it('signed out → the login board, its notes in order, and GitHub at /auth/github/start', () => {
     app('signed_out');
-    expect(screen.getByRole('heading', { name: 'Vos agents, dans la poche' })).toBeInTheDocument();
-    expect(screen.getByText('Connectez-vous avec le même compte GitHub que dans Ledge sur votre PC.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tes agents, dans la poche' })).toBeInTheDocument();
+    expect(screen.getByText('Connecte-toi avec le même compte GitHub que dans Ledge sur ton PC.')).toBeInTheDocument();
     expect(screen.getByText(globalThis.location.host)).toBeInTheDocument();
     expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       'Cet appareil crée sa propre clé. Elle ne le quitte jamais.',
-      'Rien n’est accessible avant que vous ayez confirmé un code sur votre PC.',
-      'Le serveur relaie des messages chiffrés : il ne peut ni les lire, ni répondre à votre place.'
+      'Rien n’est accessible avant que tu aies confirmé un code sur ton PC.',
+      'Le serveur relaie des messages chiffrés : il ne peut ni les lire, ni répondre à ta place.'
     ]);
     expect(screen.getByRole('link', { name: 'Continuer avec GitHub' })).toHaveAttribute('href', '/auth/github/start');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -34,26 +34,26 @@ describe('signing in', () => {
 
   it.each(['bad_state', 'error'])('?signin=%s → the login board says the sign-in failed', (issue) => {
     app('signed_out', { signin: issue });
-    expect(screen.getByRole('alert')).toHaveTextContent('La connexion à GitHub a échoué. Réessayez.');
+    expect(screen.getByRole('alert')).toHaveTextContent('La connexion à GitHub a échoué. Réessaie.');
   });
 
   it('a failed sign-in is said on the login board even before the link knows it is signed out', () => {
     app('handshaking', { signin: 'error' });
-    expect(screen.getByRole('heading', { name: 'Vos agents, dans la poche' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tes agents, dans la poche' })).toBeInTheDocument();
   });
 
   it('?signin=not_allowed → « Ce compte n’a pas accès », then another account → the login board', () => {
     app('signed_out', { signin: 'not_allowed' });
     expect(screen.getByRole('heading', { name: 'Ce compte n’a pas accès' })).toBeInTheDocument();
-    expect(screen.getByText('Ce compte GitHub n’est pas dans la liste de ce serveur. Demandez à son administrateur de vous ajouter.')).toBeInTheDocument();
+    expect(screen.getByText('Ce compte GitHub n’est pas dans la liste de ce serveur. Demande à son administrateur de t’ajouter.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Utiliser un autre compte' }));
-    expect(screen.getByRole('heading', { name: 'Vos agents, dans la poche' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tes agents, dans la poche' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('the login board in front: no pairing starts behind it', () => {
     const t = app('unpaired', { signin: 'error' });
-    expect(screen.getByRole('heading', { name: 'Vos agents, dans la poche' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tes agents, dans la poche' })).toBeInTheDocument();
     expect(t.calls).toEqual([]);
   });
 });

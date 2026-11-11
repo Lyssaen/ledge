@@ -19,8 +19,8 @@ describe('comparing the code', () => {
     act(() => t.setPairing({ step: 'committing' }));
     expect(screen.getByRole('status')).toHaveTextContent('En attente du code du PC…');
     act(() => t.setPairing(compare()));
-    expect(screen.getByRole('heading', { name: 'Comparez ce code' })).toBeInTheDocument();
-    expect(screen.getByText(/Ledge vient d’afficher un code sur/)).toHaveTextContent('Ledge vient d’afficher un code sur votre PC. Il doit être identique à celui-ci.');
+    expect(screen.getByRole('heading', { name: 'Compare ce code' })).toBeInTheDocument();
+    expect(screen.getByText(/Ledge vient d’afficher un code sur/)).toHaveTextContent('Ledge vient d’afficher un code sur ton PC. Il doit être identique à celui-ci.');
     expect(screen.getByLabelText('Code de liaison 123 456')).toHaveTextContent('123456');
     expect([...screen.getByLabelText('Code de liaison 123 456').children].map((c) => c.textContent)).toEqual(['123', '456']);
     expect(screen.getByText('Calculé à partir des clés du PC et de cet appareil')).toBeInTheDocument();
@@ -28,13 +28,13 @@ describe('comparing the code', () => {
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Les codes sont identiques', 'Ils sont différents']);
   });
 
-  it('same → « Confirmez sur le PC » while pair_ok is missing, then « <appareil> lié à <nom> » until « Voir ce qui attend »', () => {
+  it('same → « Confirme sur le PC » while pair_ok is missing, then « <appareil> lié à <nom> » until « Voir ce qui attend »', () => {
     const t = app('pairing');
     act(() => t.setPairing(compare()));
     fireEvent.click(screen.getByRole('button', { name: 'Les codes sont identiques' }));
     expect(t.calls).toContain('confirmOnPhone');
-    expect(screen.getByRole('heading', { name: 'Confirmez sur le PC' })).toBeInTheDocument();
-    expect(screen.getByText(/cliquez sur Approuver/)).toHaveTextContent('Dans Ledge sur votre PC, cliquez sur Approuver sous le même code 123 456.');
+    expect(screen.getByRole('heading', { name: 'Confirme sur le PC' })).toBeInTheDocument();
+    expect(screen.getByText(/clique sur Approuver/)).toHaveTextContent('Dans Ledge sur ton PC, clique sur Approuver sous le même code 123 456.');
     expect(screen.getByRole('button', { name: 'Annuler' })).toBeInTheDocument();
 
     // pair_ok: the link pins the PC, says hello, and the first snapshot names it.
@@ -46,22 +46,22 @@ describe('comparing the code', () => {
     act(() => t.deliver(snapshot([], 'PC-Desan')));
     act(() => t.setPinned({ ...pc, name: 'PC-Desan' }));
     expect(screen.getByRole('heading', { name: 'Appareil lié à PC-Desan' })).toBeInTheDocument();
-    expect(screen.getByText('Vous pouvez lire, approuver et écrire. Retirez cet appareil à tout moment depuis Ledge sur le PC.')).toBeInTheDocument();
+    expect(screen.getByText('Tu peux lire, approuver et écrire. Retire cet appareil à tout moment depuis Ledge sur le PC.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: 'Voir ce qui attend' }));
-    expect(screen.getByRole('heading', { name: 'À traiter' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'À toi' })).toBeInTheDocument();
   });
 
   it('the PC confirmed first: the code stays until the phone says it is the same', () => {
     const t = app('pairing');
     act(() => t.setPairing(compare({ pcConfirmed: true })));
-    expect(screen.getByRole('heading', { name: 'Comparez ce code' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Compare ce code' })).toBeInTheDocument();
   });
 
   it('the PC offline while waiting for its code → said, with « Réessayer », not a bare spinner', () => {
     const t = app('pairing');
     act(() => t.setReach('pc_offline'));
     expect(screen.getByRole('heading', { name: 'PC hors ligne' })).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Activez l’accès mobile dans Ledge sur votre PC : la liaison démarre dès qu’il est en ligne.');
+    expect(screen.getByRole('status')).toHaveTextContent('Active l’accès mobile dans Ledge sur ton PC : la liaison démarre dès qu’il est en ligne.');
     expect(screen.queryByText('En attente du code du PC…')).not.toBeInTheDocument();
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Réessayer']);
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
@@ -75,7 +75,7 @@ describe('comparing the code', () => {
     const t = app('pairing');
     act(() => t.setReach('relay_unreachable'));
     expect(screen.getByRole('heading', { name: 'Relais injoignable' })).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Cet appareil n’arrive pas à joindre le relais Ledge. Vérifiez sa connexion à internet, puis réessayez.');
+    expect(screen.getByRole('status')).toHaveTextContent('Cet appareil n’arrive pas à joindre le relais Ledge. Vérifie sa connexion à internet, puis réessaie.');
     expect(screen.queryByText('En attente du code du PC…')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     expect(t.calls).toEqual(['retry']);
@@ -93,7 +93,7 @@ describe('comparing the code', () => {
   it('the PC offline once the code is shown → the code stays: the comparison is not interrupted', () => {
     const t = app('pairing');
     act(() => { t.setPairing(compare()); t.setReach('pc_offline'); });
-    expect(screen.getByRole('heading', { name: 'Comparez ce code' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Compare ce code' })).toBeInTheDocument();
   });
 
   it('different → « Liaison annulée », nothing confirmed, and « Recommencer » pairs again', () => {
@@ -140,9 +140,9 @@ describe('comparing the code', () => {
       t.set('pairing');
       t.setPairing(compare());
     });
-    expect(screen.getByText(/Ledge vient d’afficher un code sur/)).toHaveTextContent('Ledge vient d’afficher un code sur votre PC.');
+    expect(screen.getByText(/Ledge vient d’afficher un code sur/)).toHaveTextContent('Ledge vient d’afficher un code sur ton PC.');
     act(() => t.setPairing({ step: 'linked', pc }));
-    expect(screen.getByRole('heading', { name: 'Appareil lié à votre PC' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Appareil lié à ton PC' })).toBeInTheDocument();
   });
 
   it('a pairing that could not start (no identity, keys not stored) → « Recommencer », not a spinner forever', () => {

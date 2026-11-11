@@ -29,22 +29,22 @@ describe('the app', () => {
     expect(screen.queryByText('PC hors ligne')).not.toBeInTheDocument();
   });
 
-  it('PC offline before it was ever named → « Votre PC ne répond plus »', () => {
+  it('PC offline before it was ever named → « Ton PC ne répond plus »', () => {
     app('pc_offline');
-    expect(screen.getByText('Votre PC ne répond plus')).toBeInTheDocument();
+    expect(screen.getByText('Ton PC ne répond plus')).toBeInTheDocument();
   });
 
   it('every other screen reconnects through the same retry', () => {
     const t = app('pc_offline', { hash: '#/agents' });
-    expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Reconnecter et actualiser' }));
+    expect(screen.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Réessayer' }));
     expect(t.calls).toEqual(['retry']);
   });
 
   it('routes to the agents, a thread, a terminal and a request', () => {
     const t = app('ready', { hash: '#/agents' });
     act(() => t.deliver(snapshot([session('a', { name: 'Kai', topic: 'Inbox mobile', state: 'waiting_permission', pending: pending({ key: 'ka', text: 'pnpm build' }) })], 'PC-Desan')));
-    expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sessions' })).toBeInTheDocument();
     act(() => { globalThis.location.hash = '#/thread/a'; });
     hashChange();
     expect(screen.getByRole('heading', { name: 'Inbox mobile' })).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe('the app', () => {
     expect(globalThis.location.hash).toBe('#/request/a/p2');
     hashChange();
     expect(screen.getByText('pnpm build', { selector: 'pre' })).toBeInTheDocument();
-    expect(screen.getByText('La demande a été mise à jour. Relisez-la avant de décider.')).toBeInTheDocument();
+    expect(screen.getByText('La demande a été mise à jour. Relis-la avant de décider.')).toBeInTheDocument();
   });
 
   it('the connection screen: account, relay, PC and its fingerprint, the app’s version and fingerprint, and sign out', async () => {
@@ -117,7 +117,7 @@ describe('the app', () => {
     expect(t.of('device.forget')).toEqual([]);
     expect(t.calls).toEqual(['signOut']);
     act(() => t.set('signed_out'));
-    expect(screen.getByText('Le PC n’a pas confirmé. Retirez cet appareil dans Ledge sur le PC, section Accès mobile.')).toBeInTheDocument();
+    expect(screen.getByText('Le PC n’a pas confirmé. Retire cet appareil dans Ledge sur le PC, section Accès mobile.')).toBeInTheDocument();
   });
 
   it('« Se déconnecter » without an answer from the PC: erased after 5 s, with the note', async () => {
@@ -150,7 +150,7 @@ describe('the app', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     act(() => u.set({ waiting: { version: '0.6.0', fingerprint: '3f9ac21e70bd44e19a02d5c8aaaa' } }));
     const sheet = screen.getByRole('dialog', { name: 'Nouvelle version · 0.6.0' });
-    expect(sheet).toHaveTextContent('Le serveur propose une mise à jour de l’app. Rien ne change tant que vous ne l’acceptez pas.');
+    expect(sheet).toHaveTextContent('Le serveur propose une mise à jour de l’app. Rien ne change tant que tu ne l’acceptes pas.');
     expect(within(sheet).getByText('Empreinte de cette version')).toBeInTheDocument();
     expect(within(sheet).getByText('3f9a c21e 70bd 44e1 9a02 d5c8')).toBeInTheDocument();
     expect(sheet).toHaveTextContent('Actuelle : 0.5.4 · 8e17 02af');
@@ -158,7 +158,7 @@ describe('the app', () => {
       .toHaveAttribute('href', 'https://github.com/Lyssaen/ledge/releases/tag/v0.6.0');
     expect(within(sheet).getAllByRole('button').map((b) => b.textContent)).toEqual(['Plus tard', 'Mettre à jour']);
     // The screen stays underneath.
-    expect(screen.getByText('À traiter', { selector: 'h1' })).toBeInTheDocument();
+    expect(screen.getByText('À toi', { selector: 'h1' })).toBeInTheDocument();
 
     fireEvent.click(within(sheet).getByRole('button', { name: 'Mettre à jour' }));
     expect(u.accept).toHaveBeenCalledTimes(1);
@@ -177,7 +177,7 @@ describe('the app', () => {
   it('the sheet takes the focus, Escape is « Plus tard », and the focus comes back where it was', () => {
     const u = fakeUpdates({ version: '0.5.4', fingerprint: '8e1702af' });
     app('ready', { updates: u.watch });
-    const gear = screen.getByRole('link', { name: /réglages/i });
+    const gear = screen.getByRole('link', { name: 'Réglages' });
     gear.focus();
     act(() => u.set({ waiting: { version: '0.6.0', fingerprint: '3f9ac21e' } }));
     const sheet = screen.getByRole('dialog', { name: 'Nouvelle version · 0.6.0' });
@@ -281,7 +281,7 @@ describe('the app', () => {
       expect(screen.getByText('Face ID ou le code de cet appareil sera demandé pour autoriser une commande à impact élevé.')).toBeInTheDocument();
       await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
       fireEvent.click(screen.getByRole('link', { name: 'Plus tard' }));
-      expect(screen.getByRole('heading', { name: 'À traiter' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'À toi' })).toBeInTheDocument();
     });
 
     it('after the pairing, a PC with no device offers nothing but the way in', () => {
@@ -309,7 +309,7 @@ describe('the app', () => {
       expect(await screen.findByRole('heading', { name: 'Être prévenu quand un agent attend' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Activer les notifications' })).toBeInTheDocument();
       fireEvent.click(screen.getByRole('link', { name: 'Plus tard' }));
-      expect(screen.getByRole('heading', { name: 'À traiter' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'À toi' })).toBeInTheDocument();
     });
 
     it('a refused permission says so and keeps the step', async () => {

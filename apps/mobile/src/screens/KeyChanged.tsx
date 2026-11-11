@@ -1,4 +1,4 @@
-import { copy } from '../copy';
+import { copy, locale } from '../copy';
 import type { PinnedPc } from '../link/keys';
 import { groupFingerprint } from '../model/fingerprint';
 import { Board, Fill, H1, ICON, OUTLINE, PRIMARY } from '../ui/Board';
@@ -7,7 +7,7 @@ const K = copy.keyChanged;
 /** « 16 oct. », the day the PC was pinned. */
 const pinnedOn = (iso: string): string => {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? copy.connection.unknown : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  return Number.isNaN(d.getTime()) ? copy.connection.unknown : d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 };
 
 /** Board KeyChanged: the PC answered with another key. Nothing is sent or shown until the phone is linked again. */

@@ -25,7 +25,7 @@ const DOUBLE_MS = 320, DOUBLE_PX = 30;
 const NO_FRAME = 'button,a,[role=button],.unassigned-card';
 /** The tiles the fit measures. */
 const TILES = '.atelier-room,.unassigned-zone';
-/** Between Ledge's label (« Votre assistant ») and the « Sans projet » frame under it (atelier units). */
+/** Between Ledge's label (« Ton assistant ») and the « Sans projet » frame under it (atelier units). */
 const UNDER_LEDGE = 12;
 
 /** Kept for the page's life (module state): the zoom chosen by hand (null: the fit) and where the floor was scrolled. */

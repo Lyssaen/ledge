@@ -92,7 +92,7 @@ describe('a <task-notification> in the thread', () => {
     const t = opened();
     deliver(t, note('killed', 'Agent "Explore" was stopped'));
     const card = screen.getByRole('region', { name: 'Tâche · Arrêtée' });
-    expect(card).toHaveTextContent('L’agent Explore a été arrêté. Il peut reprendre si vous lui écrivez.');
+    expect(card).toHaveTextContent('L’agent Explore a été arrêté. Il peut reprendre si tu lui écris.');
     expect(card.querySelector('strong')).toHaveTextContent('Explore');
     expect(card).not.toHaveTextContent('<task-notification>');
     const raw = screen.getByRole('button', { name: 'Notification brute' });

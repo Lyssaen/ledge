@@ -17,8 +17,8 @@ export function Result({ store, title, body, item, final = false, children }: {
   store: MobileStore; title: string; body: string; item?: InboxItem | undefined; final?: boolean; children?: ReactNode;
 }) {
   const link = linkView(useMobile(store));
-  const back = href({ name: 'inbox' });
-  const backRoute = { name: 'inbox' } as const;
+  const back = href({ name: 'atoi' });
+  const backRoute = { name: 'atoi' } as const;
   return (
     <>
       <BackHeader title={copy.result.header} fallback={backRoute} label={copy.detail.back} link={link} />

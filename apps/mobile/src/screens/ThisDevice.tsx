@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DEVICE_NAME_MAX } from '@ledge/protocol';
-import { copy } from '../copy';
+import { copy, locale } from '../copy';
 import type { PinnedPc } from '../link/keys';
 import { defaultDeviceName } from '../link/label';
 import { useMobile, type MobileStore } from '../state/store';
@@ -26,7 +26,7 @@ export function ThisDevice({ store, pinned }: { store: MobileStore; pinned: Pinn
   const device = state.device;
   if (!device?.id) return null;
   const name = ownName(device.name);
-  const linked = pinned ? new Date(pinned.pinnedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+  const linked = pinned ? new Date(pinned.pinnedAt).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
   const draft = editing?.trim() ?? '';
   const save = () => {
     if (!draft || draft.length > DEVICE_NAME_MAX) return;
@@ -36,8 +36,8 @@ export function ThisDevice({ store, pinned }: { store: MobileStore; pinned: Pinn
   };
   return (
     <section aria-labelledby="device-title" className="flex flex-col gap-2.5">
-      <h2 id="device-title" className="text-body text-muted">{D.title}</h2>
-      <div className="flex items-center gap-3 rounded-control border border-line bg-surface px-4 py-3">
+      <h2 id="device-title" className="text-small font-medium text-muted">{D.title}</h2>
+      <div className="flex items-center gap-3 rounded-[10px] border border-line bg-surface px-4 py-3">
         <span className="grid size-9 flex-none place-items-center rounded-[10px] bg-raised" aria-hidden="true"><Icon name={device.kind === 'tablet' ? 'tablet' : 'phone'} /></span>
         <div className="min-w-0 flex-1">
           <p className="text-body font-semibold [overflow-wrap:anywhere]">{name}</p>
