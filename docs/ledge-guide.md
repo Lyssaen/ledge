@@ -351,7 +351,7 @@ Le chat de Ledge sur le téléphone, avec « Le point ». Les cartes proposent u
 
 ### Fil d'une session (`thread`)
 
-Les échanges avec un agent et le champ pour lui écrire.
+Les échanges avec un agent et le champ pour lui écrire. Le fil s'ouvre en bas, sur le dernier échange. Si on l'a remonté, il ne bouge pas quand un message arrive ; une demande qui arrive est signalée par la pastille « Demande en bas ». Passer au terminal puis revenir au fil retrouve l'endroit où on en était.
 
 - **L'en-tête** donne le nom de la session et son point d'état, plus l'heure de fin d'une session terminée. La bascule « Fil · Terminal » passe d'une vue à l'autre, et « Plus d'actions » ouvre la feuille des actions. Sur une tablette, l'en-tête donne aussi le projet et la branche.
 - **Les outils** lancés d'affilée tiennent en une ligne, « 4 outils · Read, Write, Edit, Bash » ; un toucher la déplie, un outil par ligne (✓ fait, ● en cours, ✕ en échec).
