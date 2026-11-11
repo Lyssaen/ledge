@@ -87,8 +87,9 @@ export function DecisionFooter(p: DecisionFooterProps) {
   // « Toujours » where the agent offers it, in the words of what it grants (m2-toujours.html §1); never for a high-impact accept (m1-a-toi.html §4).
   const always = plain && offers(item.tool, item.kind, 'always');
   const scope = alwaysScope(item);
-  // The full request says what « Toujours » grants under the buttons: a phone has no hover (Q67).
-  const grants = always && <p className="text-small text-muted phone-side:hidden">{copy.atoi.scope[scope]}</p>;
+  // The full request says what « Toujours » grants under the buttons: a phone has no hover (Q67). On its side the line takes the
+  // hint's place at 12 px, whole, never cut: it says what the button grants beyond this request (design-ux, c8cef0d4).
+  const grants = always && <p className="text-small text-muted phone-side:text-[12px] phone-side:leading-4">{copy.atoi.scope[scope]}</p>;
   // Y / N only while the buttons they stand for are shown and enabled.
   const shown = outcome.kind !== 'sending' && outcome.kind !== 'uncertain'
     && !((outcome.kind === 'rejected' || outcome.kind === 'failed') && (outcome.reason === 'no_prompt' || outcome.reason === 'nothing_to_decide' || outcome.reason === 'stale'));
@@ -101,7 +102,7 @@ export function DecisionFooter(p: DecisionFooterProps) {
 
   const thread = <a href={p.threadHref ?? href({ name: 'thread', sessionId: item.sessionId })} className={full('ghost')}>{copy.result.thread(item.botName)}</a>;
   // The board's order: what to do, then the way to the thread, then what a tap does. A phone on its side (under 500 px of height)
-  // keeps the request above the buttons: the footer gives up the hint and the thread's line.
+  // keeps the request above the buttons: the footer gives up the hint and the thread's line (what « Toujours » grants stays).
   const wrap = (children: ReactNode, hint?: string, withThread = true) => (
     <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-4 phone-side:pb-2">
       {children}
@@ -142,14 +143,16 @@ export function DecisionFooter(p: DecisionFooterProps) {
       {grants && <div className="basis-full">{grants}</div>}
     </div>
   ) : (
-    <div className="flex flex-col gap-2.5 phone-side:flex-row">
-      <div className="flex gap-2.5 phone-side:flex-[2]">
-        <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={half()}>{D.deny}</button>
-        {onPc
-          ? <OnPc />
-          : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={half('primary')}>{D.allow}</button>}
+    <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2.5 phone-side:flex-row">
+        <div className="flex gap-2.5 phone-side:flex-[2]">
+          <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={half()}>{D.deny}</button>
+          {onPc
+            ? <OnPc />
+            : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={half('primary')}>{D.allow}</button>}
+        </div>
+        {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={buttonClass({ variant: 'ghost', block: true, className: 'phone-side:w-auto phone-side:flex-1' })}>{alwaysLabel(scope)}</button>}
       </div>
-      {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={buttonClass({ variant: 'ghost', block: true, className: 'phone-side:w-auto phone-side:flex-1' })}>{alwaysLabel(scope)}</button>}
       {grants}
     </div>
   );

@@ -50,6 +50,11 @@ test('in landscape the app spans the whole width with its tabs on the left', asy
   expect.soft(command.y).toBeGreaterThanOrEqual(0);
   expect.soft(command.y + command.height).toBeLessThanOrEqual(allow.y);
   expect.soft(allow.y + allow.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  // What « Toujours » grants stays, whole, in the hint's place under the buttons (Q67, design-ux c8cef0d4).
+  const grants = page.getByText(copy.atoi.scope.project);
+  await expect.soft(grants).toBeInViewport({ ratio: 1 });
+  expect.soft((await grants.boundingBox())!.height).toBeLessThanOrEqual(2 * 16 + 1);
+  await expect.soft(page.getByText(copy.decide.hint)).toBeHidden();
   expect.soft(await width()).toBe(page.viewportSize()!.width);
 
   await page.goBack();
