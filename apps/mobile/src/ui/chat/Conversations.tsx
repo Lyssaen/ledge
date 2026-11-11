@@ -9,7 +9,8 @@ import { Icon } from '../icons';
 import { kitButtonClass } from '../kit/Controls';
 
 const H = () => copy.chat.history;
-export const clockOf = (iso: string) => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+/** « 9:12 », « 14:20 »: 24 h without a leading zero, in English too (m3-chat.html §6, design-ux 3ccd3da3). */
+export const clockOf = (iso: string) => { const d = new Date(iso); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 /** « Aujourd'hui », « Hier », then « lun. 8 nov. », as the sheet's groups. */

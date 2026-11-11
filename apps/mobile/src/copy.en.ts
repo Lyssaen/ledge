@@ -150,6 +150,7 @@ export const en: Copy = {
       limits: 'LIMITS', limitsLabel: 'Limits', harness: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' } as Record<string, string>,
       harnessShort: { claude: 'Claude', codex: 'Codex', cursor: 'Cursor' } as Record<string, string>,
       five: '5 h', week: 'Week', month: 'Month', poolCursor: 'Cursor', poolOther: 'Others', model: (m: string) => m,
+      weekShort: 'wk',
       resumes: (at: string) => `resumes at ${at}`, resumesOn: (at: string) => `resumes on ${at}`, loading: 'Reading…',
       notOnPc: (harness: string) => `Cannot read: reconnect ${harness} on the PC.`,
       unread: 'Limit not read: Cursor does not give it for this plan.', unreach: (age: string) => `Not read for ${age}.`, unreachNever: 'Cannot read for now.', stale: (age: string) => `Read ${age} ago.`,

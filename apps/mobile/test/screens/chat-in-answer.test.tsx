@@ -34,6 +34,19 @@ describe('a request in the answer (Q30)', () => {
     expect(screen.queryByText(label('Pim'))).toBeNull();
   });
 
+  it("two sessions with one name: the step's session id finds the one that waits", () => {
+    thread([session('a', { name: 'Nova', repo: 'ledge' }), asking('b', 'Nova')],
+      [Q1, { question: 'Où en est Nova ?', answer: 'Nova attend.', answeredAt: '2026-11-11T10:00:05.000Z', steps: [{ kind: 'reply', id: 'b', name: 'Nova' }] }]);
+    expect(screen.getByText(label('Nova'))).toBeInTheDocument();
+    expect(screen.getByText('pnpm build Nova')).toBeInTheDocument();
+  });
+
+  it('control: the same names, the step read the session that does not wait', () => {
+    thread([session('a', { name: 'Nova', repo: 'ledge' }), asking('b', 'Nova')],
+      [Q1, { question: 'Où en est Nova ?', answer: 'Nova travaille.', answeredAt: '2026-11-11T10:00:05.000Z', steps: [{ kind: 'reply', id: 'a', name: 'Nova' }] }]);
+    expect(screen.queryByText(label('Nova'))).toBeNull();
+  });
+
   it('three at most, then « Voir les N autres dans À toi »', () => {
     const names = ['Ada', 'Bix', 'Cy', 'Dee', 'Eve'];
     thread(names.map((n, i) => asking(String(i), n)),

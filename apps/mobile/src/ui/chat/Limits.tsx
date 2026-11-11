@@ -3,6 +3,7 @@ import type { PhoneHarnessUsage, UsageHarness, UsageWindow } from '@ledge/protoc
 import { HARNESS_PROVIDER, PROVIDER_MARKS } from '@ledge/ui/logos/providers';
 import { copy } from '../../copy';
 import { reached, resetIsDate, resetLabel, shownUsage, span, usageTone } from '../../model/usage';
+import { IN_ANSWER } from './TurnView';
 
 /** A harness's logo: its provider's own mark (Claude's spark in its orange; OpenAI's and Cursor's follow the text colour). */
 export function HarnessLogo({ harness, size = 14 }: { harness: UsageHarness; size?: number }): JSX.Element {
@@ -47,6 +48,39 @@ function Row({ label, w, now, alert }: { label: string; w: UsageWindow; now: num
         <b className={`font-medium ${TONE_TEXT[tone]}`}>{copy.percent(w.pct)}</b>
         {at && <small className="ml-1.5 text-[11px] text-muted">{reached(w) ? (w.resetsAt && resetIsDate(w.resetsAt, now) ? P.resumesOn(at) : P.resumes(at)) : `↺ ${at}`}</small>}
       </span>
+    </div>
+  );
+}
+
+/**
+ * The limits under an answer that read them (m3-chat.html §2, Q31): one compact row per window, « Claude 5 h », « Codex sem. »,
+ * its gauge, its percent and « ↺ » when it starts again. Only the 5 hours and the week of Claude and Codex: a model's week,
+ * Cursor's windows and a harness without windows wait for Q89 and Q90 (design-ux 3ccd3da3).
+ */
+export function CompactLimits({ usage: given, now, alert, fresh = true, at }: { usage: readonly PhoneHarnessUsage[]; now: number; alert: number | null; fresh?: boolean; at: string }): JSX.Element | null {
+  const P = copy.chat.point;
+  const rows = shownUsage(given, now, fresh)
+    .filter(h => h.harness !== 'cursor' && h.status !== 'loading' && h.status !== 'expired')
+    .flatMap(h => h.windows.filter(w => w.kind === 'five_hour' || w.kind === 'seven_day').map(w => ({ h, w })));
+  if (!rows.length) return null;
+  return (
+    <div role="group" aria-label={P.limitsLabel} className={IN_ANSWER}>
+      <div className="flex flex-col">
+      {rows.map(({ h, w }) => {
+        const tone = usageTone(w.pct, alert);
+        return (
+          <div key={`${h.harness}:${w.kind}`} className="grid grid-cols-[66px_1fr_118px] items-center gap-2 py-0.5 text-[12px]">
+            <span className="whitespace-nowrap">{`${P.harnessShort[h.harness] ?? h.harness} ${w.kind === 'five_hour' ? P.five : P.weekShort}`}</span>
+            <UsageGauge pct={w.pct} alert={alert} />
+            <span className="whitespace-nowrap font-mono text-[12px]">
+              <b className={tone ? `font-medium ${TONE_TEXT[tone]}` : 'font-normal'}>{copy.percent(w.pct)}</b>
+              {w.resetsAt && <small className="ml-[5px] text-[11px] text-muted">↺ {resetLabel(w.resetsAt, now, true)}</small>}
+            </span>
+          </div>
+        );
+      })}
+      </div>
+      <span className="text-[11.5px] text-muted">{P.stale(span(Math.max(0, now - Date.parse(at))))}</span>
     </div>
   );
 }

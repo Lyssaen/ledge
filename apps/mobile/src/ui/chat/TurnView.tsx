@@ -11,8 +11,7 @@ import { RelayCard } from './RelayCard';
 import { TaskCards } from './TaskCard';
 import { kitButtonClass } from '../kit/Controls';
 import type { PhoneHarnessUsage } from '@ledge/protocol';
-import { span } from '../../model/usage';
-import { Limits } from './Limits';
+import { CompactLimits } from './Limits';
 
 /** Under an answer, the edge that sets what it shows apart from Ledge's text (m3-chat.html `.inans`). */
 export const IN_ANSWER = 'flex flex-col gap-1.5 border-l-2 border-line pl-2.5';
@@ -88,12 +87,7 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskA
       {!live && text && <Answer text={text} names={names} />}
       {!live && turn.answer && <Sources names={sourcesOf(steps)} ids={names} />}
       {!live && turn.answer && inAnswer}
-      {!live && turn.answer && limits && limits.usage.length > 0 && (
-        <div className={IN_ANSWER}>
-          <Limits usage={limits.usage} now={Date.now()} alert={limits.alert} fresh={limits.fresh} />
-          <span className="text-[11.5px] text-muted">{copy.chat.point.stale(span(Math.max(0, Date.now() - Date.parse(limits.at))))}</span>
-        </div>
-      )}
+      {!live && turn.answer && limits && <CompactLimits usage={limits.usage} now={Date.now()} alert={limits.alert} fresh={limits.fresh} at={limits.at} />}
       {!live && turn.cut && <span className="px-1 text-small text-muted">{copy.chat.cut}</span>}
       {!live && turn.error && (
         // Under the question, with what can be done next (m3-chat.html §3): a stop is only said.

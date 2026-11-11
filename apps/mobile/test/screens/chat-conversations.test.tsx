@@ -47,8 +47,8 @@ describe('« Conversations » (m3-chat.html §6)', () => {
       ]
     }));
     const sheet = screen.getByRole('dialog', { name: H.title });
-    expect(within(sheet).getByRole('button', { name: /« Où en est ledge-dev \? ».*En cours · 4 questions · depuis 09:12/ })).toHaveAttribute('aria-current', 'true');
-    expect(within(within(sheet).getByRole('region', { name: H.today })).getByRole('button', { name: /Résumer la nuit.*7 questions · 07:40/ })).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: /« Où en est ledge-dev \? ».*En cours · 4 questions · depuis 9:12/ })).toHaveAttribute('aria-current', 'true');
+    expect(within(within(sheet).getByRole('region', { name: H.today })).getByRole('button', { name: /Résumer la nuit.*7 questions · 7:40/ })).toBeInTheDocument();
     const yesterday = within(sheet).getByRole('region', { name: H.yesterday });
     expect(within(yesterday).getAllByRole('button')).toHaveLength(2);
     expect(within(yesterday).getByRole('button', { name: /Redémarre ledge-dev.*1 question · 11:30/ })).toBeInTheDocument();
@@ -101,7 +101,7 @@ describe('« Conversations » (m3-chat.html §6)', () => {
     act(() => t.deliver(chat.history(chat.turn(Q1, { question: 'Où en est ledge-dev ?', askedAt: at(0, 9, 12) }), chat.turn(Q2, { question: 'Et mes limites ?', askedAt: at(0, 9, 14) }))));
     fireEvent.click(screen.getByRole('button', { name: H.today }));
     const sheet = screen.getByRole('dialog', { name: H.today });
-    expect(within(sheet).getAllByRole('button').map(b => b.textContent)).toEqual(['« Où en est ledge-dev ? »09:12', '« Et mes limites ? »09:14']);
+    expect(within(sheet).getAllByRole('button').map(b => b.textContent)).toEqual(['« Où en est ledge-dev ? »9:12', '« Et mes limites ? »9:14']);
     expect(t.of('chat.conversations')).toHaveLength(0);
     fireEvent.click(within(sheet).getByRole('button', { name: /Et mes limites/ }));
     expect(screen.queryByRole('dialog')).toBeNull();

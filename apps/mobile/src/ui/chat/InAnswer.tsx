@@ -16,10 +16,10 @@ import { IN_ANSWER } from './TurnView';
 export const IN_ANSWER_MAX = 3;
 export const requestId = (i: Pick<InboxItem, 'sessionId' | 'key'>) => `${i.sessionId}/${i.key}`;
 
-/** The ids of the sessions an answer read (its « Sources »), from its steps and the names no two sessions share. */
+/** The ids of the sessions an answer read (its « Sources »): the step's own session id, or else its name when no two sessions share it. */
 export function sourceIds(steps: readonly PhoneChatStep[], ids: ReadonlyMap<string, string>): Set<string> {
   return new Set(steps.filter(s => s.kind === 'pane' || s.kind === 'reply').flatMap(s => {
-    const id = s.name ? ids.get(s.name) : s.id;
+    const id = s.id ?? (s.name ? ids.get(s.name) : undefined);
     return id ? [id] : [];
   }));
 }

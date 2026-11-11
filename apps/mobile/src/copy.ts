@@ -151,6 +151,8 @@ const fr = {
       limits: 'LIMITES', limitsLabel: 'Limites', harness: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' } as Record<string, string>,
       harnessShort: { claude: 'Claude', codex: 'Codex', cursor: 'Cursor' } as Record<string, string>,
       five: '5 h', week: 'Semaine', month: 'Mois', poolCursor: 'Cursor', poolOther: 'Autres', model: (m: string) => m,
+      /** A week in a compact row under an answer (m3-chat.html §2, Q31): « Claude sem. ». */
+      weekShort: 'sem.',
       resumes: (at: string) => `reprend à ${at}`, resumesOn: (at: string) => `reprend le ${at}`, loading: 'Lecture en cours…',
       notOnPc: (harness: string) => `Lecture impossible : reconnecte ${harness} sur le PC.`,
       unread: 'Limite non lue : Cursor ne la donne pas pour cette offre.', unreach: (age: string) => `Pas de lecture depuis ${age}.`, unreachNever: 'Lecture impossible pour l’instant.', stale: (age: string) => `Lu il y a ${age}.`,
