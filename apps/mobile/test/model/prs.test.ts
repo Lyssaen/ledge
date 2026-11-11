@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  atoiPrs, blockersOf, canMerge, canRerun, chipOf, diffTotal, duration, failedCount, failedJob, fileThreads, isReady, logCut,
+  approvalsText, atoiPrs, canMerge, canRerun, chipOf, diffTotal, duration, failedCount, failedJob, fileThreads, inFoot, isReady, logCut, mergeConditions,
   PIPE_DOT, prRouteId, shortSha, signInCommand, splitPrs, stagesOf, threadCounts, unreadable
 } from '../../src/model/prs';
 import { detail, forgeState, mr, pr } from './forge-fixtures';
@@ -100,36 +100,54 @@ describe('the pipeline', () => {
 });
 
 describe('merging', () => {
-  it('gives each blocker what its sentence needs, and keeps an unknown code as is', () => {
+  it('lists the refused conditions first, as Desktop does, and keeps an unknown code as is', () => {
     const d = detail(mr(), {
       reviewers: [{ name: 'review-qa', state: 'changes' }, { name: 'tom', state: 'approved' }, { name: 'ana', state: 'changes' }],
-      mergeBlockers: ['draft', 'not_open', 'approvals', 'changes_requested', 'pipeline', 'pipeline_not_started', 'conflicts']
+      mergeBlockers: ['draft', 'not_open', 'approvals', 'changes_requested', 'pipeline', 'merge_queue']
     });
-    expect(blockersOf(d)).toEqual([
-      { code: 'draft', forge: 'gitlab' },
-      { code: 'not_open' },
-      { code: 'approvals', given: 0, required: 1 },
-      { code: 'changes_requested', who: 'review-qa, ana' },
-      { code: 'pipeline', pipeline: 'fail' },
-      { code: 'pipeline_not_started' },
-      { code: 'unknown', raw: 'conflicts' }
+    expect(mergeConditions(d)).toEqual([
+      { ok: false, key: 'draft' },
+      { ok: false, key: 'not_open' },
+      { ok: false, key: 'approvals', given: 0, required: 1 },
+      { ok: false, key: 'changes_requested', who: 'review-qa, ana' },
+      { ok: false, key: 'pipeline_fail' },
+      { ok: false, key: 'raw', code: 'merge_queue' }
     ]);
   });
 
-  it('counts one more approval than given when GitHub does not say how many are required', () => {
-    expect(blockersOf(detail(pr({ approvals: { given: 1 } }), { mergeBlockers: ['approvals'] }))).toEqual([{ code: 'approvals', given: 1, required: 2 }]);
+  it('says how the pipeline stands, and when none started yet', () => {
+    const keys = (p: Parameters<typeof pr>[0], b: string[] = []) => mergeConditions(detail(pr(p), { mergeBlockers: b })).map(c => c.key);
+    expect(keys({ pipeline: 'run' }, ['pipeline'])[0]).toBe('pipeline_run');
+    expect(keys({ pipeline: 'wait' }, ['pipeline_not_started'])[0]).toBe('pipeline_not_started');
+    expect(keys({ pipeline: 'none' })).toEqual(['noCi', 'approved', 'noChanges']);
   });
 
-  it('offers a merge only when nothing blocks it on an open request', () => {
+  it('counts one approval required when GitHub does not say, as Desktop does', () => {
+    expect(mergeConditions(detail(pr({ approvals: { given: 1 } })))).toEqual([
+      { ok: true, key: 'pipeline' }, { ok: true, key: 'approved', given: 1, required: 1 }, { ok: true, key: 'noChanges' }
+    ]);
+    expect(mergeConditions(detail(pr({ approvals: { given: 0 } }), { mergeBlockers: ['approvals'] }))[0]).toEqual({ ok: false, key: 'approvals', given: 0, required: 1 });
+  });
+
+  it('offers a merge only when every condition is met on an open request', () => {
     expect(canMerge(detail())).toBe(true);
     expect(canMerge(detail(pr({ state: 'review' })))).toBe(true);
     expect(canMerge(detail(pr(), { mergeBlockers: ['approvals'] }))).toBe(false);
+    expect(canMerge(detail(pr({ pipeline: 'run' })))).toBe(false);
     expect(canMerge(detail(pr({ state: 'merged' })))).toBe(false);
+  });
+
+  it('writes the approvals and quotes a sentence in the footer', () => {
+    expect(approvalsText(mr({ approvals: { given: 1, required: 1 } }))).toBe('1/1');
+    expect(approvalsText(pr({ approvals: { given: 0 } }))).toBe('0');
+    expect(inFoot('Le pipeline a échoué.', { ok: false, key: 'pipeline_fail' })).toBe('le pipeline a échoué');
+    expect(inFoot('reviewer demande des changements.', { ok: false, key: 'changes_requested', who: 'reviewer' })).toBe('reviewer demande des changements');
+    expect(inFoot('Tom demande des changements.', { ok: false, key: 'changes_requested', who: 'Tom' })).toBe('Tom demande des changements');
   });
 });
 
 describe('the detail', () => {
-  const thread = (id: string, extra: object) => ({ id, comments: [{ id: `${id}c`, author: 'a', at: AT, body: 'b' }], ...extra });
+  const thread = (id: string, extra: { resolvable: boolean; resolved: boolean; file?: string }) => ({ id, comments: [{ id: `${id}c`, author: 'a', at: AT, body: 'b' }], ...extra });
 
   it('counts the open and resolved threads, leaving out the comments on the request', () => {
     const d = detail(pr(), {

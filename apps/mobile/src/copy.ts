@@ -1,5 +1,6 @@
 import { MESSAGE_MAX, type ActionErrorCode } from '@ledge/protocol';
 import { actionWords, type ActionVars } from '@ledge/ui/chat/actionWords';
+import { prsFr } from './copy.prs';
 import { rigsFr } from './copy.rigs';
 
 import { useSyncExternalStore } from 'react';
@@ -1115,7 +1116,8 @@ const fr = {
     notSent: (pc: string) => `${pc} ne transmet pas encore ses MR et PR à cet appareil`,
     notSentBody: 'Ledge suit les branches des sessions et des sièges. Leurs MR, PR et pipelines s’afficheront ici une fois Ledge mis à jour sur le PC.',
     tracked: 'Suivies : les branches des sessions et des sièges, via gh et glab.',
-    pane: { title: 'Rien à afficher', body: 'Une MR ou une PR et son pipeline s’ouvrent ici.' }
+    pane: { title: 'Rien à afficher', body: 'Une MR ou une PR et son pipeline s’ouvrent ici.' },
+    ...prsFr
   },
   /** Rigs before the PC sends them (m0-socle.html, §2 and §3). */
   rigs: {

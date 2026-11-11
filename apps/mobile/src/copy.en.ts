@@ -1,5 +1,6 @@
 import { MESSAGE_MAX, type ActionErrorCode } from '@ledge/protocol';
 import { actionWords, type ActionVars } from '@ledge/ui/chat/actionWords';
+import { prsEn } from './copy.prs.en';
 import { rigsEn } from './copy.rigs.en';
 
 import type { Copy, Model } from './copy';
@@ -1081,11 +1082,12 @@ export const en: Copy = {
   },
   /** MR/PR before the PC sends them (m0-socle.html, §3, answer A of question Q3). */
   prs: {
-    title: 'MR and PR', subtitle: 'GitHub · GitLab',
+    title: 'MRs and PRs', subtitle: 'GitHub · GitLab',
     notSent: (pc: string) => `${pc} does not send its MRs and PRs to this device yet`,
     notSentBody: 'Ledge follows the branches of the sessions and seats. Their MRs, PRs and pipelines will show here once Ledge is updated on the PC.',
-    tracked: 'Tracked: the branches of the sessions and seats, via gh and glab.',
-    pane: { title: 'Nothing to show', body: 'An MR or PR and its pipeline open here.' }
+    tracked: 'Followed: the branches of the sessions and seats, through gh and glab.',
+    pane: { title: 'Nothing to show', body: 'An MR or PR and its pipeline open here.' },
+    ...prsEn
   },
   /** Rigs before the PC sends them (m0-socle.html, §2 and §3). */
   rigs: {

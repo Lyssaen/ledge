@@ -67,36 +67,56 @@ export function duration(s: number | undefined): { text: string; hours: boolean 
 /** A log the PC cut: it keeps the end and starts with « … » (contract §3). */
 export const logCut = (text: string): boolean => text.startsWith('…');
 
-/**
- * What blocks a merge, one entry per code of `mergeBlockers`, with what its sentence needs: the forge for a draft, the approvals, who
- * asked for changes, how the pipeline stands. A code the phone does not know is kept as is (Q59).
- */
-export type Blocker =
-  | { code: 'draft'; forge: ForgeKind }
-  | { code: 'not_open' }
-  | { code: 'approvals'; given: number; required: number }
-  | { code: 'changes_requested'; who: string }
-  | { code: 'pipeline'; pipeline: PipeStatus }
-  | { code: 'pipeline_not_started' }
-  | { code: 'unknown'; raw: string };
+const KNOWN = new Set(['draft', 'not_open', 'approvals', 'changes_requested', 'pipeline', 'pipeline_not_started']);
 
-export function blockersOf(d: PrDetail): Blocker[] {
-  return d.mergeBlockers.map((code): Blocker => {
-    switch (code) {
-      case 'draft': return { code, forge: d.pr.forge };
-      case 'not_open': return { code };
-      // GitHub does not give the number required: one more than given is what is missing.
-      case 'approvals': return { code, given: d.pr.approvals.given, required: d.pr.approvals.required ?? d.pr.approvals.given + 1 };
-      case 'changes_requested': return { code, who: d.reviewers.filter(r => r.state === 'changes').map(r => r.name).join(', ') };
-      case 'pipeline': return { code, pipeline: d.pr.pipeline };
-      case 'pipeline_not_started': return { code };
-      default: return { code: 'unknown', raw: code };
-    }
-  });
+/**
+ * A condition of a merge, met or not, as Desktop lists them under « Pour fusionner » (apps/desktop/src/forge/states.ts): the
+ * refused ones first, in the PC's order, then the met ones. A code the phone does not know is shown as is (Q59).
+ */
+export type MergeCondition =
+  | { ok: true; key: 'pipeline' | 'noCi' | 'noChanges' }
+  | { ok: true; key: 'approved'; given: number; required: number }
+  | { ok: false; key: 'draft' | 'not_open' | 'pipeline_fail' | 'pipeline_run' | 'pipeline_wait' | 'pipeline_skip' | 'pipeline_not_started' }
+  | { ok: false; key: 'raw'; code: string }
+  | { ok: false; key: 'approvals'; given: number; required: number }
+  | { ok: false; key: 'changes_requested'; who: string };
+
+/** Desktop's conditions, the same on the phone: GitHub gives no number of approvals required, which counts as one. */
+export function mergeConditions(d: Pick<PrDetail, 'pr' | 'mergeBlockers' | 'reviewers'>): MergeCondition[] {
+  const { pr } = d;
+  const b = new Set(d.mergeBlockers);
+  const required = Math.max(1, pr.approvals.required ?? 0);
+  const out: MergeCondition[] = [];
+  if (b.has('draft')) out.push({ ok: false, key: 'draft' });
+  if (b.has('not_open')) out.push({ ok: false, key: 'not_open' });
+  if (b.has('approvals')) out.push({ ok: false, key: 'approvals', given: pr.approvals.given, required });
+  if (b.has('changes_requested')) out.push({ ok: false, key: 'changes_requested', who: d.reviewers.filter(r => r.state === 'changes').map(r => r.name).join(', ') });
+  if (b.has('pipeline_not_started')) out.push({ ok: false, key: 'pipeline_not_started' });
+  else if (b.has('pipeline') || (pr.pipeline !== 'ok' && pr.pipeline !== 'none')) {
+    out.push({ ok: false, key: pr.pipeline === 'run' ? 'pipeline_run' : pr.pipeline === 'wait' ? 'pipeline_wait' : pr.pipeline === 'skip' ? 'pipeline_skip' : 'pipeline_fail' });
+  } else out.push({ ok: true, key: pr.pipeline === 'none' ? 'noCi' : 'pipeline' });
+  for (const code of b) if (!KNOWN.has(code)) out.push({ ok: false, key: 'raw', code });
+  if (!b.has('approvals')) out.push({ ok: true, key: 'approved', given: pr.approvals.given, required });
+  if (!b.has('changes_requested')) out.push({ ok: true, key: 'noChanges' });
+  return out;
 }
 
-/** A merge is offered when nothing blocks it and the request can still be merged (Q59). */
-export const canMerge = (d: PrDetail): boolean => d.mergeBlockers.length === 0 && (d.pr.state === 'open' || d.pr.state === 'review');
+/** A merge is offered when every condition is met and the request can still be merged (Q59). */
+export const canMerge = (d: Pick<PrDetail, 'pr' | 'mergeBlockers' | 'reviewers'>): boolean =>
+  (d.pr.state === 'open' || d.pr.state === 'review') && mergeConditions(d).every(c => c.ok);
+
+/** The approvals as the footer writes them: « 1/1 » when the forge says how many are required (GitLab), else « 0 ». */
+export const approvalsText = (p: Pick<PullRequest, 'approvals'>): string =>
+  `${p.approvals.given}${p.approvals.required !== undefined ? `/${p.approvals.required}` : ''}`;
+
+/**
+ * A condition's sentence as the footer quotes it after « · » (« 1/1 approbation · le pipeline a échoué »): its final period dropped,
+ * and its first letter lowered unless it starts with a name (`changes_requested`) or is a code shown as is.
+ */
+export const inFoot = (s: string, c: MergeCondition): string => {
+  const cut = s.replace(/\.$/, '');
+  return c.key === 'changes_requested' || c.key === 'raw' ? cut : cut.charAt(0).toLowerCase() + cut.slice(1);
+};
 
 /** Rerun shows only on a failed pipeline of an open request that is not a draft: the PC reruns the failed jobs (Q58, M5 behaviours). */
 export const canRerun = (p: PullRequest): boolean => p.pipeline === 'fail' && (p.state === 'open' || p.state === 'review');

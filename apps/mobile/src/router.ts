@@ -27,10 +27,12 @@ export type Route =
   | { name: 'kernel' }
   | { name: 'max'; goalId?: string }
   /** « Nouvelle session » (`#/new`): launches an agent on the PC (m2-sessions.html §9, m2-lancement.html). */
-  | { name: 'launch' };
+  | { name: 'launch' }
+  /** A pull or merge request of the MR/PR tab (`#/prs/<id>`, its id `host/repo#n` escaped): docs/mockups/ledge-mobile-refonte/m5-mr-pr.html. */
+  | { name: 'pr'; id: string };
 
 /** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
-const ROUTE_NAME: Record<Route['name'], true> = { atoi: true, sessions: true, prs: true, rigs: true, atelier: true, chat: true, thread: true, terminal: true, request: true, ask: true, connection: true, rig: true, kernel: true, max: true, launch: true };
+const ROUTE_NAME: Record<Route['name'], true> = { atoi: true, sessions: true, prs: true, rigs: true, atelier: true, chat: true, thread: true, terminal: true, request: true, ask: true, connection: true, rig: true, kernel: true, max: true, launch: true, pr: true };
 export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
 
 const SIMPLE = ['sessions', 'prs', 'rigs', 'chat', 'connection', 'kernel', 'max'] as const;
@@ -47,6 +49,7 @@ export function parseRoute(hash: string): Route {
     if (parts[0] === 'atelier' && parts.length <= 2) return parts[1] ? { name: 'atelier', sessionId: decodeURIComponent(parts[1]) } : { name: 'atelier' };
     if (parts[0] === 'connection' && parts.length === 2 && parts[1] === 'link') return { name: 'connection', section: 'link' };
     if (parts[0] === 'rigs' && parts.length === 2) return { name: 'rig', rig: decodeURIComponent(parts[1]!) };
+    if (parts[0] === 'prs' && parts.length === 2) return { name: 'pr', id: decodeURIComponent(parts[1]!) };
     if (parts[0] === 'max' && parts.length === 2) return { name: 'max', goalId: decodeURIComponent(parts[1]!) };
     if (parts[0] === 'sessions' && parts.length === 2 && (parts[1] === 'working' || parts[1] === 'waiting')) return { name: 'sessions', filter: parts[1] };
   } catch { /* malformed escape: fall through to À toi */ }
@@ -65,6 +68,7 @@ export function href(r: Route): string {
     : r.requestKey ? `#/atelier/${encodeURIComponent(r.sessionId)}/request/${encodeURIComponent(r.requestKey)}` : `#/atelier/${encodeURIComponent(r.sessionId)}`;
   if (r.name === 'connection' && r.section) return `#/connection/${r.section}`;
   if (r.name === 'rig') return `#/rigs/${encodeURIComponent(r.rig)}`;
+  if (r.name === 'pr') return `#/prs/${encodeURIComponent(r.id)}`;
   if (r.name === 'max' && r.goalId) return `#/max/${encodeURIComponent(r.goalId)}`;
   if (r.name === 'sessions' && r.filter) return `#/sessions/${r.filter}`;
   if (r.name === 'launch') return `#/${NEW}`;
