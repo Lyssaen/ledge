@@ -153,12 +153,22 @@ export async function createMobileService(opts: {
     devices: () => devices,
     send: sendFrame,
     onConfirmed(deviceId, peer) {
-      if (devices.some((d) => d.id === deviceId)) {
+      const d0 = devices.find((d) => d.id === deviceId);
+      if (d0) {
         const at = new Date(now()).toISOString();
+        // A device put back with its passkey is back for real once its new key says hello: then Desktop hears it.
+        const back = d0.recovering;
+        const confirmed = (d: ApprovedDevice): ApprovedDevice => {
+          if (!d.recovering) return d;
+          const { recovering, ...rest } = d;
+          return { ...rest, recovered: { at: recovering.at, ...(recovering.model ? { model: recovering.model } : {}), pending: true } };
+        };
         // A peer belongs to the device that confirmed on it last: a browser that lost its keys and paired again keeps its
         // cookie, so the same peer; the old device no longer owns it, and revoking that one must not revoke this peer.
-        try { saveDevices(devices.map((d) => (d.id === deviceId ? { ...d, lastPeer: peer, lastSeenAt: at, peers: withPeer(d, peer) } : withoutPeer(d, peer)))); }
+        let saved = false;
+        try { saveDevices(devices.map((d) => (d.id === deviceId ? confirmed({ ...d, lastPeer: peer, lastSeenAt: at, peers: withPeer(d, peer) }) : withoutPeer(d, peer)))); saved = true; }
         catch (e) { log(`mobile: devices.json not written (${(e as Error).message})`); }
+        if (back && saved) told({ event: 'recovered', id: deviceId, at: back.at });
       }
       pairing.linked(deviceId);
       changed();
@@ -197,7 +207,7 @@ export async function createMobileService(opts: {
       const { push: _push, peers: _peers, lastPeer: _last, lastSeenAt: _seen, refused: _refused, ...kept } = d;
       const entry: ApprovedDevice = {
         ...kept, id: next.id, publicKey: next.publicKey, lastPeer: next.peer, peers: [next.peer],
-        credential: { ...d.credential, counter: next.counter }, recovered: { at, ...(next.model ? { model: next.model } : {}), pending: true }
+        credential: { ...d.credential, counter: next.counter }, recovering: { at, ...(next.model ? { model: next.model } : {}) }
       };
       // The thread's folder first: the old id leaving the list drops its thread, folder included. A folder that cannot be moved
       // stops the restore with nothing changed, and a list that cannot be written puts the folder back: the thread is never lost.
@@ -221,7 +231,7 @@ export async function createMobileService(opts: {
       const peers = peersOf(d).filter((p) => !others.has(p));
       for (const p of peers) sendFrame(p, { k: 'denied' });
       void Promise.all(peers.map((p) => revokeOnRelay(p)));
-      told({ event: 'recovered', id: next.id, at });
+      // Desktop hears it at the new key's first hello (onConfirmed): a phone that failed to keep the PC's key never says it.
       changed();
       return shownName(entry);
     },

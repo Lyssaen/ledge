@@ -107,7 +107,9 @@ Si un `recover_start` plus récent du même pair, un nouveau `welcome` ou l'arr�
   - `label`, `name`, `kind`, `prefs`, `approvedAt` ;
   - le credential, avec son compteur mis à jour.
 - Elle **n'hérite pas** de `push`, ni des anciens pairs, ni de `lastSeenAt`, ni de `refused`.
-- Elle porte `recovered { at, model?, pending: true }`.
+- Elle porte `recovering { at, model? }`, que le PC garde pour lui. Au premier `hello` de la nouvelle clé, il devient
+  `recovered { at, model?, pending: true }` et Desktop est prévenu (§ 5). Un téléphone qui n'a pas su garder la clé du PC
+  (écran 2 j) ne dit jamais `hello` : Desktop n'annonce donc pas un appareil qui n'est pas relié.
 - L'historique du chat `~/.ledge/mobile/chat/<ancien id>` est **renommé** vers le nouvel id, avant l'écriture de la liste :
   - si le dossier ne peut pas être déplacé, ou si le nouvel id en a déjà un, rien ne change et la réponse est `failed` ;
   - si la liste ne peut pas être écrite, le dossier est remis sous l'ancien id, l'ancien appareil reste approuvé, et la réponse est `failed`.
@@ -115,6 +117,14 @@ Si un `recover_start` plus récent du même pair, un nouveau `welcome` ou l'arr�
 - L'ancienne entrée disparaît :
   - ses pairs reçoivent `denied` et sont révoqués sur le relais, comme pour une révocation ;
   - **aucune pierre tombale n'est créée** : la passkey vit dans la nouvelle entrée.
+
+**« Réessayer » après un `recover_ok` que le téléphone n'a pas pu garder (2 j)** :
+- Chaque `recover_start` compte dans les 5 essais par heure, « Réessayer » compris : 2 g s'applique au-delà.
+- Le téléphone refait une clé d'appareil et recommence. L'appareil, remis sous la première nouvelle clé mais jamais relié,
+  n'est pas connecté : il est remis en place une seconde fois, sous la nouvelle clé, avec son historique. Le pair de l'app
+  n'est pas révoqué, puisqu'il est celui de la nouvelle entrée. Desktop n'est prévenu qu'une fois, au `hello`.
+- Une question encore en cours pour l'ancien id au moment de la remise en place est arrêtée, comme à un redémarrage du
+  daemon : la conversation suit l'appareil, mais la réponse de cette question est perdue.
 
 **Mémoire de la reconnexion** : `~/.ledge/recovery.json`, en mode 0600. Il contient :
 - les pierres tombales `{ credentialId, device, revokedAt }`, gardées 90 jours ;
@@ -138,7 +148,9 @@ Au niveau de l'état entier, `recovery?: { blocked?: { since, failures } }` port
 `model` permet à Desktop d'écrire « maintenant un iPhone » quand le modèle diffère de l'appareil (P14). Ce cas n'est pas dessiné tant que P14 n'est pas tranché.
 
 **Messages du daemon vers les fronts locaux** (`ServerMessageSchema`) :
-- `mobile.recovery { event: 'recovered' | 'refused' | 'blocked', id?, at }` arrive au moment même, pour le toast (5 a, 5 b). Il n'y a pas de toast dessiné pour `blocked` : seul l'encadré 6 e existe.
+- `mobile.recovery { event: 'recovered' | 'refused' | 'blocked', id?, at }` arrive pour le toast (5 a, 5 b) : `refused` et
+  `blocked` au moment même, `recovered` au premier `hello` de l'appareil remis en place (`at` reste l'heure de la remise en
+  place). Il n'y a pas de toast dessiné pour `blocked` : seul l'encadré 6 e existe.
 - La trace durable, elle, arrive avec le `mobile` qui suit.
 
 **Messages des fronts locaux vers le daemon** (`ClientMessageSchema`) :

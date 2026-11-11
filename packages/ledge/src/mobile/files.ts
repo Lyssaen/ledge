@@ -35,6 +35,9 @@ const ApprovedDeviceSchema = z.object({
   prefs: DevicePrefsSchema.optional().catch(undefined),
   /** It came back with its passkey after a reinstall (`pending` until « C'était bien moi »). */
   recovered: RecoveredSchema.optional().catch(undefined),
+  /** Put back with its passkey, but its new key has not said hello yet: the phone may not have kept the PC's key (P19). Desktop
+   *  is told nothing until that hello turns it into `recovered`; never shown to the fronts. */
+  recovering: z.object({ at: z.string(), model: z.string().optional() }).optional().catch(undefined),
   /** Another device tried to take its place with its passkey while it was connected (until « Compris »). */
   refused: z.object({ at: z.string(), model: z.string().optional() }).optional().catch(undefined)
 });

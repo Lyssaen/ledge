@@ -90,15 +90,16 @@ async function reinstalled() {
   const app = await fakeDevice({ relayUrl: relay.url, token: relay.deviceToken(NEW_PEER), peer: NEW_PEER, pcPublicKey: s.pcKey() });
   cleanups.push(() => app.close());
   const userHandle = b64u(await recoveryUserId(s.pcKey()));
-  /** The reinstalled app's recovery, as the phone runs it. */
-  const recover = async (model?: string): Promise<SealedFrame> => {
+  let counter = 0;
+  /** The reinstalled app's recovery, as the phone runs it (`on`: an app on the same peer under another device key). */
+  const recover = async (model?: string, on: FakeDevice = app): Promise<SealedFrame> => {
     const n = randomNonce();
-    const offer = app.waitFor('recover_offer');
-    app.sendFrame({ k: 'recover_start', d: app.publicKey, n, ...(model ? { model } : {}) });
+    const offer = on.waitFor('recover_offer');
+    on.sendFrame({ k: 'recover_start', d: on.publicKey, n, ...(model ? { model } : {}) });
     const o = await offer;
-    const challenge = await recoverChallenge({ pcPublicKey: o.pc, devicePublicKey: app.publicKey, pcNonce: o.n, deviceNonce: n });
-    const done = Promise.race([app.waitFor('recover_ok'), app.waitFor('recover_no')]);
-    app.sendFrame({ k: 'recover_proof', assertion: passkey.get(rp, challenge, { counter: 1 }), userHandle });
+    const challenge = await recoverChallenge({ pcPublicKey: o.pc, devicePublicKey: on.publicKey, pcNonce: o.n, deviceNonce: n });
+    const done = Promise.race([on.waitFor('recover_ok'), on.waitFor('recover_no')]);
+    on.sendFrame({ k: 'recover_proof', assertion: passkey.get(rp, challenge, { counter: ++counter }), userHandle });
     return done;
   };
   return { s, relay, revoked, events, old, oldId, app, recover, chat, passkey };
@@ -113,27 +114,67 @@ describe('passkey recovery through the service', () => {
     const [d, ...rest] = readDevices();
     expect(rest).toEqual([]);
     expect(d).toMatchObject({ id: newId, publicKey: t.app.publicKey, label: 'iPad', name: 'iPad de G', lastPeer: NEW_PEER, peers: [NEW_PEER],
-      credential: { id: t.passkey.id, counter: 1, recover: true }, recovered: { model: 'iPad', pending: true } });
+      credential: { id: t.passkey.id, counter: 1, recover: true }, recovering: { model: 'iPad' } });
     expect(d).not.toHaveProperty('push');
     expect(existsSync(t.chat)).toBe(false);
     expect(readFileSync(join(deviceChatDir(paths().dir, newId), 'turns.json'), 'utf8')).toBe('[]');
     await until(() => t.revoked.length === 1, 'old peer revoked');
     expect(t.revoked).toEqual([OLD_PEER]);
     expect(readRecovery().tombstones).toEqual([]);
-    expect(t.events).toEqual([{ event: 'recovered', id: newId, at: d!.recovered!.at }]);
-    expect(t.s.state().devices).toEqual([expect.objectContaining({ id: newId, recover: true, recovered: { at: d!.recovered!.at, model: 'iPad', pending: true } })]);
+    // Desktop hears nothing yet: the phone may not have kept the PC's key (P19).
+    expect(t.events).toEqual([]);
+    expect(t.s.state().devices[0]).not.toHaveProperty('recovered');
+    expect(t.s.state().devices[0]).not.toHaveProperty('recovering');
 
-    // It pins the PC key and says hello as any approved device.
+    // It pins the PC key and says hello as any approved device: now Desktop hears it.
+    const at = d!.recovering!.at;
     await t.app.hello();
     await until(() => t.s.state().devices[0]?.online === true, 'back online');
+    expect(t.events).toEqual([{ event: 'recovered', id: newId, at }]);
+    expect(t.s.state().devices).toEqual([expect.objectContaining({ id: newId, recover: true, recovered: { at, model: 'iPad', pending: true } })]);
+    expect(readDevices()[0]).not.toHaveProperty('recovering');
+
+    // A later hello tells nothing more.
+    t.app.close();
+    await until(() => t.s.state().devices[0]?.online === false, 'offline again');
+    const again = await fakeDevice({ relayUrl: t.relay.url, token: t.relay.deviceToken(NEW_PEER), peer: NEW_PEER, pcPublicKey: t.s.pcKey(), identity: t.app.identity });
+    cleanups.push(() => again.close());
+    await again.hello();
+    await until(() => t.s.state().devices[0]?.online === true, 'online again');
+    expect(t.events).toHaveLength(1);
 
     // « C'était bien moi »: the notice goes, the trace stays.
     await t.s.handle({ type: 'mobile.device.ack', id: newId, what: 'recovered' });
-    expect(t.s.state().devices[0]!.recovered).toEqual({ at: d!.recovered!.at, model: 'iPad' });
+    expect(t.s.state().devices[0]!.recovered).toEqual({ at, model: 'iPad' });
 
     // Revoked afterwards, its passkey is remembered for « révoqué le … ».
     await t.s.handle({ type: 'mobile.device.revoke', id: newId });
     expect(readRecovery().tombstones).toEqual([{ credentialId: t.passkey.id, device: 'iPad de G', revokedAt: expect.any(String) }]);
+  });
+
+  it('« Réessayer » after a recover_ok the phone could not keep: a new device key is put back again, each start counts, Desktop hears it once', async () => {
+    const t = await reinstalled();
+    expect(await t.recover('iPhone')).toMatchObject({ k: 'recover_ok' });
+    const firstId = await fingerprint(t.app.publicKey);
+    // The phone failed to keep the PC's key: it throws its device key away and tries again, on the same relay peer.
+    t.app.close();
+    const retry = await fakeDevice({ relayUrl: t.relay.url, token: t.relay.deviceToken(NEW_PEER), peer: NEW_PEER, pcPublicKey: t.s.pcKey() });
+    cleanups.push(() => retry.close());
+    expect(await t.recover('iPhone', retry)).toEqual({ k: 'recover_ok', name: 'iPad de G' });
+    const id = await fingerprint(retry.publicKey);
+    expect(readDevices().map(d => d.id)).toEqual([id]);
+    expect(readDevices()[0]).toMatchObject({ peers: [NEW_PEER], recovering: { model: 'iPhone' } });
+    expect(existsSync(deviceChatDir(paths().dir, firstId))).toBe(false);
+    expect(readFileSync(join(deviceChatDir(paths().dir, id), 'turns.json'), 'utf8')).toBe('[]');
+    // Its own peer is not revoked by the second restore.
+    await new Promise(r => setTimeout(r, 50));
+    expect(t.revoked).toEqual([OLD_PEER]);
+    expect(readRecovery().attempts).toHaveLength(2);
+    expect(t.events).toEqual([]);
+
+    await retry.hello();
+    await until(() => t.events.length === 1, 'Desktop told');
+    expect(t.events).toEqual([{ event: 'recovered', id, at: expect.any(String) }]);
   });
 
   it('connected: while the iPad is online, another app with its passkey is refused, and the PC keeps a notice until « Compris »', async () => {

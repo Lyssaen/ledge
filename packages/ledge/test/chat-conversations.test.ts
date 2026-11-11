@@ -2,7 +2,7 @@
 // restart, « Nouvelle conversation » and a new day put it away, and what is older than 7 days is pruned.
 import { describe, it, expect, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, existsSync, readdirSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
@@ -122,6 +122,23 @@ describe('a device keeps its conversations', { timeout: 20_000 }, () => {
     await s.threads.drop('d1');
     expect(existsSync(join(s.home, 'mobile', 'chat', 'd1'))).toBe(false);
     expect(await s.d1().conversations!()).toEqual({ past: [] });
+  });
+
+  it('a device put back under a new key (passkey recovery): its folder moved, the old thread dropped mid-question writes nowhere it would stay', async () => {
+    const s = setup();
+    await s.d1().ask('q1', 'un', quiet);
+    await settle(s);
+    // restore() renames the folder, then the old id leaves the list and its thread is dropped, a question still under way.
+    const moved = join(s.home, 'mobile', 'chat', 'd2');
+    renameSync(join(s.home, 'mobile', 'chat', 'd1'), moved);
+    const before = readFileSync(join(moved, 'conversations', 'current.json'), 'utf8');
+    const asked = s.d1().ask('q2', 'deux', quiet);
+    await s.threads.drop('d1');
+    await asked.catch(() => {});
+    await new Promise(r => setTimeout(r, 50));
+    expect(existsSync(join(s.home, 'mobile', 'chat', 'd1'))).toBe(false);
+    expect(readFileSync(join(moved, 'conversations', 'current.json'), 'utf8')).toBe(before);
+    expect(s.threads.device('d2').history().map(t => t.qid)).toEqual(['q1']);
   });
 
   it('what was under way when the daemon stopped is not any more', async () => {
