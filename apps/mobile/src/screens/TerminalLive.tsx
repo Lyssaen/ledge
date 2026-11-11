@@ -1,29 +1,30 @@
-// The agent's terminal, live (spec 2026-11-02 mobile terminal; mockup docs/mockups/mobile-terminal.html, 1a–4b): the pane at
-// the PC's size, « Lisible » or « Ajusté », and once the passkey gave the hand, the keyboard with its row of special keys.
+// The agent's terminal, live (spec 2026-11-02 mobile terminal; mockups mobile-terminal.html 1a–4b and m2-sessions.html §6): the
+// pane at the PC's size under the session's head, and once the passkey gave the hand, the keyboard with its row of keys.
 import type { PhoneSession } from '@ledge/protocol';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { copy } from '../copy';
 import type { PhoneLink } from '../link/link';
 import { href } from '../router';
-import { isLive, type Op } from '../state/operations';
 import { localStore } from '../state/storage';
 import { useMobile, type MobileStore } from '../state/store';
 import { TermController, type TermView, type TermWire } from '../term/controller';
-import { HOLD_IDLE_MS, keyBytes, READABLE_PX, withModifiers, type Mod, type SpecialKey } from '../term/keys';
+import { contextKeys, HOLD_IDLE_MS, keyBytes, READABLE_PX, withModifiers, type Mod, type SpecialKey } from '../term/keys';
 import type { XtermScreen } from '../term/xterm';
-import { BackHeader, linkView } from '../ui/Header';
 import { buttonClass } from '../ui/Button';
 import { Sheet } from '../ui/Dialog';
 import { Icon } from '../ui/icons';
 import { Notice } from '../ui/Notice';
 import { useNow } from '../useNow';
 import { useDeviceCheck } from './SessionClose';
+import { SessionHead } from './SessionHead';
+import { SessionFoot } from './Thread';
+import { useWide } from '../ui/layout';
+import { CONTEXT_NEAR } from '@ledge/protocol';
 import { isApple } from './device';
 
 const L = copy.terminal.live2;
 const VIEW_KEY = 'ledge.mobile.terminalView';
 type ViewMode = 'readable' | 'fit';
-const SETTLE = 10_000;
 
 const loadView = (storage?: Storage): ViewMode => { try { return localStore(storage)?.getItem(VIEW_KEY) === 'fit' ? 'fit' : 'readable'; } catch { return 'readable'; } };
 const saveView = (v: ViewMode, storage?: Storage) => { try { localStore(storage)?.setItem(VIEW_KEY, v); } catch { /* the choice lasts for this visit */ } };
@@ -33,9 +34,10 @@ export function wireOf(link: PhoneLink): TermWire {
   return { send: m => { void link.send(m).catch(() => undefined); }, onMessage: fn => link.onMessage(fn), ready: () => link.state() === 'ready', subscribe: fn => link.subscribe(fn) };
 }
 
-const left = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+/** Where the pane was when the person went to « Fil »: it opens there again (Comportements, « garde le défilement de chaque vue »). */
+const keptPlace = new Map<string, { left: number; top: number }>();
 
-type Interrupt = Op & { message: Extract<Op['message'], { type: 'session.interrupt' }> };
+const left = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 /** xterm is loaded with the first terminal opened: the rest of the app never pays for it. */
 const loadXterm = (host: HTMLElement): Promise<XtermScreen> => import('../term/xterm').then(m => m.createXterm(host));
@@ -55,9 +57,12 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
   const [mods, setMods] = useState<Record<Mod, 'off' | 'armed' | 'locked'>>({ ctrl: 'off', alt: 'off' });
   const [lineMode, setLineMode] = useState(false);
   const [line, setLine] = useState('');
-  const [withEnter, setWithEnter] = useState(true);
   const [pasteFailed, setPasteFailed] = useState(false);
   const [map, setMap] = useState<{ left: number; width: number } | null>(null);
+  // The numbered choice the screen shows, as context keys (§6); « Modèle et effort », opened from the foot.
+  const [rowsChoice, setRowsChoice] = useState<ReturnType<typeof contextKeys>>([]);
+  const [model, setModel] = useState(false);
+  const wide = useWide();
   const following = useRef(true);
   const modsRef = useRef(mods);
   modsRef.current = mods;
@@ -110,16 +115,28 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
     const el = box.current;
     const update = () => {
       if (!el) return;
+      const kept = keptPlace.get(session.id);
+      // The place comes back once the pane is drawn wide and tall enough to hold it; it stops the cursor's following.
+      if (kept && el.scrollWidth >= kept.left + el.clientWidth && el.scrollHeight >= kept.top + el.clientHeight) {
+        keptPlace.delete(session.id);
+        el.scrollLeft = kept.left; el.scrollTop = kept.top;
+        following.current = false;
+      }
       if (following.current && mode === 'readable') {
         const { x, cellWidth } = screen.cursor();
         const at = x * cellWidth;
         if (at < el.scrollLeft || at > el.scrollLeft + el.clientWidth - cellWidth * 4) el.scrollLeft = Math.max(0, at - el.clientWidth / 2);
       }
       setMap(el.scrollWidth > el.clientWidth + 1 ? { left: el.scrollLeft / el.scrollWidth, width: el.clientWidth / el.scrollWidth } : null);
+      const next = contextKeys(screen.rows());
+      setRowsChoice(c => (c.length === next.length && c.every((k, i) => k.digit === next[i]!.digit && k.word === next[i]!.word) ? c : next));
     };
     screen.onDrawn(update);
     update();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, mode]);
+
+  const leave = () => { const el = box.current; if (el) keptPlace.set(session.id, { left: el.scrollLeft, top: el.scrollTop }); };
 
   const onScroll = () => {
     const el = box.current;
@@ -159,21 +176,16 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
     ctl.type(applyMods(keyBytes(k, screen.appCursor())));
   };
 
+  // « Taper ↵ » always ends the line with Enter (§6, QUESTIONS.md « M2b · Le terminal » 6).
   const sendLine = () => {
     if (!ctl || !line) return;
-    const text = line.replace(/\r?\n/g, withEnter ? '\r' : ' ');
-    ctl.type(withEnter ? `${text}\r` : text);
+    ctl.type(`${line.replace(/\r?\n/g, '\r')}\r`);
     setLine('');
   };
 
-  // Interrupt, as the read-only screen has it.
-  const last = Object.values(state.ops)
-    .filter((o): o is Interrupt => o.message.type === 'session.interrupt' && o.message.id === session.id)
-    .sort((a, b) => a.at.localeCompare(b.at)).at(-1);
-  const working = session.state === 'working';
+  // A request waits on the person: the context keys may show, and the read-only bar says where else it is.
   const waiting = !!session.pending || session.state === 'waiting_permission' || session.state === 'waiting_input';
-  const justSent = last?.phase === 'applied' && (!working || now - Date.parse(last.at) < SETTLE);
-  const canInterrupt = working && state.fresh && !waiting && !(last && isLive(last.phase)) && !justSent;
+  const permission = session.pending?.kind === 'permission' || session.state === 'waiting_permission';
 
   const backRoute = { name: 'thread', sessionId: session.id } as const;
   const phase = view?.phase ?? 'connecting';
@@ -181,53 +193,39 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
   const offline = phase === 'offline';
   const canType = !!state.daemon?.terminalInput && !view?.readOnly && session.readOnly !== true;
   const status = held ? L.status.held : L.status[phase];
-  const meta = ended ? L.ended(session.project) : L.meta(session.project, view?.cols ?? 0, view?.rows ?? 0);
   const releasedLine = view?.released && view.released !== 'asked' ? L.released[view.released] : null;
   const exitLine = view?.exit === 'gone' ? L.exit.gone(session.name) : view?.exit ? L.exit[view.exit] : null;
   const refusedLine = view?.refused ? L.refused[view.refused] ?? L.refused.unavailable! : null;
   const holdRefusedLine = view?.holdRefused ? L.holdRefused[view.holdRefused] ?? copy.confirm.refused[view.holdRefused as keyof typeof copy.confirm.refused] ?? null : null;
   // The page's clock ticks once a second, behind the last key: never more than the 5 minutes.
   const heldLeft = view?.held ? Math.min(HOLD_IDLE_MS, Math.min(view.held.lastKey + HOLD_IDLE_MS, view.held.until) - now) : 0;
+  // The countdown shows only in the last minute, in place of « Au clavier »; the project gives it room.
+  const lastMinute = held && heldLeft <= 60_000;
+  // The context keys: only for a permission waiting, and while the screen shows « ❯ 1. ».
+  const choice = permission ? rowsChoice : [];
 
   return (
     <>
-      {held ? (
-        <div className="flex flex-none items-center gap-2 pt-2 pb-2 text-small">
-          <span aria-hidden="true" className="size-2 flex-none rounded-full bg-info" />
-          <span role="status" className="min-w-0 flex-1 leading-[1.35]"><b className="font-semibold">{L.heldTitle(session.name)}</b><br /><span className="text-muted">{L.heldLeft(left(heldLeft))}</span></span>
-          <button type="button" onClick={() => ctl?.release()} className={buttonClass({ size: 'sm' })}>{L.release}</button>
+      <SessionHead store={store} session={session} current="terminal" onLeave={leave} model={model} onModel={setModel}
+        display={phase === 'live' || offline ? { value: mode === 'readable' ? L.readable : L.fit, onToggle: () => pick(mode === 'readable' ? 'fit' : 'readable') } : undefined} />
+      <main className="flex min-h-0 flex-1 flex-col pt-2">
+        {/* The banner (§6): the project, the state in the app's words, the size; « Rendre la main » while at the keyboard. Dark in both themes. */}
+        <div className={`flex h-9 flex-none items-center gap-2 rounded-t-card bg-term-bg px-3 text-[12px] text-term-fg ${held ? 'border-2 border-b-0 border-info' : 'border border-b-0 border-line'}`}>
+          {!lastMinute && <span className="min-w-0 truncate font-mono">{session.project}</span>}
+          <span role="status" className={`flex-none rounded-[6px] px-2 py-0.5 font-medium ${held ? 'bg-info text-white' : offline ? 'text-attention' : phase === 'live' ? 'text-ok' : 'text-muted'}`}>
+            {lastMinute ? L.heldLeft(left(heldLeft)) : status}
+          </span>
+          <span className="flex-1" />
+          {held
+            ? <button type="button" onClick={() => ctl?.release()} className="flex-none underline">{L.release}</button>
+            : view && !ended && phase !== 'refused' && <span className="flex-none font-mono">{view.cols} × {view.rows}</span>}
         </div>
-      ) : (
-        <BackHeader title={copy.terminal.title(session.name)} fallback={backRoute} label={L.back} link={linkView(state)} />
-      )}
-      <main className="flex min-h-0 flex-1 flex-col">
-        {!held && (
-          <div className="flex flex-none items-center justify-between gap-2 py-2.5">
-            <div className="min-w-0">
-              <p role="status" className={`flex items-center gap-1.5 text-meta ${offline ? 'text-attention' : ended || phase === 'refused' ? 'text-muted' : 'text-ok'}`}>
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />{status}
-              </p>
-              <p className="text-meta text-muted">{meta}</p>
-            </div>
-            {(phase === 'live' || offline) && (
-              <div role="group" aria-label={L.view} className="inline-flex gap-0.5 rounded-control border border-input p-0.5">
-                {(['readable', 'fit'] as const).map(v => (
-                  <button key={v} type="button" aria-pressed={mode === v} onClick={() => pick(v)}
-                    className={`min-h-8 rounded-[8px] px-2.5 text-small font-medium ${mode === v ? 'bg-raised text-fg' : 'text-muted'}`}>
-                    {v === 'readable' ? L.readable : L.fit}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
         <div ref={box} onScroll={onScroll} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
           aria-label={L.screen(session.name)}
-          className={`relative min-h-0 flex-1 overflow-auto rounded-card bg-term-bg p-2 ${held ? 'border-2 border-info' : 'border border-line'} ${offline || ended ? 'opacity-45' : ''}`}>
+          className={`relative min-h-0 flex-1 overflow-auto rounded-b-card bg-term-bg p-2 ${held ? 'border-2 border-t-0 border-info' : 'border border-t-0 border-line'} ${offline || ended ? 'opacity-45' : ''}`}>
           <div ref={host} data-term="" className="w-max" />
-          {held && <span aria-hidden="true" className="absolute top-2 right-2 rounded-[6px] bg-info px-2 py-0.5 text-meta font-semibold text-white">{L.heldTag}</span>}
         </div>
-        {map && !held && (
+        {map && !held && mode === 'readable' && (
           <div aria-label={L.position} role="img" className="relative mt-2 h-1 flex-none rounded-full bg-raised">
             <span className="absolute inset-y-0 rounded-full bg-muted" style={{ left: `${map.left * 100}%`, width: `${map.width * 100}%` }} />
           </div>
@@ -235,21 +233,16 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
       </main>
       {held ? (
         <footer className="flex flex-none flex-col gap-1 pt-2 pb-[max(8px,var(--foot-inset))]">
-          {lineMode && (
-            <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); sendLine(); }}>
-              <input id="term-line" value={line} onChange={e => setLine(e.target.value)} aria-label={L.lineField} autoCapitalize="off" enterKeyHint="send"
-                className="min-h-12 min-w-0 flex-1 rounded-control border border-input bg-transparent px-3 text-body" />
-              <button type="submit" disabled={!line} aria-label={L.lineSend} className={buttonClass({ variant: 'primary', size: 'sm' })}><Icon name="arrowUp" /></button>
-            </form>
-          )}
           {pasteFailed && <p role="alert" className="text-meta text-attention">{L.pasteFailed}</p>}
           <div role="toolbar" aria-label={L.keys} className="flex gap-1.5 overflow-x-auto py-1.5">
-            {lineMode && (
-              <label className="flex flex-none items-center gap-1.5 pr-1 text-small text-muted">
-                <input type="checkbox" checked={withEnter} onChange={e => setWithEnter(e.target.checked)} />{L.withEnter}
-              </label>
-            )}
-            {(lineMode ? ['esc', 'tab', 'up', 'down', 'line'] as const : ['esc', 'tab', 'ctrl', 'alt', 'left', 'up', 'down', 'right', 'enter', 'interrupt', 'paste', 'line'] as const).map(k => {
+            {choice.map(c => (
+              <button key={c.digit} type="button" onPointerDown={e => e.preventDefault()} onClick={() => { following.current = true; ctl?.type(c.digit); }}
+                className="inline-grid h-10 min-w-10 flex-none place-items-center rounded-control border border-attention/50 bg-attention/10 px-2.5 font-mono text-[13px] font-medium text-attention">
+                {c.word ? `${c.digit} ${L.contextKeys[c.word]}` : c.digit}
+              </button>
+            ))}
+            {/* A tablet keeps the keys a hardware keyboard lacks (§10, Q26); a phone, the whole row. */}
+            {(wide ? ['interrupt', 'paste'] as const : lineMode ? ['esc', 'tab', 'up', 'down', 'line'] as const : ['esc', 'tab', 'ctrl', 'alt', 'left', 'up', 'down', 'right', 'enter', 'interrupt', 'paste', 'line'] as const).map(k => {
               const on = k === 'ctrl' || k === 'alt' ? mods[k] !== 'off' : k === 'line' ? lineMode : false;
               const pressed = k === 'ctrl' || k === 'alt' || k === 'line' ? on : undefined;
               const state2 = (k === 'ctrl' || k === 'alt') && mods[k] !== 'off' ? `, ${mods[k] === 'locked' ? L.locked : L.armed}` : '';
@@ -262,30 +255,37 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
                 </button>
               );
             })}
+            {wide && <span className="ml-auto flex-none self-center pl-2 text-[12px] text-muted">{L.hardware}</span>}
           </div>
+          {lineMode && !wide && (
+            <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); sendLine(); }}>
+              <span aria-hidden="true" className="font-mono text-muted">$</span>
+              <input id="term-line" value={line} onChange={e => setLine(e.target.value)} aria-label={L.lineField} placeholder={L.lineField} autoCapitalize="off" enterKeyHint="send"
+                className="min-h-11 min-w-0 flex-1 rounded-control border border-input bg-transparent px-3 font-mono text-body" />
+              <button type="submit" disabled={!line} aria-label={L.lineSend} className={buttonClass({ variant: 'primary', size: 'sm' })}>{L.lineGo}</button>
+            </form>
+          )}
         </footer>
       ) : (
-        <footer className="flex flex-none flex-col gap-2.5 border-t border-line bg-bg pt-3 pb-[max(16px,var(--foot-inset))]">
-          {(releasedLine || exitLine || refusedLine || holdRefusedLine) && (
-            <p role="status" className="text-center text-small text-muted">{refusedLine ?? exitLine ?? holdRefusedLine ?? releasedLine}</p>
-          )}
-          {ended ? (
-            <a href={href(backRoute)} className={buttonClass({ block: true })}>{L.back}</a>
-          ) : (
-            <>
-              {canType && phase !== 'refused' && (
-                <button type="button" disabled={phase !== 'live' || view?.holding} onClick={() => setSheet(true)} className={buttonClass({ variant: 'primary', block: true })}>
+        <>
+          <footer className="flex flex-none flex-col gap-2 pt-2.5 pb-2.5">
+            {(releasedLine || exitLine || refusedLine || holdRefusedLine) && (
+              <p role="status" className="text-center text-small text-muted">{refusedLine ?? exitLine ?? holdRefusedLine ?? releasedLine}</p>
+            )}
+            {ended ? (
+              <a href={href(backRoute)} className={buttonClass({ block: true })}>{L.back}</a>
+            ) : canType && phase !== 'refused' ? (
+              <div className="flex items-center gap-3">
+                {waiting && <span className="min-w-0 flex-1 text-small text-muted">{L.alsoInThread}</span>}
+                <button type="button" disabled={phase !== 'live' || view?.holding} onClick={() => setSheet(true)} className={buttonClass({ size: 'sm', className: waiting ? 'flex-none' : 'ml-auto flex-none' })}>
                   <Icon name="keyboard" />{view?.released ? L.holdAgain : L.hold}
                 </button>
-              )}
-              <button type="button" disabled={!canInterrupt} onClick={() => { if (canInterrupt) store.interrupt(session.id); }} className={buttonClass({ block: true })}>
-                <Icon name="stop" />{justSent ? copy.terminal.sent : copy.terminal.interrupt(session.name)}
-              </button>
-              {offline && <p className="text-center text-meta text-muted">{L.offlineHint}</p>}
-              {!canType && !offline && state.daemon?.terminal && !view?.readOnly && session.readOnly !== true && <p className="text-center text-meta text-muted">{L.inputOff}</p>}
-            </>
-          )}
-        </footer>
+              </div>
+            ) : !offline && state.daemon?.terminal && !view?.readOnly && session.readOnly !== true && <p className="text-center text-meta text-muted">{L.inputOff}</p>}
+            {offline && <p className="text-center text-meta text-muted">{L.offlineHint}</p>}
+          </footer>
+          <SessionFoot store={store} session={session} wide={wide} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
+        </>
       )}
       {sheet && ctl && <HoldSheet store={store} session={session} onClose={() => setSheet(false)} hold={a => { setSheet(false); void ctl.hold(a); return 'sent'; }} />}
     </>

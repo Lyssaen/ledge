@@ -17,6 +17,8 @@ export const ICONS = {
     'M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z'
   ],
   terminal: ['m4 17 6-6-6-6', 'M12 19h8'],
+  /** « Masquer les sous-agents » (m2-sessions.html §7). */
+  eye: ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', circle(12, 12, 3)],
   arrowRight: ['M5 12h14', 'm13 6 6 6-6 6'],
   arrowUp: ['m5 12 7-7 7 7', 'M12 19V5'],
   plane: ['m22 2-7 20-4-9-9-4Z', 'M22 2 11 13'],
@@ -70,7 +72,9 @@ export const ICONS = {
   camera: ['M4 8h3l2-3h6l2 3h3v11H4z', circle(12, 13, 3.5)],
   folder: ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
   list: ['M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2'],
-  down: ['M6 9l6 6 6-6']
+  down: ['M6 9l6 6 6-6'],
+  /** A git branch: a project folder on its branch (m2-lancement.html §1). */
+  branch: [circle(6, 5, 2), circle(6, 19, 2), circle(18, 8, 2), 'M6 7v10M18 10c0 4-6 3-12 7']
 } as const satisfies Record<string, readonly string[]>;
 
 export type IconName = keyof typeof ICONS;

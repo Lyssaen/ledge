@@ -25,13 +25,17 @@ export type Route =
    *  thread): docs/mockups/ledge-mobile-refonte/m4-rigs.html. */
   | { name: 'rig'; rig: string }
   | { name: 'kernel' }
-  | { name: 'max'; goalId?: string };
+  | { name: 'max'; goalId?: string }
+  /** « Nouvelle session » (`#/new`): launches an agent on the PC (m2-sessions.html §9, m2-lancement.html). */
+  | { name: 'launch' };
 
 /** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
-const ROUTE_NAME: Record<Route['name'], true> = { atoi: true, sessions: true, prs: true, rigs: true, atelier: true, chat: true, thread: true, terminal: true, request: true, ask: true, connection: true, rig: true, kernel: true, max: true };
+const ROUTE_NAME: Record<Route['name'], true> = { atoi: true, sessions: true, prs: true, rigs: true, atelier: true, chat: true, thread: true, terminal: true, request: true, ask: true, connection: true, rig: true, kernel: true, max: true, launch: true };
 export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
 
 const SIMPLE = ['sessions', 'prs', 'rigs', 'chat', 'connection', 'kernel', 'max'] as const;
+/** Routes whose address is not their name. */
+const NEW = 'new';
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -47,6 +51,7 @@ export function parseRoute(hash: string): Route {
     if (parts[0] === 'sessions' && parts.length === 2 && (parts[1] === 'working' || parts[1] === 'waiting')) return { name: 'sessions', filter: parts[1] };
   } catch { /* malformed escape: fall through to À toi */ }
   if (parts[0] === 'agents' && parts.length === 1) return { name: 'sessions' };
+  if (parts[0] === NEW && parts.length === 1) return { name: 'launch' };
   const simple = SIMPLE.find((n) => n === parts[0]);
   if (simple && parts.length === 1) return { name: simple };
   return { name: 'atoi' };
@@ -62,6 +67,7 @@ export function href(r: Route): string {
   if (r.name === 'rig') return `#/rigs/${encodeURIComponent(r.rig)}`;
   if (r.name === 'max' && r.goalId) return `#/max/${encodeURIComponent(r.goalId)}`;
   if (r.name === 'sessions' && r.filter) return `#/sessions/${r.filter}`;
+  if (r.name === 'launch') return `#/${NEW}`;
   return r.name === 'atoi' ? '#/' : `#/${r.name}`;
 }
 

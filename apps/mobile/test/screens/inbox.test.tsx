@@ -110,7 +110,7 @@ describe('« À toi » on a phone (m1-a-toi.html §1)', () => {
 
   it('nothing waiting while sessions work: « En cours », five at most, then the others (Q13)', () => {
     const t = setup();
-    const working = Array.from({ length: 7 }, (_, i) => session(`w${i}`, { name: `W${i}`, state: 'working', lastActivityAt: at(i), lastReply: { text: `étape ${i}\nsuite`, at: at(i) } }));
+    const working = Array.from({ length: 7 }, (_, i) => session(`w${i}`, { name: `W${i}`, state: 'working', lastActivityAt: at(i), doing: { tool: 'Bash', label: `étape ${i}`, since: at(i) } }));
     t.deliver(snapshot(working));
     render(<Inbox store={t.store} />);
     expect(screen.getByText(/Les nouvelles demandes arrivent ici/)).toBeInTheDocument();

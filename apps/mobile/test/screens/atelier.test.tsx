@@ -118,9 +118,34 @@ describe('the Atelier screen', () => {
     const t = setup();
     t.deliver(atelier(sessions));
     wide(true);
-    const r = render(<AtelierScreen store={t.store} {...(sessionId ? { sessionId } : {})} {...(requestKey ? { requestKey } : {})} />);
+    const r = render(<AtelierScreen store={t.store} storage={t.storage} {...(sessionId ? { sessionId } : {})} {...(requestKey ? { requestKey } : {})} />);
     return { ...t, ...r };
   };
+
+  it('« Masquer les sous-agents » takes them off the tables, as Desktop’s eye, and the device keeps it (§10)', () => {
+    const { container, storage } = open();
+    expect(container.querySelectorAll('.helper-seat')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Masquer les sous-agents' }));
+    expect(container.querySelectorAll('.helper-seat')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Afficher les sous-agents' })).toHaveAttribute('aria-pressed', 'true');
+    expect(storage.getItem('ledge.mobile.sessions.helpers')).toBe('hidden');
+  });
+
+  it('« Projets · Rigs » orders the rooms, hiding none, and the device keeps it (§10, Q83 A)', () => {
+    const { container, storage } = open();
+    const order = () => [...container.querySelectorAll('.atelier-room')].map(r => r.getAttribute('data-room'));
+    expect(screen.getByRole('button', { name: 'Projets' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Rigs' }));
+    expect(order()).toEqual(['rig:dev-omp', 'ledge', 'website']);
+    expect(storage.getItem('ledge.mobile.sessions.groupBy')).toBe('rigs');
+    fireEvent.click(screen.getByRole('button', { name: 'Projets' }));
+    expect(order()).toEqual(['ledge', 'website', 'rig:dev-omp']);
+  });
+
+  it('its head’s counts, one by one, and none at 0 but the agents’ (design-ux 8dbda670)', () => {
+    expect(copy.atelier.subtitle(1, 1, 1)).toBe('1 agent · 1 t’attend · 1 au travail');
+    expect(copy.atelier.subtitle(3, 0, 0)).toBe('3 agents');
+  });
 
   it('draws a room per project and per rig, « Sans projet » after them, and counts them in its head', () => {
     const { container } = open();
@@ -129,7 +154,8 @@ describe('the Atelier screen', () => {
     expect([...container.querySelectorAll('.unassigned-zone [data-agent]')].map(a => a.getAttribute('data-agent'))).toEqual(['kit', 'old']);
     expect(container.querySelector('.unassigned-zone')?.textContent).toContain(copy.atelier.unassignedHint);
     // « Sans projet » is no room.
-    expect(screen.getByText(copy.atelier.subtitle(6, 3, 2))).toBeInTheDocument();
+    // The head counts as the tablet board does (m2-sessions.html §10): agents, those waiting for you, those working.
+    expect(screen.getByText('6 agents · 2 t’attendent · 1 au travail')).toBeInTheDocument();
     expect(container.querySelectorAll('.helper-seat')).toHaveLength(1);
     // No keyboard shortcut, no menu, no drag on iPad.
     expect(container.querySelector('.seat-shortcut, .seat-more, .plaque-btn, .zoom-hint, kbd, [draggable]')).toBeNull();

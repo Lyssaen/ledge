@@ -2,7 +2,7 @@ import type { PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
 import type { DotState } from '../ui/kit/marks';
 import { endedAtLabel } from './sessionEnd';
-import { firstLine, requestsOf } from './requests';
+import { requestsOf } from './requests';
 
 /*
  * The Sessions list (docs/mockups/ledge-mobile-refonte/m2-sessions.html §1, Q24, Q25): the filters, the groups by project then by
@@ -59,6 +59,40 @@ export function sessionGroups(sessions: readonly PhoneSession[], f: SessionFilte
   return [...projects.values(), ...rigs.values()].map(sorted);
 }
 
+/** The phone's Atelier (m2-sessions.html §7): by project (then OpenRig's rigs, as the list), or by rig then « Hors rig ». */
+export type Grouping = 'projects' | 'rigs';
+export const GROUPINGS: readonly Grouping[] = ['projects', 'rigs'];
+
+export interface Island {
+  id: string;
+  /** `outside` gathers every session out of a rig, when grouped by rig. */
+  kind: SessionGroup['kind'] | 'outside';
+  name: string;
+  sessions: PhoneSession[];
+}
+
+export function islands(sessions: readonly PhoneSession[], by: Grouping): Island[] {
+  const groups = sessionGroups(sessions, 'all');
+  if (by === 'projects') return groups;
+  const outside = sessions.filter(s => !s.rig).map((s, i) => [s, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([s]) => s);
+  return [...groups.filter(g => g.kind === 'rig'), ...(outside.length ? [{ id: 'outside', kind: 'outside' as const, name: copy.sessions.outsideRig, sessions: outside }] : [])];
+}
+
+/** A project's island shows its most pressing request, red then amber, and nothing without one (design-ux, 6e8d4bba, point 3). */
+export function islandDot(island: Island): 'perm' | 'ask' | null {
+  if (island.kind !== 'project') return null;
+  const dots = island.sessions.map(dotOf);
+  return dots.includes('perm') ? 'perm' : dots.includes('ask') ? 'ask' : null;
+}
+
+/** A sub-agent's small seat: its own state's dot, grey once it finished. */
+export function helperDot(h: PhoneSession['helpers'][number]): DotState {
+  if (h.finishedAt !== undefined || h.state === 'exited') return 'done';
+  if (h.state === 'waiting_permission') return 'perm';
+  if (h.state === 'waiting_input') return 'ask';
+  return h.state === 'working' ? 'work' : 'idle';
+}
+
 /** How many sessions each filter holds, for its chip. */
 export const filterCounts = (sessions: readonly PhoneSession[]): Record<SessionFilter, number> => ({
   all: sessions.length,
@@ -86,7 +120,7 @@ export const activeHelpers = (s: PhoneSession): number => s.helpers.filter(h => 
  */
 export function rowLine(s: PhoneSession, f: SessionFilter, now: number = Date.now()): string {
   const L = copy.sessions.line;
-  if (f === 'working') return (s.lastReply && firstLine(s.lastReply.text)) || L.thinking;
+  if (f === 'working') return doingLine(s);
   const ctx = contextPct(s);
   const pct = ctx === undefined ? '' : ` · ${ctx} %`;
   const pending = requestsOf([s])[0];
@@ -100,6 +134,12 @@ export function rowLine(s: PhoneSession, f: SessionFilter, now: number = Date.no
     default: return L.idle + pct;
   }
 }
+
+/**
+ * What an agent at work is doing (m2-toujours.html §2, Q68): `doing`'s label as the PC sends it (a command, a tool and its target,
+ * OMP's intent), with no icon or prefix; between two tools, « Réfléchit… ». Shared by « Au travail » and « En cours » of « À toi ».
+ */
+export const doingLine = (s: Pick<PhoneSession, 'doing'>): string => s.doing?.label || copy.sessions.line.thinking;
 
 /** Its context in percent of its window, when the PC knows it. */
 export const contextPct = (s: PhoneSession): number | undefined => s.context ? Math.round(Math.min(1, s.context.used / s.context.window) * 100) : undefined;

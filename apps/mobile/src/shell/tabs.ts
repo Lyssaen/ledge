@@ -9,11 +9,11 @@ import { href, type Route } from '../router';
 export type Tab = 'atoi' | 'sessions' | 'prs' | 'rigs' | 'chat' | 'atelier';
 export const PHONE_TABS = ['atoi', 'sessions', 'prs', 'rigs', 'chat'] as const satisfies readonly Tab[];
 
-/** The tab a screen belongs to: a request to À toi, a thread or a terminal to Sessions; none for Réglages. */
+/** The tab a screen belongs to: a request to À toi, a thread, a terminal or « Nouvelle session » to Sessions; none for Réglages. */
 export function tabOf(r: Route): Tab | null {
   switch (r.name) {
     case 'atoi': case 'request': case 'ask': return 'atoi';
-    case 'sessions': case 'thread': case 'terminal': return 'sessions';
+    case 'sessions': case 'thread': case 'terminal': case 'launch': return 'sessions';
     case 'prs': case 'rigs': case 'chat': return r.name;
     // A rig, the kernel and Max belong to the Rigs tab, even opened from Sessions (m4-rigs.html, §11, Q48).
     case 'rig': case 'kernel': case 'max': return 'rigs';

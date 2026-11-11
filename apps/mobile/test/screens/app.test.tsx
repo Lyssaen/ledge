@@ -52,7 +52,8 @@ describe('the app', () => {
     expect(screen.getByRole('link', { name: /Autoriser une commande/ })).toHaveAttribute('href', '#/request/a/ka');
     act(() => { globalThis.location.hash = '#/terminal/a'; });
     hashChange();
-    expect(screen.getByText('Terminal de Kai')).toBeInTheDocument();
+    // The terminal shares the session's head (m2-sessions.html §6): « Terminal » is the current view.
+    expect(screen.getByRole('link', { name: 'Terminal' })).toHaveAttribute('aria-current', 'page');
     act(() => { globalThis.location.hash = '#/request/a/ka'; });
     hashChange();
     expect(screen.getByText('pnpm build', { selector: 'pre' })).toBeInTheDocument();

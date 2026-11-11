@@ -292,6 +292,16 @@ const fr = {
       idle: 'Elles sont toutes disponibles ou terminées.'
     },
     seeWaiting: 'Voir en attente',
+    /** The Atelier on a phone (§7, QUESTIONS.md « M2b · L'Atelier sur téléphone ») and a seat's long press (§8). */
+    mode: { label: 'Affichage des sessions', list: 'Liste', atelier: 'Atelier' },
+    groupBy: { label: 'Regrouper par', projects: 'Projets', rigs: 'Rigs' },
+    helpersHide: 'Masquer les sous-agents', helpersShow: 'Afficher les sous-agents',
+    outsideRig: 'Hors rig', rigTag: 'rig', kernelTag: 'OpenRig',
+    seats: (n: number) => (n === 1 ? '1 siège' : `${n} sièges`),
+    deskTitle: 'Bureau de Ledge',
+    seatOf: (role: string, rig: string) => `siège ${role} · ${rig}`,
+    /** The header's and the empty list's way to « Nouvelle session » (m2-sessions.html §1). */
+    new: 'Nouvelle', newSession: 'Nouvelle session',
     /** A session's screen (m2-sessions.html §3 to §5): its head, its folded tools, its foot and « Plus d'actions ». */
     view: { label: 'Vue de la session', thread: 'Fil', terminal: 'Terminal' },
     more: 'Plus d’actions',
@@ -552,7 +562,7 @@ const fr = {
     }
   },
   terminal: {
-    title: (bot: string) => `Terminal de ${bot}`, back: 'Retour au fil',
+    back: 'Retour au fil',
     live: 'Lecture seule · en direct', waiting: 'Lecture seule · en attente', offline: 'Lecture seule · dernier état connu',
     smaller: 'Réduire le texte', larger: 'Agrandir le texte',
     output: 'Sortie du terminal, défilement horizontal', empty: 'Aucune sortie pour le moment.', unknown: 'Cette session n’existe plus sur le PC.',
@@ -565,9 +575,7 @@ const fr = {
     uncertain: 'Réception non confirmée : vérifie le terminal avant de recommencer.',
     /** The live terminal (spec 2026-11-02 mobile terminal, mockup docs/mockups/mobile-terminal.html). */
     live2: {
-      meta: (project: string, cols: number, rows: number) => `${project} · ${cols} × ${rows}, taille du PC`,
-      ended: (project: string) => `${project} · terminée`,
-      status: { connecting: 'Connexion au terminal…', live: 'En direct · lecture seule', held: 'Au clavier', offline: 'Connexion perdue · dernier écran connu', ended: 'Session terminée', refused: 'Terminal indisponible' },
+      status: { connecting: 'Connexion au terminal…', live: 'Lecture seule · en direct', held: 'Au clavier', offline: 'Connexion perdue · dernier écran connu', ended: 'Session terminée', refused: 'Terminal indisponible' },
       view: 'Affichage', readable: 'Lisible', fit: 'Ajusté',
       screen: (bot: string) => `Terminal de ${bot}`,
       position: 'Partie visible des colonnes',
@@ -575,9 +583,7 @@ const fr = {
       inputOff: 'Pour taper ici, active « Taper dans les terminaux depuis un appareil lié » sur le PC, dans Accès mobile.',
       offlineHint: 'L’écran reprend dès que le PC répond.',
       back: 'Retour au fil',
-      heldTitle: (bot: string) => `Tu tapes dans ${bot}`,
       heldLeft: (left: string) => `Main rendue dans ${left} sans frappe`,
-      heldTag: 'Au clavier',
       released: { idle: 'Main rendue : 5 minutes sans frappe.', expired: 'Main rendue : 30 minutes écoulées.', background: 'Main rendue : l’appli est passée en arrière-plan.', pc: 'Le PC a repris la main.', link: 'Main rendue : connexion perdue.' },
       exit: { ended: null, gone: (bot: string) => `Le terminal de ${bot} n’existe plus sur le PC.`, closed: null, superseded: 'Le terminal a été ouvert ailleurs sur cet appareil.', failed: 'Le PC n’a pas pu suivre ce terminal.' },
       refused: { read_only: 'Session démarrée hors de Ledge : ouvre son terminal sur le PC.', unknown_session: 'Cette session n’existe plus sur le PC.', unavailable: 'Le PC ne peut pas montrer ce terminal.' } as Partial<Record<string, string>>,
@@ -591,8 +597,16 @@ const fr = {
       key: { esc: 'Échap', tab: 'Tab', ctrl: 'Ctrl', alt: 'Alt', left: '←', up: '↑', down: '↓', right: '→', enter: '↵', interrupt: '^C', paste: 'Coller', line: 'Ligne' },
       keyLabel: { esc: 'Échap', tab: 'Tabulation', ctrl: 'Contrôle', alt: 'Alt', left: 'Flèche gauche', up: 'Flèche haut', down: 'Flèche bas', right: 'Flèche droite', enter: 'Entrée', interrupt: 'Contrôle C', paste: 'Coller', line: 'Mode ligne' },
       armed: 'armé', locked: 'verrouillé',
-      lineField: 'Ligne à taper dans le terminal', lineSend: 'Taper la ligne', withEnter: 'Avec ↵',
-      pasteFailed: 'Rien à coller, ou l’appareil a refusé l’accès au presse-papiers.'
+      lineField: 'Ligne à taper dans le terminal', lineSend: 'Taper la ligne',
+      /** The line's button (m2-sessions.html §6): it always sends with Enter. */
+      lineGo: 'Taper ↵',
+      /** In the read-only bar, when the session has a request waiting (§6). */
+      alsoInThread: 'La demande est aussi dans le fil et dans « À toi ».',
+      /** The context keys for a numbered choice on the screen (§6, QUESTIONS.md « M2b · Le terminal » 3). */
+      contextKeys: { yes: 'Oui', always: 'Toujours', no: 'Non' },
+      pasteFailed: 'Rien à coller, ou l’appareil a refusé l’accès au presse-papiers.',
+      /** A tablet at the keyboard: the short bar's note (m2-sessions.html §10, Q26). */
+      hardware: 'Clavier matériel : tape directement'
     }
   },
   question: {
@@ -1084,8 +1098,9 @@ const fr = {
   /** The Atelier on iPad (docs/mockups/ledge-ipad-atelier.html): the PC's rooms, tables and agents, as Ledge Desktop draws them. */
   atelier: {
     title: 'Atelier',
-    subtitle: (agents: number, rooms: number, waiting: number) =>
-      `${agents} ${agents > 1 ? 'agents' : 'agent'} · ${rooms} ${rooms > 1 ? 'pièces' : 'pièce'}${waiting ? ` · ${waiting} ${waiting > 1 ? 'attendent' : 'attend'}` : ''}`,
+    /** The tablet's head (m2-sessions.html §10, design-ux 8dbda670): a count at 0 goes, the agents' stays. */
+    subtitle: (agents: number, waiting: number, working: number) =>
+      `${agents} ${agents > 1 ? 'agents' : 'agent'}${waiting ? ` · ${waiting} ${waiting > 1 ? 't’attendent' : 't’attend'}` : ''}${working ? ` · ${working} au travail` : ''}`,
     region: 'Atelier',
     fullScreen: 'Plein écran', closePanel: 'Fermer le panneau', closeTitle: 'Fermer',
     session: (name: string) => `Session de ${name}`,
@@ -1118,6 +1133,60 @@ const fr = {
     entrance: 'ENTRÉE',
     more: (n: number) => `+${n} à cette table`,
     zoom: { bar: 'Zoom de l’atelier', out: 'Dézoomer', in: 'Zoomer', reset: 'Revenir à 100 %', fit: 'Ajuster', fitTitle: 'Revenir à la vue lisible' }
+  },
+  /** « Nouvelle session » (m2-sessions.html §9, Desktop's `launch.*` said with « tu »; its refusals: m2-lancement.html). */
+  launch: {
+    title: 'Nouvelle session', close: 'Fermer',
+    project: 'Projet', where: 'Où travailler', agent: 'Agent', model: 'Modèle', message: 'Premier message',
+    remembered: 'Dernier choix pour ce projet retenu', offline: 'hors ligne',
+    noProjects: 'Aucun projet pour l’instant.', noProjectsBody: 'Crée un projet dans Réglages pour y lancer des agents.', chooseProject: 'Choisis un projet',
+    done: 'Terminer le choix',
+    more: (n: number) => `+ ${n}`, moreLabel: (first: string, n: number) => `${first} et ${n === 1 ? '1 autre dossier' : `${n} autres dossiers`}`,
+    permissions: 'Permissions',
+    approvals: { 'always-ask': ['Demander', 'Avant chaque écriture ou commande'], write: ['Fichiers auto', 'Écrit sans demander, demande avant les commandes'], yolo: ['Auto', 'Approuve tout, commandes comprises'] },
+    onBranch: (branch: string) => `Sur ${branch}, dans le dossier du projet`, inFolder: 'Dans le dossier du projet',
+    tools: { claude: 'Conception, revue', codex: 'Code et tests', cursor: 'Dans l’éditeur', omp: 'Piloté en natif' },
+    placeholder: 'Que doit faire l’agent ? Décris le résultat attendu.',
+    ideas: ['Relire la dernière pull request', 'Corriger les tests qui échouent', 'Mettre à jour la documentation'],
+    pick: (model: string, effort: string | null) => (effort ? `${model} · ${effort}` : model),
+    summary: (tool: string, model: string | null, machine: string, project: string) => `${model ? `${tool} · ${model}` : tool} sur ${machine}, dans ${project}`,
+    launchCheck: 'Lancer avec Face ID', launchDevice: 'Lancer avec mon appareil', launching: 'Lancement…',
+    missing: {
+      prompt: 'Écris la consigne', machine: 'Aucune machine en ligne', setup: 'Protège d’abord tes accords',
+      pcOld: (machine: string) => `${machine} ne lance pas encore depuis le téléphone`
+    },
+    setupBody: 'Lancer demande la passkey de cet appareil, comme fermer une session.', openSettings: 'Ouvrir Réglages',
+    pcOldBody: 'Le lancement depuis le téléphone arrive avec une prochaine version de Ledge sur le PC. Ton message est conservé.',
+    cancelled: 'Vérification annulée. Rien n’a été lancé.',
+    folders: (project: string) => `Les dossiers que le projet ${project} déclare`,
+    projectFolder: 'Le dossier du projet',
+    folder: {
+      missing: (machine: string) => `Introuvable sur ${machine}`,
+      elsewhere: (other: string, machine: string) => `Sur ${other} : ce téléphone ne lance que sur ${machine}`,
+      single: 'Codex et Cursor Agent ne prennent qu’un dossier ; Claude Code et OMP peuvent en prendre plusieurs.'
+    },
+    kept: 'Rien n’a été lancé. Ton message est conservé.',
+    refused: {
+      not_found: 'Démarrage refusé : le dossier est introuvable',
+      invalid: 'Démarrage refusé : le PC n’accepte pas ces choix',
+      invalidBody: (agent: string) => `Le dossier, le modèle ou l’effort ne convient pas à ${agent}. Un dossier ne peut pas être ton dossier personnel. Ton message est conservé.`,
+      stale: 'Démarrage refusé : le projet a changé sur le PC',
+      staleBody: 'Rien n’a été lancé. Les projets sont rechargés : vérifie Projet et Où travailler.',
+      confirm_required: 'Démarrage refusé : la vérification de l’appareil est requise',
+      setupKept: 'Protège d’abord tes accords depuis Réglages. Ton message est conservé.',
+      assertion_invalid: 'Démarrage refusé : la vérification de l’appareil a été refusée',
+      assertion_expired: 'Démarrage refusé : la vérification a expiré',
+      expiredBody: 'Rien n’a été lancé. Vérifie de nouveau pour lancer.',
+      unavailable: (machine: string) => `Démarrage refusé : ${machine} ne lance pas depuis le téléphone`,
+      unavailableBody: 'Mets à jour Ledge sur le PC. Ton message est conservé.',
+      other: 'Démarrage refusé'
+    },
+    failed: (agent: string) => `Le PC n’a pas pu démarrer ${agent}`,
+    failedBody: (agent: string) => `Rien n’a été lancé. Vérifie ${agent} et tmux sur le PC, puis réessaie.`,
+    timeout: 'Le démarrage n’a pas répondu.', timeoutBody: 'Vérifie la machine puis réessaie.',
+    lostBody: 'La session a peut-être démarré : vérifie dans Sessions avant de relancer.',
+    retry: 'Réessayer', settings: 'Réglages',
+    started: (name: string, table: string) => `${name} démarre à la table ${table}.`
   }
 } as const;
 

@@ -89,8 +89,9 @@ function TableTop({ sheets, length }: { sheets: Sheet[]; length: number }): JSX.
 
 /** A room's table: the rug and its label, the plants (none at an end where a sub-agent sits), the chairs, the sheets, the
  *  seats, the sub-agents at the ends. A seat opens its session; a sub-agent its parent's; the label the room's sheet. */
-export function Table({ table, project, color, frozen, act }: { table: AtelierTable<AtelierPhone>; project: { id: string; name: string }; color: string; frozen: boolean; act: SceneActions }): JSX.Element {
-  const { length, width, seats, ends, notes, extra, extraCount } = layoutTable(table.mains, true, MAX_SEATS, IPAD_RUG_SIDE);
+export function Table({ table, project, color, frozen, act, helpers = true }: { table: AtelierTable<AtelierPhone>; project: { id: string; name: string }; color: string; frozen: boolean; act: SceneActions;
+  /** The sub-agents at the ends; « Masquer les sous-agents » takes them off, as Desktop's eye does (§10, design-ux 8dbda670). */ helpers?: boolean }): JSX.Element {
+  const { length, width, seats, ends, notes, extra, extraCount } = layoutTable(table.mains, helpers, MAX_SEATS, IPAD_RUG_SIDE);
   const at = (dx: number) => `calc(50% - ${length / 2}px + ${dx}px)`;
   const branch = tableBranch(table.mains);
   const sheets: Sheet[] = seats.map(({ session: s, x, side }) => {

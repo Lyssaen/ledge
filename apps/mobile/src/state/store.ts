@@ -2,7 +2,7 @@
 // of it. Every write is an operation named by a uuid, sent again with that same uuid after a lost connection.
 import { useSyncExternalStore } from 'react';
 import {
-  PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type PhoneFolder, type ProjectColor, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
+  PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type PhoneFolder, type PhoneLaunch, type OperationReason, type ProjectColor, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
   type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice, type PhoneHarnessUsage, type HumanAsk, type HumanAnswer, type HumanChannel, type OpenRigAction
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
@@ -37,7 +37,7 @@ export interface MobileState {
   /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
   device: { confirm: boolean; /** Its passkey can bring it back after a reinstall: without it, « Mettre à jour la passkey ». */ recover?: true; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string; /** This device's own settings (`daemon.settings`). */ prefs?: DevicePrefs } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true; /** Sends `usage.state`. */ usage?: true; /** Answers `openrig.asks` (« À toi »). */ openrig?: true; /** Answers the `rigs.*` reads and takes their actions (M4, the Rigs tab). */ rigs?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true; /** Sends `usage.state`. */ usage?: true; /** Answers `openrig.asks` (« À toi »). */ openrig?: true; /** Answers the `rigs.*` reads and takes their actions (M4, the Rigs tab). */ rigs?: true; /** Takes `session.launch` (« Nouvelle session »). */ launch?: true } | null;
   /** The user's projects, in their order (`daemon.atelier`): the Atelier's rooms. Kept for an offline start; empty from an older PC. */
   projects: PhoneProject[];
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
@@ -78,8 +78,14 @@ export interface MobileState {
 
 /** The request a challenge is asked for, as `session.decide` names it. */
 export type PhoneExpect = Extract<PhoneClientMessage, { type: 'session.decide' }>['expect'];
+/**
+ * How a « Nouvelle session » got on (m2-sessions.html §9): `sent` once the PC has it, its outcome then in `ops[op]`; or why
+ * nothing left: the check cancelled, refused (`assertion_invalid`) or too slow (`assertion_expired`), no passkey here
+ * (`confirm_required`), no challenge in time (`noAnswer`), or anything else (`failed`).
+ */
+export type LaunchStart = { status: 'sent'; op: string } | { status: 'cancelled' } | { status: 'noAnswer' } | { status: 'failed' } | { status: 'rejected'; reason: OperationReason };
 export type ConfirmChallenge = Extract<PhoneServerMessage, { type: 'confirm.challenge' }>;
-export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string } | { purpose: 'close'; qid: string }
+export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string } | { purpose: 'launch'; launch: PhoneLaunch } | { purpose: 'close'; qid: string }
   /** A turn's generic card (`chat.act`). */
   | { purpose: 'act'; qid: string }
   /** A session's own close (`session.close`) or resume (`session.resume`). */
@@ -231,6 +237,17 @@ export interface MobileStore {
   cancelRelay(qid: string): Promise<ChatAction>;
   /** Launches the turn's proposals (`rows`, or all of them), after the device's confirmation. */
   launch(qid: string, rows?: number[]): Promise<ChatAction>;
+  /** « Nouvelle session » (§9): the device's check over this very launch, then `session.launch`. */
+  launchSession(launch: PhoneLaunch): Promise<LaunchStart>;
+  /** « Réessayer » after no answer: the same launch again, same op and assertion, so the PC never starts two (contract §6). False when it cannot go. */
+  launchAgain(op: string): boolean;
+  /**
+   * Whether `launchAgain` may send this launch now: the PC's current boot is known (a snapshot since the link came back), it is
+   * the boot the launch was first sent to, and `resendable` allows it. A launch sent before the PC restarted (received or
+   * not), or one past the replay window, may have started a session that nothing reports now: sent again, the new process
+   * would refuse it as if the first had been refused.
+   */
+  canLaunchAgain(op: string): boolean;
   /** Closes the turn's sessions (`rows`, or all of them), after the device's confirmation. (Not `close`: that stops the store.) */
   closeSessions(qid: string, rows?: number[]): Promise<ChatAction>;
   /** Applies rows of the turn's generic card (action registry spec §9.2), in order; the device's check first when one of them
@@ -602,7 +619,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         }
         stopTimer(m.op);
         const { reason: _old, ...rest } = o;
-        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.how ? { how: m.how } : {}), ...(m.sent ? { sent: m.sent } : {}), ...(m.refused ? { refused: m.refused } : {}) }));
+        patchOp(m.op, () => ({ ...rest, received: true, ...(boot ? { boot } : {}), phase: m.status as Op['phase'], ...(m.reason ? { reason: m.reason } : {}), ...(m.how ? { how: m.how } : {}), ...(m.sent ? { sent: m.sent } : {}), ...(m.refused ? { refused: m.refused } : {}), ...(m.id ? { id: m.id } : {}) }));
         // The request changed under this answer: ask for the one there now, with its body.
         if (m.status === 'rejected' && m.reason === 'stale' && ready() && o.message.type.startsWith('session.') && 'id' in o.message && typeof o.message.id === 'string') send({ type: 'session.pending', id: o.message.id });
         return;
@@ -631,7 +648,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (!parsed.success || !('op' in parsed.data)) return null;
     const message = parsed.data as OpMessage;
     if (!isNew(state.ops, message, boot)) return null;
-    setOps({ ...state.ops, [message.op]: { op: message.op, message, phase: 'sending', at: new Date().toISOString(), ...keep } });
+    setOps({ ...state.ops, [message.op]: { op: message.op, message, phase: 'sending', at: new Date().toISOString(), ...(boot ? { sentBoot: boot } : {}), ...keep } });
     send(message);
     arm(message.op);
     return message.op;
@@ -1056,6 +1073,36 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         // The link dropped after the passkey: the PC never got it, so the card stays as it was and can be tapped again.
         return op === null ? { status: 'expired' } : finalOf(op);
       });
+    },
+
+    async launchSession(launch) {
+      // A phone without a passkey cannot confirm: the PC would refuse, and no prompt is worth showing.
+      if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+      let challenge: ConfirmChallenge;
+      try { challenge = await store.prepareConfirm({ purpose: 'launch', launch }); }
+      catch (e) { return { status: e instanceof Error && e.message === 'timeout' ? 'noAnswer' : 'failed' }; }
+      if (!challenge.credentialId) return { status: 'rejected', reason: 'confirm_required' };
+      const at = Date.now();
+      const signed = await getAssertion({ challenge: challenge.challenge, rpId: challenge.rpId, credentialId: challenge.credentialId }).catch(() => 'failed' as const);
+      if (signed === 'cancelled') return { status: 'cancelled' };
+      if (signed === 'failed') return { status: 'rejected', reason: 'assertion_invalid' };
+      if (Date.now() - at >= challenge.expiresInMs) return { status: 'rejected', reason: 'assertion_expired' };
+      const op = write(o => ({ type: 'session.launch', op: o, launch, assertion: signed }));
+      return op === null ? { status: 'failed' } : { status: 'sent', op };
+    },
+
+    canLaunchAgain(op) {
+      const o = state.ops[op];
+      return !closed && ready() && state.fresh && !!o && o.message.type === 'session.launch' && resendable(o, boot);
+    },
+
+    launchAgain(op) {
+      const o = state.ops[op];
+      if (!o || !store.canLaunchAgain(op)) return false;
+      patchOp(op, x => ({ ...x, phase: 'sending' }));
+      send(o.message);
+      arm(op);
+      return true;
     },
 
     closeSessions(qid, rows) {

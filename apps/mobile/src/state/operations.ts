@@ -33,12 +33,16 @@ export interface Op {
   starting?: true;
   /** An `openrig.answer`'s end, as `openrig.answered` said it (not kept across a reload). */
   rig?: Omit<Extract<PhoneServerMessage, { type: 'openrig.answered' }>, 'type' | 'op' | 'qitemId'>;
+  /** An applied `session.launch`: the new session's id. */
+  id?: string;
   /** When the phone first sent it. */
   at: string;
   /** The PC said `received` (or a final status): it may have applied the op. Absent on an op that never got that far. */
   received?: boolean;
   /** The PC's boot id known when it said so; absent when none was known (a daemon without boot ids). */
   boot?: string;
+  /** The PC's boot id known when the phone first sent it (not kept across a reload). A signed op answers that process's challenge only. */
+  sentBoot?: string;
 }
 
 export const OPS_KEY = 'ledge.mobile.operations';
@@ -57,7 +61,7 @@ export const UNCERTAIN_MS = 10_000;
  */
 const isVolatile = (m: { type: string }) => m.type === 'push.subscribe' || m.type === 'device.rename' || m.type === 'device.prefs' || m.type === 'context.set' || m.type.startsWith('project.') || m.type === 'push.unsubscribe' || m.type === 'chat.relay' || m.type === 'chat.relay.cancel' || m.type === 'chat.launch' || m.type === 'chat.close'
   || m.type === 'chat.task' || m.type === 'task.seen'
-  || m.type === 'daemon.update' || m.type === 'daemon.restart' || m.type === 'session.model' || m.type === 'session.close' || m.type === 'session.resume'
+  || m.type === 'daemon.update' || m.type === 'daemon.restart' || m.type === 'session.model' || m.type === 'session.close' || m.type === 'session.resume' || m.type === 'session.launch'
   || m.type === 'openrig.answer';
 
 export const isLive = (p: OpPhase) => p === 'sending' || p === 'uncertain';
@@ -93,6 +97,9 @@ export function resendable(o: Op, boot: string | null, now: number = Date.now())
   if (!isLive(o.phase)) return false;
   if (expectKey(o.message) !== undefined) return true;
   if (now - Date.parse(o.at) >= RESEND_MAX_MS) return false;
+  // A launch's assertion signs the challenge of the process it was first sent to: another one refuses it, received or
+  // not, while the first may have started the session. It stays uncertain (review 688eb599).
+  if (o.message.type === 'session.launch' && (o.sentBoot ?? null) !== boot) return false;
   return !o.received || boot === null || o.boot === boot;
 }
 

@@ -287,6 +287,14 @@ export const en: Copy = {
       idle: 'They are all available or ended.'
     },
     seeWaiting: 'See waiting',
+    mode: { label: 'Sessions view', list: 'List', atelier: 'Atelier' },
+    groupBy: { label: 'Group by', projects: 'Projects', rigs: 'Rigs' },
+    helpersHide: 'Hide sub-agents', helpersShow: 'Show sub-agents',
+    outsideRig: 'Outside a rig', rigTag: 'rig', kernelTag: 'OpenRig',
+    seats: (n: number) => (n === 1 ? '1 seat' : `${n} seats`),
+    deskTitle: 'Ledge’s desk',
+    seatOf: (role: string, rig: string) => `seat ${role} · ${rig}`,
+    new: 'New', newSession: 'New session',
     view: { label: 'Session view', thread: 'Thread', terminal: 'Terminal' },
     more: 'More actions',
     moreOf: (bot: string) => `More actions for ${bot}`,
@@ -544,7 +552,7 @@ export const en: Copy = {
     }
   },
   terminal: {
-    title: (bot: string) => `${bot}’s terminal`, back: 'Back to the thread',
+    back: 'Back to the thread',
     live: 'Read only · live', waiting: 'Read only · waiting', offline: 'Read only · last known state',
     smaller: 'Smaller text', larger: 'Larger text',
     output: 'Terminal output, horizontal scrolling', empty: 'No output yet.', unknown: 'This session no longer exists on the PC.',
@@ -557,9 +565,7 @@ export const en: Copy = {
     uncertain: 'Receipt not confirmed: check the terminal before trying again.',
     /** The live terminal (spec 2026-11-02 mobile terminal, mockup docs/mockups/mobile-terminal.html). */
     live2: {
-      meta: (project: string, cols: number, rows: number) => `${project} · ${cols} × ${rows}, PC size`,
-      ended: (project: string) => `${project} · ended`,
-      status: { connecting: 'Connecting to the terminal…', live: 'Live · read only', held: 'At the keyboard', offline: 'Connection lost · last screen known', ended: 'Session ended', refused: 'Terminal unavailable' },
+      status: { connecting: 'Connecting to the terminal…', live: 'Read only · live', held: 'At the keyboard', offline: 'Connection lost · last screen known', ended: 'Session ended', refused: 'Terminal unavailable' },
       view: 'View', readable: 'Readable', fit: 'Fit',
       screen: (bot: string) => `${bot}’s terminal`,
       position: 'Visible part of the columns',
@@ -567,9 +573,7 @@ export const en: Copy = {
       inputOff: 'To type here, turn on “Type into terminals from a linked device” on the PC, in Mobile access.',
       offlineHint: 'The screen comes back as soon as the PC answers.',
       back: 'Back to the thread',
-      heldTitle: (bot: string) => `You are typing in ${bot}`,
       heldLeft: (left: string) => `Hand given back in ${left} without a key press`,
-      heldTag: 'At the keyboard',
       released: { idle: 'Hand given back: 5 minutes without a key press.', expired: 'Hand given back: 30 minutes passed.', background: 'Hand given back: the app went to the background.', pc: 'The PC took the hand back.', link: 'Hand given back: connection lost.' },
       exit: { ended: null, gone: (bot: string) => `${bot}’s terminal no longer exists on the PC.`, closed: null, superseded: 'The terminal was opened elsewhere on this device.', failed: 'The PC could not follow this terminal.' },
       refused: { read_only: 'Session started outside Ledge: open its terminal on the PC.', unknown_session: 'This session no longer exists on the PC.', unavailable: 'The PC cannot show this terminal.' } as Partial<Record<string, string>>,
@@ -583,8 +587,15 @@ export const en: Copy = {
       key: { esc: 'Esc', tab: 'Tab', ctrl: 'Ctrl', alt: 'Alt', left: '←', up: '↑', down: '↓', right: '→', enter: '↵', interrupt: '^C', paste: 'Paste', line: 'Line' },
       keyLabel: { esc: 'Escape', tab: 'Tab', ctrl: 'Control', alt: 'Alt', left: 'Left arrow', up: 'Up arrow', down: 'Down arrow', right: 'Right arrow', enter: 'Enter', interrupt: 'Control C', paste: 'Paste', line: 'Line mode' },
       armed: 'armed', locked: 'locked',
-      lineField: 'Line to type in the terminal', lineSend: 'Type the line', withEnter: 'With ↵',
-      pasteFailed: 'Nothing to paste, or the device refused access to the clipboard.'
+      lineField: 'Line to type in the terminal', lineSend: 'Type the line',
+      /** The line's button (m2-sessions.html §6): it always sends with Enter. */
+      lineGo: 'Type ↵',
+      /** In the read-only bar, when the session has a request waiting (§6). */
+      alsoInThread: `The request is also in the thread and in “${ATOI}”.`,
+      /** The context keys for a numbered choice on the screen (§6, QUESTIONS.md « M2b · Le terminal » 3). */
+      contextKeys: { yes: 'Yes', always: 'Always', no: 'No' },
+      pasteFailed: 'Nothing to paste, or the device refused access to the clipboard.',
+      hardware: 'Hardware keyboard: type directly'
     }
   },
   question: {
@@ -1063,8 +1074,8 @@ export const en: Copy = {
   /** The Atelier on iPad (docs/mockups/ledge-ipad-atelier.html): the PC's rooms, tables and agents, as Ledge Desktop draws them. */
   atelier: {
     title: 'Atelier',
-    subtitle: (agents: number, rooms: number, waiting: number) =>
-      `${agents} ${plural(agents, 'agent', 'agents')} · ${rooms} ${plural(rooms, 'room', 'rooms')}${waiting ? ` · ${waiting} waiting` : ''}`,
+    subtitle: (agents: number, waiting: number, working: number) =>
+      `${agents} ${plural(agents, 'agent', 'agents')}${waiting ? ` · ${waiting} ${waiting > 1 ? 'wait' : 'waits'} for you` : ''}${working ? ` · ${working} working` : ''}`,
     region: 'Atelier',
     fullScreen: 'Full screen', closePanel: 'Close the panel', closeTitle: 'Close',
     session: (name: string) => `${name}’s session`,
@@ -1097,5 +1108,58 @@ export const en: Copy = {
     entrance: 'ENTRANCE',
     more: (n: number) => `+${n} at this table`,
     zoom: { bar: 'Atelier zoom', out: 'Zoom out', in: 'Zoom in', reset: 'Back to 100 %', fit: 'Fit', fitTitle: 'Back to the readable view' }
+  },
+  launch: {
+    title: 'New session', close: 'Close',
+    project: 'Project', where: 'Where to work', agent: 'Agent', model: 'Model', message: 'First message',
+    remembered: 'Last choice for this project kept', offline: 'offline',
+    noProjects: 'No project yet.', noProjectsBody: 'Create a project in Settings to launch agents in it.', chooseProject: 'Choose a project',
+    done: 'Done',
+    more: (n: number) => `+ ${n}`, moreLabel: (first: string, n: number) => `${first} and ${n === 1 ? '1 more folder' : `${n} more folders`}`,
+    permissions: 'Permissions',
+    approvals: { 'always-ask': ['Ask', 'Before every write or command'], write: ['Auto files', 'Writes without asking, asks before commands'], yolo: ['Auto', 'Approves everything, commands included'] },
+    onBranch: (branch: string) => `On ${branch}, in the project folder`, inFolder: 'In the project folder',
+    tools: { claude: 'Design, review', codex: 'Code and tests', cursor: 'In the editor', omp: 'Driven natively' },
+    placeholder: 'What should the agent do? Describe the expected result.',
+    ideas: ['Review the latest pull request', 'Fix the failing tests', 'Update the documentation'],
+    pick: (model: string, effort: string | null) => (effort ? `${model} · ${effort}` : model),
+    summary: (tool: string, model: string | null, machine: string, project: string) => `${model ? `${tool} · ${model}` : tool} on ${machine}, in ${project}`,
+    launchCheck: 'Launch with Face ID', launchDevice: 'Launch with my device', launching: 'Launching…',
+    missing: {
+      prompt: 'Write the instruction', machine: 'No machine online', setup: 'Protect your agreements first',
+      pcOld: (machine: string) => `${machine} does not launch from the phone yet`
+    },
+    setupBody: 'Launching asks for this device’s passkey, like closing a session.', openSettings: 'Open Settings',
+    pcOldBody: 'Launching from the phone comes with a later version of Ledge on the PC. Your message is kept.',
+    cancelled: 'Check cancelled. Nothing was launched.',
+    folders: (project: string) => `The folders the project ${project} declares`,
+    projectFolder: 'The project’s folder',
+    folder: {
+      missing: (machine: string) => `Not found on ${machine}`,
+      elsewhere: (other: string, machine: string) => `On ${other}: this phone launches on ${machine} only`,
+      single: 'Codex and Cursor Agent take a single folder; Claude Code and OMP can take several.'
+    },
+    kept: 'Nothing was launched. Your message is kept.',
+    refused: {
+      not_found: 'Start refused: the folder is not found',
+      invalid: 'Start refused: the PC does not take these choices',
+      invalidBody: (agent: string) => `The folder, the model or the effort does not suit ${agent}. A folder cannot be your home folder. Your message is kept.`,
+      stale: 'Start refused: the project changed on the PC',
+      staleBody: 'Nothing was launched. The projects are reloaded: check Project and Where to work.',
+      confirm_required: 'Start refused: the device check is required',
+      setupKept: 'Protect your agreements first in Settings. Your message is kept.',
+      assertion_invalid: 'Start refused: the device check was refused',
+      assertion_expired: 'Start refused: the check has expired',
+      expiredBody: 'Nothing was launched. Check again to launch.',
+      unavailable: (machine: string) => `Start refused: ${machine} does not launch from the phone`,
+      unavailableBody: 'Update Ledge on the PC. Your message is kept.',
+      other: 'Start refused'
+    },
+    failed: (agent: string) => `The PC could not start ${agent}`,
+    failedBody: (agent: string) => `Nothing was launched. Check ${agent} and tmux on the PC, then try again.`,
+    timeout: 'The start did not answer.', timeoutBody: 'Check the machine, then try again.',
+    lostBody: 'The session may have started: check Sessions before launching again.',
+    retry: 'Retry', settings: 'Settings',
+    started: (name: string, table: string) => `${name} is starting at the ${table} table.`
   }
 };

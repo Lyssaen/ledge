@@ -53,7 +53,7 @@ for (const theme of ['dark', 'light'] as const) {
     await expect(page).toHaveURL(/#\/atelier$/);
     await expect(atelierTab(page)).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('heading', { name: copy.atelier.title })).toBeVisible();
-    await expect(page.getByText(copy.atelier.subtitle(10, 3, 2))).toBeVisible();
+    await expect(page.getByText(copy.atelier.subtitle(10, 2, 4))).toBeVisible();
     await expect(page.locator('.atelier-room')).toHaveCount(3);
     await expect(page.locator('.rig-room .plaque-where')).toHaveText('rig · ledge · projet Ledge');
     await expect(page.locator('.helper-seat')).toHaveCount(1);

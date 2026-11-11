@@ -24,6 +24,8 @@ export interface XtermScreen extends TermScreen {
   appCursor(): boolean;
   /** After each write is drawn. */
   onDrawn(fn: () => void): void;
+  /** The rows on screen, as text: the context keys read a numbered choice there. */
+  rows(): string[];
   focus(): void;
   setTheme(t: TermTheme): void;
   dispose(): void;
@@ -75,6 +77,10 @@ export function createXterm(host: HTMLElement): XtermScreen {
     paste: text => { if (input) term.paste(text); },
     appCursor: () => term.modes.applicationCursorKeysMode,
     onDrawn: fn => { term.onWriteParsed(fn); },
+    rows: () => {
+      const b = term.buffer.active;
+      return Array.from({ length: term.rows }, (_, y) => b.getLine(b.viewportY + y)?.translateToString(true) ?? '');
+    },
     focus: () => term.focus(),
     setTheme: t => { term.options.theme = t; },
     dispose: () => term.dispose()

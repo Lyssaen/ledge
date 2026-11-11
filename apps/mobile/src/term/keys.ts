@@ -38,3 +38,28 @@ export function withModifiers(data: string, m: { ctrl: boolean; alt: boolean }):
   }
   return m.alt ? `\x1b${out}` : out;
 }
+
+/** A context key's word (m2-sessions.html §6): fixed, from how the option begins; null for an option it does not know. */
+export type ContextWord = 'yes' | 'always' | 'no' | null;
+
+/**
+ * The numbered choice on screen (« ❯ 1. Oui », « 2. Oui, toujours… », « 3. Non… »), as context keys: each option's digit and
+ * its word. « Oui, toujours » or « Yes, and don't ask » give Toujours; Oui / Yes give Oui; Non / No give Non; any other its
+ * digit alone. Empty when no row shows « ❯ 1. » (QUESTIONS.md, « M2b · Le terminal » 3).
+ */
+export function contextKeys(rows: readonly string[]): { digit: string; word: ContextWord }[] {
+  const start = rows.findIndex(r => /❯\s*1\.\s/.test(r));
+  if (start < 0) return [];
+  const keys: { digit: string; word: ContextWord }[] = [];
+  // An option may wrap: rows without a digit are its continuation, up to a dozen rows below the first.
+  for (const row of rows.slice(start, start + 12)) {
+    const m = /^\s*(?:❯\s*)?(\d)\.\s+(.*)$/.exec(row);
+    if (!m) continue;
+    if (m[1] !== String(keys.length + 1)) break;
+    const text = m[2]!.trim();
+    const word: ContextWord = /^(oui,?\s+toujours|yes,?\s+and\s+don.t\s+ask)/i.test(text) ? 'always'
+      : /^(oui|yes)\b/i.test(text) ? 'yes' : /^(non|no)\b/i.test(text) ? 'no' : null;
+    keys.push({ digit: m[1]!, word });
+  }
+  return keys;
+}

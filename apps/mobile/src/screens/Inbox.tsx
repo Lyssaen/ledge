@@ -4,6 +4,7 @@ import { copy, locale } from '../copy';
 import { askEndOf, cardMode, CHIPS_FROM, pillOf, sortAsks, whoOf, workingOf, WORKING_MAX } from '../model/atoi';
 import { outcomeFor } from '../model/requestOutcome';
 import { ageLabel, filterItems, firstLine, headline, requestsOf, type Filter, type InboxItem } from '../model/requests';
+import { doingLine } from '../model/sessions';
 import { indicators } from '../model/usage';
 import { href, useRoute } from '../router';
 import { TabPage } from '../shell/Shell';
@@ -60,7 +61,7 @@ function ChannelStrip({ state, machine }: { state: MobileState; machine: string 
   );
 }
 
-/** The sessions at work (Q13): five at most, then « Voir les N autres ». Their last reply, as the PC gives no current tool. */
+/** The sessions at work (Q13): five at most, then « Voir les N autres ». What each is doing (Q68). */
 function Working({ sessions, threshold, now, stale }: { sessions: PhoneSession[]; threshold: number; now: number; stale: boolean }) {
   const shown = sessions.slice(0, WORKING_MAX);
   const rest = sessions.length - shown.length;
@@ -73,7 +74,7 @@ function Working({ sessions, threshold, now, stale }: { sessions: PhoneSession[]
             key={s.id} href={href({ name: 'thread', sessionId: s.id })} stale={stale}
             lead={<><Dot state="work" pulse={!stale} /><RuntimeTag tool={s.tool} /></>}
             title={<><b className="font-semibold">{s.name}</b>{s.rig && <span className="text-small text-muted"> {s.rig.name}</span>}</>}
-            sub={s.lastReply ? firstLine(s.lastReply.text) : copy.agents.working}
+            sub={doingLine(s)}
             {...(ctx ? { meta: `${ctx.pct} %`, metaWarn: ctx.near } : {})}
           />
         );
@@ -278,7 +279,7 @@ function WideList({ update, state, items, asks, working, showRigs, chipBar, empt
                 key={s.id} href={href({ name: 'thread', sessionId: s.id })} stale={offline}
                 lead={<RuntimeTag tool={s.tool} />}
                 title={<><b className="font-semibold">{s.name}</b>{s.rig && <span className="text-small text-muted"> {s.rig.name}</span>}</>}
-                sub={s.lastReply ? firstLine(s.lastReply.text) : copy.agents.working}
+                sub={doingLine(s)}
                 {...(ctx ? { meta: `${ctx.pct} %`, metaWarn: ctx.near } : {})}
               />
             );
