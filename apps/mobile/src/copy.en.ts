@@ -594,7 +594,8 @@ export const en: Copy = {
       alsoInThread: `The request is also in the thread and in “${ATOI}”.`,
       /** The context keys for a numbered choice on the screen (§6, QUESTIONS.md « M2b · Le terminal » 3). */
       contextKeys: { yes: 'Yes', always: 'Always', no: 'No' },
-      pasteFailed: 'Nothing to paste, or the device refused access to the clipboard.'
+      pasteFailed: 'Nothing to paste, or the device refused access to the clipboard.',
+      hardware: 'Hardware keyboard: type directly'
     }
   },
   question: {

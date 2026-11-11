@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TERM_INPUT_MAX, type PhoneServerMessage } from '@ledge/protocol';
 import { Terminal } from '../../src/screens/Terminal';
@@ -273,6 +273,19 @@ describe('the live terminal screen', () => {
     act(() => t.xt.show(choice));
     expect(screen.queryByRole('button', { name: '1 Oui' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Échap' })).toBeInTheDocument();
+  });
+
+  // A tablet keeps only what a hardware keyboard lacks: the context keys, ^C, Coller (m2-sessions.html §10, Q26).
+  it('on a tablet, the short key bar and its note', async () => {
+    const before = globalThis.matchMedia;
+    globalThis.matchMedia = ((q: string) => ({ matches: true, media: q, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia;
+    try {
+      const t = await held('waiting_permission');
+      act(() => t.xt.show(choice));
+      const bar = within(screen.getByRole('toolbar', { name: /touches/i }));
+      expect(bar.getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['1 Oui', '2 Toujours', '3 Non', 'Contrôle C', 'Coller']);
+      expect(screen.getByText('Clavier matériel : tape directement')).toBeInTheDocument();
+    } finally { globalThis.matchMedia = before; }
   });
 
   it('« Taper ↵ » types the line with Enter', async () => {

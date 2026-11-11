@@ -241,7 +241,8 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
                 {c.word ? `${c.digit} ${L.contextKeys[c.word]}` : c.digit}
               </button>
             ))}
-            {(lineMode ? ['esc', 'tab', 'up', 'down', 'line'] as const : ['esc', 'tab', 'ctrl', 'alt', 'left', 'up', 'down', 'right', 'enter', 'interrupt', 'paste', 'line'] as const).map(k => {
+            {/* A tablet keeps the keys a hardware keyboard lacks (§10, Q26); a phone, the whole row. */}
+            {(wide ? ['interrupt', 'paste'] as const : lineMode ? ['esc', 'tab', 'up', 'down', 'line'] as const : ['esc', 'tab', 'ctrl', 'alt', 'left', 'up', 'down', 'right', 'enter', 'interrupt', 'paste', 'line'] as const).map(k => {
               const on = k === 'ctrl' || k === 'alt' ? mods[k] !== 'off' : k === 'line' ? lineMode : false;
               const pressed = k === 'ctrl' || k === 'alt' || k === 'line' ? on : undefined;
               const state2 = (k === 'ctrl' || k === 'alt') && mods[k] !== 'off' ? `, ${mods[k] === 'locked' ? L.locked : L.armed}` : '';
@@ -254,8 +255,9 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
                 </button>
               );
             })}
+            {wide && <span className="ml-auto flex-none self-center pl-2 text-[12px] text-muted">{L.hardware}</span>}
           </div>
-          {lineMode && (
+          {lineMode && !wide && (
             <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); sendLine(); }}>
               <span aria-hidden="true" className="font-mono text-muted">$</span>
               <input id="term-line" value={line} onChange={e => setLine(e.target.value)} aria-label={L.lineField} placeholder={L.lineField} autoCapitalize="off" enterKeyHint="send"

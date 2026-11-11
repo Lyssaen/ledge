@@ -604,7 +604,9 @@ const fr = {
       alsoInThread: 'La demande est aussi dans le fil et dans « À toi ».',
       /** The context keys for a numbered choice on the screen (§6, QUESTIONS.md « M2b · Le terminal » 3). */
       contextKeys: { yes: 'Oui', always: 'Toujours', no: 'Non' },
-      pasteFailed: 'Rien à coller, ou l’appareil a refusé l’accès au presse-papiers.'
+      pasteFailed: 'Rien à coller, ou l’appareil a refusé l’accès au presse-papiers.',
+      /** A tablet at the keyboard: the short bar's note (m2-sessions.html §10, Q26). */
+      hardware: 'Clavier matériel : tape directement'
     }
   },
   question: {
