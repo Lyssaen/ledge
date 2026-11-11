@@ -45,6 +45,8 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
 
   /** The devices whose folder is about to move (passkey recovery): no thread opens on them until it is released. */
   const held = new Map<string, Promise<void>>();
+  /** A hold still stopping the device's question and its writes. */
+  const quieting = new Map<string, Promise<void>>();
 
   const device = (id: string): Chat => {
     checkId(id);
@@ -76,10 +78,14 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
       const running = dropping.get(id); if (running) return running;
       const c = devices.get(id);
       devices.delete(id); emitters.delete(`device:${id}`); const k = kept.get(id); kept.delete(id);
+      // Read now: a hold that starts after this drop waits for it instead.
+      const holding = quieting.get(id);
       const p = (async () => {
         try {
           if (c) { for (const t of c.history()) c.cancel(t.qid); await c.idle(); }
           await k?.close();
+          // A hold under way holds the thread and its conversations: their last writes land before the folder goes.
+          await holding;
           await rm(deviceHome(id), { recursive: true, force: true });
         } finally { dropping.delete(id); }
       })();
@@ -98,13 +104,19 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
       const p = new Promise<void>(r => { open = r; });
       held.set(id, p);
       const release = () => { if (held.get(id) === p) held.delete(id); open(); };
-      try {
+      const quiet = (async () => {
         await dropping.get(id);
         const c = devices.get(id); const k = kept.get(id);
         devices.delete(id); kept.delete(id);
         if (c) { for (const t of c.history()) c.cancel(t.qid); await c.idle(); }
         await k?.close();
-      } catch (e) { release(); throw e; }
+      })();
+      // A drop that comes meanwhile (the device revoked) waits for it, not for the release: the recovery's own drop must not wait.
+      const settled = quiet.catch(() => {});
+      quieting.set(id, settled);
+      try { await quiet; }
+      catch (e) { release(); throw e; }
+      finally { if (quieting.get(id) === settled) quieting.delete(id); }
       return release;
     },
     /** Every thread's queued instructions (each thread's day roll is told to its own emitter), the desktop's first. */

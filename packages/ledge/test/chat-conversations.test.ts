@@ -165,6 +165,50 @@ describe('a device keeps its conversations', { timeout: 20_000 }, () => {
       expect(s.threads.device('d2').history()[0]).toMatchObject({ qid: 'q1', answer: 'ok' });
     });
 
+    /** Threads whose CLI only stops when the test says so (`stop`), once its question has started (`started`). */
+    const slow = () => {
+      const home = mkdtempSync(join(tmpdir(), 'ledge-conv-'));
+      let child: EventEmitter | undefined; let ready!: () => void;
+      const started = new Promise<void>(r => { ready = r; });
+      const spawnSlow = (() => {
+        child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), killed: false, kill: () => {} });
+        ready();
+        return child;
+      }) as unknown as typeof nodeSpawn;
+      const threads = createChatThreads({ store: new Store({ journalPath: join(home, 'j.json') }), tmux, home, env: async () => ({ ...process.env }), spawn: spawnSlow });
+      return { threads, started, stop: () => child!.emit('close', null), dir: join(home, 'mobile', 'chat', 'd1') };
+    };
+
+    it('the device forgotten while a hold stops its question: its folder is gone once all is done (review-qa f6ce9941)', async () => {
+      const s = slow();
+      const asked = s.threads.device('d1').ask('q1', 'secret', quiet);
+      await s.started;
+      const holding = s.threads.hold('d1');
+      await new Promise(r => setTimeout(r, 20));
+      const dropped = s.threads.drop('d1');
+      // Time for a drop that would not wait to remove the folder before the question's last write.
+      await new Promise(r => setTimeout(r, 20));
+      s.stop();
+      const release = await holding;
+      await asked; await dropped;
+      release();
+      expect(existsSync(s.dir)).toBe(false);
+    });
+
+    it('a hold that comes during a drop waits for it, and the drop does not wait for the hold', async () => {
+      const s = slow();
+      const asked = s.threads.device('d1').ask('q1', 'secret', quiet);
+      await s.started;
+      const dropped = s.threads.drop('d1');
+      const holding = s.threads.hold('d1');
+      s.stop();
+      await dropped;
+      const release = await holding;
+      await asked;
+      release();
+      expect(existsSync(s.dir)).toBe(false);
+    });
+
     it('held, no thread opens; released without a move, the device finds its conversation again', async () => {
       const s = setup();
       await s.d1().ask('q1', 'un', quiet);
