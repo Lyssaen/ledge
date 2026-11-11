@@ -88,8 +88,8 @@ export const prsEn: PrsCopy = {
   sentTo: (name: string) => `Sent to ${name}`,
   openAgent: (name: string) => `Open ${name}`,
   mostActive: 'most active',
-  // Pending design-ux (no English in the mockup for the « ▾ » button's label).
-  otherSession: 'Une autre session',
+  // design-ux, row 5de225c4 (commit 930375f5).
+  otherSession: 'Another session',
   noSession: (branch: string) => `No session works on ${branch}: nobody to send it to.`,
   discSub: (open: number, resolved: number) => `${open} open · ${resolved} resolved`,
   sendAll: (name: string) => `Send all to ${name}`,

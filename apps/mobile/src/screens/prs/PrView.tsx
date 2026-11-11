@@ -2,18 +2,21 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { PrDetail, PrJob, PullRequest } from '@ledge/protocol';
 import { copy } from '../../copy';
 import {
-  PIPE_DOT, approvalsText, canMerge, duration, failedJob, inFoot, logCut, mergeConditions, stagesOf, type MergeCondition, type Stage
+  PIPE_DOT, approvalsText, canMerge, duration, failedJob, inFoot, logCut, mergeConditions, shortSha, stagesOf, type MergeCondition, type Stage
 } from '../../model/prs';
 import { LinkStrip, hostName, useShell } from '../../shell/Shell';
-import { useForge, type DetailRead, type ForgeStore } from '../../state/forge';
+import { useForge, type DetailRead, type ForgeRun, type ForgeStore } from '../../state/forge';
+import { useMobile, type MobileStore } from '../../state/store';
 import { iconButtonClass } from '../../ui/Button';
 import { Sheet } from '../../ui/Dialog';
 import { BackLink } from '../../ui/Header';
 import { Icon } from '../../ui/icons';
 import { Dot } from '../../ui/kit/marks';
 import { useWide } from '../../ui/layout';
-import { Receipt, Spinner, Strip, rigButtonClass } from '../rigs/kit';
+import { Receipt, RigSheet, Spinner, Strip, rigButtonClass } from '../rigs/kit';
+import { Cancel, CheckedButton } from '../rigs/sheets';
 import { PipeChip, condText, dayTime, forgeWords, repoName } from './parts';
+import { ForgeRunNote } from './runs';
 
 /*
  * A request (m5-mr-pr.html, §3 and §8, the board PhonePR): its head, four views, the overview (the pipeline top to bottom, the failed
@@ -275,9 +278,28 @@ function ReadError({ read, pr, pc, onRetry }: { read: DetailRead; pr: PullReques
   );
 }
 
+/** « Fusionner #231 dans main ? »: the exact command the PC runs, the head read, then the device's check over this very merge (§4, Q54). */
+function MergeSheet({ d, pc, confirm, live, onMerge, onClose }: { d: PrDetail; pc: string; confirm: boolean; live: boolean; onMerge: () => void; onClose: () => void }) {
+  return (
+    <RigSheet title={C.confirm(d.pr.ref, d.pr.target)} onClose={onClose}>
+      <span className="text-[12.5px] text-muted">{C.runsOn(pc)}</span>
+      <code className="block rounded-md bg-raised px-2 py-1.5 font-mono text-[12px] break-all">{d.mergeCommand}</code>
+      <p className="m-0 text-[12px] leading-4 text-muted">{C.headRead(shortSha(d.pr.headSha))}</p>
+      <CheckedButton verb={C.merge} confirm={confirm} disabled={!live} onClick={() => { onClose(); onMerge(); }} />
+      <Cancel onClose={onClose} />
+    </RigSheet>
+  );
+}
+
+/** A run on this request still to show: the last one, under way or not dismissed. */
+const lastRun = (runs: readonly ForgeRun[], id: string): ForgeRun | undefined => runs.filter(r => r.prId === id).at(-1);
+const going = (r: ForgeRun | undefined) => !!r && (r.phase === 'checking' || r.phase === 'sending' || r.phase === 'received');
+
 /** A request of the MR/PR tab (`#/prs/<id>`). */
-export function PrView({ id, forge }: { id: string; forge: ForgeStore }) {
+export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; store: MobileStore }) {
   const f = useForge(forge);
+  const m = useMobile(store);
+  const [merging, setMerging] = useState(false);
   const { pc, look } = useShell();
   const wide = useWide();
   const [view, setView] = useState<View>('overview');
@@ -315,6 +337,11 @@ export function PrView({ id, forge }: { id: string; forge: ForgeStore }) {
   const gone = !!f.state && !listed;
   const job = sheetJob && d ? d.jobs.find(j => j.id === sheetJob) : undefined;
   const openLog = (j: PrJob) => { forge.readDetail(id, j.id); };
+  const run = lastRun(f.runs, id);
+  const busy = going(run);
+  const live = m.fresh && !offline;
+  // The merge names the head the person read: the detail's, which a new head in the list reads again.
+  const merge = () => { if (d) void forge.act(id, { kind: 'merge', headSha: d.pr.headSha }); };
 
   return (
     <>
@@ -322,7 +349,8 @@ export function PrView({ id, forge }: { id: string; forge: ForgeStore }) {
       <Views pr={pr} d={d} view={view} onView={setView} />
       <main data-tab-scroll="" className={scroll}>
         <LinkStrip body={C.offlineBody} />
-        {gone && <Receipt mark="warn" title={C.gone(w.kind, name)} sub={C.goneBody} />}
+        {gone && !run && <Receipt mark="warn" title={C.gone(w.kind, name)} sub={C.goneBody} />}
+        {run && <ForgeRunNote run={run} pr={pr} detail={d} forge={forge} pc={name} onReload={() => forge.readDetail(id)} />}
         {read?.error && !d && <ReadError read={read} pr={pr} pc={name} onRetry={() => forge.readDetail(id)} />}
         {read?.cut && <Strip lead={<Icon name="alert" className="mt-px size-4 text-muted" />}><span>{C.cut(w.host)}</span></Strip>}
         <div className={`flex flex-col gap-2.5 ${offline ? 'opacity-50' : ''}`}>
@@ -340,12 +368,13 @@ export function PrView({ id, forge }: { id: string; forge: ForgeStore }) {
         ) : (
           <>
             <span data-foot="why" className="min-w-0 flex-1 text-[12px] leading-4 text-muted">{d ? footWords(d, w.host) : C.footApprovals(approvalsText(pr))}</span>
-            <button type="button" disabled={offline || gone || !d || !canMerge(d)} className={rigButtonClass({ tone: 'primary', className: 'h-[42px]' })}>
+            <button type="button" disabled={!live || gone || busy || !d || !canMerge(d)} onClick={() => setMerging(true)} className={rigButtonClass({ tone: 'primary', className: 'h-[42px]' })}>
               <Icon name="merge" className="size-4" />{C.merge}
             </button>
           </>
         )}
       </footer>
+      {merging && d && <MergeSheet d={d} pc={name} confirm={!!m.device?.confirm} live={live} onMerge={merge} onClose={() => setMerging(false)} />}
       {job && <LogSheet job={job} read={read} pr={pr} onRetry={() => openLog(job)} onClose={() => setSheetJob(null)} />}
     </>
   );

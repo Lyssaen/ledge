@@ -1,20 +1,24 @@
 // A request of the MR/PR tab (docs/mockups/ledge-mobile-refonte/m5-mr-pr.html, §3 and §8): its head, the pipeline and the failed job's
 // log, « Pour fusionner », the details, the footer, and the detail's states.
-import { act, fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage, PrDetail } from '@ledge/protocol';
 import { copy } from '../../src/copy';
+import { getAssertion } from '../../src/link/webauthn';
 import { detail, forgeState, mr, pr } from '../model/forge-fixtures';
 import { snapshot } from '../state/helpers';
 import { app } from './app-setup';
 
+vi.mock('../../src/link/webauthn', () => ({ platformAvailable: vi.fn(async () => false), createCredential: vi.fn(), getAssertion: vi.fn() }));
+
 const C = copy.prs;
+const CHALLENGE = { type: 'confirm.challenge' as const, purpose: 'forge' as const, challenge: 'Y2g', rpId: 'pc.local', credentialId: 'Y3I', expiresInMs: 60_000 };
 const at = (id: string) => `#/prs/${encodeURIComponent(id)}`;
 
 /** The app on a request, its PC sending its requests, the list delivered. */
-function open(id: string) {
+function open(id: string, o: { confirm?: boolean } = {}) {
   const t = app('ready', { hash: at(id) });
-  const snap = snapshot([], 'WSL') as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+  const snap = snapshot([], 'WSL', undefined, { confirm: o.confirm ?? true }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
   act(() => t.deliver({ ...snap, daemon: { ...snap.daemon, forge: true } }));
   act(() => t.deliver({ type: 'forge.state', ...forgeState() }));
   const give = (d: PrDetail | undefined, extra: { cut?: true; error?: 'unavailable' | 'failed' | 'too_large' } = {}) =>
@@ -109,5 +113,64 @@ describe('a request\'s detail that does not come', () => {
   it('says a request no longer followed', () => {
     open('github.com/acme/ledge#999');
     expect(screen.getByText(C.gone('PR', 'WSL'))).toBeTruthy();
+  });
+});
+
+describe('merging a request', () => {
+  const ready = () => detail(pr());
+  /** Merge, then the sheet's checked button, the PC's challenge and the passkey. */
+  async function merge(t: ReturnType<typeof open>) {
+    fireEvent.click(screen.getByRole('button', { name: C.merge }));
+    const sheet = screen.getByRole('dialog', { name: C.confirm('#231', 'main') });
+    expect(within(sheet).getByText(ready().mergeCommand)).toBeTruthy();
+    expect(within(sheet).getByText(C.headRead('a3f9c1e'))).toBeTruthy();
+    vi.mocked(getAssertion).mockResolvedValue({ id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' });
+    fireEvent.click(within(sheet).getByRole('button', { name: /Fusionner avec/ }));
+    await waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    act(() => t.deliver(CHALLENGE));
+    await waitFor(() => expect(t.of('forge.act')).toHaveLength(1));
+    return t.of('forge.act')[0]!;
+  }
+
+  it('asks the device\'s check over the head read, says it merges, then the receipt with the command', async () => {
+    const t = open(pr().id);
+    t.give(ready());
+    const sent = await merge(t);
+    expect(sent).toMatchObject({ prId: pr().id, action: { kind: 'merge', headSha: pr().headSha } });
+    act(() => t.deliver({ type: 'operation.result', op: sent.op, status: 'received' } as PhoneServerMessage));
+    expect(screen.getByText(`${C.merging} · ${C.answers('gh')}`)).toBeTruthy();
+    expect((screen.getByRole('button', { name: C.merge }) as HTMLButtonElement).disabled).toBe(true);
+    act(() => t.deliver({ type: 'forge.done', op: sent.op, ok: true, command: ready().mergeCommand }));
+    expect(screen.getByText(C.merged('#231'))).toBeTruthy();
+    expect(screen.getAllByText(ready().mergeCommand).length).toBeGreaterThan(0);
+  });
+
+  it('says the branch moved, with its new head, and reads it again', async () => {
+    const t = open(pr().id);
+    t.give(ready());
+    const sent = await merge(t);
+    const moved = pr({ headSha: '7d2e04b17d2e04b17d2e04b17d2e04b17d2e04b1' });
+    act(() => t.deliver({ type: 'forge.state', ...forgeState({ prs: [moved] }) }));
+    act(() => t.deliver({ type: 'forge.done', op: sent.op, ok: false, error: 'stale' }));
+    expect(screen.getByText(C.stale('7d2e04b'))).toBeTruthy();
+    const before = t.of('forge.detail').length;
+    fireEvent.click(screen.getByRole('button', { name: C.reload }));
+    expect(t.of('forge.detail').length).toBe(before + 1);
+  });
+
+  it('says what the forge refuses, and gh\'s last line on a failure', async () => {
+    const t = open(pr().id);
+    t.give(ready());
+    const sent = await merge(t);
+    act(() => t.deliver({ type: 'forge.done', op: sent.op, ok: false, error: 'failed', message: 'GraphQL: base branch requires signed commits' }));
+    expect(screen.getByText(C.failed('gh'))).toBeTruthy();
+    expect(screen.getByText('GraphQL: base branch requires signed commits')).toBeTruthy();
+  });
+
+  it('asks to protect the approvals first on a device without its check', () => {
+    const t = open(pr().id, { confirm: false });
+    t.give(ready());
+    fireEvent.click(screen.getByRole('button', { name: C.merge }));
+    expect(screen.getByText(copy.rigs.protectFirst)).toBeTruthy();
   });
 });

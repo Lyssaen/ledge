@@ -308,7 +308,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       prs: failed ? { text: failed > 99 ? '99+' : String(failed), tone: 'red' as const } : null
     };
     const prsList = prsOn ? <PrsList forge={forge} store={store} /> : <Prs />;
-    const prView = prsOn && route.name === 'pr' ? <PrView key={route.id} id={route.id} forge={forge} /> : null;
+    const prView = prsOn && route.name === 'pr' ? <PrView key={route.id} id={route.id} forge={forge} store={store} /> : null;
     const inbox = <Inbox store={store} onReconnect={retry} />;
     const sessions = <Sessions store={store} filter={route.name === 'sessions' ? route.filter : undefined} />;
     // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
