@@ -93,7 +93,7 @@ Codes de refus (`reason`) :
 | `invalid` | ce que l'agent ne prend pas : plusieurs dossiers pour Codex ou Cursor, un dossier en double, `approval` hors OMP, un modèle absent du `models.listing` de l'agent, un effort que ce modèle (ou, sans modèle, celui par défaut) ne prend pas ; ou un dossier trop large (le dossier personnel ou au-dessus, ou un lien symbolique qui y mène). Quand le PC n'a pas pu lire les modèles de l'agent, il ne refuse ni modèle ni effort : l'agent le dit alors dans son terminal |
 | `stale` | le projet n'existe plus, ou un dossier n'est plus déclaré par le projet, ou appartient à une autre machine : recharger les projets |
 | `confirm_required` | pas de passkey enregistrée, ou pas d'assertion |
-| `assertion_invalid`, `assertion_expired`, `assertion_replayed` | comme pour les autres actions vérifiées : refaire la vérification |
+| `assertion_invalid`, `assertion_expired` | comme pour les autres actions vérifiées : refaire la vérification (une vérification déjà utilisée revient en `assertion_invalid`) |
 | `unavailable` | ce PC ne lance pas pour le téléphone |
 
 **Textes :** validés par l'utilisateur le 2026-11-10 (décision 12 du plan) dans le complément
