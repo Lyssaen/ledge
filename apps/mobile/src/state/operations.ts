@@ -41,6 +41,8 @@ export interface Op {
   received?: boolean;
   /** The PC's boot id known when it said so; absent when none was known (a daemon without boot ids). */
   boot?: string;
+  /** The PC's boot id known when the phone first sent it (not kept across a reload). A signed op answers that process's challenge only. */
+  sentBoot?: string;
 }
 
 export const OPS_KEY = 'ledge.mobile.operations';
@@ -95,6 +97,9 @@ export function resendable(o: Op, boot: string | null, now: number = Date.now())
   if (!isLive(o.phase)) return false;
   if (expectKey(o.message) !== undefined) return true;
   if (now - Date.parse(o.at) >= RESEND_MAX_MS) return false;
+  // A launch's assertion signs the challenge of the process it was first sent to: another one refuses it, received or
+  // not, while the first may have started the session. It stays uncertain (review 688eb599).
+  if (o.message.type === 'session.launch' && (o.sentBoot ?? null) !== boot) return false;
   return !o.received || boot === null || o.boot === boot;
 }
 

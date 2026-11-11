@@ -269,13 +269,13 @@ describe('« Nouvelle session » (m2-sessions.html §9)', () => {
   });
 
   describe('a launch the PC took, then lost with its answer, is never presented as refused (review 688eb599)', () => {
-    /** Sent and received under `b1`, the link lost before the outcome, back on a PC that booted `boot`. */
-    async function lostAfterReceipt(boot: string) {
+    /** Sent (and `received`, unless that was lost too) under `b1`, the link lost before the outcome, back on a PC that booted `boot`. */
+    async function lostAfterReceipt(boot: string, received = true) {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       const t = opened({ boot: 'b1' });
       type('Corrige les tests');
       const m = await launched(t);
-      act(() => t.deliver({ type: 'operation.result', op: m.op, status: 'received' } as PhoneServerMessage));
+      if (received) act(() => t.deliver({ type: 'operation.result', op: m.op, status: 'received' } as PhoneServerMessage));
       act(() => t.set('pc_offline'));
       act(() => t.set('ready'));
       act(() => t.deliver(snap({ boot })));
@@ -290,6 +290,13 @@ describe('« Nouvelle session » (m2-sessions.html §9)', () => {
       expect(t.of('session.launch')).toHaveLength(1);
       expect(t.of('confirm.prepare')).toHaveLength(1);
       expect(screen.queryByText(/Démarrage refusé/)).not.toBeInTheDocument();
+    });
+
+    it('the PC restarted and its « received » was lost too: not sent again, by itself or by Réessayer', async () => {
+      const { t } = await lostAfterReceipt('b2', false);
+      expect(screen.queryByRole('button', { name: 'Réessayer' })).not.toBeInTheDocument();
+      expect(t.of('session.launch')).toHaveLength(1);
+      expect(t.of('confirm.prepare')).toHaveLength(1);
     });
 
     it('control: the same PC process, Réessayer sends the same launch again', async () => {

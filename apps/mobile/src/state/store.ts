@@ -242,9 +242,10 @@ export interface MobileStore {
   /** « Réessayer » after no answer: the same launch again, same op and assertion, so the PC never starts two (contract §6). False when it cannot go. */
   launchAgain(op: string): boolean;
   /**
-   * Whether `launchAgain` may send this launch now: the PC's current boot is known (a snapshot since the link came back) and
-   * `resendable` allows it. A launch the PC received before it restarted, or one past the replay window, may have started a
-   * session that nothing reports now: sent again, the new process would refuse it as if the first had been refused.
+   * Whether `launchAgain` may send this launch now: the PC's current boot is known (a snapshot since the link came back), it is
+   * the boot the launch was first sent to, and `resendable` allows it. A launch sent before the PC restarted (received or
+   * not), or one past the replay window, may have started a session that nothing reports now: sent again, the new process
+   * would refuse it as if the first had been refused.
    */
   canLaunchAgain(op: string): boolean;
   /** Closes the turn's sessions (`rows`, or all of them), after the device's confirmation. (Not `close`: that stops the store.) */
@@ -647,7 +648,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     if (!parsed.success || !('op' in parsed.data)) return null;
     const message = parsed.data as OpMessage;
     if (!isNew(state.ops, message, boot)) return null;
-    setOps({ ...state.ops, [message.op]: { op: message.op, message, phase: 'sending', at: new Date().toISOString(), ...keep } });
+    setOps({ ...state.ops, [message.op]: { op: message.op, message, phase: 'sending', at: new Date().toISOString(), ...(boot ? { sentBoot: boot } : {}), ...keep } });
     send(message);
     arm(message.op);
     return message.op;
