@@ -319,7 +319,7 @@ Ce qui attend l'utilisateur, tranchable sur place. Les demandes des sessions en 
 
 ### Sessions (`sessions`)
 
-Les sessions par projet. Une session ouvre son fil.
+Les sessions groupées par projet, puis par rig OpenRig. Les filtres en haut : « Toutes », « En attente » et « Au travail », chacun avec son compte. Une ligne donne le point d'état de la session, son outil, son nom et ce qu'elle fait ; elle dit « Fermeture… » pendant qu'elle se ferme depuis ce téléphone. Toucher une ligne ouvre le fil de la session. Sur une tablette, la liste reste à gauche et le fil s'ouvre à droite.
 
 ### MR et PR (`prs`)
 
@@ -351,7 +351,15 @@ Le chat de Ledge sur le téléphone, avec « Le point ». Les cartes proposent u
 
 ### Fil d'une session (`thread`)
 
-Les échanges avec un agent et le champ pour lui écrire. « Examiner la demande » quand une décision attend. Un bouton ouvre son terminal.
+Les échanges avec un agent et le champ pour lui écrire.
+
+- **L'en-tête** donne le nom de la session et son point d'état, plus l'heure de fin d'une session terminée. La bascule « Fil · Terminal » passe d'une vue à l'autre, et « Plus d'actions » ouvre la feuille des actions. Sur une tablette, l'en-tête donne aussi le projet et la branche.
+- **Les outils** lancés d'affilée tiennent en une ligne, « 4 outils · Read, Write, Edit, Bash » ; un toucher la déplie, un outil par ligne (✓ fait, ● en cours, ✕ en échec).
+- **La demande en attente** arrive au pied du fil, comme sa carte dans « À toi » : elle se décide sur place, avec « Toujours » quand l'agent le propose. Sur une tablette, au clavier, Y autorise et N refuse.
+- **Le pied** donne le modèle (un toucher ouvre « Modèle et effort » quand le téléphone peut le changer), le contexte utilisé en pour cent, ambre près de la limite, puis la branche, ou le dossier sans Git. Sur une tablette, il ajoute le contexte en tokens (« 620k / 1M »), le projet et la limite de l'outil (« Claude 5 h 84 % ») quand le PC les connaît.
+- **« Plus d'actions »** regroupe « Modèle et effort », « Plan de travail » (quand l'agent en a un), « Interrompre », « Écrire au groupe » (aux sessions vivantes du même projet ou du même rig) et « Fermer », en rouge, qui demande la vérification de l'appareil. Une action qui ne se fait pas d'ici reste visible, grisée, et dit pourquoi.
+- **Une session terminée** garde son fil lisible. À la place du champ, « Session terminée » et « Reprendre », qui relance l'agent sur cette conversation après la vérification de l'appareil. Une session fermée de force le dit : son dernier tour peut manquer.
+- **Une session démarrée hors de Ledge** se lit seulement : le champ dit « Réponds dans le terminal ».
 
 ### Terminal (`terminal`)
 
