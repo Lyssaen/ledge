@@ -93,8 +93,8 @@ function Thread({ pr, t, agent, forge, store, live, pc, readOnly = false }: {
   };
   const post = () => { setReplying(false); void forge.act(pr.id, { kind: 'reply', threadId: t.id, body: draft.trim() }); };
   const busy = !!run && GOING.includes(run.phase);
-  // A reply not posted keeps its text: the field opens again on it.
-  const open = !busy && (replying || (draft !== '' && run?.action.kind === 'reply' && !(run.phase === 'done' && run.done?.ok)));
+  // A reply not posted keeps its text: the field opens again on it. One that may have gone (uncertain) keeps it too, field closed.
+  const open = !busy && (replying || (draft !== '' && run?.action.kind === 'reply' && run.phase !== 'uncertain' && !(run.phase === 'done' && run.done?.ok)));
   return (
     <article data-thread={t.id} className={card}>
       {where && <span className="font-mono text-[11px] text-muted">{where}</span>}

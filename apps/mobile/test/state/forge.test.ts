@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage } from '@ledge/protocol';
 import { getAssertion } from '../../src/link/webauthn';
 import { createForge, DETAIL_MS, draftKey, FORGE_STATE_KEY, type ForgeStore } from '../../src/state/forge';
-import { UNCERTAIN_MS } from '../../src/state/operations';
+import { RESEND_MAX_MS, UNCERTAIN_MS } from '../../src/state/operations';
 import { createStore, type MobileStore } from '../../src/state/store';
 import { detail, mr, pr, stateMsg } from '../model/forge-fixtures';
 import { fakeLink, MemoryStorage, snapshot } from './helpers';
@@ -16,6 +16,13 @@ const ASSERTION = { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signat
 const CHALLENGE = { type: 'confirm.challenge' as const, purpose: 'forge' as const, challenge: 'Y2g', rpId: 'pc.local', credentialId: 'Y3I', expiresInMs: 60_000 };
 const flush = () => new Promise(r => setTimeout(r, 0));
 
+const BOOT = '11111111-1111-4111-8111-111111111111';
+/** The PC's snapshot under `boot`, offering its requests. */
+const snap = (boot: string) => {
+  const s = snapshot([], 'WSL', boot, { confirm: true }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+  return { ...s, daemon: { ...s.daemon, forge: true as const } };
+};
+
 /** A ready link to a PC that sends its requests (`daemon.forge`), unless `offered` is false; this phone has a passkey unless `confirm` is false. */
 function setup(offered = true, confirm = true) {
   const f = fakeLink('ready');
@@ -23,8 +30,8 @@ function setup(offered = true, confirm = true) {
   const store = createStore(f.link, storage);
   const forge = createForge(f.link, store, storage);
   open.push({ forge, store });
-  const snap = snapshot([], 'WSL', undefined, { confirm }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
-  f.deliver(offered ? { ...snap, daemon: { ...snap.daemon, forge: true } } : snap);
+  const s = snapshot([], 'WSL', BOOT, { confirm }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+  f.deliver(offered ? { ...s, daemon: { ...s.daemon, forge: true } } : s);
   return { ...f, store, forge, storage };
 }
 
@@ -161,20 +168,79 @@ describe('the forge store', () => {
     expect(t.of('confirm.prepare')).toHaveLength(1);
   });
 
-  it('sends an uncertain action again on the next link, and forgets it once its receipt is closed', async () => {
+  it('sends an uncertain action again on the next link once its snapshot names the same PC process, and forgets it once its receipt is closed', async () => {
     const t = setup();
     const { ended, sent } = await acted(t, pr().id, { kind: 'rerun' });
     t.set('pc_offline');
     const run = await ended;
     expect(run.phase).toBe('uncertain');
     t.set('ready');
+    // Nothing goes before the snapshot says which process answers.
+    expect(t.of('forge.act')).toHaveLength(1);
+    t.deliver(snap(BOOT));
     expect(t.of('forge.act')).toHaveLength(2);
     t.forge.dismiss(run.id);
     t.set('pc_offline');
     t.set('ready');
+    t.deliver(snap(BOOT));
     expect(t.of('forge.act')).toHaveLength(2);
     t.deliver({ type: 'forge.done', op: sent.op, ok: true });
     expect(t.forge.getState().runs).toHaveLength(0);
+  });
+
+  it('never sends again what a PC that restarted may have run: the run stays uncertain, with no retry, and a late refusal does not end it', async () => {
+    const t = setup();
+    const key = draftKey(pr().id);
+    t.forge.setDraft(key, 'Merci');
+    const { ended, sent } = await acted(t, pr().id, { kind: 'comment', body: 'Merci' });
+    t.deliver({ type: 'operation.result', op: sent.op, status: 'received' } as PhoneServerMessage);
+    // The comment is posted, its end is lost with the link, and the PC restarts before the next one.
+    t.set('pc_offline');
+    t.set('ready');
+    t.deliver(snap('22222222-2222-4222-8222-222222222222'));
+    expect(t.of('forge.act')).toHaveLength(1);
+    expect(await ended).toMatchObject({ phase: 'uncertain', lost: true });
+    t.forge.resend(t.forge.getState().runs[0]!.id);
+    expect(t.of('forge.act')).toHaveLength(1);
+    t.deliver({ type: 'forge.done', op: sent.op, ok: false, rejected: 'assertion_invalid' });
+    expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+    expect(t.forge.getState().drafts[key]).toBe('Merci');
+  });
+
+  it('a PC restarted behind the relay, on the same link, loses what the old process held', async () => {
+    const t = setup();
+    const { ended, sent } = await acted(t, pr().id, { kind: 'merge', headSha: pr().headSha });
+    t.deliver({ type: 'operation.result', op: sent.op, status: 'received' } as PhoneServerMessage);
+    t.deliver(snap('22222222-2222-4222-8222-222222222222'));
+    expect(await ended).toMatchObject({ phase: 'uncertain', lost: true });
+    expect(t.of('forge.act')).toHaveLength(1);
+  });
+
+  it('takes a refusal of a send again as uncertain, not as the action not done', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = setup();
+    const { ended, sent } = await acted(t, pr().id, { kind: 'comment', body: 'Merci' });
+    vi.advanceTimersByTime(UNCERTAIN_MS + 1);
+    const run = await ended;
+    t.forge.resend(run.id);
+    await flush();
+    expect(t.of('forge.act')).toHaveLength(2);
+    // The PC forgot the op (its registry evicted it): the send again is new to it, and its check refused.
+    t.deliver({ type: 'operation.result', op: sent.op, status: 'rejected', reason: 'assertion_invalid' } as PhoneServerMessage);
+    t.deliver({ type: 'forge.done', op: sent.op, ok: false, rejected: 'assertion_invalid' });
+    expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
+  });
+
+  it('does not send an uncertain action again once too old for the PC to still hold it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = setup();
+    const { ended } = await acted(t, pr().id, { kind: 'rerun' });
+    vi.advanceTimersByTime(RESEND_MAX_MS + 1);
+    const run = await ended;
+    t.forge.resend(run.id);
+    await flush();
+    expect(t.of('forge.act')).toHaveLength(1);
+    expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'uncertain', lost: true });
   });
 
   it('keeps a comment not posted in its field, and drops it once posted', async () => {
@@ -195,6 +261,17 @@ describe('the forge store', () => {
     await vi.waitFor(() => expect(t.of('forge.act')).toHaveLength(2));
     t.deliver({ type: 'forge.done', op: t.of('forge.act')[1]!.op, ok: true });
     expect(t.forge.getState().drafts[key]).toBeUndefined();
+  });
+
+  it('keeps a comment written again while the last one was posting: only the text sent leaves its field', async () => {
+    const t = setup();
+    const key = draftKey(pr().id);
+    t.forge.setDraft(key, 'A');
+    const { sent } = await acted(t, pr().id, { kind: 'comment', body: 'A' });
+    t.forge.setDraft(key, 'A, et B');
+    t.deliver({ type: 'operation.result', op: sent.op, status: 'received' } as PhoneServerMessage);
+    t.deliver({ type: 'forge.done', op: sent.op, ok: true });
+    expect(t.forge.getState().drafts[key]).toBe('A, et B');
   });
 
   it('forgets the old PC’s requests when the phone is unpaired', () => {

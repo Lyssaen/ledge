@@ -9,7 +9,7 @@ import {
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
-import { newOperationId, UNCERTAIN_MS } from './operations';
+import { newOperationId, RESEND_MAX_MS, UNCERTAIN_MS } from './operations';
 import { localStore } from './storage';
 import type { ConfirmRequest, MobileStore } from './store';
 
@@ -38,6 +38,13 @@ export interface ForgeRun {
   done?: Msg<'forge.done'>;
   startedAt: number;
   endedAt?: number;
+  /** When it first left, and the PC's boot then: its passkey signs that process's challenge, which no other one takes. */
+  sentAt?: number;
+  boot?: string | null;
+  /** It left more than once: a refusal of a later send says nothing of the first one, which may have run. */
+  again?: true;
+  /** An uncertain run the PC can no longer settle (it restarted, or the run is too old to be sent again): nothing is sent again. */
+  lost?: true;
 }
 
 export interface ForgeState {
@@ -81,8 +88,10 @@ export const DETAIL_MS = 65_000;
 export const draftKey = (prId: string, threadId?: string): string => (threadId ? `${prId}\n${threadId}` : prId);
 
 const isFinal = (p: ForgeRunPhase) => p !== 'checking' && p !== 'sending' && p !== 'received';
-/** A run the PC may still answer: under way, or uncertain. */
-const open = (r: ForgeRun | undefined): boolean => !!r && (!isFinal(r.phase) || r.phase === 'uncertain');
+/** A run the PC may still answer: under way, or uncertain and not lost. */
+const open = (r: ForgeRun | undefined): boolean => !!r && (!isFinal(r.phase) || (r.phase === 'uncertain' && !r.lost));
+/** The refusals a send again may get for itself, whatever became of the first send: another process's check, or an op it does not take. */
+const RESENT_REFUSALS = new Set(['assertion_invalid', 'assertion_expired', 'confirm_required', 'conflict']);
 
 function loadKept(storage?: Storage): { state: PhoneForgeState; at: string } | null {
   try {
@@ -108,6 +117,8 @@ export function createForge(link: PhoneLink, store: MobileStore, storage?: Stora
   const ends = new Map<string, (r: ForgeRun) => void>();
   /** Counts the links: a message that could not leave on one link may have gone with the resend of the next. */
   let linkGen = 0;
+  /** The PC's boot of this link, from its snapshot (null when it sends none); `undefined` until the snapshot of a new link. */
+  let boot: string | null | undefined = store.getState().daemon ? (store.getState().daemon?.boot ?? null) : undefined;
 
   const ready = () => !closed && link.state() === 'ready';
   const offered = () => !!store.getState().daemon?.forge;
@@ -139,6 +150,30 @@ export function createForge(link: PhoneLink, store: MobileStore, storage?: Stora
       end?.(next);
     }
   }
+  /**
+   * Whether a run that left may go again under its op: the PC keeps its operations in memory, and the passkey signed the challenge of
+   * the process it was first sent to. Under another boot, or once too old for the PC to still hold it, a send again would be refused or
+   * run as new: the run stays uncertain for good.
+   */
+  const resendable = (r: ForgeRun): boolean =>
+    r.sentAt !== undefined && Date.now() - r.sentAt < RESEND_MAX_MS && boot !== undefined && (r.boot ?? null) === boot;
+  /** Gives up on a run the PC can no longer settle: uncertain, never sent again. */
+  const lose = (r: ForgeRun) => {
+    answered(`op:${r.op}`);
+    inFlight.delete(r.op);
+    patchRun(r.id, x => ({ ...x, phase: 'uncertain', lost: true, endedAt: x.endedAt ?? Date.now() }));
+  };
+  /** Sends again, under their own op, the runs of the last link the PC may still settle; the others are lost. */
+  function resendAll() {
+    for (const [op, m] of [...inFlight]) {
+      const r = runOfOp(op);
+      if (!r) { inFlight.delete(op); continue; }
+      if (!resendable(r)) { lose(r); continue; }
+      patchRun(r.id, x => ({ ...x, again: true }));
+      send(m);
+      if (r.phase === 'sending') armAnswer(op);
+    }
+  }
   const end = (op: string, patch: Partial<ForgeRun>) => {
     answered(`op:${op}`);
     const r = runOfOp(op);
@@ -152,9 +187,15 @@ export function createForge(link: PhoneLink, store: MobileStore, storage?: Stora
 
   function onMessage(m: PhoneServerMessage) {
     switch (m.type) {
-      case 'snapshot':
+      case 'snapshot': {
+        // The snapshot says which process answers this link: what the last one may have run is sent again only to that same one.
+        // A new boot on the same link (the PC restarted behind the relay) loses what the old process held, as a new link would.
+        const was = boot;
+        boot = m.daemon.boot ?? null;
+        if (was === undefined || was !== boot) resendAll();
         ask();
         return;
+      }
       case 'forge.state': {
         answered('state');
         const at = new Date().toISOString();
@@ -188,21 +229,24 @@ export function createForge(link: PhoneLink, store: MobileStore, storage?: Stora
           if (r.phase === 'sending' || r.phase === 'uncertain') patchRun(r.id, x => { const { endedAt: _e, ...rest } = x; return { ...rest, phase: 'received' }; });
           return;
         }
+        // A send again refused for itself says nothing of the first send, which may have run: uncertain for good.
+        if (m.status === 'rejected' && r.again && RESENT_REFUSALS.has(m.reason ?? '')) { lose(r); return; }
         // A refusal before it ran (`stale`, `busy`, the check…): `forge.done` follows, but the run already says why.
         if (m.status === 'rejected') end(m.op, { phase: 'rejected', reason: m.reason ?? 'invalid' });
         return;
       }
       case 'forge.done': {
         const r = runOfOp(m.op);
-        if (!r) return;
+        if (!r || r.lost) return;
+        if (m.rejected && r.again && RESENT_REFUSALS.has(m.rejected)) { lose(r); return; }
         const first = open(r);
         end(m.op, m.rejected ? { phase: 'rejected', reason: m.rejected, done: m } : { phase: 'done', done: m, ...(m.error ? { reason: m.error } : {}) });
         // A refusal may already have ended the run: the detail still lands on it, for its words (`message`).
         if (!first) patchRun(r.id, x => ({ ...x, done: m }));
+        // A posted text leaves its field, unless the field was written again meanwhile: that newer text stays.
         if (m.ok && (r.action.kind === 'comment' || r.action.kind === 'reply')) {
           const key = draftKey(r.prId, r.action.kind === 'reply' ? r.action.threadId : undefined);
-          const { [key]: _gone, ...rest } = state.drafts;
-          set({ drafts: rest });
+          if (state.drafts[key]?.trim() === r.action.body) { const { [key]: _gone, ...rest } = state.drafts; set({ drafts: rest }); }
         }
         // After an action, its request is read again; `stale` asks for the new head too.
         if (state.details[r.prId]) store_.readDetail(r.prId);
@@ -221,7 +265,8 @@ export function createForge(link: PhoneLink, store: MobileStore, storage?: Stora
       wasReady = true;
       linkGen++;
       asked = false;
-      for (const [op, m] of inFlight) { send(m); if (runOfOp(op)?.phase === 'sending') armAnswer(op); }
+      // What may still be in flight goes again once this link's snapshot names the PC's boot.
+      boot = undefined;
     } else if (!now && wasReady) {
       wasReady = false;
       asked = false;
@@ -296,7 +341,7 @@ export function createForge(link: PhoneLink, store: MobileStore, storage?: Stora
         const parsed = PhoneClientMessageSchema.safeParse({ type: 'forge.act', op, prId, action, assertion: s.assertion });
         if (!parsed.success || !ready()) { patchRun(id, x => ({ ...x, phase: 'unsent', endedAt: Date.now() })); return; }
         inFlight.set(op, parsed.data);
-        patchRun(id, x => ({ ...x, op, phase: 'sending' }));
+        patchRun(id, x => ({ ...x, op, phase: 'sending', sentAt: Date.now(), boot: boot ?? null }));
         await dispatch(id, op, parsed.data);
       })();
       return done;
@@ -304,8 +349,9 @@ export function createForge(link: PhoneLink, store: MobileStore, storage?: Stora
     resend(id) {
       const r = state.runs.find(x => x.id === id);
       const m = r?.op ? inFlight.get(r.op) : undefined;
-      if (!r || r.phase !== 'uncertain' || !m || !ready()) return;
-      patchRun(id, x => { const { endedAt: _e, ...rest } = x; return { ...rest, phase: 'sending' }; });
+      if (!r || r.phase !== 'uncertain' || r.lost || !m || !ready()) return;
+      if (!resendable(r)) { lose(r); return; }
+      patchRun(id, x => { const { endedAt: _e, ...rest } = x; return { ...rest, phase: 'sending', again: true }; });
       void dispatch(id, r.op, m);
     },
     setDraft(key, text) {

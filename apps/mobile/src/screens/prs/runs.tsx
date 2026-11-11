@@ -33,11 +33,12 @@ export function ForgeRunNote({ run, pr, detail, forge, pc, onReload }: {
   if (run.phase === 'sending' || run.phase === 'received') {
     return <HoldBar>{run.action.kind === 'merge' ? `${C.merging} · ${C.answers(w.cli)}` : C.answers(w.cli)}</HoldBar>;
   }
-  // The PC did not say it has it (Q76): it may have run; « Réessayer » sends the same operation, which the PC runs once.
+  // The PC did not say it has it (Q76): it may have run; « Réessayer » sends the same operation, which the PC runs once. A lost run
+  // (the PC restarted, or too old) has no « Réessayer »: the PC would take it as new, or refuse it, whatever became of the first.
   if (run.phase === 'uncertain') {
     return (
       <Receipt mark="ask" title={R.uncertain.title} sub={R.uncertain.body} {...close}>
-        <button type="button" onClick={() => forge.resend(run.id)} className={rigButtonClass({ size: 'xs', className: 'mt-1.5' })}>{C.retry}</button>
+        {!run.lost && <button type="button" onClick={() => forge.resend(run.id)} className={rigButtonClass({ size: 'xs', className: 'mt-1.5' })}>{C.retry}</button>}
       </Receipt>
     );
   }

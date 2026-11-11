@@ -155,6 +155,20 @@ describe('merging a request', () => {
     expect(screen.getAllByText(ready().mergeCommand).length).toBeGreaterThan(0);
   });
 
+  it('says a merge may have gone, with no retry, when the PC restarted before its end came', async () => {
+    const t = open(pr().id);
+    t.give(ready());
+    const sent = await merge(t);
+    act(() => t.deliver({ type: 'operation.result', op: sent.op, status: 'received' } as PhoneServerMessage));
+    act(() => t.set('pc_offline'));
+    act(() => t.set('ready'));
+    const snap = snapshot([], 'WSL', '22222222-2222-4222-8222-222222222222', { confirm: true }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+    act(() => t.deliver({ ...snap, daemon: { ...snap.daemon, forge: true } }));
+    expect(screen.getByText(copy.rigs.uncertain.title)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: C.retry })).toBeNull();
+    expect(t.of('forge.act')).toHaveLength(1);
+  });
+
   it('says the branch moved, with its new head, and reads it again', async () => {
     const t = open(pr().id);
     t.give(ready());
@@ -340,6 +354,16 @@ describe('a request\'s discussion', () => {
     act(() => t.deliver({ type: 'forge.done', op: sent.op, ok: true }));
     expect(screen.getByText(C.commentPosted('GitHub'))).toBeTruthy();
     expect((screen.getByPlaceholderText(C.addComment) as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('keeps a comment written again while the last one was posting', async () => {
+    const t = discussion();
+    const field = () => screen.getByPlaceholderText(C.addComment) as HTMLTextAreaElement;
+    fireEvent.change(field(), { target: { value: 'LGTM' } });
+    const sent = await check(t, /^Publier avec/);
+    fireEvent.change(field(), { target: { value: 'LGTM, et le test du plafond ?' } });
+    act(() => t.deliver({ type: 'forge.done', op: sent.op, ok: true }));
+    expect(field().value).toBe('LGTM, et le test du plafond ?');
   });
 
   it('says there is no comment', () => {
