@@ -133,6 +133,11 @@ describe('<ChatView>', () => {
     rerender(<ChatView {...base} turns={[]} live={null} offline="Offline" />);
     expect(screen.getByRole('textbox', { name: 'Ask Ledge' })).toBeDisabled(); expect(screen.getByText('Offline')).toBeInTheDocument();
   });
+  it('a question the daemon stopped in the middle of says so in the island\'s words (Q81)', () => {
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [], error: 'the daemon stopped before the answer', errorCause: 'interrupted' }];
+    render(<ChatView {...base} turns={turns} live={null} />);
+    expect(document.querySelector('[data-chat-error]')).toHaveTextContent(/^Ledge could not answer: the daemon stopped before the answer\.$/);
+  });
   it('an answered turn with an empty answer keeps the chat usable and shows only its sources', () => {
     const turns: ChatTurn[] = [{ qid: 'q1', question: 'x', askedAt: T0, steps: [{ kind: 'sessions' }], answer: '', answeredAt: T0 }];
     render(<ChatView {...base} turns={turns} live={null} now={Date.parse(T0) + 10_000} />);

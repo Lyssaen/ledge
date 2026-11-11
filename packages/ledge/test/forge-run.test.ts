@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classify, execForge, forgeOf, logTail, redact } from '../src/daemon/forge/run.js';
+import { classify, execForge, forgeOf, installedCli, logTail, redact } from '../src/daemon/forge/run.js';
 
 /** A `gh` that is a Node script: it echoes its standard input, and writes its arguments to a file (never stderr, where Node
  *  itself may warn, as it does for every process when NODE_USE_ENV_PROXY is set). */
@@ -44,6 +44,19 @@ describe('the forge runner', () => {
     expect(r.code).not.toBe(0);
     expect(r.stdout).toBe('');
     expect(r.stderr).toMatch(/output over 1024 bytes/);
+  });
+});
+
+describe('installedCli', () => {
+  it('finds a CLI on the PATH without running it, and only an executable one', async () => {
+    const a = mkdtempSync(join(tmpdir(), 'ledge-path-a-')), b = mkdtempSync(join(tmpdir(), 'ledge-path-b-'));
+    writeFileSync(join(a, 'glab'), 'not executable');
+    writeFileSync(join(b, 'gh'), '#!/bin/sh\nexit 0\n'); chmodSync(join(b, 'gh'), 0o755);
+    try {
+      expect(await installedCli('gh', { PATH: `${a}:${b}` })).toBe(true);
+      expect(await installedCli('glab', { PATH: `${a}:${b}` })).toBe(false);
+      expect(await installedCli('gh', {})).toBe(false);
+    } finally { rmSync(a, { recursive: true }); rmSync(b, { recursive: true }); }
   });
 });
 

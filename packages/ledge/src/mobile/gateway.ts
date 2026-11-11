@@ -335,7 +335,7 @@ export function createPhoneGateway(deps: {
     if (f) f.pushStatus = push;
     const message: Extract<PhoneServerMessage, { type: 'snapshot' }> = {
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: deps.sessions().filter(s => !isArchived(s)).map(s => projected(deviceId, s)), capabilities: capabilities(), daemon: { version: deps.version, boot: deps.boot, name: clip(hostname(), 40).text, ...(deps.pc?.canUpdate ? { update: true as const } : {}), ...(deps.pc?.canRestart ? { restart: true as const } : {}), checklist: true as const, commands: true as const, rigRows: true as const, ...(deps.closeSession ? { sessionClose: true as const } : {}),
-      ...(deps.terminal ? { terminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), ...(deps.usage ? { usage: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}), ...(settings ? { settings: true as const } : {}), ...(projects ? { projectEdit: true as const } : {}), ...(projects && deps.folders ? { projectFolders: true as const } : {}), ...(deps.rigs ? { rigs: true as const } : {}), ...(projects && deps.launch ? { launch: true as const } : {}), ...(deps.forge ? { forge: true as const } : {}), ...(deps.chats ? { conversations: true as const } : {}) },
+      ...(deps.terminal ? { terminal: true as const, helperTerminal: true as const } : {}), ...(deps.terminal?.inputAllowed() ? { terminalInput: true as const } : {}), ...(deps.openrig ? { openrig: true as const } : {}), ...(deps.usage ? { usage: true as const } : {}), broadcast: true as const, ...(projects ? { atelier: true as const } : {}), ...(settings ? { settings: true as const } : {}), ...(projects ? { projectEdit: true as const } : {}), ...(projects && deps.folders ? { projectFolders: true as const } : {}), ...(deps.rigs ? { rigs: true as const } : {}), ...(projects && deps.launch ? { launch: true as const } : {}), ...(deps.forge ? { forge: true as const } : {}), ...(deps.chats ? { conversations: true as const } : {}) },
     ...(projects ? { projects: toPhoneProjects(projects) } : {}),
     device: { confirm: deps.credential(deviceId) !== null, ...(deps.credential(deviceId)?.recover ? { recover: true as const } : {}), push, ...(deps.chats ? { chat: true as const } : {}), ...(deps.contextNear ? { contextNear: deps.contextNear() } : {}), id: deviceId, ...ownInfo(deviceId), ...(settings ? { prefs: mobile.prefsOf!(deviceId) } : {}) }
     };
@@ -860,7 +860,9 @@ export function createPhoneGateway(deps: {
     if (!s) return { status: 'rejected', reason: 'unknown_session' };
     if (s.source === 'hook_only' || s.source === 'rig') return { status: 'rejected', reason: 'read_only' };
     if (s.state === 'exited' || !s.tmuxSession || backendOf(s) === 'omp-rpc') return { status: 'rejected', reason: 'unavailable' };
-    terminals.open(deviceId, msg.op, { id: s.id, tmuxName: s.tmuxSession });
+    // A subagent has no pane of its own: its page shows its parent's, which it may never type into.
+    if (msg.helper !== undefined && !s.helpers.some(h => h.id === msg.helper)) return { status: 'rejected', reason: 'unknown_session' };
+    terminals.open(deviceId, msg.op, { id: s.id, tmuxName: s.tmuxSession, ...(msg.helper !== undefined ? { readOnly: true } : {}) });
     return { status: 'applied' };
   };
 

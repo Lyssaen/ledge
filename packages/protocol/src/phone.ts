@@ -498,8 +498,9 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('brain.answer'), op: OperationIdSchema, task: z.string().min(1).max(40), choice: BrainChoiceSchema, assertion: AssertionSchema.optional() }),
   /** Puts a closed task Ledge gave away from « À traiter ». */
   z.object({ type: z.literal('task.seen'), op: OperationIdSchema, task: z.string().min(1).max(40) }),
-  /** Streams a session's pane, read-only; answered by `term.opened` or `operation.result` (rejected). */
-  z.object({ type: z.literal('term.open'), op: OperationIdSchema, id: sessionId }),
+  /** Streams a session's pane, read-only; answered by `term.opened` or `operation.result` (rejected). `helper`: one of the
+   *  session's subagents (`helpers[].id`), whose terminal is its parent's, read-only for good (`term.opened.readOnly`). */
+  z.object({ type: z.literal('term.open'), op: OperationIdSchema, id: sessionId, helper: z.string().min(1).max(200).optional() }),
   /** « Prendre la main »: passkey, purpose `terminal`, over the session; answered by `term.held` or `operation.result` (rejected). */
   z.object({ type: z.literal('term.hold'), op: OperationIdSchema, tid: TerminalIdSchema, assertion: AssertionSchema.optional() }),
   /** Keys to type, as xterm produced them; `n` counts from 0 for the terminal, so a duplicate is dropped and a gap seen. Refused unless held. */
@@ -579,6 +580,9 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
     /** The daemon takes `session.close` and `session.resume`. */ sessionClose: z.literal(true).optional(),
     /** The daemon streams a session's terminal (`term.open`). */ terminal: z.literal(true).optional(),
     /** The PC lets a phone type into a terminal (`term.hold`): its setting is on. */ terminalInput: z.literal(true).optional(),
+    /** `term.open` takes `helper`: a subagent's terminal is its parent's, read-only for good. Absent (an older PC, which would drop
+     *  `helper` and open the parent's pane as its own): the phone opens no subagent's terminal. */
+    helperTerminal: z.literal(true).optional(),
     /** The daemon answers `session.commands`. */ commands: z.literal(true).optional(),
     /** The daemon answers `openrig.row`. */ rigRows: z.literal(true).optional(),
     /** The daemon answers `openrig.asks` and `openrig.answer` (« À toi »). */ openrig: z.literal(true).optional(),

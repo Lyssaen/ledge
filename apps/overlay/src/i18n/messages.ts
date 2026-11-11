@@ -200,6 +200,7 @@ const fr = {
     source: { sessions: 'les sessions', pane: (name: string) => `le terminal de ${name}`, reply: (name: string) => `la dernière réponse de ${name}`, git: (name: string) => `git dans le dossier de ${name}`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'aucune lecture', ago: (when: string) => `il y a ${when}`,
     error: (why: string) => `Ledge n’a pas pu répondre : ${why}`,
+    interrupted: 'Ledge n’a pas pu répondre : le daemon s’est arrêté avant la réponse.',
     stopped: 'Arrêté.',
     card: {
       label: 'Session proposée', folder: 'Dossier', tool: 'Harnais', byDefault: (tool: string) => `${tool} · par défaut`, prompt: 'Instruction', noPrompt: 'Aucune, session vide',
@@ -459,6 +460,7 @@ const en: Messages = {
     source: { sessions: 'the sessions', pane: (name: string) => `${name}'s terminal`, reply: (name: string) => `${name}'s last reply`, git: (name: string) => `git in ${name}'s folder`, repo: (path: string) => path },
     sources: 'Sources', sourcesNone: 'nothing read', ago: (when: string) => `${when} ago`,
     error: (why: string) => `Ledge could not answer: ${why}`,
+    interrupted: 'Ledge could not answer: the daemon stopped before the answer.',
     stopped: 'Stopped.',
     card: {
       label: 'Proposed session', folder: 'Folder', tool: 'Harness', byDefault: (tool: string) => `${tool} · default`, prompt: 'Instruction', noPrompt: 'None, empty session',

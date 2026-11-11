@@ -1789,7 +1789,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     folders: { home: opts.home ?? homedir(), recents: () => store.recents().map(r => r.cwd), machineLabel: id => machines.find(m => m.id === id)?.label,
       inspect: paths => inspectRepos(paths, { home: opts.home }) },
     // « Nouvelle session » on the phone (M2 §9): the PC's own launch, its folders checked first so a refusal says why.
-    launch: phoneLaunch(launch, opts.home),
+    launch: phoneLaunch(launch, opts.home, tool => models.list(tool)),
     ...(forge ? { forge: { state: () => forge.state() } } : {}),
     // The phone's model switch (#58): `session.model` answers with a code, and `models.list` asks this machine's agents.
     models: true,

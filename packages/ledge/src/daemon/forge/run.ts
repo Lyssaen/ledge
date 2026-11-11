@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { access, constants } from 'node:fs/promises';
+import { delimiter, join } from 'node:path';
 import { repositoryId } from '../git.js';
 
 /**
@@ -43,6 +45,15 @@ export function execForge(env: () => Promise<NodeJS.ProcessEnv>, opts0: { maxOut
       child.stdin.end(opts.input ?? '');
     });
   };
+}
+
+/** Whether a forge CLI is on the PATH, found without running it: a missing `glab` is told apart from one not signed in. */
+export async function installedCli(cli: ForgeCli, env: NodeJS.ProcessEnv): Promise<boolean> {
+  for (const dir of (env.PATH ?? '').split(delimiter)) {
+    if (!dir) continue;
+    try { await access(join(dir, cli), constants.X_OK); return true; } catch { /* not in this folder */ }
+  }
+  return false;
 }
 
 /** A repository path a forge CLI reads as a path, never as a flag: segments that start with a letter or a digit. */

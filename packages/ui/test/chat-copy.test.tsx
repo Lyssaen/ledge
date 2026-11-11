@@ -28,6 +28,15 @@ describe('the shared chat reads its copy from the app', () => {
     expect(relativeTime(T0, Date.parse(T0) + 120_000, frTime)).toBe('2 min');
   });
 
+  it('a question the daemon stopped in the middle of says the app\'s own words; without them, the daemon\'s text', () => {
+    const turns: ChatTurn[] = [{ qid: 'q1', question: 'q', askedAt: T0, steps: [], error: 'the daemon stopped before the answer', errorCause: 'interrupted' }];
+    const { unmount } = render(<ChatCopyProvider value={{ ...copy, chat: { ...copy.chat, interrupted: 'Interrupted, in the app\'s words' } }}><ChatView {...base} turns={turns} now={Date.parse(T0)} /></ChatCopyProvider>);
+    expect(document.querySelector('[data-chat-error]')).toHaveTextContent(/^Interrupted, in the app's words$/);
+    unmount();
+    render(<ChatCopyProvider value={copy}><ChatView {...base} turns={turns} now={Date.parse(T0)} /></ChatCopyProvider>);
+    expect(document.querySelector('[data-chat-error]')).toHaveTextContent(/^error the daemon stopped before the answer$/);
+  });
+
   it('a web link in an answer opens through the MarkdownLinks context', () => {
     const openUrl = vi.fn();
     const turns: ChatTurn[] = [{ qid: 'q1', question: 'q', askedAt: T0, answeredAt: T0, steps: [], answer: 'See [docs](https://example.com/x).' }];
