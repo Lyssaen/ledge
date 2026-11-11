@@ -58,11 +58,10 @@ test('the phone chat: a question, its steps and answer, the instruction sent, th
     await page.getByRole('link', { name: copy.compare.seePending }).click();
   });
 
-  await test.step('a suggestion asked: the steps, then the answer', async () => {
+  await test.step('a suggestion asked at once (Q32): the steps, then the answer', async () => {
     await page.getByRole('link', { name: copy.nav.chat, exact: true }).click();
     await expect(page.getByRole('region', { name: copy.chat.point.label })).toBeVisible();
     await page.getByRole('button', { name: copy.chat.suggestions.waiting }).click();
-    await page.getByRole('button', { name: copy.chat.send }).click();
     await expect(page.getByText('Otto attend votre accord.').first()).toBeVisible();
     await expect(page.getByText(copy.chat.steps.pane('Otto'))).toBeVisible();
     await expect(page.getByText(/^Lit les \d+ sessions…$/)).toBeVisible();
