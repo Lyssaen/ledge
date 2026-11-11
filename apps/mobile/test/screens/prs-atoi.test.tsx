@@ -1,9 +1,9 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import type { PhoneForgeState, PhoneServerMessage } from '@ledge/protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setLang } from '../../src/copy';
 import { Inbox } from '../../src/screens/Inbox';
-import { atoiSub } from '../../src/screens/prs/forgeMarks';
+import { atoiSub, CHIP_TOAST_MS } from '../../src/screens/prs/forgeMarks';
 import { Thread } from '../../src/screens/Thread';
 import type { ForgeStore } from '../../src/state/forge';
 import { session } from '../model/fixtures';
@@ -12,6 +12,7 @@ import { snapshot } from '../state/helpers';
 import { setup } from './setup';
 
 const AT = '2026-11-11T14:12:00.000Z';
+const TIP = 'GitLab ne se lit pas sur WSL : Ledge ne sait pas si cette branche a une MR.';
 
 /** A forge store holding `s`, as the app's would after its `forge.state`. */
 const forgeOf = (s: PhoneForgeState | null): ForgeStore => {
@@ -101,9 +102,27 @@ describe('the request chip of a session\'s foot (M5 §9, Q60)', () => {
   });
 
   it('says « MR ? » when the forge of its repository cannot be read, with Desktop\'s sentence', () => {
-    const chip = within(foot('s-glab', unread)).getByRole('img', { name: 'GitLab ne se lit pas sur WSL : Ledge ne sait pas si cette branche a une MR.' });
+    const chip = within(foot('s-glab', unread)).getByRole('button', { name: TIP });
     expect(chip).toHaveTextContent('MR ?');
-    expect(chip).toHaveAttribute('title', 'GitLab ne se lit pas sur WSL : Ledge ne sait pas si cette branche a une MR.');
+    expect(chip).toHaveAttribute('title', TIP);
+  });
+
+  it('says that sentence in a toast on a tap, alone, until 4 s or the next tap (Q91)', () => {
+    vi.useFakeTimers();
+    try {
+      const chip = within(foot('s-glab', unread)).getByRole('button', { name: TIP });
+      fireEvent.click(chip);
+      const toast = () => document.querySelector('[data-chip-toast]');
+      expect(toast()).toHaveAttribute('role', 'status');
+      expect(toast()).toHaveTextContent(TIP);
+      expect(within(toast() as HTMLElement).queryByRole('button')).toBeNull();
+      act(() => { vi.advanceTimersByTime(CHIP_TOAST_MS); });
+      expect(toast()).toBeNull();
+      fireEvent.click(chip);
+      expect(toast()).not.toBeNull();
+      fireEvent.pointerDown(document.body);
+      expect(toast()).toBeNull();
+    } finally { vi.useRealTimers(); }
   });
 
   it('has no chip without a request, nor before the PC sends its requests', () => {

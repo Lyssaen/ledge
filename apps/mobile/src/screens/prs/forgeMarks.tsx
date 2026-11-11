@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import type { PhoneSession, PullRequest } from '@ledge/protocol';
 import { copy } from '../../copy';
 import { atoiPrs, chipOf, PIPE_DOT } from '../../model/prs';
@@ -79,10 +79,47 @@ export function PrChip({ forge, mobile, session }: { forge: ForgeStore | null | 
     );
   }
   const w = forgeWords({ forge: chip.kind });
-  const tip = C.chipTip(w.host, mobile.daemon.name, w.kind);
+  return <UnknownChip tip={C.chipTip(w.host, mobile.daemon.name, w.kind)} label={C.chipUnknown(w.kind)} />;
+}
+
+/** How long the sentence of « MR ? » stays (Q91). */
+export const CHIP_TOAST_MS = 4000;
+
+/**
+ * « MR ? »: a tap says its sentence in a toast at the bottom, above the message field (Q91 = A, the toast of m5-mr-pr.html §5,
+ * the sentence alone); it goes after `CHIP_TOAST_MS` or at the next tap anywhere.
+ */
+function UnknownChip({ tip, label }: { tip: string; label: string }) {
+  const chip = useRef<HTMLButtonElement>(null);
+  const [at, setAt] = useState<CSSProperties | null>(null);
+  useEffect(() => {
+    if (!at) return;
+    const t = setTimeout(() => setAt(null), CHIP_TOAST_MS);
+    const away = (e: PointerEvent) => { if (!chip.current?.contains(e.target as Node)) setAt(null); };
+    document.addEventListener('pointerdown', away, true);
+    return () => { clearTimeout(t); document.removeEventListener('pointerdown', away, true); };
+  }, [at]);
+  const show = () => {
+    if (at) { setAt(null); return; }
+    // Above the field: the foot's own top, or the field's when it sits right above the foot.
+    const foot = chip.current?.closest('footer');
+    const above = (foot?.previousElementSibling ?? foot)?.getBoundingClientRect();
+    const height = globalThis.innerHeight ?? 0;
+    setAt({ bottom: above ? Math.max(height - above.top + 8, 8) : 96 });
+  };
   return (
-    <span role="img" aria-label={tip} title={tip} data-pr-chip="unknown" className="flex-none rounded-md border border-dashed border-input px-[5px] font-mono text-[11px] text-muted">
-      {C.chipUnknown(w.kind)}
-    </span>
+    <>
+      <button
+        ref={chip} type="button" aria-label={tip} title={tip} onClick={show} data-pr-chip="unknown"
+        className="flex-none rounded-md border border-dashed border-input px-[5px] font-mono text-[11px] text-muted"
+      >
+        {label}
+      </button>
+      {at && (
+        <span role="status" data-chip-toast="" style={at} className="fixed inset-x-3.5 z-[7] flex items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5 text-[13px] leading-[18px] whitespace-normal text-fg shadow-[0_8px_24px_#0005]">
+          {tip}
+        </span>
+      )}
+    </>
   );
 }
