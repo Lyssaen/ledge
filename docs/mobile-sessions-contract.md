@@ -130,8 +130,8 @@ contextuelles (« 1 Oui », « 2 Toujours », « 3 Non ») viennent de l'écran 
 - `unavailable` : une session terminée, sans volet tmux, ou OMP en mode rpc ; ou un PC sans `daemon.terminal` ;
 - `unknown_session` : une session inconnue ou archivée, ou un sous-agent (`helper`) qu'elle ne liste plus.
 
-Le terminal d'un sous-agent est celui de son parent, en lecture seule (`term.open` avec `helper`, voir
-`docs/mobile-launch-contract.md` § 10).
+Le terminal d'un sous-agent est celui de son parent, en lecture seule (`term.open` avec `helper`, seulement si le PC
+annonce `daemon.helperTerminal` ; voir `docs/mobile-launch-contract.md` § 10).
 
 ## 7. L'Atelier sur téléphone, l'appui long (Q22)
 

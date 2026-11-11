@@ -171,8 +171,9 @@ de son parent, en lecture seule :
 ```
 
 « Prendre la main » y est refusé (`read_only`). Un `helper` que la session ne liste pas (fini depuis plus de 5 minutes)
-est refusé en `unknown_session`. Un PC d'avant ce champ répond `rejected` / `invalid` : le téléphone n'ouvre alors pas le
-terminal d'un sous-agent.
+est refusé en `unknown_session`. Le téléphone n'envoie `helper` qu'à un PC qui annonce `daemon.helperTerminal` : un PC
+d'avant ce champ le retirerait sans rien dire et ouvrirait le volet du parent comme le sien, où l'on peut prendre la main.
+Sans le drapeau, le téléphone n'ouvre pas le terminal d'un sous-agent.
 
 ## 11. Q29 : les titres des notifications, écrits par le téléphone
 
