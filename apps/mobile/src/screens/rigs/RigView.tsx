@@ -376,7 +376,7 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
           {queueBlock}
           <Lbl>{C.actions.snapshots}</Lbl>
           <SnapshotList read={snaps} kindOnly retry={() => rigs.readSnapshots(rig)} />
-          <button type="button" disabled={!can} onClick={() => act({ kind: 'rig.snapshot', rig })} className={rigButtonClass({ size: 'sm', className: 'self-start' })}><IconLabel icon="camera">{C.snapshots.take}</IconLabel></button>
+          <button type="button" disabled={!can} onClick={() => act({ kind: 'rig.snapshot', rig })} className={rigButtonClass({ size: 'sm', className: 'max-w-full self-start !h-auto min-h-9 py-1.5 !whitespace-normal text-left [&>svg]:flex-none' })}><IconLabel icon="camera">{C.snapshots.take}</IconLabel></button>
         </div>
       </div>
     )
