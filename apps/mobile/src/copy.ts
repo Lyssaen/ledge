@@ -1098,8 +1098,9 @@ const fr = {
   /** The Atelier on iPad (docs/mockups/ledge-ipad-atelier.html): the PC's rooms, tables and agents, as Ledge Desktop draws them. */
   atelier: {
     title: 'Atelier',
-    subtitle: (agents: number, rooms: number, waiting: number) =>
-      `${agents} ${agents > 1 ? 'agents' : 'agent'} · ${rooms} ${rooms > 1 ? 'pièces' : 'pièce'}${waiting ? ` · ${waiting} ${waiting > 1 ? 'attendent' : 'attend'}` : ''}`,
+    /** The tablet's head (m2-sessions.html §10, design-ux 8dbda670): a count at 0 goes, the agents' stays. */
+    subtitle: (agents: number, waiting: number, working: number) =>
+      `${agents} ${agents > 1 ? 'agents' : 'agent'}${waiting ? ` · ${waiting} ${waiting > 1 ? 't’attendent' : 't’attend'}` : ''}${working ? ` · ${working} au travail` : ''}`,
     region: 'Atelier',
     fullScreen: 'Plein écran', closePanel: 'Fermer le panneau', closeTitle: 'Fermer',
     session: (name: string) => `Session de ${name}`,

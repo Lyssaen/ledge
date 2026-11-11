@@ -7,6 +7,10 @@ import { roomTileWidth, rigColor, sceneOf, IPAD_RUG_SIDE, MAX_SEATS, type Atelie
 import { copy } from '../copy';
 import { navigate, replaceRoute } from '../router';
 import { useMobile, type MobileStore } from '../state/store';
+import { localStore } from '../state/storage';
+import { MOBILE_STORAGE_PREFIX } from '../link/keys';
+import { filterCounts, GROUPINGS, type Grouping } from '../model/sessions';
+import { kitButtonClass } from '../ui/kit/Controls';
 import { sessionStatus } from '../model/agents';
 import { GroupWrite } from '../screens/GroupWrite';
 import { RequestDetail } from '../screens/RequestDetail';
@@ -104,6 +108,9 @@ function roomOf(scene: AtelierScene<AtelierPhone, PhoneProject>, id: string): { 
   return { name: room.rig?.kind === 'kernel' ? copy.atelier.kernel : room.project.name, ids: room.tables.flatMap(t => t.mains.map(s => s.id)) };
 }
 
+const HELPERS_KEY = `${MOBILE_STORAGE_PREFIX}sessions.helpers`;
+const GROUP_KEY = `${MOBILE_STORAGE_PREFIX}sessions.groupBy`;
+
 export function AtelierScreen({ store, sessionId, requestKey, storage, onReconnect }: { store: MobileStore; sessionId?: string; requestKey?: string; storage?: Storage; onReconnect?: () => void }): JSX.Element {
   const state = useMobile(store);
   const offline = !state.fresh;
@@ -113,6 +120,12 @@ export function AtelierScreen({ store, sessionId, requestKey, storage, onReconne
   const scene = useMemo(() => sceneOf<AtelierPhone, PhoneProject>(order, state.projects, s => s.projectId ?? null, 'all', true,
     ({ id, name, kind }) => ({ id, name, color: rigColor(kind) })), [order, state.projects]);
   const [sheet, setSheet] = useState<string | null>(null);
+  // « Masquer les sous-agents » (§10), kept on the device with the phone's islands' own choice.
+  const [helpers, setHelpers] = useState<boolean>(() => { try { return localStore(storage)?.getItem(HELPERS_KEY) !== 'hidden'; } catch { return true; } });
+  // « Projets · Rigs » (§10, Q83 A): the rooms' order only, nothing hidden; kept on the device with the phone's islands' grouping.
+  const [by, setBy] = useState<Grouping>(() => { try { const v = localStore(storage)?.getItem(GROUP_KEY); return v === 'rigs' ? 'rigs' : 'projects'; } catch { return 'projects'; } });
+  const chooseBy = (g: Grouping) => { setBy(g); try { localStore(storage)?.setItem(GROUP_KEY, g); } catch { /* kept for this visit only */ } };
+  const toggleHelpers = () => { const next = !helpers; setHelpers(next); try { localStore(storage)?.setItem(HELPERS_KEY, next ? 'shown' : 'hidden'); } catch { /* kept for this visit only */ } };
   const view = useIpadView([scene, offline]);
 
   const open = (id: string) => {
@@ -125,8 +138,12 @@ export function AtelierScreen({ store, sessionId, requestKey, storage, onReconne
 
   const live = sessions.filter(s => s.state !== 'exited').length;
   const waiting = sessions.filter(waitingOf).length;
-  const subtitle = `${offline ? `${copy.agents.offline} · ` : ''}${copy.atelier.subtitle(live, scene.rooms.length, waiting)}`;
+  const subtitle = `${offline ? `${copy.agents.offline} · ` : ''}${copy.atelier.subtitle(live, waiting, filterCounts(sessions).working)}`;
   const room = sheet ? roomOf(scene, sheet) : null;
+  // Projets: the projects' rooms then the rigs', the kernel's among them; Rigs: the other way round.
+  const projectRooms = scene.rooms.filter(r => !r.rig);
+  const rigRooms = scene.rooms.filter(r => r.rig);
+  const rooms = by === 'rigs' ? [...rigRooms, ...projectRooms] : [...projectRooms, ...rigRooms];
   const shown = sessionId ? state.sessions.get(sessionId) : undefined;
 
   return (
@@ -136,6 +153,17 @@ export function AtelierScreen({ store, sessionId, requestKey, storage, onReconne
           <h1 className="text-title font-semibold tracking-[-.3px]">{copy.atelier.title}</h1>
           <span className="min-w-0 truncate text-meta text-muted">{subtitle}</span>
           <span className="flex-1" />
+          <div role="group" aria-label={copy.sessions.groupBy.label} className="flex flex-none overflow-hidden rounded-lg border border-input">
+            {GROUPINGS.map(g => (
+              <button key={g} type="button" aria-pressed={g === by} onClick={() => chooseBy(g)}
+                className="grid h-9 place-items-center px-3.5 text-[13px] font-medium text-muted aria-pressed:bg-raised aria-pressed:text-fg">
+                {copy.sessions.groupBy[g]}
+              </button>
+            ))}
+          </div>
+          <button type="button" aria-pressed={!helpers} onClick={toggleHelpers} className={kitButtonClass({ size: 'sm', className: 'flex-none' })}>
+            <Icon name="eye" className="size-4" />{helpers ? copy.sessions.helpersHide : copy.sessions.helpersShow}
+          </button>
           <HostPill />
         </header>
         <div className="mb-3 flex-none empty:hidden"><LinkStrip /></div>
@@ -153,10 +181,10 @@ export function AtelierScreen({ store, sessionId, requestKey, storage, onReconne
             <div className="atelier-floor">
               <div ref={view.shellRef} className={`office-shell${offline ? ' office-paused' : ''}`}>
                 <LedgeDesk count={live} frozen={offline} {...(state.device?.chat ? { onOpen: act.chat } : {})} />
-                <div className={`project-grid ${scene.rooms.length === 1 ? 'focused' : ''}`}>
-                  {scene.rooms.map(({ project, tables, rig }) => (
+                <div className={`project-grid ${rooms.length === 1 ? 'focused' : ''}`}>
+                  {rooms.map(({ project, tables, rig }) => (
                     <Room key={project.id} project={project} tables={tables} {...(rig ? { rig } : {})} width={roomTileWidth(tables, MAX_SEATS, IPAD_RUG_SIDE)} act={act}>
-                      {tables.map(table => <Table key={table.key} table={table} project={project} color={PROJECT_COLORS[project.color]} frozen={offline} act={act} />)}
+                      {tables.map(table => <Table key={table.key} table={table} project={project} color={PROJECT_COLORS[project.color]} frozen={offline} act={act} helpers={helpers} />)}
                     </Room>
                   ))}
                 </div>

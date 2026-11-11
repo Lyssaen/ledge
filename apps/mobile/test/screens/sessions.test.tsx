@@ -19,6 +19,9 @@ const fleet = () => snapshot([
 ]);
 const rows = (region: string) => within(screen.getByRole('region', { name: region })).getAllByRole('link');
 
+/** The sessions' rows, without « Nouvelle » in the head (§1). */
+const rowLinks = () => screen.getAllByRole('link').filter(a => a.getAttribute('href') !== '#/new');
+
 describe('Sessions (m2-sessions.html §1)', () => {
   it('groups by project then by rig, those waiting first and the ended last, each row opening its thread', () => {
     const t = setup();
@@ -50,7 +53,7 @@ describe('Sessions (m2-sessions.html §1)', () => {
     const bar = screen.getByRole('group', { name: 'Filtrer les sessions' });
     expect(within(bar).getAllByRole('button').map(b => b.textContent)).toEqual(['Toutes6', 'En attente1', 'Au travail2']);
     fireEvent.click(within(bar).getByRole('button', { name: /En attente/ }));
-    expect(screen.getAllByRole('link').map(a => a.getAttribute('href'))).toEqual(['#/thread/pim']);
+    expect(rowLinks().map(a => a.getAttribute('href'))).toEqual(['#/thread/pim']);
     fireEvent.click(within(bar).getByRole('button', { name: /Au travail/ }));
     expect(rows('ledge')[0]).toHaveTextContent('pnpm --filter desktop test term38 %');
     expect(screen.queryByText(/Lou|Tom/)).toBeNull();
@@ -78,7 +81,7 @@ describe('Sessions (m2-sessions.html §1)', () => {
     expect(screen.getByText('Rien ne t’attend.')).toBeInTheDocument();
     expect(screen.getByText('Aucune session ne demande ta décision. 1 est au travail.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Voir toutes' }));
-    expect(screen.getAllByRole('link')).toHaveLength(2);
+    expect(rowLinks()).toHaveLength(2);
 
     act(() => t.deliver(snapshot([session('p', { name: 'P', state: 'waiting_permission', pending: pending() }), session('i', { name: 'I' })])));
     fireEvent.click(screen.getByRole('button', { name: /Au travail/ }));

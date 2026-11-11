@@ -1074,8 +1074,8 @@ export const en: Copy = {
   /** The Atelier on iPad (docs/mockups/ledge-ipad-atelier.html): the PC's rooms, tables and agents, as Ledge Desktop draws them. */
   atelier: {
     title: 'Atelier',
-    subtitle: (agents: number, rooms: number, waiting: number) =>
-      `${agents} ${plural(agents, 'agent', 'agents')} · ${rooms} ${plural(rooms, 'room', 'rooms')}${waiting ? ` · ${waiting} waiting` : ''}`,
+    subtitle: (agents: number, waiting: number, working: number) =>
+      `${agents} ${plural(agents, 'agent', 'agents')}${waiting ? ` · ${waiting} ${waiting > 1 ? 'wait' : 'waits'} for you` : ''}${working ? ` · ${working} working` : ''}`,
     region: 'Atelier',
     fullScreen: 'Full screen', closePanel: 'Close the panel', closeTitle: 'Close',
     session: (name: string) => `${name}’s session`,
