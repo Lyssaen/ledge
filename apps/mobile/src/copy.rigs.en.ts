@@ -46,6 +46,7 @@ export const rigsEn: RigsCopy = {
   topology: 'Topology',
   topologyHint: 'tap a seat',
   topologyStopped: 'the seats start with the rig',
+  seatsByRole: 'Seats by role',
   seatState: { perm: 'permission', ask: 'question', work: 'working', idle: 'available', off: 'stopped', starting: 'starting…', waiting: 'waiting' },
   seatLabel: (seat: string, state: string) => `${seat}, ${state}`,
   queue: {

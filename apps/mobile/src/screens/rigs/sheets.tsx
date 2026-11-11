@@ -106,9 +106,14 @@ export function StopSheet({ rig, pc, verb, confirm, live, onAct, onClose }: {
   );
 }
 
-/** §6: the seats per role of a running rig, each from 0 to 9; adding asks nothing, removing asks the device's check. */
-export function ReseatSheet({ rig, pc, confirm, live, onReseat, onClose }: {
-  rig: Rig; pc: string; confirm: boolean; live: boolean; onReseat: (seats: Record<string, number>, delegation: 'pairs' | 'all' | undefined) => void; onClose: () => void;
+/**
+ * §6: the seats per role of a running rig, each from 0 to 9; adding asks nothing, removing asks the device's check. In a sheet on a
+ * phone; inline on a wide screen (§10, « Sièges par rôle »), where each role shows its seats' context.
+ */
+export function ReseatForm({ rig, confirm, live, onReseat, onDone, context }: {
+  rig: Rig; confirm: boolean; live: boolean; onReseat: (seats: Record<string, number>, delegation: 'pairs' | 'all' | undefined) => void; onDone?: () => void;
+  /** Wide: each seat's context (%), by logical id. */
+  context?: Record<string, number | undefined>;
 }) {
   const roles = roleCounts(rig);
   const [want, setWant] = useState<Record<string, number>>({});
@@ -118,10 +123,10 @@ export function ReseatSheet({ rig, pc, confirm, live, onReseat, onClose }: {
   const add = plan.add.length, remove = plan.remove.length;
   const leaving = rig.nodes.filter(n => plan.remove.includes(n.logicalId) && isWorking(n)).map(n => n.logicalId);
   const label = add && remove ? C.reseat.change(add, remove) : add ? C.reseat.add(add) : remove ? C.reseat.remove(remove) : C.reseat.noChange;
-  const send = () => { onClose(); onReseat(changed, add ? delegation : undefined); };
+  const send = () => { onDone?.(); setWant({}); onReseat(changed, add ? delegation : undefined); };
+  const inline = context !== undefined;
   return (
-    <RigSheet title={C.reseat.title(rig.name, pc)} onClose={onClose}>
-      <p className="text-[12px] leading-4 text-muted">{C.reseat.today(roles.map(r => C.reseat.part(r.count, r.role)).join(', '))}</p>
+    <>
       <table className="w-full border-collapse text-[13px]">
         <tbody>
           {roles.map(r => {
@@ -129,14 +134,17 @@ export function ReseatSheet({ rig, pc, confirm, live, onReseat, onClose }: {
             const adds = plan.add.filter(a => a.role === r.role).map(a => C.reseat.adds(`${a.pod}.${a.id}`));
             const removes = plan.remove.filter(id => r.ids.includes(id)).map(C.reseat.removes);
             const names = r.ids.map(id => seatName(id, rig.nodes.find(x => x.logicalId === id)?.session)).join(', ');
+            const ctx = inline ? r.ids.map(id => context[id]).filter((c): c is number => c !== undefined).map(c => `${Math.round(c)} %`).join(', ') : '';
+            const sub = inline ? [...adds, ...removes].join(' · ') : [names, ...adds, ...removes].join(removes.length ? ' → ' : ' · ');
             return (
               <tr key={r.role} className="border-b border-line last:border-b-0">
                 <td className="px-1 py-[7px] font-mono text-[12.5px]">
                   {r.role}
-                  <small className="block font-sans text-[11.5px] text-muted">{[names, ...adds, ...removes].join(removes.length ? ' → ' : ' · ')}</small>
+                  {sub && <small className="block font-sans text-[11.5px] text-muted">{sub}</small>}
                 </td>
+                {inline && <td className="px-1 py-[7px] text-[12px] text-muted">{ctx}</td>}
                 <td className="px-1 py-[7px] text-right">
-                  <Stepper value={n} changed={n !== r.count} fewer={C.reseat.fewer(r.role)} more={C.reseat.more(r.role)} onChange={v => setWant({ ...want, [r.role]: v })} />
+                  <Stepper value={n} changed={n !== r.count} disabled={!live} fewer={C.reseat.fewer(r.role)} more={C.reseat.more(r.role)} onChange={v => setWant({ ...want, [r.role]: v })} />
                 </td>
               </tr>
             );
@@ -150,9 +158,21 @@ export function ReseatSheet({ rig, pc, confirm, live, onReseat, onClose }: {
         </div>
       )}
       {remove > 0 && <Conseq title={leaving.length ? C.reseat.working(leaving) : C.reseat.lastFirst} {...(leaving.length ? { body: C.reseat.lastFirst } : {})} />}
-      {remove > 0
+      {(!inline || add + remove > 0) && (remove > 0
         ? <CheckedButton verb={label} confirm={confirm} disabled={!live} onClick={send} />
-        : <button type="button" disabled={!live || add === 0} onClick={send} className={rigButtonClass({ tone: 'primary', className: 'w-full' })}>{label}</button>}
+        : <button type="button" disabled={!live || add === 0} onClick={send} className={rigButtonClass({ tone: 'primary', className: 'w-full' })}>{label}</button>)}
+      {inline && add + remove > 0 && <button type="button" onClick={() => setWant({})} className={rigButtonClass({ className: 'w-full' })}>{C.confirm.cancel}</button>}
+    </>
+  );
+}
+
+export function ReseatSheet({ rig, pc, confirm, live, onReseat, onClose }: {
+  rig: Rig; pc: string; confirm: boolean; live: boolean; onReseat: (seats: Record<string, number>, delegation: 'pairs' | 'all' | undefined) => void; onClose: () => void;
+}) {
+  return (
+    <RigSheet title={C.reseat.title(rig.name, pc)} onClose={onClose}>
+      <p className="text-[12px] leading-4 text-muted">{C.reseat.today(roleCounts(rig).map(r => C.reseat.part(r.count, r.role)).join(', '))}</p>
+      <ReseatForm rig={rig} confirm={confirm} live={live} onReseat={onReseat} onDone={onClose} />
       <Cancel onClose={onClose} />
     </RigSheet>
   );
@@ -290,30 +310,34 @@ export function SeatSettingsSheet({ rig, seat, node, selection, confirm, live, o
   );
 }
 
+/** The snapshots, newest first: when, what kind, how it went. */
+export function SnapshotList({ read, kindOnly = false }: { read: Read<RigSnapshot[]> | undefined; kindOnly?: boolean }) {
+  const list = newestFirst(read?.data ?? []);
+  if (read?.error && !read.data) return <p role="alert" className="text-[13px] text-attention">{C.snapshots.unavailable}</p>;
+  if (read?.data && list.length === 0) return <p className="text-[13px] text-muted">{C.snapshots.none}</p>;
+  if (!list.length) return <p role="status" className="text-[13px] text-muted">{C.loading}</p>;
+  return (
+    <div className="flex max-h-[45dvh] flex-col overflow-y-auto rounded-[10px] border border-line bg-surface dark:bg-transparent">
+      {list.map(s => (
+        <div key={s.id} className="flex min-h-[46px] items-center gap-2.5 border-b border-line px-3 py-1.5 text-[13px] last:border-b-0">
+          <Icon name="camera" className="size-4 text-muted" />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span>{snapWhen(s.createdAt).long}</span>
+            <small className="text-[11.5px] text-muted">{kindOnly ? C.snapshots.kind[s.kind] ?? s.kind : [C.snapshots.kind[s.kind] ?? s.kind, C.snapshots.status[s.status] ?? s.status].join(' · ')}</small>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** §7: the rig's 20 last snapshots, and one now (no check). */
 export function SnapshotsSheet({ rig, read, live, running, onSnapshot, onClose }: {
   rig: string; read: Read<RigSnapshot[]> | undefined; live: boolean; running: boolean; onSnapshot: () => void; onClose: () => void;
 }) {
-  const list = newestFirst(read?.data ?? []);
   return (
     <RigSheet title={C.snapshots.title(rig)} onClose={onClose}>
-      {read?.error && !read.data
-        ? <p role="alert" className="text-[13px] text-attention">{C.snapshots.unavailable}</p>
-        : read?.data && list.length === 0
-          ? <p className="text-[13px] text-muted">{C.snapshots.none}</p>
-          : list.length > 0 && (
-            <div className="flex max-h-[45dvh] flex-col overflow-y-auto rounded-[10px] border border-line">
-              {list.map(s => (
-                <div key={s.id} className="flex min-h-[46px] items-center gap-2.5 border-b border-line px-3 py-1.5 text-[13px] last:border-b-0">
-                  <Icon name="camera" className="size-4 text-muted" />
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span>{snapWhen(s.createdAt).long}</span>
-                    <small className="text-[11.5px] text-muted">{[C.snapshots.kind[s.kind] ?? s.kind, C.snapshots.status[s.status] ?? s.status].join(' · ')}</small>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+      <SnapshotList read={read} />
       <button type="button" disabled={!live || running} onClick={() => { onClose(); onSnapshot(); }} className={rigButtonClass({ className: 'w-full' })}>
         <IconLabel icon="camera">{C.snapshots.take}</IconLabel>
       </button>

@@ -48,6 +48,7 @@ export const rigsFr = {
   topology: 'Topologie',
   topologyHint: 'appuie sur un siège',
   topologyStopped: 'les sièges démarrent avec le rig',
+  seatsByRole: 'Sièges par rôle',
   seatState: { perm: 'autorisation', ask: 'question', work: 'au travail', idle: 'disponible', off: 'arrêté', starting: 'démarrage…', waiting: 'en attente' },
   seatLabel: (seat: string, state: string) => `${seat}, ${state}`,
   queue: {

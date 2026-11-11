@@ -3,7 +3,7 @@ import type { HumanAsk, OpenRigAction, PhoneOpenRigState, PhoneSession, RigGraph
 import { copy } from '../../copy';
 import { ageLabel, requestsOf } from '../../model/requests';
 import {
-  SEAT_DOT, closedTone, parseRigTime, permLevelOf, podsOf, rigStatus, rowTone, runRig, seatName, seatState, sessionOfSeat, STATUS_TONE, toolOf, topSeat,
+  SEAT_DOT, closedTone, newestFirst, parseRigTime, permLevelOf, podsOf, rigStatus, rowTone, runRig, seatName, seatState, sessionOfSeat, STATUS_TONE, toolOf, topSeat,
   type RigStatus, type RowTone
 } from '../../model/rigs';
 import { href } from '../../router';
@@ -15,10 +15,11 @@ import { iconButtonClass } from '../../ui/Button';
 import { BackLink } from '../../ui/Header';
 import { Icon } from '../../ui/icons';
 import { Dot, Pill, RuntimeTag } from '../../ui/kit/marks';
+import { useWide } from '../../ui/layout';
 import { clock } from '../Inbox';
 import { Chip, Frame, HoldBar, IconLabel, Lbl, Opt, Strip, Tile, rigButtonClass } from './kit';
 import { RunNote, isRunning, lastRun } from './runs';
-import { MoreSheet, PermissionsSheet, ReseatSheet, SeatSettingsSheet, SeatSheet, SnapshotsSheet, StopSheet, snapWhen } from './sheets';
+import { MoreSheet, PermissionsSheet, ReseatForm, ReseatSheet, SeatSettingsSheet, SeatSheet, SnapshotList, SnapshotsSheet, StopSheet, snapWhen } from './sheets';
 
 /*
  * A rig (m4-rigs.html, §3 to §7): its status in the head, the tiles (seats, permissions, last snapshot), the seat that waits, the
@@ -199,14 +200,16 @@ function Waits({ rig, sessions, asks }: { rig: string; sessions: PhoneSession[];
   );
 }
 
-/** A rig of the Rigs tab, by its name (`#/rigs/<rig>`). */
+/** A rig of the Rigs tab, by its name (`#/rigs/<rig>`). Wide (§10): its actions in the pane's head, two columns. */
 export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; store: MobileStore }) {
   const r = useRigs(rigs);
   const m = useMobile(store);
-  const { pc } = useShell();
+  const { pc, look } = useShell();
+  const wide = useWide();
   const [sheet, setSheet] = useState<Open>(null);
   const [resume, setResume] = useState<'last' | 'fresh'>('last');
   const live = m.fresh;
+  const offline = look === 'offline';
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
   useEffect(() => {
@@ -227,28 +230,43 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
   const run = lastRun(r.runs, x => runRig(x.subject) === rig);
   const busy = isRunning(run);
   const act = (a: OpenRigAction) => { void rigs.act(a); };
+  const reseat = (seats: Record<string, number>, delegation: 'pairs' | 'all' | undefined) => { void rigs.reseat(rig, seats, delegation ? { delegation } : {}); };
   const close = () => setSheet(null);
-
-  const header = (chip: ReactNode) => (
-    <header className="flex h-14 flex-none items-center gap-2 border-b border-line pr-1.5 pl-0.5">
-      <BackLink fallback={{ name: 'rigs' }} label={C.back} />
-      <h1 className="min-w-0 truncate text-base font-semibold">{rig}</h1>
-      {chip}
-      <span className="flex-1" />
-      {it && (
-        <button type="button" aria-label={C.more} title={C.more} aria-haspopup="menu" onClick={() => setSheet({ kind: 'more' })} className={iconButtonClass()}>
-          <Icon name="more" />
-        </button>
-      )}
-    </header>
+  const more = (
+    <button type="button" aria-label={C.more} title={C.more} aria-haspopup="menu" onClick={() => setSheet({ kind: 'more' })} className={iconButtonClass()}>
+      <Icon name="more" />
+    </button>
   );
+
+  const header = (chip: ReactNode, sub?: string, actions?: ReactNode) => wide
+    ? (
+      <header className="pane-head flex h-[58px] flex-none items-center gap-2 border-b border-line pr-1.5">
+        <BackLink fallback={{ name: 'rigs' }} label={C.back} />
+        <h1 className="min-w-0 truncate text-[17px] font-semibold">{rig}</h1>
+        {chip}
+        {sub && <span className="min-w-0 truncate text-[12.5px] text-muted">{sub}</span>}
+        <span className="flex-1" />
+        {actions}
+        {it && more}
+      </header>
+    )
+    : (
+      <header className="flex h-14 flex-none items-center gap-2 border-b border-line pr-1.5 pl-0.5">
+        <BackLink fallback={{ name: 'rigs' }} label={C.back} />
+        <h1 className="min-w-0 truncate text-base font-semibold">{rig}</h1>
+        {chip}
+        <span className="flex-1" />
+        {it && more}
+      </header>
+    );
+  const scroll = `tab-main flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pb-[18px] ${wide ? 'pt-[18px]' : 'pt-3'}`;
 
   if (!it) {
     const why = state ? C.readError.unknown_rig : r.error ? C.readError[r.error] : null;
     return (
       <>
         {header(null)}
-        <main data-tab-scroll="" className="tab-main flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pt-3.5 pb-[18px]">
+        <main data-tab-scroll="" className={scroll}>
           <LinkStrip body={C.offlineBody} />
           {why
             ? <Strip warn role="alert" lead={<Icon name="warning" className="mt-px size-4 text-attention" />}><b className="font-semibold">{why}</b></Strip>
@@ -262,8 +280,8 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
   const stopped = status === 'stopped';
   const perm = perms?.data ? permLevelOf(perms.data.seats) : null;
   const level = perm ? C.level[perm] : null;
-  const newest = snaps?.data?.length ? snaps.data.reduce((a, b) => ((parseRigTime(b.createdAt)?.getTime() ?? 0) > (parseRigTime(a.createdAt)?.getTime() ?? 0) ? b : a)) : null;
-  const snapTile = newest ? snapWhen(newest.createdAt).short : it.snapshot || '—';
+  const newest = newestFirst(snaps?.data ?? [])[0];
+  const snapShort = newest ? snapWhen(newest.createdAt).short : it.snapshot || '';
   const added = run?.phase === 'done' && run.reseated?.ok ? run.reseated.added : [];
   const stoppedSeats = it.nodes.filter(n => n.stopped).map(n => seatName(n.logicalId, n.session));
   const seatOf = (id: string) => graph?.data?.seats.find(s => s.logicalId === id);
@@ -271,62 +289,94 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
     ? { kind: 'rig.start', rig, fresh: (graph?.data?.seats.map(s => s.logicalId) ?? it.nodes.map(n => n.logicalId)) as [string, ...string[]] }
     : { kind: 'rig.start', rig });
   const ended = run && !busy ? run : undefined;
+  const can = live && !busy;
 
-  const bar = busy
-    ? <RunNote run={run!} rigs={rigs} pc={name} bar />
-    : status === 'starting'
-      ? <HoldBar bar>{C.startingSeats(rig, it.running, it.seats)}</HoldBar>
-      : (
-        <div className={`bleed grid flex-none gap-2 border-t border-line bg-bg px-3.5 pt-2.5 pb-3 ${stopped ? 'grid-cols-1' : 'grid-cols-3'}`}>
-          {stopped
-            ? <button type="button" disabled={!live} onClick={start} className={rigButtonClass({ tone: 'primary', className: '!h-[42px]' })}><IconLabel icon="power">{C.actions.start}</IconLabel></button>
-            : (
-              <>
-                <button type="button" disabled={!live} onClick={() => setSheet({ kind: 'reseat' })} className={rigButtonClass({ className: '!h-[42px] !px-2 !text-[13.5px]' })}><IconLabel icon="plus">{C.actions.seats}</IconLabel></button>
-                <button type="button" disabled={!live} onClick={() => setSheet({ kind: 'restart' })} className={rigButtonClass({ className: '!h-[42px] !px-2 !text-[13.5px]' })}><IconLabel icon="refresh">{C.actions.restart}</IconLabel></button>
-                <button type="button" disabled={!live} onClick={() => setSheet({ kind: 'stop' })} className={rigButtonClass({ tone: 'danger', className: '!h-[42px] !px-2 !text-[13.5px]' })}><IconLabel icon="power">{C.actions.stop}</IconLabel></button>
-              </>
-            )}
-        </div>
-      );
+  // The rig's actions: at the bottom on a phone (start alone when it is stopped), in the pane's head on a wide screen.
+  const btn = wide ? 'sm' as const : 'md' as const;
+  const barClass = wide ? '' : '!h-[42px] !px-2 !text-[13.5px]';
+  const startBtn = <button type="button" disabled={!can} onClick={start} className={rigButtonClass({ tone: 'primary', size: btn, className: wide ? '' : '!h-[42px]' })}><IconLabel icon="power">{C.actions.start}</IconLabel></button>;
+  const restartBtn = <button type="button" disabled={!can} onClick={() => setSheet({ kind: 'restart' })} className={rigButtonClass({ size: btn, className: barClass })}><IconLabel icon="refresh">{C.actions.restart}</IconLabel></button>;
+  const stopBtn = <button type="button" disabled={!can} onClick={() => setSheet({ kind: 'stop' })} className={rigButtonClass({ tone: 'danger', size: btn, className: barClass })}><IconLabel icon="power">{C.actions.stop}</IconLabel></button>;
+  const seatsBtn = <button type="button" disabled={!can} onClick={() => setSheet({ kind: 'reseat' })} className={rigButtonClass({ size: btn, className: barClass })}><IconLabel icon="plus">{C.actions.seats}</IconLabel></button>;
+  const going = busy ? <RunNote run={run!} rigs={rigs} pc={name} bar={!wide} /> : status === 'starting' ? <HoldBar bar={!wide}>{C.startingSeats(rig, it.running, it.seats)}</HoldBar> : null;
+  const bar = going ?? (
+    <div className={`bleed grid flex-none gap-2 border-t border-line bg-bg px-3.5 pt-2.5 pb-3 ${stopped ? 'grid-cols-1' : 'grid-cols-3'}`}>
+      {stopped ? startBtn : <>{seatsBtn}{restartBtn}{stopBtn}</>}
+    </div>
+  );
 
-  const seatSheet = sheet?.kind === 'seat' || sheet?.kind === 'settings' ? seatOf(sheet.id) : undefined;
-  const node = seatSheet ? it.nodes.find(n => n.logicalId === seatSheet.logicalId) : undefined;
-
-  return (
+  const waits = live && <Waits rig={rig} sessions={sessions} asks={m.asks} />;
+  const partial = status === 'partial' && stoppedSeats.length > 0 && (
+    <Strip warn lead={<Icon name="warning" className="mt-px size-4 text-attention" />}>
+      <span>{C.partial(stoppedSeats, it.nodes.length - stoppedSeats.length)}</span>
+      <button type="button" disabled={!can} onClick={() => setSheet({ kind: 'restart' })} className={rigButtonClass({ size: 'sm', className: 'self-start' })}>{C.actions.restartRig}</button>
+    </Strip>
+  );
+  const topology = (
     <>
-      {header(<Chip tone={STATUS_TONE[status]}>{C.status[status]}</Chip>)}
-      <main data-tab-scroll="" className="tab-main flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pt-3 pb-[18px]">
-        <LinkStrip body={C.offlineBody} />
-        {ended && <RunNote run={ended} rigs={rigs} pc={name} />}
+      <Lbl aside={stopped ? C.topologyStopped : graph?.data ? C.topologyHint : undefined}>{C.topology}</Lbl>
+      {graph?.data
+        ? <Topology graph={graph.data} rig={it} status={status} sessions={sessions} near={near} added={added} onSeat={id => setSheet({ kind: 'seat', id })} />
+        : <Frame><p role={graph?.error ? 'alert' : 'status'} className="p-3 text-[13px] text-muted">{graph?.error ? C.readError[graph.error] : C.loading}</p></Frame>}
+    </>
+  );
+  const resumeOpts = stopped && it.snapshot && (
+    <>
+      <Lbl>{C.resume}</Lbl>
+      <div className="flex flex-col gap-1.5">
+        <Opt pressed={resume === 'last'} disabled={!live} onClick={() => setResume('last')} title={C.resumeLast(newest ? snapWhen(newest.createdAt).long : it.snapshot)} sub={C.resumeLastBody} />
+        <Opt pressed={resume === 'fresh'} disabled={!live} onClick={() => setResume('fresh')} title={C.fresh} sub={C.freshBody} />
+      </div>
+    </>
+  );
+  const queueBlock = <Queue read={queue} asks={m.asks} now={now} />;
+
+  const body = wide
+    ? (
+      <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] content-start gap-[18px]">
+        <div className="flex min-w-0 flex-col gap-3.5">
+          {waits}{partial}{topology}
+          {!stopped && status !== 'starting' && (
+            <>
+              <Lbl>{C.seatsByRole}</Lbl>
+              <Frame><div className="flex flex-col gap-2.5 px-3 py-1"><ReseatForm key={it.nodes.length} rig={it} confirm={confirm} live={can} onReseat={reseat} context={Object.fromEntries((graph?.data?.seats ?? []).map(s => [s.logicalId, s.context]))} /></div></Frame>
+            </>
+          )}
+          {resumeOpts}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3.5">
+          {queueBlock}
+          <Lbl>{C.actions.snapshots}</Lbl>
+          <SnapshotList read={snaps} kindOnly />
+          <button type="button" disabled={!can} onClick={() => act({ kind: 'rig.snapshot', rig })} className={rigButtonClass({ size: 'sm', className: 'self-start' })}><IconLabel icon="camera">{C.snapshots.take}</IconLabel></button>
+        </div>
+      </div>
+    )
+    : (
+      <>
         <div className="grid grid-cols-3 gap-2">
           <Tile label={C.tiles.seats} value={`${it.running}/${it.seats}`} />
           <Tile label={C.tiles.permissions} value={level ?? '—'} onOpen={() => setSheet({ kind: 'permissions' })} />
-          <Tile label={C.tiles.snapshot} value={snapTile} onOpen={() => setSheet({ kind: 'snapshots' })} />
+          <Tile label={C.tiles.snapshot} value={snapShort || '—'} onOpen={() => setSheet({ kind: 'snapshots' })} />
         </div>
-        {live && <Waits rig={rig} sessions={sessions} asks={m.asks} />}
-        {status === 'partial' && stoppedSeats.length > 0 && (
-          <Strip warn lead={<Icon name="warning" className="mt-px size-4 text-attention" />}>
-            <span>{C.partial(stoppedSeats, it.nodes.length - stoppedSeats.length)}</span>
-            <button type="button" disabled={!live || busy} onClick={() => setSheet({ kind: 'restart' })} className={rigButtonClass({ size: 'sm', className: 'self-start' })}>{C.actions.restartRig}</button>
-          </Strip>
-        )}
-        <Lbl aside={stopped ? C.topologyStopped : graph?.data ? C.topologyHint : undefined}>{C.topology}</Lbl>
-        {graph?.data
-          ? <Topology graph={graph.data} rig={it} status={status} sessions={sessions} near={near} added={added} onSeat={id => setSheet({ kind: 'seat', id })} />
-          : <Frame><p role={graph?.error ? 'alert' : 'status'} className="p-3 text-[13px] text-muted">{graph?.error ? C.readError[graph.error] : C.loading}</p></Frame>}
-        <Queue read={queue} asks={m.asks} now={now} />
-        {stopped && it.snapshot && (
-          <>
-            <Lbl>{C.resume}</Lbl>
-            <div className="flex flex-col gap-1.5">
-              <Opt pressed={resume === 'last'} disabled={!live} onClick={() => setResume('last')} title={C.resumeLast(newest ? snapWhen(newest.createdAt).long : it.snapshot)} sub={C.resumeLastBody} />
-              <Opt pressed={resume === 'fresh'} disabled={!live} onClick={() => setResume('fresh')} title={C.fresh} sub={C.freshBody} />
-            </div>
-          </>
-        )}
+        {waits}{partial}{topology}{queueBlock}{resumeOpts}
+      </>
+    );
+
+  const seatSheet = sheet?.kind === 'seat' || sheet?.kind === 'settings' ? seatOf(sheet.id) : undefined;
+  const node = seatSheet ? it.nodes.find(n => n.logicalId === seatSheet.logicalId) : undefined;
+  const sub = [C.seats(it.running, it.seats), level ?? '', snapShort ? C.snapshot(snapShort) : ''].filter(Boolean).join(' · ');
+
+  return (
+    <>
+      {header(<Chip tone={STATUS_TONE[status]}>{C.status[status]}</Chip>, sub, !going && (stopped ? startBtn : <>{restartBtn}{stopBtn}</>))}
+      <main data-tab-scroll="" className={scroll}>
+        <LinkStrip body={C.offlineBody} />
+        {wide && going}
+        {ended && <RunNote run={ended} rigs={rigs} pc={name} />}
+        <div className={`flex flex-col gap-3 ${offline ? 'opacity-50' : ''}`}>{body}</div>
       </main>
-      {bar}
+      {!wide && bar}
       {sheet?.kind === 'more' && (
         <MoreSheet
           rig={rig} live={live} running={busy} snapshots={snaps?.data ? snaps.data.length : null} level={level} onClose={close}
@@ -334,9 +384,9 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
           onPermissions={() => setSheet({ kind: 'permissions' })} onRefresh={() => { close(); rigs.retry(); rigs.openRig(rig); rigs.readSnapshots(rig); }}
         />
       )}
-      {(sheet?.kind === 'stop' || sheet?.kind === 'restart') && <StopSheet rig={it} pc={name} verb={sheet.kind} confirm={confirm} live={live && !busy} onAct={act} onClose={close} />}
-      {sheet?.kind === 'reseat' && <ReseatSheet rig={it} pc={name} confirm={confirm} live={live && !busy} onReseat={(seats, delegation) => { void rigs.reseat(rig, seats, delegation ? { delegation } : {}); }} onClose={close} />}
-      {sheet?.kind === 'permissions' && <PermissionsSheet rig={it} read={perms} level={perm} confirm={confirm} live={live && !busy} onAct={act} onClose={close} />}
+      {(sheet?.kind === 'stop' || sheet?.kind === 'restart') && <StopSheet rig={it} pc={name} verb={sheet.kind} confirm={confirm} live={can} onAct={act} onClose={close} />}
+      {sheet?.kind === 'reseat' && <ReseatSheet rig={it} pc={name} confirm={confirm} live={can} onReseat={reseat} onClose={close} />}
+      {sheet?.kind === 'permissions' && <PermissionsSheet rig={it} read={perms} level={perm} confirm={confirm} live={can} onAct={act} onClose={close} />}
       {sheet?.kind === 'snapshots' && <SnapshotsSheet rig={rig} read={snaps} live={live} running={busy} onSnapshot={() => act({ kind: 'rig.snapshot', rig })} onClose={close} />}
       {sheet?.kind === 'seat' && seatSheet && graph?.data && (
         <SeatSheet
@@ -347,10 +397,9 @@ export function RigView({ rig, rigs, store }: { rig: string; rigs: RigsStore; st
       {sheet?.kind === 'settings' && seatSheet && (
         <SeatSettingsSheet
           rig={rig} seat={seatSheet} node={node} selection={perms?.data?.seats.find(s => s.logicalId === seatSheet.logicalId)?.selection}
-          confirm={confirm} live={live && !busy} onAct={act} onClose={close}
+          confirm={confirm} live={can} onAct={act} onClose={close}
         />
       )}
     </>
   );
 }
-
