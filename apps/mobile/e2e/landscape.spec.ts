@@ -60,6 +60,25 @@ test('in landscape the app spans the whole width with its tabs on the left', asy
   await expect.soft(page.getByText(copy.decide.hint)).toBeHidden();
   expect.soft(await width()).toBe(page.viewportSize()!.width);
 
+  // Turned to portrait and on its side again, or opened in portrait then turned: the command comes back above the buttons (review-qa).
+  const allowButton = page.getByRole('button', { name: copy.decide.allow });
+  const placed = async () => {
+    await expect(shown).toBeInViewport({ ratio: 1 });
+    const c = (await shown.boundingBox())!, a = (await allowButton.boundingBox())!;
+    expect.soft(c.y + c.height).toBeLessThanOrEqual(a.y);
+  };
+  const side = page.viewportSize()!;
+  const upright = { width: side.height, height: side.width };
+  await page.setViewportSize(upright);
+  await page.setViewportSize(side);
+  await placed();
+  await page.goBack();
+  await page.setViewportSize(upright);
+  await page.getByRole('link', { name: /pnpm test/ }).click();
+  await expect(allowButton).toBeEnabled();
+  await page.setViewportSize(side);
+  await placed();
+
   await page.goBack();
   // A desktop window is a wide screen: the list keeps its rail and a pane beside it (tablet.spec.ts).
   await page.setViewportSize({ width: 1280, height: 800 });

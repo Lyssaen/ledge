@@ -137,7 +137,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   const scroller = useRef<HTMLElement>(null);
   const commandBox = useRef<HTMLDivElement>(null);
   // The page settles after its first paint (the footer, a whole body asked again): placed again at each size change, until the
-  // person scrolls or touches it themselves.
+  // person scrolls or touches it themselves. Turning the phone on its side, from portrait or back to it, places it anew (review-qa).
   const placedFor = useRef<string | null>(null);
   const unplace = useRef<(() => void) | null>(null);
   useEffect(() => () => { unplace.current?.(); unplace.current = null; }, [key]);
@@ -145,21 +145,30 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
     const main = scroller.current, box = commandBox.current;
     if (!main || !box || placedFor.current === key) return;
     placedFor.current = key;
-    if (globalThis.matchMedia?.(PHONE_SIDE).matches !== true) return;
+    const side = globalThis.matchMedia?.(PHONE_SIDE);
+    if (!side) return;
+    let taken = false;
     const place = () => {
+      if (taken || !side.matches) return;
       const cmd = box.firstElementChild ?? box;
       const room = main.getBoundingClientRect(), at = cmd.getBoundingClientRect();
       const top = at.top - room.top + main.scrollTop;
       const pad = parseFloat(getComputedStyle(main).paddingBottom) || 0;
       main.scrollTop = at.height > main.clientHeight - pad ? top : Math.max(0, top + at.height - (main.clientHeight - pad));
     };
+    const turned = () => { if (side.matches) { taken = false; place(); } };
+    const took = () => { taken = true; };
     place();
     const watch = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
     watch?.observe(main);
     watch?.observe(box);
-    const stop = () => { watch?.disconnect(); for (const e of HANDS) main.removeEventListener(e, stop); };
-    for (const e of HANDS) main.addEventListener(e, stop, { passive: true });
-    unplace.current = stop;
+    side.addEventListener?.('change', turned);
+    for (const e of HANDS) main.addEventListener(e, took, { passive: true });
+    unplace.current = () => {
+      watch?.disconnect();
+      side.removeEventListener?.('change', turned);
+      for (const e of HANDS) main.removeEventListener(e, took);
+    };
   });
   const header = (title: string) => (panel ? <PanelHeader title={title} panel={panel} /> : <BackHeader title={title} fallback={backRoute} label={copy.detail.back} link={link} />);
 
