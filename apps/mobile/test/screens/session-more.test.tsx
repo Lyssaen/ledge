@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { BROADCAST_SESSIONS_MAX, type PhoneServerMessage, type PhoneSession, type ThreadItem } from '@ledge/protocol';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLang } from '../../src/copy';
 import { Thread } from '../../src/screens/Thread';
 import { pending, session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
@@ -35,6 +36,31 @@ describe('a session’s head and foot (m2-sessions.html §3, §4)', () => {
   it('an ended session says when in its head', () => {
     opened([pim({ state: 'exited', exitedAt: new Date().toISOString() })]);
     expect(within(screen.getByRole('banner')).getByText(/^terminée à \d\d:\d\d$/)).toBeInTheDocument();
+  });
+
+  describe('its end time on a phone, under the name where it fits (review-qa f3d4bee6, design-ux e39f7cba)', () => {
+    const wide = (on: boolean) => { globalThis.matchMedia = ((q: string) => ({ matches: on, media: q, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia; };
+    afterEach(() => { wide(false); setLang('fr'); });
+    // The name's line and the end time's share one column: the end time is under the name, not after it.
+    const column = (end: RegExp) => { const p = within(screen.getByRole('banner')).getByText(end).parentElement!; return p.tagName !== 'HEADER' && p.contains(within(screen.getByRole('banner')).getByText('Pim')) ? p : null; };
+
+    it.each([['fr', /^terminée à \d\d:\d\d$/], ['en', /^ended at \d\d:\d\d$/]] as const)('in %s', (lang, end) => {
+      setLang(lang);
+      opened([pim({ state: 'exited', exitedAt: new Date().toISOString() })]);
+      expect(column(end)).toHaveClass('flex-col');
+      expect(within(screen.getByRole('banner')).getByText('Pim')).toHaveClass('truncate');
+    });
+
+    it('a live session has no second line', () => {
+      opened([pim()]);
+      expect(screen.getByRole('banner').querySelector('.flex-col')).toBeNull();
+    });
+
+    it('on a tablet the end time stays beside the name', () => {
+      wide(true);
+      opened([pim({ state: 'exited', exitedAt: new Date().toISOString() })]);
+      expect(column(/^terminée à \d\d:\d\d$/)).toBeNull();
+    });
   });
 
   it('the foot: the model that opens « Modèle et effort », the context (amber past « Contexte max »), the branch', () => {

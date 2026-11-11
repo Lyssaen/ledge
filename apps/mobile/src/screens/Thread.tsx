@@ -309,7 +309,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
     <>
       <DetailHeader
         back={panel ? <span className="w-2.5" /> : <BackLink fallback={{ name: 'sessions' }} label={copy.thread.back} />}
-        tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && fresh} sub={endedAt ?? where}
+        tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && fresh} sub={endedAt ?? where} under={!wide && !!endedAt}
         more={<>
           {panel ? <PanelButtons sessionId={sessionId} panel={panel} /> : <ViewToggle sessionId={sessionId} current="thread" onLeave={() => { if (scroller.current) keptScroll.set(sessionId, scroller.current.scrollTop); }} />}
           <button type="button" aria-haspopup="dialog" aria-label={copy.sessions.moreOf(session.name)} title={copy.sessions.more} onClick={() => setMore(true)} className={iconButtonClass({ className: more ? 'bg-raised text-fg' : 'text-muted' })}>
