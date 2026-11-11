@@ -56,7 +56,8 @@ export const maxWord = (g: Goal): string | null => g.question?.text ?? g.proposa
 function GoalReceipt({ run, pc, onAgain, onClose }: { run: Run; pc: string; onAgain: () => void; onClose: () => void }) {
   const close = { onClose, closeLabel: C.done.close };
   const again = <button type="button" onClick={onAgain} className={rigButtonClass({ size: 'xs', className: 'mt-1.5' })}>{M.sendAgain}</button>;
-  const error = run.phase === 'done' ? run.sent?.error : undefined;
+  // No word from the PC in time: the same receipt as the PC's own « uncertain », « Renvoyer » sends the same id again.
+  const error = run.phase === 'uncertain' ? 'uncertain' : run.phase === 'done' ? run.sent?.error : undefined;
   if (!error) return <Receipt mark="bad" title={M.unsent} sub={M.keeps} {...close}>{again}</Receipt>;
   if (error === 'uncertain') return <Receipt mark="ask" title={M.errors.uncertain.title} sub={M.errors.uncertain.body} {...close}>{again}</Receipt>;
   if (error === 'refused') return <Receipt mark="bad" title={M.errors.refused.title} {...(run.sent?.message ? { sub: <span className="font-mono">{run.sent.message}</span> } : {})} {...close} />;
@@ -100,15 +101,19 @@ function trailWords(t: Goal['trail'][number]): string {
   }
 }
 
-/** A goal as a thread: what was written, the trail, what Max said and what waits in « À toi », then the replies under way. */
-export function GoalThread({ goal, runs, rigs, pc }: { goal: Goal; runs: readonly Run[]; rigs: RigsStore; pc: string }) {
+/**
+ * A goal as a thread: what was written, the trail, what Max said and what waits in « À toi », then the replies under way. `compact`: the
+ * kernel's pane on a tablet (M4 §10), without the trail nor the card's sentence.
+ */
+export function GoalThread({ goal, runs, rigs, pc, compact = false }: { goal: Goal; runs: readonly Run[]; rigs: RigsStore; pc: string; compact?: boolean }) {
   const word = maxWord(goal);
+  const said = maxAt(goal);
   const open = goal.question ?? (goal.proposal && !goal.proposal.answer ? goal.proposal : null);
   const mine = runs.filter(r => r.subject.kind === 'reply' && r.subject.goalId === goal.goalId);
   return (
     <div className="flex flex-col gap-3">
       <div className="max-w-[85%] self-end rounded-[14px] rounded-br-[5px] bg-secondary px-3 py-2 text-[14px] leading-5 [overflow-wrap:anywhere]">{goal.text}</div>
-      {goal.trail.some(t => t.kind !== 'sent') && (
+      {!compact && goal.trail.some(t => t.kind !== 'sent') && (
         <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[12.5px] text-muted">
           {goal.trail.filter(t => t.kind !== 'sent').map((t, i) => (
             <li key={`${t.at}-${i}`} className="flex gap-2"><span className="font-mono text-[11.5px]">{clock(iso(t.at))}</span><span className="min-w-0 [overflow-wrap:anywhere]">{trailWords(t)}</span></li>
@@ -117,14 +122,14 @@ export function GoalThread({ goal, runs, rigs, pc }: { goal: Goal; runs: readonl
       )}
       {word && (
         <div className="flex flex-col gap-1 text-[13.5px] leading-[19px]">
-          <span className="flex items-center gap-1.5 text-[12px] text-muted"><Dot state="idle" />{C.kernelView.max}</span>
+          <span className="flex items-center gap-1.5 text-[12px] text-muted"><Dot state="idle" />{said ? `${C.kernelView.max} · ${clock(iso(said))}` : C.kernelView.max}</span>
           <span className="[overflow-wrap:anywhere]">{word}</span>
         </div>
       )}
       {open && (
         <div className="flex flex-col gap-2 rounded-[10px] border border-attention/45 bg-surface px-3 py-2.5">
-          <span className="flex items-center gap-2"><Dot state="ask" /><b className="text-[14px] font-semibold">{goal.question ? M.question : M.proposal}</b></span>
-          <p className="text-[13px] text-muted">{goal.question ? M.questionBody : M.proposalBody}</p>
+          <span className="flex items-center gap-2"><Dot state="ask" /><b className="text-[14px] font-semibold">{goal.question ? M.question : M.proposal}</b>{said && <span className="ml-auto font-mono text-[11.5px] text-muted">{clock(iso(said))}</span>}</span>
+          {!compact && <p className="text-[13px] text-muted">{goal.question ? M.questionBody : M.proposalBody}</p>}
           <a href={href({ name: 'atoi' })} className={rigButtonClass({ size: 'sm', className: 'self-start' })}>{M.seeAtoi}</a>
         </div>
       )}

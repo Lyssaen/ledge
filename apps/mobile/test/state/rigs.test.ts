@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage } from '@ledge/protocol';
 import { createRigs, READ_MS, RIGS_STATE_KEY, type RigsStore } from '../../src/state/rigs';
+import { UNCERTAIN_MS } from '../../src/state/operations';
 import { createStore, type MobileStore } from '../../src/state/store';
 import { openrig, routing } from '../model/openrig-fixtures';
 import { fakeLink, MemoryStorage, snapshot } from './helpers';
@@ -89,6 +90,57 @@ describe('the rigs store', () => {
     const again = t.of('rigs.goal.send')[1]!;
     expect(again.goalId).toBe('goal-retry-0001');
     expect(again.op).not.toBe(m.op);
+  });
+
+  it('ends a run the link could not send as « unsent », and does not send it again on the next link', async () => {
+    const t = setup();
+    vi.spyOn(t.link, 'send').mockResolvedValueOnce(false);
+    expect(await t.rigs.sendGoal('Une équipe', 'goal-unsent-0001')).toMatchObject({ phase: 'unsent' });
+    t.set('pc_offline');
+    t.set('ready');
+    expect(t.of('rigs.goal.send')).toHaveLength(0);
+  });
+
+  it('ends a run whose send threw as « unsent »', async () => {
+    const t = setup();
+    vi.spyOn(t.link, 'send').mockRejectedValueOnce(new Error('closed'));
+    expect(await t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' })).toMatchObject({ phase: 'unsent' });
+  });
+
+  it('stops waiting for a PC that never says it has the action (« uncertain »), and still takes its late answer', async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const sent = t.of('rigs.act')[0]!;
+    vi.advanceTimersByTime(UNCERTAIN_MS + 1);
+    expect(await ended).toMatchObject({ phase: 'uncertain' });
+    t.deliver({ type: 'rigs.done', op: sent.op, ok: true, commands: ['rig up ledge-dev --existing'] });
+    expect(t.rigs.getState().runs[0]).toMatchObject({ phase: 'done', done: { ok: true } });
+  });
+
+  it('keeps waiting once the PC said it has the action', async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    void t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    t.deliver({ type: 'operation.result', op: t.of('rigs.act')[0]!.op, status: 'received' } as PhoneServerMessage);
+    vi.advanceTimersByTime(UNCERTAIN_MS * 3);
+    expect(t.rigs.getState().runs[0]!.phase).toBe('received');
+  });
+
+  it('turns a run the link dropped before the PC had it « uncertain », and sends it again with its own op on the next link', async () => {
+    const t = setup();
+    const ended = t.rigs.sendGoal('Une équipe', 'goal-drop-0001');
+    await vi.waitFor(() => expect(t.of('rigs.goal.send')).toHaveLength(1));
+    const first = t.of('rigs.goal.send')[0]!;
+    t.set('pc_offline');
+    expect(await ended).toMatchObject({ phase: 'uncertain' });
+    t.set('ready');
+    expect(t.of('rigs.goal.send')).toHaveLength(2);
+    expect(t.of('rigs.goal.send')[1]!.op).toBe(first.op);
+    t.deliver({ type: 'rigs.goal.sent', op: first.op, goalId: 'goal-drop-0001', ok: true });
+    expect(t.rigs.getState().runs[0]!.phase).toBe('done');
   });
 
   it('forgets the old PC’s OpenRig when the phone is unpaired', () => {

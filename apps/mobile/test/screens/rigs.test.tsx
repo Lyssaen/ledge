@@ -1,9 +1,10 @@
 // The Rigs tab (docs/mockups/ledge-mobile-refonte/m4-rigs.html): the list, a rig, the kernel and Max, on the whole app with a PC that
 // sends its rigs (`daemon.rigs`), and what each tap sends to it.
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage } from '@ledge/protocol';
 import { copy } from '../../src/copy';
+import { clock } from '../../src/screens/Inbox';
 import { session } from '../model/fixtures';
 import { goal, kernelGraph, ledgeGraph, openrig, routing } from '../model/openrig-fixtures';
 import { snapshot } from '../state/helpers';
@@ -84,6 +85,19 @@ describe('a rig', () => {
     fireEvent.click(screen.getByRole('button', { name: C.reseat.add(1) }));
     await waitFor(() => expect(t.of('rigs.seats')).toHaveLength(1));
     expect(t.of('rigs.seats')[0]).toMatchObject({ rig: 'ledge-dev', seats: { 'dev.front': 2 }, delegation: 'pairs' });
+  });
+
+  it('says an action the PC did not confirm may have gone (Q76), then shows its late result', async () => {
+    const t = open('#/rigs/synapse-review');
+    fireEvent.click(screen.getByRole('button', { name: C.actions.start }));
+    await waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const op = t.of('rigs.act')[0]!.op;
+    act(() => t.set('pc_offline'));
+    await waitFor(() => expect(screen.getByText(C.uncertain.title)).toBeTruthy());
+    expect(screen.getByText(C.uncertain.body)).toBeTruthy();
+    act(() => t.set('ready'));
+    act(() => t.deliver({ type: 'rigs.done', op, ok: true, commands: ['rig up synapse-review --existing'] }));
+    expect(screen.queryByText(C.uncertain.title)).toBeNull();
   });
 
   it('starts a stopped rig from its last snapshot, or fresh', async () => {
@@ -225,6 +239,28 @@ describe('Max', () => {
     expect(t.of('rigs.goal.send')[1]!.goalId).toBe(first.goalId);
   });
 
+  it('gives the field its text back when the goal could not leave', async () => {
+    const t = open('#/max');
+    act(() => t.deliver({ type: 'rigs.goals', goals: [] }));
+    vi.spyOn(t.link, 'send').mockResolvedValueOnce(false);
+    const field = screen.getByLabelText(C.max.goalPlaceholder) as HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'Une équipe' } });
+    fireEvent.click(screen.getByRole('button', { name: C.max.send }));
+    await waitFor(() => expect(field.value).toBe('Une équipe'));
+    expect(screen.getByText(C.max.unsent)).toBeTruthy();
+  });
+
+  it('says a goal the link dropped may have gone, and « Renvoyer » sends the same id', async () => {
+    const t = open('#/max');
+    act(() => t.deliver({ type: 'rigs.goals', goals: [] }));
+    fireEvent.change(screen.getByLabelText(C.max.goalPlaceholder), { target: { value: 'Une équipe' } });
+    fireEvent.click(screen.getByRole('button', { name: C.max.send }));
+    await waitFor(() => expect(t.of('rigs.goal.send')).toHaveLength(1));
+    act(() => t.set('pc_offline'));
+    await waitFor(() => expect(screen.getByText(C.max.errors.uncertain.title)).toBeTruthy());
+    expect((screen.getByLabelText(C.max.goalPlaceholder) as HTMLTextAreaElement).value).toBe('');
+  });
+
   it('says goals it could not read, and reads them again', () => {
     const t = open('#/max');
     act(() => t.deliver({ type: 'rigs.goals', goals: [], error: 'unavailable' } as PhoneServerMessage));
@@ -278,5 +314,15 @@ describe('on a wide screen', () => {
     act(() => t.deliver({ type: 'rigs.goals', goals: [goal()] }));
     expect(screen.getByText(`${C.kernelView.max} · ${goal().text}`)).toBeTruthy();
     expect(screen.getByLabelText(C.max.replyPlaceholder)).toBeTruthy();
+  });
+
+  it('shows the kernel’s thread as M4 §10 draws it: Max with his time, no trail, no sentence under the card', () => {
+    wide(true);
+    const t = open('#/kernel');
+    const said = goal({ trail: [...goal().trail, { at: '2026-11-11T13:52:00.000Z', kind: 'note', seat: 'operator-agent@kernel', qitemId: 'qitem-g1', text: goal().proposal!.text }] });
+    act(() => t.deliver({ type: 'rigs.goals', goals: [said] }));
+    expect(screen.getByText(`${C.kernelView.max} · ${clock('2026-11-11T13:52:00.000Z')}`)).toBeTruthy();
+    expect(screen.queryByText(C.max.trail.taken)).toBeNull();
+    expect(screen.queryByText(C.max.proposalBody)).toBeNull();
   });
 });

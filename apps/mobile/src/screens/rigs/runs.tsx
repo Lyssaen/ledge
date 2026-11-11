@@ -72,6 +72,8 @@ export function RunNote({ run, rigs, pc, bar = false }: { run: Run; rigs: RigsSt
     const what = k === 'seats' ? C.running.seats(arg) : k ? C.running[k](arg) : '';
     return <HoldBar bar={bar}>{`${what} · ${C.running.note}`}</HoldBar>;
   }
+  // Q76: the PC did not say it has it; a late answer turns this receipt into the real one.
+  if (run.phase === 'uncertain') return <Receipt mark="ask" title={C.uncertain.title} sub={C.uncertain.body} {...close} />;
   if (run.phase !== 'done') { const r = refusal(run, pc); return <Receipt mark={r.mark} title={r.title} {...(r.sub ? { sub: r.sub } : {})} {...close} />; }
   const at = clock(run.endedAt ? new Date(run.endedAt).toISOString() : null);
   if (run.reseated) {

@@ -8,7 +8,7 @@ import {
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
-import { newOperationId } from './operations';
+import { newOperationId, UNCERTAIN_MS } from './operations';
 import { localStore } from './storage';
 import type { ConfirmRequest, MobileStore } from './store';
 
@@ -24,9 +24,11 @@ export type PermissionsData = Pick<Msg<'rigs.permissions'>, 'policy' | 'seats'>;
  * An action this phone asked for, from the tap to its end. `checking`: the passkey is asked; `sending`: sent, the PC has not said it has
  * it; `received`: the PC runs it (an action lasts as long as `rig`). Then `done` (the PC's `rigs.done` / `rigs.reseated` / goal answer
  * came: `ok` or not), `rejected` (refused before it ran: `reason`), `cancelled` (Face ID cancelled, nothing sent), `expired` (the
- * check took too long, nothing sent) or `unsent` (it could not leave).
+ * check took too long, nothing sent), `unsent` (it could not leave) or `uncertain` (it left, but the PC did not say it has it within
+ * `UNCERTAIN_MS`, or the link dropped first: it may have run). An uncertain run still takes the PC's late answer, and goes again with its
+ * own op on the next link (the PC replays an op it has seen, never runs it twice).
  */
-export type RunPhase = 'checking' | 'sending' | 'received' | 'done' | 'rejected' | 'cancelled' | 'expired' | 'unsent';
+export type RunPhase = 'checking' | 'sending' | 'received' | 'done' | 'rejected' | 'cancelled' | 'expired' | 'unsent' | 'uncertain';
 
 export type RunSubject =
   | { kind: 'act'; action: OpenRigAction }
@@ -182,16 +184,28 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
     const next = f(state.runs[at]!);
     set({ runs: state.runs.map((r, i) => (i === at ? next : r)) });
     if (isFinal(next.phase)) {
-      if (next.op) inFlight.delete(next.op);
+      if (next.op && next.phase !== 'uncertain') inFlight.delete(next.op);
       const end = ends.get(id);
       ends.delete(id);
       end?.(next);
     }
   }
   const runOfOp = (op: string) => state.runs.find(r => r.op === op);
+  /** A run the PC may still answer: under way, or uncertain (its answer may come late, or after the next link). */
+  const open = (r: Run | undefined): r is Run => !!r && (!isFinal(r.phase) || r.phase === 'uncertain');
   const end = (op: string, patch: Partial<Run>) => {
     const r = runOfOp(op);
-    if (r && !isFinal(r.phase)) patchRun(r.id, x => ({ ...x, ...patch, endedAt: Date.now() }));
+    answered(`op:${op}`);
+    if (open(r)) patchRun(r.id, x => ({ ...x, ...patch, endedAt: Date.now() }));
+  };
+  /** Sent and not received by the PC after `UNCERTAIN_MS`: the run stops waiting, uncertain. */
+  const armAnswer = (op: string) => {
+    clearTimeout(timers.get(`op:${op}`));
+    timers.set(`op:${op}`, setTimeout(() => {
+      timers.delete(`op:${op}`);
+      const r = runOfOp(op);
+      if (r?.phase === 'sending') patchRun(r.id, x => ({ ...x, phase: 'uncertain', endedAt: Date.now() }));
+    }, UNCERTAIN_MS));
   };
 
   /** After an action that touched a rig, its view is read again (the state itself is pushed). */
@@ -243,8 +257,13 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
         return;
       case 'operation.result': {
         const r = runOfOp(m.op);
-        if (!r || isFinal(r.phase)) return;
-        if (m.status === 'received') { if (r.phase === 'sending') patchRun(r.id, x => ({ ...x, phase: 'received' })); return; }
+        if (!open(r)) return;
+        if (m.status === 'received') {
+          answered(`op:${m.op}`);
+          // The PC has it and always sends its end; an uncertain run waits for it again.
+          if (r.phase === 'sending' || r.phase === 'uncertain') patchRun(r.id, x => { const { endedAt: _e, ...rest } = x; return { ...rest, phase: 'received' }; });
+          return;
+        }
         // A refusal before it ran: its detail (`rigs.done`…) follows, but the run already says why.
         if (m.status === 'rejected') end(m.op, { phase: 'rejected', reason: m.reason ?? 'invalid' });
         // `applied` and `failed` wait for the detail, which carries the commands and OpenRig's words.
@@ -268,20 +287,25 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
   }
 
   let wasReady = ready();
+  /** Counts the links: a message that could not leave on one link may have gone with the resend of the next. */
+  let linkGen = 0;
   const offState = link.subscribe(() => {
     const at = link.state();
     if (at === 'unpaired' || at === 'pairing') forget();
     const now = ready();
     if (now && !wasReady) {
       wasReady = true;
+      linkGen++;
       // A new link: the subscriptions are asked again, and the runs whose end never came go again with their own op.
       stateAsked = false; goalsAsked = false;
-      for (const m of inFlight.values()) send(m);
+      for (const [op, m] of inFlight) { send(m); if (runOfOp(op)?.phase === 'sending') armAnswer(op); }
     } else if (!now && wasReady) {
       wasReady = false;
       stateAsked = false; goalsAsked = false;
       for (const [k, t] of timers) { clearTimeout(t); timers.delete(k); }
+      // What the PC had not said it has may or may not have reached it: those runs stop waiting, uncertain.
       set({ loading: false });
+      for (const r of state.runs) if (r.phase === 'sending' && r.op) patchRun(r.id, x => ({ ...x, phase: 'uncertain', endedAt: Date.now() }));
     }
   });
   const offMessage = link.onMessage(onMessage);
@@ -331,7 +355,15 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
       if (!parsed.success || !ready()) { patchRun(id, x => ({ ...x, phase: 'unsent', endedAt: Date.now() })); return; }
       inFlight.set(op, parsed.data);
       patchRun(id, x => ({ ...x, op, phase: 'sending' }));
-      send(parsed.data);
+      armAnswer(op);
+      const gen = linkGen;
+      const left = await link.send(parsed.data).catch(() => false);
+      // Not sent, and not sent since by a new link: nothing reached the PC.
+      const now = runOfOp(op)?.phase;
+      if (!left && gen === linkGen && (now === 'sending' || now === 'uncertain')) {
+        answered(`op:${op}`);
+        patchRun(id, x => ({ ...x, phase: 'unsent', endedAt: Date.now() }));
+      }
     })();
     return done;
   }

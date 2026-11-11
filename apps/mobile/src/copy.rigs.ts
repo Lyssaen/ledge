@@ -142,6 +142,8 @@ export const rigsFr = {
     againVerb: { stop: 'Arrête', restart: 'Redémarre', apply: 'Applique', save: 'Enregistre', remove: 'Retire' },
     nothingSent: 'Rien n\'a été envoyé.'
   },
+  /** An action the PC did not say it has (Q76): it may have run. */
+  uncertain: { title: 'L\'action est peut-être partie, sans confirmation du PC.', body: 'Son résultat s\'affichera s\'il arrive. Vérifie l\'état avant de recommencer.' },
   busy: { title: (pc: string) => `Une autre action OpenRig est en cours sur ${pc}.`, body: 'Réessaie quand elle sera finie.' },
   failed: (why: string) => `Échec : ${why}`,
   /** « Pas arrêté : la vérification Face ID a expiré. » */

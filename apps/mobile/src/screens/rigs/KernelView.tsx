@@ -192,7 +192,7 @@ export function KernelView({ rigs, store }: { rigs: RigsStore; store: MobileStor
         <Lbl>{`${K.max} · ${current.text}`}</Lbl>
         <Frame>
           <div className="flex flex-col gap-2.5 p-3">
-            <GoalThread goal={current} runs={r.runs} rigs={rigs} pc={name} />
+            <GoalThread goal={current} runs={r.runs} rigs={rigs} pc={name} compact />
             <ReplyField goalId={current.goalId} rigs={rigs} live={live} />
           </div>
         </Frame>

@@ -133,6 +133,7 @@ export const rigsEn: RigsCopy = {
     againVerb: { stop: 'Stop', restart: 'Restart', apply: 'Apply', save: 'Save', remove: 'Remove' },
     nothingSent: 'Nothing was sent.'
   },
+  uncertain: { title: 'The action may have gone, without confirmation from the PC.', body: 'Its result will show if it arrives. Check the state before trying again.' },
   busy: { title: (pc: string) => `Another OpenRig action is running on ${pc}.`, body: 'Try again when it is over.' },
   failed: (why: string) => `Failure: ${why}`,
   because: (verb: string, why: string) => `${verb}: ${why}`,
