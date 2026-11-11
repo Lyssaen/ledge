@@ -95,6 +95,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
   };
   const list = sessions.map(x => ({ id: x.id, name: x.name, repo: x.repo, exited: x.state === 'exited', state: x.state, helpers: x.helpers }));
   const reset = () => { setRefused(null); store.resetChat(); };
+  const limitsOf = (at: string) => ({ at, usage: state.usage ?? [], alert: state.usageAlert, fresh: state.fresh });
   const openSheet = () => { store.askConversations(); setSheet(true); };
 
   if (past) {
@@ -105,7 +106,10 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
           back={<button type="button" aria-label={copy.nav.backTo.chat} title={copy.nav.backTo.chat} onClick={() => setPast(null)} className={iconButtonClass({ className: 'text-muted' })}><Icon name="back" /></button>} />
         <p className="bleed flex flex-none items-center gap-2 border-b border-line bg-raised px-3.5 py-2 text-small text-muted"><Icon name="clock" className="size-4 flex-none" />{copy.chat.history.pastBanner}</p>
         <main data-tab-scroll="" className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain py-3 text-[14px]">
-          {shown && 'turns' in shown && shown.turns.map(t => <TurnView key={t.qid} store={store} turn={t} list={list} canConfirm={false} live={null} sessions={sessions.length} readOnly />)}
+          {shown && 'turns' in shown && shown.turns.map(t => {
+            const read = shown.limits.find(r => r.qid === t.qid);
+            return <TurnView key={t.qid} store={store} turn={t} list={list} canConfirm={false} live={null} sessions={sessions.length} readOnly limits={read && limitsOf(read.at)} />;
+          })}
         </main>
         <div className="flex-none pt-1.5 pb-3"><button type="button" onClick={() => setPast(null)} className={kitButtonClass({ variant: 'primary', className: 'w-full' })}>{copy.chat.history.backToday}</button></div>
       </>
@@ -155,7 +159,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         {chat.turns.map(t => (
           <div key={t.qid} id={`turn-${t.qid}`} className="contents">
           <TurnView store={store} turn={t} list={list} canConfirm={!!state.device?.confirm} live={chat.live?.qid === t.qid ? chat.live : null} sessions={sessions.length}
-            {...(!running && !offline ? { onAskAgain: (q: string) => ask(q) } : {})} />
+            {...(!running && !offline ? { onAskAgain: (q: string) => ask(q) } : {})} limits={chat.limits[t.qid] !== undefined ? limitsOf(chat.limits[t.qid]!) : undefined} />
           </div>
         ))}
         {refused && (

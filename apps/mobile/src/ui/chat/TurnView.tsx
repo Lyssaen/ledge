@@ -9,6 +9,12 @@ import { LaunchCards } from './LaunchCard';
 import { RelayCard } from './RelayCard';
 import { TaskCards } from './TaskCard';
 import { kitButtonClass } from '../kit/Controls';
+import type { PhoneHarnessUsage } from '@ledge/protocol';
+import { span } from '../../model/usage';
+import { Limits } from './Limits';
+
+/** Under an answer, the edge that sets what it shows apart from Ledge's text (m3-chat.html `.inans`). */
+export const IN_ANSWER = 'flex flex-col gap-1.5 border-l-2 border-line pl-2.5';
 
 const ICON = 'size-3.5 flex-none fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.6]';
 
@@ -55,11 +61,13 @@ const errorText = (c: ChatErrorCode): string => ({ busy: copy.chat.busy, timeout
  * One question and what came of it. `live` is the question being answered: its steps and the text so far
  * (the answer's Markdown comes later, the text is shown as it is).
  */
-export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskAgain, readOnly = false }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string; exited?: boolean; state?: PhoneSession['state']; helpers?: PhoneSession['helpers'] }[]; canConfirm: boolean;
+export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskAgain, readOnly = false, limits }: { store: MobileStore; turn: PhoneChatTurn; live: { steps: PhoneChatStep[]; text: string } | null; sessions: number; list: { id: string; name: string; repo?: string; exited?: boolean; state?: PhoneSession['state']; helpers?: PhoneSession['helpers'] }[]; canConfirm: boolean;
   /** « Reposer la question » after a timeout or a failure (Q37): the same question, as a new one; absent while it cannot be sent. */
   onAskAgain?: (question: string) => void;
   /** A past conversation (m3-chat.html §6): its cards keep their outcome and are switched off; the PC refuses any action on them. */
-  readOnly?: boolean }) {
+  readOnly?: boolean;
+  /** The answer read the account limits (Q31): when, and the phone's own usage to draw them with. */
+  limits?: { at: string; usage: readonly PhoneHarnessUsage[]; alert: number | null; fresh: boolean } | undefined }) {
   const steps = live?.steps ?? turn.steps;
   const text = live ? live.text : turn.answer;
   // A name two sessions share says nothing about which one is meant: it is not linked.
@@ -76,6 +84,12 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskA
       {live && text && <p aria-live="polite" className="px-1 whitespace-pre-wrap break-words">{text}</p>}
       {!live && text && <Answer text={text} names={names} />}
       {!live && turn.answer && <Sources names={sourcesOf(steps)} ids={names} />}
+      {!live && turn.answer && limits && limits.usage.length > 0 && (
+        <div className={IN_ANSWER}>
+          <Limits usage={limits.usage} now={Date.now()} alert={limits.alert} fresh={limits.fresh} />
+          <span className="text-[11.5px] text-muted">{copy.chat.point.stale(span(Math.max(0, Date.now() - Date.parse(limits.at))))}</span>
+        </div>
+      )}
       {!live && turn.cut && <span className="px-1 text-small text-muted">{copy.chat.cut}</span>}
       {!live && turn.error && (
         // Under the question, with what can be done next (m3-chat.html §3): a stop is only said.

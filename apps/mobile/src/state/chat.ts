@@ -8,6 +8,8 @@ export interface ChatState {
   live: { qid: string; steps: PhoneChatStep[]; text: string } | null;
   /** `offline`: nothing was sent. `busy` carries the question's `text`, for the screen to put back in its field. */
   error: { code: ChatErrorCode | 'offline'; qid?: string; text?: string } | null;
+  /** The answers that read the account limits (Q31), by qid: when Ledge read them. The PC sends them whole each time. */
+  limits: Readonly<Record<string, string>>;
 }
 
 /** What a relay or a launch came to, once its operation is final. */
@@ -19,7 +21,7 @@ export type ChatAction =
   | { status: 'cancelled' }
   | { status: 'expired' };
 
-export const emptyChat = (): ChatState => ({ turns: [], live: null, error: null });
+export const emptyChat = (): ChatState => ({ turns: [], live: null, error: null, limits: {} });
 
 /** A conversation put away, as the PC gave it back (read-only); `gone`: the PC no longer keeps it. */
 export type PastConversation = { turns: PhoneChatTurn[]; limits: ChatLimitsRead[] } | { gone: true };
@@ -38,11 +40,11 @@ export const noConversations = (): Conversations => ({ list: null, open: {} });
 const finished = (t: PhoneChatTurn) => t.answer !== undefined || t.error !== undefined;
 
 /** The message of the PC's chat that `reduceChat` takes. */
-export type ChatServerMessage = Extract<PhoneServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' }>;
+export type ChatServerMessage = Extract<PhoneServerMessage, { type: 'chat.history' | 'chat.step' | 'chat.delta' | 'chat.done' | 'chat.error' | 'chat.limits' }>;
 
 /** A question just asked: its bubble now, before any answer. */
 export function asked(s: ChatState, turn: PhoneChatTurn): ChatState {
-  return { turns: [...s.turns, turn], live: { qid: turn.qid, steps: [], text: '' }, error: null };
+  return { ...s, turns: [...s.turns, turn], live: { qid: turn.qid, steps: [], text: '' }, error: null };
 }
 
 /** `fresh`: the qids asked since the last ready, which a history reply may have been built before seeing. */
@@ -80,10 +82,12 @@ export function reduceChat(s: ChatState, m: ChatServerMessage, fresh: ReadonlySe
       if (m.code === 'busy') {
         // The PC made no turn for it: the bubble goes, and the text comes back to the field.
         const turn = s.turns.find(t => t.qid === m.qid);
-        return { turns: s.turns.filter(t => t.qid !== m.qid), live, error: { code: 'busy', qid: m.qid, text: turn?.question ?? '' } };
+        return { ...s, turns: s.turns.filter(t => t.qid !== m.qid), live, error: { code: 'busy', qid: m.qid, text: turn?.question ?? '' } };
       }
-      return { turns: s.turns.map(t => t.qid === m.qid ? { ...t, error: m.code } : t), live, error: { code: m.code, qid: m.qid } };
+      return { ...s, turns: s.turns.map(t => t.qid === m.qid ? { ...t, error: m.code } : t), live, error: { code: m.code, qid: m.qid } };
     }
+    case 'chat.limits':
+      return { ...s, limits: Object.fromEntries(m.reads.map(r => [r.qid, r.at])) };
   }
 }
 

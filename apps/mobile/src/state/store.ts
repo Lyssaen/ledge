@@ -632,7 +632,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         if (m.status === 'rejected' && m.reason === 'stale' && ready() && o.message.type.startsWith('session.') && 'id' in o.message && typeof o.message.id === 'string') send({ type: 'session.pending', id: o.message.id });
         return;
       }
-      case 'chat.history': case 'chat.step': case 'chat.delta': case 'chat.done': case 'chat.error':
+      case 'chat.history': case 'chat.step': case 'chat.delta': case 'chat.done': case 'chat.error': case 'chat.limits':
         setChat(reduceChat(chatState, m, askedSinceReady));
         return;
       case 'chat.conversations':

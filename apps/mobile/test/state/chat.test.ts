@@ -122,7 +122,7 @@ describe('the phone chat in the store', () => {
     expect(t.of('chat.cancel')).toEqual([{ type: 'chat.cancel', qid }]);
     t.store.resetChat();
     expect(t.of('chat.reset')).toHaveLength(1);
-    expect(t.store.chat()).toEqual({ turns: [], live: null, error: null });
+    expect(t.store.chat()).toEqual({ turns: [], live: null, error: null, limits: {} });
   });
 
   it('subscribers hear chat changes', () => {
