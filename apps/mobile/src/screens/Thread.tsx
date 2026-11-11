@@ -243,8 +243,9 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
     }
     if (atFoot.current) toFoot();
     else if (items.at(-1)?.kind === 'awaiting') setBelow(true);
+  // The thread's items too: a reply that grows in place, or a tool joining its folded group, keeps its key and the count.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [end, items.length]);
+  }, [end, items.length, thread?.items]);
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;

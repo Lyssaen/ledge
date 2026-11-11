@@ -198,14 +198,30 @@ describe('the thread on a wide screen (m2-sessions.html §10, Q27)', () => {
 });
 
 describe('the thread\'s place (m2-sessions.html, Comportements)', () => {
-  /** A main that has 1000 px of thread for 400 px of room, scrolled where the test says. */
+  /** A main that has 1000 px of thread for 400 px of room, scrolled where the test says; `grow` makes the thread taller. */
   function sized(main: HTMLElement) {
     let top = 600;
-    Object.defineProperty(main, 'scrollHeight', { configurable: true, get: () => 1000 });
+    let height = 1000;
+    Object.defineProperty(main, 'scrollHeight', { configurable: true, get: () => height });
     Object.defineProperty(main, 'clientHeight', { configurable: true, get: () => 400 });
-    Object.defineProperty(main, 'scrollTop', { configurable: true, get: () => top, set: (v: number) => { top = Math.min(v, 600); } });
-    return { at: () => top, scrollTo: (v: number) => { top = v; fireEvent.scroll(main); } };
+    Object.defineProperty(main, 'scrollTop', { configurable: true, get: () => top, set: (v: number) => { top = Math.min(v, height - 400); } });
+    return { at: () => top, scrollTo: (v: number) => { top = v; fireEvent.scroll(main); }, grow: (h: number) => { height = h; } };
   }
+
+  it('a reply growing in place keeps the foot in view, and moves nothing for one who scrolled up (review-qa 82ddb551)', () => {
+    const t = opened({ state: 'working' });
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [prompt('1', 'Fais-le', '2026-11-11T10:00:00Z'), reply('2', 'Je m\'y', '2026-11-11T10:00:05Z')], cut: [], more: false }));
+    const box = sized(screen.getByRole('main', { name: /Kai/ }));
+    box.scrollTo(600);
+    // The same reply, longer: neither the last key nor the count change.
+    box.grow(1400);
+    act(() => t.deliver({ type: 'session.thread.item', id: 'a', item: reply('2', 'Je m\'y mets, et voici le plan en dix points.', '2026-11-11T10:00:05Z') }));
+    expect(box.at()).toBe(1000);
+    box.scrollTo(300);
+    box.grow(1800);
+    act(() => t.deliver({ type: 'session.thread.item', id: 'a', item: reply('2', 'Je m\'y mets, et voici le plan en dix points, puis les tests.', '2026-11-11T10:00:05Z') }));
+    expect(box.at()).toBe(300);
+  });
 
   it('scrolled up, a request arriving moves nothing and « Demande en bas » says it; a tap goes down', () => {
     const t = opened({ state: 'working' });
