@@ -58,6 +58,14 @@ describe('a session’s head and foot (m2-sessions.html §3, §4)', () => {
       expect(screen.getByRole('banner')).toHaveClass('bleed');
     });
 
+    // « Thread » is wider than « Fil »: at 14 px a side, « ended on 28 Sept » lost 4 px; 12 on a phone, 14 kept on a tablet (Q84 A).
+    it('« Fil · Terminal » takes 12 px a side on a phone, so the English date fits too', () => {
+      opened([pim({ state: 'exited', exitedAt: new Date().toISOString() })]);
+      const tabs = within(screen.getByRole('navigation', { name: 'Vue de la session' })).getAllByRole('link');
+      expect(tabs).toHaveLength(2);
+      for (const t of tabs) { expect(t).toHaveClass('px-3', 'tablet:px-3.5'); expect(t).not.toHaveClass('px-3.5'); }
+    });
+
     it('a live session has no second line', () => {
       opened([pim()]);
       expect(screen.getByRole('banner').querySelector('.flex-col')).toBeNull();

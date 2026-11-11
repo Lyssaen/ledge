@@ -362,7 +362,8 @@ const FOOT_SLACK = 48;
 /** « Fil · Terminal » in a session's head (§3): the two views of one session, each its own screen. */
 export function ViewToggle({ sessionId, current, onLeave }: { sessionId: string; current: 'thread' | 'terminal'; /** Before going to the other view: it keeps this one's place. */ onLeave?: () => void }) {
   const V = copy.sessions.view;
-  const tab = 'grid h-9 place-items-center px-3.5 text-[13px] font-medium text-muted aria-[current=page]:bg-raised aria-[current=page]:text-fg';
+  // 12 px on a phone (Q84 A): with « Thread », wider than « Fil », 14 left an ended session's English date 4 px short.
+  const tab = 'grid h-9 place-items-center px-3 tablet:px-3.5 text-[13px] font-medium text-muted aria-[current=page]:bg-raised aria-[current=page]:text-fg';
   return (
     <nav aria-label={V.label} className="flex flex-none overflow-hidden rounded-lg border border-input">
       <a href={href({ name: 'thread', sessionId })} onClick={current === 'thread' ? undefined : onLeave} aria-current={current === 'thread' ? 'page' : undefined} className={tab}>{V.thread}</a>
