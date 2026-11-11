@@ -7,6 +7,7 @@
 // marker in `ledge-meta` names, and moves it only on { type: 'accept' }.
 import { fingerprintOf, hexOf, type FileHash } from './fingerprint';
 import type { PushPayload } from '@ledge/protocol';
+import { NOTIFY, notifyLang, notifyText, type NotifyLang } from './notify';
 import type { BuildAnswer, BuildInfo } from './types';
 
 /** The app's files and their hashes, without sw.js (vite.sw.config.ts). */
@@ -51,6 +52,8 @@ const OWN = `${PREFIX}${__VERSION__}-${__BUILD_ID__}`;
 /** Where the accepted build's cache name is kept, across workers and versions. */
 const META = `${PREFIX}meta`;
 const ACCEPTED = '/accepted';
+/** Where the app's language is kept for the notifications (Q29): the pages say it, a push reads it. */
+const LANG = '/lang';
 /** The relay's own routes: always the network, never the cache. */
 const NETWORK = /^\/(auth(\/.*)?|ws|healthz|push\/key)$/;
 /** Where a worker that is installing writes down that its cache is not an orphan: `/pending/<cache name>` = the time. */
@@ -84,6 +87,11 @@ async function installing(): Promise<string[]> {
     else await meta.delete(path);
   }
   return names;
+}
+
+/** The language the app last said; French before it said one. */
+async function lang(): Promise<NotifyLang> {
+  try { return notifyLang(await (await (await caches.open(META)).match(LANG))?.text()); } catch { return 'fr'; }
 }
 
 async function accept(): Promise<void> {
@@ -173,6 +181,8 @@ sw.addEventListener('fetch', (e) => {
 sw.addEventListener('message', (e) => {
   const type = (e.data as { type?: unknown } | null)?.type;
   if (type === 'build') e.waitUntil(builds().then((b) => e.ports[0]?.postMessage(b)));
+  // The app's language, for the titles the phone writes itself (Q29).
+  if (type === 'lang') e.waitUntil(caches.open(META).then((m) => m.put(LANG, new Response(notifyLang((e.data as { lang?: unknown }).lang)))));
   // Accepted: this build serves from now on; every page is told, and one of an older build reloads.
   if (type === 'accept') {
     e.waitUntil((async () => {
@@ -190,7 +200,7 @@ function payloadOf(raw: unknown): PushPayload | null {
   const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
   const ok =
     p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished' || p.kind === 'chat' || p.kind === 'decision' || p.kind === 'resolved') &&
-    str(p.title, 80) && str(p.body, 120) && str(p.url, 300) && PUSH_URL.test(p.url) &&
+    str(p.title, 80) && (p.name === undefined || str(p.name, 100)) && str(p.body, 120) && str(p.url, 300) && PUSH_URL.test(p.url) &&
     typeof p.badge === 'number' && Number.isInteger(p.badge) && p.badge >= 0 && p.badge <= 999 &&
     typeof p.tag === 'string' && PUSH_TAG.test(p.tag);
   return ok ? (raw as PushPayload) : null;
@@ -201,9 +211,11 @@ sw.addEventListener('push', (e) => {
   let payload: PushPayload | null = null;
   try { payload = payloadOf(e.data?.json()); } catch { /* unreadable: the fallback below */ }
   e.waitUntil((async () => {
-    if (!payload) return sw.registration.showNotification('Ledge', { body: 'Une demande attend', tag: 'ledge', renotify: true });
+    const l = await lang();
+    if (!payload) return sw.registration.showNotification(NOTIFY[l].fallbackTitle, { body: NOTIFY[l].fallbackBody, tag: 'ledge', renotify: true });
+    const { title, body } = notifyText(payload, l);
     // `resolved` replaces the request's notification under its tag, silently; `kind` lets the app close a stale one.
-    await sw.registration.showNotification(payload.title, { body: payload.body, tag: payload.tag, data: { url: payload.url, kind: payload.kind }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' && payload.kind !== 'resolved' });
+    await sw.registration.showNotification(title, { body, tag: payload.tag, data: { url: payload.url, kind: payload.kind }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' && payload.kind !== 'resolved' });
     // The badge is a courtesy: neither a throw nor a rejection of it may fail the notification.
     try { await sw.registration.setAppBadge?.(payload.badge); } catch { /* ignored */ }
   })());

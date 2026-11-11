@@ -74,7 +74,11 @@ export const ICONS = {
   list: ['M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2'],
   down: ['M6 9l6 6 6-6'],
   /** A git branch: a project folder on its branch (m2-lancement.html §1). */
-  branch: [circle(6, 5, 2), circle(6, 19, 2), circle(18, 8, 2), 'M6 7v10M18 10c0 4-6 3-12 7']
+  branch: [circle(6, 5, 2), circle(6, 19, 2), circle(18, 8, 2), 'M6 7v10M18 10c0 4-6 3-12 7'],
+  // M5's merge, file and commit (m5-mr-pr.html, refonte.js).
+  merge: [circle(6, 5, 2.2), circle(6, 19, 2.2), circle(18, 12, 2.2), 'M6 7.2v9.6M6 7.2c0 3 4 4.8 9.8 4.8'],
+  file: ['M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z', 'M14 3v5h5'],
+  commit: [circle(12, 12, 3.5), 'M3 12h5.5M15.5 12H21']
 } as const satisfies Record<string, readonly string[]>;
 
 export type IconName = keyof typeof ICONS;

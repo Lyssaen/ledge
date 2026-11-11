@@ -17,18 +17,19 @@ const CHIP: Record<ChipTone, string> = {
   bad: 'border-approval/45 text-approval', plain: 'border-input text-muted'
 };
 
-/** A status in a chip with its dot, and nothing else (Q48: the reason is said apart). */
-export function Chip({ tone, children }: { tone: ChipTone; children: string }) {
+/** A status in a chip with its dot, and nothing else (Q48: the reason is said apart). `flat`: without its dot (M5 « sans CI »). */
+export function Chip({ tone, children, flat = false }: { tone: ChipTone; children: string; flat?: boolean }) {
   return (
     <span data-chip={tone} className={`inline-flex h-[22px] flex-none items-center gap-1.5 rounded-full border px-[9px] text-[12px] font-medium whitespace-nowrap ${CHIP[tone]}`}>
-      <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />{children}
+      {!flat && <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />}{children}
     </span>
   );
 }
 
-/** What waits on the person in a rig: a permission in red, a question in amber. */
-export function Att({ perm = false, children }: { perm?: boolean; children: string }) {
-  return <span data-att={perm ? 'perm' : 'ask'} className={`inline-flex h-[22px] items-center rounded-md px-2 text-[12px] whitespace-nowrap ${perm ? 'bg-approval/12 text-approval' : 'bg-attention/12 text-attention'}`}>{children}</span>;
+/** What waits on the person in a rig: a permission in red, a question in amber; `ok`, in green, what is ready (M5 « prête à fusionner »). */
+export function Att({ perm = false, ok = false, children }: { perm?: boolean; ok?: boolean; children: string }) {
+  const tone = perm ? 'bg-approval/12 text-approval' : ok ? 'bg-ok/12 text-ok' : 'bg-attention/12 text-attention';
+  return <span data-att={perm ? 'perm' : ok ? 'ok' : 'ask'} className={`inline-flex h-[22px] items-center rounded-md px-2 text-[12px] whitespace-nowrap ${tone}`}>{children}</span>;
 }
 
 /** A section's label, in capitals, with an aside on its right. */

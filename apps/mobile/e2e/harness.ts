@@ -9,7 +9,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   DevicePollResponseSchema, DeviceStartResponseSchema, PHONE_PROTOCOL,
-  type PhoneChatTurn, type PhoneClientMessage, type PhoneProject, type PhoneServerMessage, type PhoneSession, type PushSubscription, type ThreadItem, type PhoneHarnessUsage
+  type PhoneChatTurn, type PhoneClientMessage, type PhoneForgeState, type PrDetail, type PhoneProject, type PhoneServerMessage, type PhoneSession, type PushSubscription, type ThreadItem, type PhoneHarnessUsage
 } from '@ledge/protocol';
 import { startAccountsRelay } from '../../relay/src/app';
 import type { AccountsConfig } from '../../relay/src/config';
@@ -48,6 +48,14 @@ export interface FakeOpenRig {
   snapshots: Record<string, Extract<PhoneServerMessage, { type: 'rigs.snapshots' }>['snapshots']>;
   routing: Extract<PhoneServerMessage, { type: 'rigs.routing' }>['entries'];
   goals: Extract<PhoneServerMessage, { type: 'rigs.goals' }>['goals'];
+}
+
+/** The PC's pull and merge requests (m5-mr-pr.html): the list, each request's detail, the jobs' logs. */
+export interface FakeForge {
+  state: PhoneForgeState;
+  details: Record<string, PrDetail>;
+  /** A job's last lines, by job id: sent with the detail when the phone asks that job's log. */
+  logs: Record<string, string>;
 }
 
 export interface FakeDaemon {
@@ -99,6 +107,10 @@ export interface FakeDaemon {
   openrig: FakeOpenRig | null;
   /** The OpenRig actions the phone sent (`rigs.act`, `rigs.seats`, `rigs.goal.*`), in order. */
   rigActs: PhoneClientMessage[];
+  /** Set: the snapshot says `daemon.forge`, and the PC answers the MR/PR tab from it; null: an older PC. */
+  forge: FakeForge | null;
+  /** The forge actions the PC took (`forge.act`, the device's check passed), in order. */
+  forgeActs: Extract<PhoneClientMessage, { type: 'forge.act' }>[];
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
   stop(): void;
@@ -109,7 +121,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [], terminal: false, termTyped: [], projects: null, broadcast: false, broadcasts: [], threads: {}, usage: null, openrig: null, rigActs: [],
+    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [], terminal: false, termTyped: [], projects: null, broadcast: false, broadcasts: [], threads: {}, usage: null, openrig: null, rigActs: [], forge: null, forgeActs: [],
     finishChat() { d.turns = d.turns.map((t) => (t.answer === undefined ? finished(t) : t)); },
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
@@ -119,7 +131,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
-    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}), ...(d.terminal ? { terminal: true as const, terminalInput: true as const } : {}), ...(d.projects ? { atelier: true as const } : {}), ...(d.broadcast ? { broadcast: true as const } : {}), ...(d.usage ? { usage: true as const } : {}), ...(d.openrig ? { rigs: true as const } : {}) },
+    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}), ...(d.terminal ? { terminal: true as const, terminalInput: true as const } : {}), ...(d.projects ? { atelier: true as const } : {}), ...(d.broadcast ? { broadcast: true as const } : {}), ...(d.usage ? { usage: true as const } : {}), ...(d.openrig ? { rigs: true as const } : {}), ...(d.forge ? { forge: true as const } : {}) },
     ...(d.projects ? { projects: d.projects } : {}),
     ...(d.device || d.push || d.chat ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}), ...(d.chat ? { chat: true as const } : {}) } } : {})
   });
@@ -224,11 +236,32 @@ function runDaemon(pc: FakePc): FakeDaemon {
       default: d.rigActs.push(m);
     }
   };
+  /** The MR/PR tab's reads, answered from `d.forge`; an action taken once the device's check passes, its command as the PC's. */
+  const forgeMessage = async (f: FakeForge, m: PhoneClientMessage) => {
+    if (m.type === 'forge.state') return pc.send({ type: 'forge.state', ...f.state });
+    if (m.type === 'forge.detail') {
+      const detail = f.details[m.prId];
+      if (!detail) return pc.send({ type: 'forge.detail', prId: m.prId, error: 'unavailable' });
+      const log = m.log && f.logs[m.log] !== undefined ? { log: { jobId: m.log, text: f.logs[m.log]! } } : {};
+      return pc.send({ type: 'forge.detail', prId: m.prId, detail: { ...detail, ...log } });
+    }
+    if (m.type !== 'forge.act') return;
+    const refused = d.device ? d.device.assertForge(m) : 'confirm_required';
+    if (refused) {
+      await pc.send({ type: 'operation.result', op: m.op, status: 'rejected', reason: refused });
+      return pc.send({ type: 'forge.done', op: m.op, ok: false, rejected: refused });
+    }
+    d.forgeActs.push(m);
+    await pc.send({ type: 'operation.result', op: m.op, status: 'received' });
+    const command = m.action.kind === 'merge' ? f.details[m.prId]?.mergeCommand : undefined;
+    return pc.send({ type: 'forge.done', op: m.op, ok: true, ...(command ? { command } : {}) });
+  };
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') { await pc.send(snapshot()); if (d.usage) await pc.send({ type: 'usage.state', harnesses: d.usage, prefs: { alert: 0.8 } }); return; }
     if (d.terminal && m.type.startsWith('term.')) return terminalMessage(m);
     if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close')) return chatMessage(m);
     if (d.openrig && m.type.startsWith('rigs.')) return rigsMessage(d.openrig, m);
+    if (d.forge && m.type.startsWith('forge.')) return forgeMessage(d.forge, m);
     if (m.type === 'session.thread') return pc.send({ type: 'session.thread', id: m.id, items: d.threads[m.id] ?? [], cut: [], more: false });
     if (m.type === 'session.broadcast' && d.broadcast) {
       d.broadcasts.push({ sessions: m.sessions, text: m.text });

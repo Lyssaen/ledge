@@ -42,6 +42,10 @@ import { RigView } from './screens/rigs/RigView';
 import { KernelView } from './screens/rigs/KernelView';
 import { Max } from './screens/rigs/Max';
 import { NewSession } from './screens/NewSession';
+import { createForge, type ForgeStore } from './state/forge';
+import { PrsList } from './screens/prs/PrsList';
+import { PrView } from './screens/prs/PrView';
+import { failedCount } from './model/prs';
 import type { UpdateWatch } from './sw/register';
 import type { BuildInfo } from './sw/types';
 
@@ -66,6 +70,13 @@ function useUpdates(updates: UpdateWatch | null): { build: BuildInfo | null; wai
     return off;
   }, [updates]);
   return { build: updates?.current() ?? null, waiting: updates?.waiting() ?? null };
+}
+
+/** The PC's requests as the forge store holds them, the app drawn again at each change (the MR/PR tab's badge). */
+function useForgePrs(forge: ForgeStore | null) {
+  const [, bump] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => forge?.subscribe(bump), [forge]);
+  return forge?.getState().state?.prs ?? [];
 }
 
 /** The GitHub login the relay's session belongs to, asked once signed in; null when unknown or signed out. */
@@ -185,6 +196,15 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     setRigs(r);
     return () => { r.close(); setRigs(null); };
   }, [link, store, storage]);
+  // The PC's pull and merge requests (the MR/PR tab): followed from the app's opening while the PC offers them, for the tab's badge.
+  const [forge, setForge] = useState<ForgeStore | null>(null);
+  useEffect(() => {
+    const f = createForge(link, store, storage);
+    f.follow();
+    setForge(f);
+    return () => { f.close(); setForge(null); };
+  }, [link, store, storage]);
+  const prs = useForgePrs(forge);
   // `#/atelier` on a phone, or once the PC says it has no Atelier (an older daemon): the agents instead. Before the first
   // snapshot the last known PC decides, so an offline iPad keeps its Atelier.
   const atelierOff = route.name === 'atelier' && (!wide || ((mobile.fresh || mobile.daemon !== null) && !mobile.daemon?.atelier));
@@ -279,8 +299,17 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       replaceRoute(next ?? { name: 'atoi' });
     };
     const shell: ShellLink = { pc: pcName, look: lookOf(mobile.fresh, !!mobile.syncedAt, link.reach()), reach: link.reach(), since: clock(mobile.syncedAt), retry };
-    const badges = { atoi: atoiBadge(requestsOf([...mobile.sessions.values()]), mobile.asks ?? []) };
-    const inbox = <Inbox store={store} onReconnect={retry} />;
+    // The MR/PR tab once the PC sends its requests (`daemon.forge`, m5-mr-pr.html); before, it says the PC does not.
+    const prsOn = !!mobile.daemon?.forge && forge !== null;
+    const failed = prsOn ? failedCount(prs) : 0;
+    const badges = {
+      atoi: atoiBadge(requestsOf([...mobile.sessions.values()]), mobile.asks ?? []),
+      // The open requests whose pipeline failed, in red (M0, M5 §1).
+      prs: failed ? { text: failed > 99 ? '99+' : String(failed), tone: 'red' as const } : null
+    };
+    const prsList = prsOn ? <PrsList forge={forge} store={store} /> : <Prs />;
+    const prView = prsOn && route.name === 'pr' ? <PrView key={route.id} id={route.id} forge={forge} store={store} /> : null;
+    const inbox = <Inbox store={store} onReconnect={retry} forge={forge} />;
     const sessions = <Sessions store={store} filter={route.name === 'sessions' ? route.filter : undefined} />;
     // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
     const chatOn = !!mobile.device?.chat || (!mobile.fresh && !mobile.device);
@@ -304,11 +333,11 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           case 'ask': return <Split list={inbox} detail={<AskDetail key={route.id} store={store} id={route.id} onDone={moveOn({ name: 'ask', id: route.id })} />} />;
           case 'request': return <Split list={inbox} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} onSettled={moveOn({ name: 'request', sessionId: route.sessionId, key: route.key })} keys />} />;
           case 'sessions': return <Split list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
-          case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
+          case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} forge={forge} />} />;
           // « Nouvelle session » opens beside the list, like a session (Q82, validated by the user 2026-11-11).
           case 'launch': return <Split list={sessions} detail={<NewSession store={store} storage={storage} />} />;
-          case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
-          case 'prs': return <Split list={<Prs />} detail={<EmptyPane icon="pr" {...copy.prs.pane} />} />;
+          case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} forge={forge} />} />;
+          case 'prs': case 'pr': return <Split list={prsList} detail={prView ?? <EmptyPane icon="pr" {...copy.prs.pane} />} />;
           case 'rigs': case 'rig': case 'kernel': case 'max': return <Split list={rigsList} detail={rigsDetail ?? <EmptyPane icon="rigs" {...copy.rigs.pane} />} />;
           case 'atelier': return mobile.daemon?.atelier
             ? <AtelierScreen store={store} {...(route.sessionId ? { sessionId: route.sessionId } : {})} {...(route.requestKey ? { requestKey: route.requestKey } : {})} storage={storage} onReconnect={retry} />
@@ -331,15 +360,17 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     switch (route.name) {
       case 'atoi': return framed(inbox);
       case 'sessions': case 'atelier': return framed(sessions);
-      case 'prs': return framed(<Prs />);
+      // The MR/PR tab's header (m5-mr-pr.html): « MR et PR », the host, Réglages; before the PC sends its requests, M0's.
+      case 'prs': return framed(prsList, prsOn ? copy.prs.title : true);
+      case 'pr': return prView ? framed(prView, false) : framed(prsList, prsOn ? copy.prs.title : true);
       // The Rigs tab's header (m4-rigs.html): « Rigs », the host, Réglages; before the PC sends its rigs, M0's.
       case 'rigs': return framed(rigsList, rigsOn ? copy.rigs.title : true);
       case 'rig': case 'kernel': case 'max': return rigsDetail ? framed(rigsDetail, false) : framed(rigsList, rigsOn ? copy.rigs.title : true);
       // The Ledge tab brings its own head (m3-chat.html §1): Ledge, the host, its conversation buttons and Réglages.
       case 'chat': return framed(chat, !chatOn);
       case 'connection': return framed(connection, false);
-      case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />, false);
-      case 'terminal': return framed(<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />, false);
+      case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} forge={forge} />, false);
+      case 'terminal': return framed(<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} forge={forge} />, false);
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
       case 'ask': return framed(<AskDetail key={route.id} store={store} id={route.id} />, false);
       // Full screen, over the tabs (m2-sessions.html §9).

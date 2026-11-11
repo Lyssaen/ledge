@@ -86,3 +86,8 @@ export async function registerPinnedSw(
     }
   };
 }
+
+/** Tells the worker the app's language, kept for the titles it writes on the notifications (Q29); nothing without a worker. */
+export function sayLang(container: ServiceWorkerContainer | undefined, lang: 'fr' | 'en'): void {
+  container?.ready.then((reg) => reg.active?.postMessage({ type: 'lang', lang })).catch(() => { /* no worker: French stays */ });
+}

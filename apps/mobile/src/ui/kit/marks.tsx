@@ -5,12 +5,12 @@ import type { Tool } from '@ledge/protocol';
  * Each is its Ledge Desktop counterpart, coloured by the tokens of @ledge/ui only.
  */
 
-/** What a dot says: a session at work, waiting on a permission or a question, free, ended, unknown or offline, OpenRig's. */
-export type DotState = 'work' | 'perm' | 'ask' | 'idle' | 'done' | 'off' | 'rig';
+/** What a dot says: a session at work, waiting on a permission or a question, free, ended, unknown or offline, OpenRig's; `plain`: a skipped pipeline (M5). */
+export type DotState = 'work' | 'perm' | 'ask' | 'idle' | 'done' | 'off' | 'rig' | 'plain';
 
 const DOT: Record<DotState, string> = {
   work: 'bg-info', perm: 'bg-approval', ask: 'bg-attention', idle: 'bg-ok', done: 'bg-muted opacity-50',
-  off: 'bg-transparent shadow-[inset_0_0_0_1.5px_var(--color-muted)]', rig: 'bg-task'
+  off: 'bg-transparent shadow-[inset_0_0_0_1.5px_var(--color-muted)]', rig: 'bg-task', plain: 'bg-muted'
 };
 
 /** An 8 px status dot. `pulse`: a session at work, while the state shown is live (a stale one never pulses). */

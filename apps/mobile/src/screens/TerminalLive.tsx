@@ -6,6 +6,7 @@ import { copy } from '../copy';
 import type { PhoneLink } from '../link/link';
 import { href } from '../router';
 import { localStore } from '../state/storage';
+import type { ForgeStore } from '../state/forge';
 import { useMobile, type MobileStore } from '../state/store';
 import { TermController, type TermView, type TermWire } from '../term/controller';
 import { contextKeys, HOLD_IDLE_MS, keyBytes, READABLE_PX, withModifiers, type Mod, type SpecialKey } from '../term/keys';
@@ -42,8 +43,9 @@ const left = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); retu
 /** xterm is loaded with the first terminal opened: the rest of the app never pays for it. */
 const loadXterm = (host: HTMLElement): Promise<XtermScreen> => import('../term/xterm').then(m => m.createXterm(host));
 
-export function TerminalLive({ store, link, session, storage, makeScreen }: {
+export function TerminalLive({ store, link, session, storage, makeScreen, forge }: {
   store: MobileStore; link: PhoneLink; session: PhoneSession; storage?: Storage;
+  /** The PC's requests, for the foot's MR/PR chip (M5 §9). */ forge?: ForgeStore | null;
   /** The xterm; a fake in tests, where there is no canvas to measure. */ makeScreen?: (host: HTMLElement) => XtermScreen;
 }) {
   const state = useMobile(store);
@@ -284,7 +286,7 @@ export function TerminalLive({ store, link, session, storage, makeScreen }: {
             ) : !offline && state.daemon?.terminal && !view?.readOnly && session.readOnly !== true && <p className="text-center text-meta text-muted">{L.inputOff}</p>}
             {offline && <p className="text-center text-meta text-muted">{L.offlineHint}</p>}
           </footer>
-          <SessionFoot store={store} session={session} wide={wide} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
+          <SessionFoot store={store} forge={forge} session={session} wide={wide} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
         </>
       )}
       {sheet && ctl && <HoldSheet store={store} session={session} onClose={() => setSheet(false)} hold={a => { setSheet(false); void ctl.hold(a); return 'sent'; }} />}

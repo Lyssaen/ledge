@@ -15,6 +15,7 @@ import { modelOff, SessionMore } from './SessionMore';
 import { href } from '../router';
 import { loadDraft, markCleared, saveDraft, takeFocus, wasCleared } from '../state/drafts';
 import { isLive } from '../state/operations';
+import type { ForgeStore } from '../state/forge';
 import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
 import { footLimit, indicators, tokenCount } from '../model/usage';
@@ -36,6 +37,7 @@ import { EndErrorNotice, EndFooter, EndSheet } from './SessionClose';
 import { closeHeld, endedAtLabel, endingOf, lastEndOp, resumeHeld } from '../model/sessionEnd';
 import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
+import { PrChip } from './prs/forgeMarks';
 
 
 function AgentReply({ text }: { text: string }) {
@@ -159,7 +161,7 @@ function PanelButtons({ sessionId, panel }: { sessionId: string; panel: ThreadPa
   );
 }
 
-export function Thread({ store, sessionId, storage, onReconnect, panel }: { store: MobileStore; sessionId: string; storage?: Storage; onReconnect?: () => void; panel?: ThreadPanel }) {
+export function Thread({ store, sessionId, storage, onReconnect, panel, forge }: { store: MobileStore; sessionId: string; storage?: Storage; onReconnect?: () => void; panel?: ThreadPanel; forge?: ForgeStore | null }) {
   const state = useMobile(store);
   const now = useNow();
   const wide = useWide();
@@ -348,7 +350,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
           alert={endError && <EndErrorNotice error={endError} fresh={fresh} onRetry={() => openSheet('close')} onReconnect={onReconnect} />}
           {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />
         : <EndFooter key={ending.kind} ending={ending.kind === 'ended' && ending.error?.op === cleared ? { ...ending, error: null } : ending} name={session.name} canResume={closable} resumeHeld={resumeHeld(session, ops, boot, now)} readOnly={!!session.readOnly} fresh={fresh} focus={sent} onResume={() => openSheet('resume')} onReconnect={onReconnect} />}
-      <SessionFoot store={store} session={session} wide={wide} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
+      <SessionFoot store={store} forge={forge} session={session} wide={wide} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
       </>}
       {more && <SessionMore store={store} session={session} closable={closable && !omp} closing={shut} onClose={() => setMore(false)}
         onModel={() => { setMore(false); setModel(true); }} onCloseSession={() => { setMore(false); openSheet('close'); }} />}
@@ -378,10 +380,11 @@ export function ViewToggle({ sessionId, current, onLeave }: { sessionId: string;
 
 /**
  * The session's foot (§3, §4): its model (a tap opens « Modèle et effort » when the phone can change it), its context in percent,
- * amber past « Contexte max », and its branch, or its folder without Git. No MR/PR before M5. What is not known is not there.
+ * amber past « Contexte max », its branch, or its folder without Git, then its request's chip (M5 §9). What is not known is not there.
  */
-export function SessionFoot({ store, session, wide, threshold, onModel }: { store: MobileStore; session: PhoneSession; wide: boolean; threshold: number; onModel: () => void }) {
-  const { daemon, fresh, usage, usageAlert } = useMobile(store);
+export function SessionFoot({ store, forge, session, wide, threshold, onModel }: { store: MobileStore; forge?: ForgeStore | null | undefined; session: PhoneSession; wide: boolean; threshold: number; onModel: () => void }) {
+  const mobile = useMobile(store);
+  const { daemon, fresh, usage, usageAlert } = mobile;
   const now = useNow();
   const i = indicators(session, now, threshold);
   const S = copy.sessions;
@@ -404,6 +407,7 @@ export function SessionFoot({ store, session, wide, threshold, onModel }: { stor
       {session.branch
         ? <span className={`min-w-0 truncate font-mono text-[11px] ${wide ? '' : 'flex-1'}`}>{session.branch}</span>
         : <span aria-label={S.folder(session.project)} className={`inline-flex min-w-0 items-center gap-1 ${wide ? '' : 'flex-1'}`}><Icon name="folder" className="size-3.5" /><span className="truncate">{session.project}</span></span>}
+      {session.branch && <PrChip forge={forge} mobile={mobile} session={session} />}
       {wide && session.branch && <span className="min-w-0 truncate">{session.project}</span>}
       {wide && <span className="flex-1" />}
       {limit && (

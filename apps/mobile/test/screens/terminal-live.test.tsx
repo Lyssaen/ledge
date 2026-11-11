@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TERM_INPUT_MAX, type PhoneServerMessage } from '@ledge/protocol';
 import { Terminal } from '../../src/screens/Terminal';
+import type { ForgeStore } from '../../src/state/forge';
+import { forgeState } from '../model/forge-fixtures';
 import { INPUT_BATCH_MS, TermController, inputChunk, paintScreen, type TermScreen, type TermWire } from '../../src/term/controller';
 import { contextKeys, keyBytes, withModifiers } from '../../src/term/keys';
 import type { XtermScreen } from '../../src/term/xterm';
@@ -359,5 +361,17 @@ describe('the live terminal screen', () => {
     const b = pane(screen.getByLabelText('Terminal de Kai'));
     act(() => u.xt.show(['$ ls']));
     expect(b).toEqual({ left: 500, top: 120 });
+  });
+
+  it('ends its foot with the branch\'s MR/PR chip, as the thread does (M5 §9)', async () => {
+    const t = setup();
+    const snap = snapshot([session('s-front', { name: 'Kai', state: 'working', project: 'ledge', branch: 'feat/detached' })]);
+    t.deliver({ ...snap, ...(snap.type === 'snapshot' ? { daemon: { ...snap.daemon, terminal: true, forge: true } } : {}) } as PhoneServerMessage);
+    const held = { state: forgeState(), at: '2026-11-11T14:12:00.000Z', loading: false, details: {}, runs: [], drafts: {} };
+    const forge = { getState: () => held, subscribe: () => () => undefined } as unknown as ForgeStore;
+    const { TerminalLive } = await import('../../src/screens/TerminalLive');
+    render(<TerminalLive store={t.store} link={t.link} session={t.store.getState().sessions.get('s-front')!} storage={t.storage} makeScreen={fakeXterm().make} forge={forge} />);
+    const chip = within(document.querySelector('footer[aria-label]') as HTMLElement).getByRole('link', { name: '#231' });
+    expect(chip).toHaveAttribute('href', '#/prs/github.com%2Facme%2Fledge%23231');
   });
 });
