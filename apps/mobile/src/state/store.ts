@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type PhoneFolder, type PhoneLaunch, type OperationReason, type ProjectColor, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice, type PhoneHarnessUsage, type HumanAsk, type HumanAnswer, type HumanChannel, type OpenRigAction
+  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice, type PhoneHarnessUsage, type HumanAsk, type HumanAnswer, type HumanChannel, type OpenRigAction, type ForgeAction
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
@@ -37,7 +37,7 @@ export interface MobileState {
   /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
   device: { confirm: boolean; /** Its passkey can bring it back after a reinstall: without it, « Mettre à jour la passkey ». */ recover?: true; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string; /** This device's own settings (`daemon.settings`). */ prefs?: DevicePrefs } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true; /** Sends `usage.state`. */ usage?: true; /** Answers `openrig.asks` (« À toi »). */ openrig?: true; /** Answers the `rigs.*` reads and takes their actions (M4, the Rigs tab). */ rigs?: true; /** Takes `session.launch` (« Nouvelle session »). */ launch?: true; /** Keeps the device's conversations 7 days (M3 Q33). */ conversations?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true; /** Sends `usage.state`. */ usage?: true; /** Answers `openrig.asks` (« À toi »). */ openrig?: true; /** Answers the `rigs.*` reads and takes their actions (M4, the Rigs tab). */ rigs?: true; /** Takes `session.launch` (« Nouvelle session »). */ launch?: true; /** Keeps the device's conversations 7 days (M3 Q33). */ conversations?: true; /** Answers `forge.state` and `forge.detail`, takes `forge.act` (M5, the MR/PR tab). */ forge?: true } | null;
   /** The user's projects, in their order (`daemon.atelier`): the Atelier's rooms. Kept for an offline start; empty from an older PC. */
   projects: PhoneProject[];
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
@@ -102,7 +102,9 @@ export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: 
   /** An answer to an OpenRig ask (`openrig.answer`), bound to that row and that exact answer. */
   | { purpose: 'rig'; qitem: string; answer: HumanAnswer }
   /** An OpenRig action that stops something or drops the prompts (`rigs.act`), or a change of seats that removes one (`rigs.seats`), bound to it. */
-  | { purpose: 'rigs'; rigAct: OpenRigAction } | { purpose: 'rigs'; rigSeats: { rig: string; seats: Record<string, number> } };
+  | { purpose: 'rigs'; rigAct: OpenRigAction } | { purpose: 'rigs'; rigSeats: { rig: string; seats: Record<string, number> } }
+  /** An action on a pull or merge request (`forge.act`), bound to that request and that exact action, text included (Q54). */
+  | { purpose: 'forge'; forge: { prId: string; action: ForgeAction } };
 
 /** How long `prepareConfirm` waits for the PC's challenge. */
 export const PREPARE_MS = 10_000;

@@ -1,0 +1,208 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { PhoneServerMessage } from '@ledge/protocol';
+import { getAssertion } from '../../src/link/webauthn';
+import { createForge, DETAIL_MS, draftKey, FORGE_STATE_KEY, type ForgeStore } from '../../src/state/forge';
+import { UNCERTAIN_MS } from '../../src/state/operations';
+import { createStore, type MobileStore } from '../../src/state/store';
+import { detail, mr, pr, stateMsg } from '../model/forge-fixtures';
+import { fakeLink, MemoryStorage, snapshot } from './helpers';
+
+vi.mock('../../src/link/webauthn', () => ({ platformAvailable: vi.fn(), createCredential: vi.fn(), getAssertion: vi.fn() }));
+
+const open: { forge: ForgeStore; store: MobileStore }[] = [];
+afterEach(() => { for (const o of open.splice(0)) { o.forge.close(); o.store.close(); } vi.mocked(getAssertion).mockReset(); vi.useRealTimers(); });
+
+const ASSERTION = { id: 'a', clientDataJSON: 'b', authenticatorData: 'c', signature: 'd' };
+const CHALLENGE = { type: 'confirm.challenge' as const, purpose: 'forge' as const, challenge: 'Y2g', rpId: 'pc.local', credentialId: 'Y3I', expiresInMs: 60_000 };
+const flush = () => new Promise(r => setTimeout(r, 0));
+
+/** A ready link to a PC that sends its requests (`daemon.forge`), unless `offered` is false; this phone has a passkey unless `confirm` is false. */
+function setup(offered = true, confirm = true) {
+  const f = fakeLink('ready');
+  const storage = new MemoryStorage();
+  const store = createStore(f.link, storage);
+  const forge = createForge(f.link, store, storage);
+  open.push({ forge, store });
+  const snap = snapshot([], 'WSL', undefined, { confirm }) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+  f.deliver(offered ? { ...snap, daemon: { ...snap.daemon, forge: true } } : snap);
+  return { ...f, store, forge, storage };
+}
+
+/** Runs an action through the passkey; returns its promise and the `forge.act` sent. */
+async function acted(t: ReturnType<typeof setup>, prId: string, action: Parameters<ForgeStore['act']>[1]) {
+  vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+  const ended = t.forge.act(prId, action);
+  await vi.waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+  t.deliver(CHALLENGE);
+  await vi.waitFor(() => expect(t.of('forge.act')).toHaveLength(1));
+  return { ended, sent: t.of('forge.act')[0]! };
+}
+
+describe('the forge store', () => {
+  it('follows forge.state once per link while the PC offers it, and keeps the list for an offline start', () => {
+    const t = setup();
+    t.forge.follow();
+    t.forge.follow();
+    expect(t.of('forge.state')).toHaveLength(1);
+    t.deliver(stateMsg());
+    expect(t.forge.getState().state?.prs.map(p => p.ref)).toEqual(['!41', '#231']);
+    expect(JSON.parse(t.storage.getItem(FORGE_STATE_KEY)!).state.prs).toHaveLength(2);
+    const again = createForge(fakeLink('pc_offline').link, t.store, t.storage);
+    open.push({ forge: again, store: t.store });
+    expect(again.getState().state?.prs).toHaveLength(2);
+    t.set('pc_offline');
+    t.set('ready');
+    // A new link: the PC's snapshot comes first, then the list is asked again.
+    t.deliver({ ...(snapshot([], 'WSL', undefined, { confirm: true }) as Extract<PhoneServerMessage, { type: 'snapshot' }>), daemon: { version: '0.9.0', name: 'WSL', forge: true } });
+    expect(t.of('forge.state')).toHaveLength(2);
+  });
+
+  it('asks nothing of a PC that does not offer its requests', async () => {
+    const t = setup(false);
+    t.forge.follow();
+    t.forge.readDetail(pr().id);
+    expect(t.of('forge.state')).toHaveLength(0);
+    expect(t.of('forge.detail')).toHaveLength(0);
+    expect(await t.forge.act(pr().id, { kind: 'rerun' })).toMatchObject({ phase: 'unsent' });
+  });
+
+  it('reads a detail, keeps its job log on the next read, and says why one failed', () => {
+    const t = setup();
+    const id = mr().id;
+    t.forge.readDetail(id, 'j2');
+    expect(t.of('forge.detail')[0]).toEqual({ type: 'forge.detail', prId: id, log: 'j2' });
+    t.deliver({ type: 'forge.detail', prId: id, detail: detail(mr(), { log: { jobId: 'j2', text: 'FAIL test' } }), cut: true });
+    expect(t.forge.getState().details[id]).toMatchObject({ loading: false, cut: true, data: { log: { jobId: 'j2' } } });
+    t.forge.readDetail(id);
+    t.deliver({ type: 'forge.detail', prId: id, detail: detail(mr()) });
+    expect(t.forge.getState().details[id]!.data!.log?.text).toBe('FAIL test');
+    t.deliver({ type: 'forge.detail', prId: id, error: 'failed' });
+    expect(t.forge.getState().details[id]).toMatchObject({ error: 'failed', data: { pr: { id } } });
+  });
+
+  it('takes a detail the PC never answers as failed', () => {
+    vi.useFakeTimers();
+    const t = setup();
+    t.forge.readDetail(pr().id);
+    vi.advanceTimersByTime(DETAIL_MS + 1);
+    expect(t.forge.getState().details[pr().id]).toMatchObject({ loading: false, error: 'failed' });
+  });
+
+  it('reads a held detail again when the list brings a new head', () => {
+    const t = setup();
+    t.forge.follow();
+    t.forge.readDetail(pr().id);
+    t.deliver({ type: 'forge.detail', prId: pr().id, detail: detail() });
+    t.deliver(stateMsg({ prs: [pr({ headSha: 'b'.repeat(40) })] }));
+    expect(t.of('forge.detail')).toHaveLength(2);
+  });
+
+  it('checks every action on the device over that exact action, then ends it on forge.done and reads the request again', async () => {
+    const t = setup();
+    t.forge.readDetail(pr().id);
+    const action = { kind: 'merge' as const, headSha: pr().headSha };
+    const { ended, sent } = await acted(t, pr().id, action);
+    expect(t.of('confirm.prepare')[0]).toMatchObject({ purpose: 'forge', forge: { prId: pr().id, action } });
+    expect(sent).toMatchObject({ prId: pr().id, action, assertion: ASSERTION });
+    t.deliver({ type: 'operation.result', op: sent.op, status: 'received' } as PhoneServerMessage);
+    t.deliver({ type: 'operation.result', op: sent.op, status: 'applied' } as PhoneServerMessage);
+    t.deliver({ type: 'forge.done', op: sent.op, ok: true, command: 'gh pr merge 231 --repo acme/ledge --squash' });
+    expect(await ended).toMatchObject({ phase: 'done', done: { ok: true, command: 'gh pr merge 231 --repo acme/ledge --squash' } });
+    expect(t.of('forge.detail')).toHaveLength(2);
+  });
+
+  it('says a refusal by its code, and keeps the PC’s detail for it', async () => {
+    const t = setup();
+    const { ended, sent } = await acted(t, pr().id, { kind: 'merge', headSha: 'old' });
+    t.deliver({ type: 'operation.result', op: sent.op, status: 'rejected', reason: 'stale' } as PhoneServerMessage);
+    expect(await ended).toMatchObject({ phase: 'rejected', reason: 'stale' });
+    t.deliver({ type: 'forge.done', op: sent.op, ok: false, error: 'stale' });
+    expect(t.forge.getState().runs[0]).toMatchObject({ phase: 'rejected', done: { error: 'stale' } });
+  });
+
+  it('refuses an action without a passkey on this phone, and sends nothing', async () => {
+    const t = setup(true, false);
+    expect(await t.forge.act(pr().id, { kind: 'rerun' })).toMatchObject({ phase: 'rejected', reason: 'confirm_required' });
+    expect(t.of('forge.act')).toHaveLength(0);
+  });
+
+  it('ends a cancelled check without sending anything', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockResolvedValue('cancelled');
+    const ended = t.forge.act(pr().id, { kind: 'rerun' });
+    await vi.waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    t.deliver(CHALLENGE);
+    expect(await ended).toMatchObject({ phase: 'cancelled' });
+    expect(t.of('forge.act')).toHaveLength(0);
+  });
+
+  it('ends an action the link could not send as « unsent »', async () => {
+    const t = setup();
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    const send = t.link.send.bind(t.link);
+    vi.spyOn(t.link, 'send').mockImplementation(async m => (m.type === 'forge.act' ? false : send(m)));
+    const ended = t.forge.act(pr().id, { kind: 'rerun' });
+    await vi.waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(1));
+    t.deliver(CHALLENGE);
+    expect(await ended).toMatchObject({ phase: 'unsent' });
+  });
+
+  it('turns an action the PC never says it has « uncertain »; « Réessayer » sends the same op without a second check', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = setup();
+    const { ended, sent } = await acted(t, pr().id, { kind: 'comment', body: 'Merci' });
+    vi.advanceTimersByTime(UNCERTAIN_MS + 1);
+    const run = await ended;
+    expect(run.phase).toBe('uncertain');
+    t.forge.resend(run.id);
+    await flush();
+    expect(t.of('forge.act')).toHaveLength(2);
+    expect(t.of('forge.act')[1]!.op).toBe(sent.op);
+    expect(t.of('confirm.prepare')).toHaveLength(1);
+  });
+
+  it('sends an uncertain action again on the next link, and forgets it once its receipt is closed', async () => {
+    const t = setup();
+    const { ended, sent } = await acted(t, pr().id, { kind: 'rerun' });
+    t.set('pc_offline');
+    const run = await ended;
+    expect(run.phase).toBe('uncertain');
+    t.set('ready');
+    expect(t.of('forge.act')).toHaveLength(2);
+    t.forge.dismiss(run.id);
+    t.set('pc_offline');
+    t.set('ready');
+    expect(t.of('forge.act')).toHaveLength(2);
+    t.deliver({ type: 'forge.done', op: sent.op, ok: true });
+    expect(t.forge.getState().runs).toHaveLength(0);
+  });
+
+  it('keeps a comment not posted in its field, and drops it once posted', async () => {
+    const t = setup();
+    const key = draftKey(pr().id, 't1');
+    t.forge.setDraft(key, 'Parce que 24 lignes');
+    expect(t.forge.getState().drafts[key]).toBe('Parce que 24 lignes');
+    const { sent } = await acted(t, pr().id, { kind: 'reply', threadId: 't1', body: 'Parce que 24 lignes' });
+    t.deliver({ type: 'forge.done', op: sent.op, ok: false, error: 'failed', message: 'HTTP 502' });
+    expect(t.forge.getState().drafts[key]).toBe('Parce que 24 lignes');
+    t.forge.setDraft(key, '');
+    expect(t.forge.getState().drafts[key]).toBeUndefined();
+    t.forge.setDraft(key, 'Parce que 24 lignes');
+    vi.mocked(getAssertion).mockResolvedValue(ASSERTION);
+    void t.forge.act(pr().id, { kind: 'reply', threadId: 't1', body: 'Parce que 24 lignes' });
+    await vi.waitFor(() => expect(t.of('confirm.prepare')).toHaveLength(2));
+    t.deliver(CHALLENGE);
+    await vi.waitFor(() => expect(t.of('forge.act')).toHaveLength(2));
+    t.deliver({ type: 'forge.done', op: t.of('forge.act')[1]!.op, ok: true });
+    expect(t.forge.getState().drafts[key]).toBeUndefined();
+  });
+
+  it('forgets the old PC’s requests when the phone is unpaired', () => {
+    const t = setup();
+    t.forge.follow();
+    t.deliver(stateMsg());
+    t.set('unpaired');
+    expect(t.forge.getState().state).toBeNull();
+    expect(t.storage.getItem(FORGE_STATE_KEY)).toBeNull();
+  });
+});
