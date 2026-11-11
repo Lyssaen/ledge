@@ -68,11 +68,14 @@ describe('the thread', () => {
     expect(screen.getByText('Envoi au PC…', { selector: 'div[role=status]' })).toBeInTheDocument();
   });
 
-  it('points to the request when one waits, and keeps the composer shut', () => {
+  it('puts the request waiting at its foot, as « À toi »\'s card, and keeps the composer shut (§3, Q19)', () => {
     const t = opened({ state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }) });
     act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
-    expect(screen.getByRole('link', { name: /Examiner la demande/ })).toHaveAttribute('href', '#/request/a/k1');
+    expect(screen.getByRole('link', { name: /Autoriser une commande/ })).toHaveAttribute('href', '#/request/a/k1');
+    fireEvent.click(screen.getByRole('button', { name: 'Autoriser' }));
+    expect(t.of('session.decide')).toEqual([expect.objectContaining({ id: 'a', decision: 'accept', expect: expect.objectContaining({ key: 'k1' }) })]);
     expect(screen.getByLabelText('Message pour Kai')).toBeDisabled();
+    expect(screen.getByLabelText('Message pour Kai')).toHaveAttribute('placeholder', 'Traite la demande ci-dessus');
   });
 
   it('says the session is gone when the PC no longer knows it', () => {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CONTEXT_NEAR, type PhoneSession } from '@ledge/protocol';
 import { copy } from '../copy';
 import { MOBILE_STORAGE_PREFIX } from '../link/keys';
+import { closingHere } from '../model/sessionEnd';
 import { activeHelpers, contextPct, dotOf, filterCounts, rowLine, rowMeta, SESSION_FILTERS, sessionGroups, type SessionFilter, type SessionGroup } from '../model/sessions';
 import { href, useRoute } from '../router';
 import { TabPage } from '../shell/Shell';
@@ -51,7 +52,7 @@ function FilterBar({ value, counts, onChange }: { value: SessionFilter; counts: 
 }
 
 /** One session (§1): its dot, runtime, name and sub-agents at work, what it does or waits for, its branch or seat role. */
-function Row({ session: s, filter, offline, threshold, now }: { session: PhoneSession; filter: SessionFilter; offline: boolean; threshold: number; now: number }) {
+function Row({ session: s, filter, offline, threshold, now, closing }: { session: PhoneSession; filter: SessionFilter; offline: boolean; threshold: number; now: number; closing: boolean }) {
   const route = useRoute();
   const open = (route.name === 'thread' || route.name === 'terminal') && route.sessionId === s.id;
   const dot = dotOf(s);
@@ -67,7 +68,8 @@ function Row({ session: s, filter, offline, threshold, now }: { session: PhoneSe
         <b className="font-semibold">{s.name}</b>
         {kids > 0 && <span aria-label={copy.sessions.kidsLabel(kids)} className="ml-1.5 font-mono text-small text-muted">{copy.sessions.kids(kids)}</span>}
       </>}
-      sub={<span className={dot === 'ask' ? 'text-attention' : undefined}>{rowLine(s, filter, now)}</span>}
+      // A close this phone sent says so over the state, as the list always did, until the session ends.
+      sub={closing ? <span className="text-attention">{copy.chat.closing}</span> : <span className={dot === 'ask' ? 'text-attention' : undefined}>{rowLine(s, filter, now)}</span>}
       {...(dot === 'perm' ? { subTone: 'perm' as const } : {})}
       {...(meta !== undefined ? { meta, metaWarn: filter === 'working' && pct !== undefined && pct / 100 >= threshold } : {})}
     />
@@ -126,7 +128,7 @@ export function Sessions({ store, filter: fromRoute, storage }: { store: MobileS
           <FilterBar value={filter} counts={counts} onChange={setFilter} />
           {groups.map(g => (
             <Group key={g.id} group={g}>
-              {g.sessions.map(s => <Row key={s.id} session={s} filter={filter} offline={offline} threshold={threshold} now={now} />)}
+              {g.sessions.map(s => <Row key={s.id} session={s} filter={filter} offline={offline} threshold={threshold} now={now} closing={closingHere(s, state.ops, now)} />)}
             </Group>
           ))}
           {emptyFilter}

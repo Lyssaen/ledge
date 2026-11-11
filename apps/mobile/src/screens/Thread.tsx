@@ -3,7 +3,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseReply } from '@ledge/ui/reply/parse';
 import { copy } from '../copy';
 import { headline } from '../model/requests';
-import { composerState, messagesOf, TAKEN_WINDOW, threadItems, type ThreadItem } from '../model/thread';
+import { composerState, messagesOf, TAKEN_WINDOW, threadItems, toolNames, type ThreadItem, type ToolLine } from '../model/thread';
+import { cardMode } from '../model/atoi';
+import { outcomeFor } from '../model/requestOutcome';
+import type { InboxItem } from '../model/requests';
+import { dotOf } from '../model/sessions';
+import { DetailHeader } from '../ui/kit/Controls';
+import { SessionCard } from './atoi/SessionCard';
+import { usePlatform } from './device';
+import { modelOff, SessionMore } from './SessionMore';
 import { href } from '../router';
 import { loadDraft, markCleared, saveDraft, takeFocus, wasCleared } from '../state/drafts';
 import { isLive } from '../state/operations';
@@ -11,7 +19,6 @@ import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
 import { indicators } from '../model/usage';
 import { BackLink, LinkStatus, linkView } from '../ui/Header';
-import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
 import { ReplyView } from '../ui/ReplyView';
 import { RigItem } from '../ui/RigThread';
@@ -20,9 +27,9 @@ import { PhoneThumbs } from '../ui/PhoneThumbs';
 import { useAttachments } from '../ui/useAttachments';
 import { Checklist } from './Checklist';
 import { Reply, replyFailure, replyProblem } from './Reply';
-import { SessionModelChip, SessionModelNote, available as modelSwitchable } from './SessionModel';
+import { ChangeSheet, SessionModelChip, SessionModelNote, available as modelSwitchable } from './SessionModel';
 import { EndErrorNotice, EndFooter, EndSheet } from './SessionClose';
-import { closeHeld, endingOf, lastEndOp, resumeHeld } from '../model/sessionEnd';
+import { closeHeld, endedAtLabel, endingOf, lastEndOp, resumeHeld } from '../model/sessionEnd';
 import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 
@@ -34,9 +41,54 @@ function AgentReply({ text }: { text: string }) {
 
 const Cut = ({ align }: { align: 'start' | 'end' }) => <div className={`text-meta text-muted ${align === 'end' ? 'text-right' : ''}`}>{copy.thread.cut}</div>;
 
+const MARK: Record<ToolLine['status'], { glyph: string; tone: string }> = {
+  success: { glyph: '✓', tone: 'text-ok' }, running: { glyph: '●', tone: 'text-info' }, failed: { glyph: '✕', tone: 'text-danger-fg' }, unknown: { glyph: '·', tone: 'text-muted' }
+};
+
+/** The tools run in a row, folded (m2-sessions.html §3): « 4 outils · Read, Write, Edit, Bash »; open, one line each, the one running in blue. */
+function Tools({ tools }: { tools: ToolLine[] }) {
+  const [open, setOpen] = useState(false);
+  const S = copy.sessions;
+  return (
+    <div className="rounded-lg border border-line font-mono text-small leading-4 text-muted">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(o => !o)} className="flex h-[34px] w-full items-center gap-1.5 px-2.5 text-left font-sans text-[12.5px]">
+        <Icon name="chevron" className={`size-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+        <span className="min-w-0 truncate">{open ? S.tools(tools.length) : S.toolsNamed(tools.length, toolNames(tools).join(', '))}</span>
+      </button>
+      {open && (
+        <ul className="pb-2">
+          {tools.map(t => (
+            <li key={t.id} className="flex gap-1.5 px-2.5 py-[3px]">
+              <span aria-label={S.toolStatus[t.status]} role="img" className={MARK[t.status].tone}>{MARK[t.status].glyph}</span>
+              <span className="min-w-0 [overflow-wrap:anywhere]"><b className="font-medium text-fg">{t.name}</b> {t.label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** The request waiting, as « À toi »'s card at the thread's foot (§3, Q19): decided here, « Toujours » where the agent offers it. */
+function ThreadRequest({ store, item, onReconnect }: { store: MobileStore; item: InboxItem; onReconnect?: (() => void) | undefined }) {
+  const state = useMobile(store);
+  const platform = usePlatform();
+  const session = state.sessions.get(item.sessionId);
+  return (
+    <SessionCard
+      store={store} item={item} session={session} inThread
+      mode={cardMode(item, state.capabilities?.[item.tool], session?.readOnly === true)}
+      outcome={outcomeFor(item, [...state.sessions.values()], state.ops)} fresh={state.fresh} ghost={false}
+      changed={false} onReread={() => {}} canConfirm={state.device?.confirm === true && platform} enroll={platform && state.device?.confirm !== true}
+      onGone={() => {}} onCheck={onReconnect}
+    />
+  );
+}
+
 /** `inPanel`: in the Atelier's panel, a request opens there, to be decided without leaving the Atelier. */
-function Bubble({ item, store, storage, inPanel = false }: { item: ThreadItem; store: MobileStore; storage?: Storage | undefined; inPanel?: boolean }) {
+function Bubble({ item, store, storage, inPanel = false, onReconnect }: { item: ThreadItem; store: MobileStore; storage?: Storage | undefined; inPanel?: boolean; onReconnect?: (() => void) | undefined }) {
   switch (item.kind) {
+    case 'tools': return <Tools tools={item.tools} />;
     case 'time': return <div className="text-center font-mono text-meta text-muted">{item.label}</div>;
     case 'rig-message': case 'rig-task': case 'rig-notice': case 'rig-fold': case 'rig-unreadable': case 'rig-raw': return <RigItem e={item} storage={storage} store={store} />;
     case 'me': {
@@ -74,7 +126,7 @@ function Bubble({ item, store, storage, inPanel = false }: { item: ThreadItem; s
       );
     }
     case 'event': return <div className="text-center text-meta text-muted">{item.label}</div>;
-    case 'awaiting': return (
+    case 'awaiting': return !inPanel ? <ThreadRequest store={store} item={item.item} onReconnect={onReconnect} /> : (
       <Notice title={inPanel ? copy.atelier.awaiting : copy.thread.awaiting} tone={item.item.kind === 'question' ? 'warning' : 'approval'}>
         <p className="[overflow-wrap:anywhere]">{headline(item.item)}</p>
         <a href={href(inPanel ? { name: 'atelier', sessionId: item.item.sessionId, requestKey: item.item.key } : { name: 'request', sessionId: item.item.sessionId, key: item.item.key })} className={buttonClass({ block: true, className: 'mt-3' })}>
@@ -127,6 +179,9 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
   const changeDraft = (t: string) => { setDraft(t); saveDraft(sessionId, t, storage); setRefused(false); };
   // The close or resume sheet; once it sent its operation, the footer that follows it takes the focus.
   const [sheet, setSheet] = useState<'close' | 'resume' | null>(null);
+  // « Plus d'actions » (§5), and « Modèle et effort » opened from it or from the foot.
+  const [more, setMore] = useState(false);
+  const [model, setModel] = useState(false);
   const [sent, setSent] = useState(false);
   // The close or resume whose error was put away: by the next gesture, or by the session changing state.
   const [cleared, setCleared] = useState<string | null>(null);
@@ -214,37 +269,23 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
   const closable = !!state.daemon?.sessionClose && !session.readOnly;
   const endError = ending.kind === 'open' && ending.error && ending.error.op !== cleared ? ending.error : null;
   const openSheet = (mode: 'close' | 'resume') => { setCleared(endOp); setSent(false); setSheet(mode); };
-  // The repository and branch: a line of their own, or after the name on a phone on its side.
   // An OMP seat launched by OpenRig has no thread Ledge reads: in the panel, its terminal instead (as on Desktop).
   const omp = !!panel && session.tool === 'omp';
-  const where = <>{panel && session.rig ? `${session.rig.name}${session.rig.role ? ` · ${session.rig.role}` : ''}` : session.repo ?? session.project}{session.branch && <> · <code className={`font-mono text-[.9em] ${session.worktree ? 'underline decoration-dotted underline-offset-2' : ''}`}>{session.branch}</code></>}</>;
+  const dot = dotOf(session);
+  const endedAt = session.state === 'exited' && session.exitedAt ? copy.sessions.line.ended(endedAtLabel(session.exitedAt, now)) : undefined;
 
   return (
     <>
-      <header className="flex-none border-b border-line pt-2 pb-3 phone-side:pt-1 phone-side:pb-2">
-        <div className="flex items-center gap-2.5">
-          {!panel && <BackLink fallback={{ name: 'sessions' }} label={copy.thread.back} />}
-          <MobileBot tool={session.tool} seed={session.id} state={session.state} frozen={!fresh} />
-          <div className="min-w-0 flex-1">
-            <h1 className="text-title leading-[1.25] font-semibold tracking-[-.2px] [overflow-wrap:anywhere] phone-side:truncate phone-side:text-base">{omp ? session.name : session.topic ?? session.project}</h1>
-            <p className="mt-[3px] text-meta text-muted phone-side:truncate">{session.name} · {copy.tools[session.tool]}<span className="hidden phone-side:inline"> · {where}</span></p>
-            <Chips session={session} threshold={state.device?.contextNear ?? CONTEXT_NEAR} now={now} />
-          </div>
-          <a href={href({ name: 'terminal', sessionId })} aria-label={copy.thread.terminal(session.name)} className={iconButtonClass({ variant: 'outline' })}>
-            <Icon name="terminal" />
-          </a>
-          {closable && !omp && session.state !== 'exited' && (
-            <button
-              type="button" aria-label={shut ? copy.sessionEnd.closingNamed(session.name) : copy.sessionEnd.close(session.name)} title={shut ? copy.sessionEnd.closingNamed(session.name) : copy.sessionEnd.close(session.name)}
-              aria-disabled={shut || undefined} onClick={() => { if (!shut) openSheet('close'); }} className={iconButtonClass({ variant: 'outline', className: shut ? 'opacity-45' : '' })}
-            >
-              <Icon name="power" />
-            </button>
-          )}
-          {panel && <PanelButtons sessionId={sessionId} panel={panel} />}
-        </div>
-        <p className="mt-2 ml-[46px] text-meta [overflow-wrap:anywhere] text-muted phone-side:hidden">{where}</p>
-      </header>
+      <DetailHeader
+        back={panel ? <span className="w-2.5" /> : <BackLink fallback={{ name: 'sessions' }} label={copy.thread.back} />}
+        tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && fresh} sub={endedAt}
+        more={<>
+          {panel ? <PanelButtons sessionId={sessionId} panel={panel} /> : <ViewToggle sessionId={sessionId} current="thread" />}
+          <button type="button" aria-haspopup="dialog" aria-label={copy.sessions.moreOf(session.name)} title={copy.sessions.more} onClick={() => setMore(true)} className={iconButtonClass({ className: more ? 'bg-raised text-fg' : 'text-muted' })}>
+            <Icon name="more" />
+          </button>
+        </>}
+      />
       {omp ? (
         <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
           <h2 className="text-heading">{copy.atelier.ompNoThread}</h2>
@@ -257,7 +298,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
         {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
-        {items.map(it => <Bubble key={it.key} item={it} store={store} storage={storage} inPanel={!!panel} />)}
+        {items.map(it => <Bubble key={it.key} item={it} store={store} storage={storage} inPanel={!!panel} onReconnect={onReconnect} />)}
       </main>
       {ending.kind === 'open'
         ? <Reply name={session.name} focusAtEnd={focusOnOpen} composer={composer} draft={draft} onDraft={changeDraft} onSend={send} fresh={fresh} taken={takenNow} checking={last?.phase === 'uncertain' && fresh} error={error} onReconnect={onReconnect} images={images} dialog={dialog}
@@ -265,29 +306,53 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
           alert={endError && <EndErrorNotice error={endError} fresh={fresh} onRetry={() => openSheet('close')} onReconnect={onReconnect} />}
           {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />
         : <EndFooter key={ending.kind} ending={ending.kind === 'ended' && ending.error?.op === cleared ? { ...ending, error: null } : ending} name={session.name} canResume={closable} resumeHeld={resumeHeld(session, ops, boot, now)} readOnly={!!session.readOnly} fresh={fresh} focus={sent} onResume={() => openSheet('resume')} onReconnect={onReconnect} />}
+      <SessionFoot store={store} session={session} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
       </>}
+      {more && <SessionMore store={store} session={session} closable={closable && !omp} closing={shut} onClose={() => setMore(false)}
+        onModel={() => { setMore(false); setModel(true); }} onCloseSession={() => { setMore(false); openSheet('close'); }} />}
+      {model && modelSwitchable(state.daemon, session) && <ChangeSheet store={store} session={session} onClose={() => setModel(false)} />}
       {sheet && <EndSheet store={store} session={session} mode={sheet} onClose={() => setSheet(null)} onSent={() => { setSent(true); setSheet(null); }} onReconnect={onReconnect} />}
     </>
   );
 }
 
-/** The session's indicators under its title (docs/mockups/ledge-harness-usage.html, phone 3): model and effort, context, duration;
- *  what is not known is not there. Hidden on a phone on its side, where the header is one line. */
-function Chips({ session, threshold, now }: { session: PhoneSession; threshold: number; now: number }) {
-  const i = indicators(session, now, threshold);
-  const chip = 'inline-flex items-center gap-1.5 rounded-full border border-line px-[9px] py-[3px] text-[11.5px] text-muted';
-  const model = [i.model, i.effort].filter(Boolean).join(' · ');
-  if (!model && !i.context && !i.duration) return null;
+/** « Fil · Terminal » in a session's head (§3): the two views of one session, each its own screen. */
+export function ViewToggle({ sessionId, current }: { sessionId: string; current: 'thread' | 'terminal' }) {
+  const V = copy.sessions.view;
+  const tab = 'grid h-9 place-items-center px-3.5 text-[13px] font-medium text-muted aria-[current=page]:bg-raised aria-[current=page]:text-fg';
   return (
-    <div data-chips="" className="mt-2 flex flex-wrap gap-1.5 phone-side:hidden">
-      {model && <span className={chip}>{model}</span>}
-      {i.context && <span className={`${chip} ${i.context.near ? 'text-attention' : ''}`}>{copy.agents.context(i.context.pct)}</span>}
-      {i.duration && (
-        <span className={chip}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-          {i.duration}
+    <nav aria-label={V.label} className="flex flex-none overflow-hidden rounded-lg border border-input">
+      <a href={href({ name: 'thread', sessionId })} aria-current={current === 'thread' ? 'page' : undefined} className={tab}>{V.thread}</a>
+      <a href={href({ name: 'terminal', sessionId })} aria-current={current === 'terminal' ? 'page' : undefined} className={tab}>{V.terminal}</a>
+    </nav>
+  );
+}
+
+/**
+ * The session's foot (§3, §4): its model (a tap opens « Modèle et effort » when the phone can change it), its context in percent,
+ * amber past « Contexte max », and its branch, or its folder without Git. No MR/PR before M5. What is not known is not there.
+ */
+function SessionFoot({ store, session, threshold, onModel }: { store: MobileStore; session: PhoneSession; threshold: number; onModel: () => void }) {
+  const { daemon, fresh } = useMobile(store);
+  const now = useNow();
+  const i = indicators(session, now, threshold);
+  const S = copy.sessions;
+  const can = modelOff(daemon, session) === null;
+  return (
+    <footer aria-label={S.foot(session.name)} className="bleed flex h-10 flex-none items-center gap-2.5 border-t border-line bg-sidebar px-3 text-small whitespace-nowrap text-muted">
+      {i.model && (can
+        ? <button type="button" disabled={!fresh} aria-haspopup="dialog" aria-label={copy.model.chip(i.model)} onClick={onModel} className="inline-flex h-8 items-center gap-1 text-fg disabled:opacity-60">{i.model}<Icon name="down" className="size-3.5" /></button>
+        : <span className="text-fg">{i.model}</span>)}
+      {i.context && (
+        <span role="img" aria-label={S.contextLabel(i.context.pct)} className={`inline-flex items-center gap-1.5 ${i.context.near ? 'text-attention' : ''}`}>
+          <span className="relative block h-1 w-8 overflow-hidden rounded-sm bg-raised"><span className="absolute inset-y-0 left-0 bg-current" style={{ width: `${i.context.pct}%` }} /></span>
+          {i.context.pct} %
         </span>
       )}
-    </div>
+      {(i.model || i.context) && <span className="h-3 w-px flex-none bg-line" />}
+      {session.branch
+        ? <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{session.branch}</span>
+        : <span aria-label={S.folder(session.project)} className="inline-flex min-w-0 flex-1 items-center gap-1"><Icon name="folder" className="size-3.5" /><span className="truncate">{session.project}</span></span>}
+    </footer>
   );
 }

@@ -43,16 +43,16 @@ export function FilterChips<T extends string>({ label, options, value, onChange 
   );
 }
 
-/** A detail screen's head: back, the runtime, the name and its dot, where it works, and « Plus d'actions ». */
-export function DetailHeader({ back, tool, name, dot, sub, more }: {
-  back: ReactNode; tool?: Tool; name: string; dot?: DotState; sub?: string; more?: ReactNode;
+/** A detail screen's head: back, the runtime, the name and its dot (`pulse`: at work, live), where it works, and « Plus d'actions ». */
+export function DetailHeader({ back, tool, name, dot, pulse = false, sub, more }: {
+  back: ReactNode; tool?: Tool; name: string; dot?: DotState; pulse?: boolean; sub?: string | undefined; more?: ReactNode;
 }) {
   return (
     <header className="flex h-14 flex-none items-center gap-2 border-b border-line pr-1.5 pl-0.5">
       {back}
       {tool && <RuntimeTag tool={tool} />}
       <b className="text-base font-semibold whitespace-nowrap">{name}</b>
-      {dot && <Dot state={dot} />}
+      {dot && <Dot state={dot} pulse={pulse} />}
       {sub && <span className="min-w-0 truncate text-small text-muted">{sub}</span>}
       <span className="flex-1" />
       {more}

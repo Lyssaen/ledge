@@ -46,7 +46,8 @@ export function SessionModelNote({ store, session }: { store: MobileStore; sessi
   return <p role="status" className="pb-2 text-meta text-attention">{copy.model.failedLine(copy.model.failed[reason])}</p>;
 }
 
-function ChangeSheet({ store, session, onClose }: { store: MobileStore; session: PhoneSession; onClose: () => void }) {
+/** « Modèle et effort »: from the chip, the thread's foot or « Plus d'actions ». */
+export function ChangeSheet({ store, session, onClose }: { store: MobileStore; session: PhoneSession; onClose: () => void }) {
   const { models } = useMobile(store);
   const listing = models[session.tool] ?? NONE;
   const now = running(session);

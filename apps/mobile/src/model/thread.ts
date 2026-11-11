@@ -22,10 +22,18 @@ export type ThreadItem =
   | { key: string; kind: 'task'; task: TaskNotice; at: string; cut?: true }
   | { key: string; kind: 'event'; label: string; at: string }
   | { key: string; kind: 'capture'; label: string; at: string; images: AttachmentRef[] }
+  /** The tools the agent ran in a row, folded into one block (m2-sessions.html §3): « 4 outils · Read, Write, Edit, Bash ». */
+  | { key: string; kind: 'tools'; at: string; tools: ToolLine[] }
   | { key: string; kind: 'awaiting'; item: InboxItem }
   /** The centred time before OpenRig's elements (the mockup's `.pt`). */
   | { key: string; kind: 'time'; label: string }
   | RigElement;
+
+/** One tool of a folded block: its short name, what it ran on, and whether it is done, running or failed. */
+export interface ToolLine { id: string; name: string; label: string; status: Extract<PcItem, { kind: 'tool' }>['status'] }
+
+/** The distinct names of a block's tools, in the order they first ran: what the folded block says after its count. */
+export const toolNames = (tools: readonly ToolLine[]): string[] => [...new Set(tools.map(t => t.name))];
 
 type Instruction = Op & { message: Extract<Op['message'], { type: 'session.reply' }> };
 
@@ -74,8 +82,8 @@ const sameText = (prompt: string, sent: string, shortened: boolean) => {
  * The thread in the PC's order (a row updated in place keeps its place; the PC's rows are not sorted by time), what
  * this phone sent that the PC's thread does not show yet in its place in time, what is still on its way, then the
  * request still waiting. A taken instruction the PC never lists (a command such as `/new`, or a prompt that fell off its
- * window) goes once the PC lists something `TAKEN_WINDOW` past it: the PC moved on without it. Of the tools only those that returned images show, as a
- * capture; a prompt that is Claude Code's `<task-notification>` shows as a task card; helpers and messages between agents are left to the terminal, but for OpenRig's (the items that carry `rig`:
+ * window) goes once the PC lists something `TAKEN_WINDOW` past it: the PC moved on without it. A tool that returned images
+ * shows as a capture; the others are folded, those in a row in one block; a prompt that is Claude Code's `<task-notification>` shows as a task card; helpers and messages between agents are left to the terminal, but for OpenRig's (the items that carry `rig`:
  * a bubble, a task card, a notice line, each after its time); a permission shows once decided. `sessions`: the phone's,
  * to name the seat an OpenRig block is from. `self`: this device's id, to tell its own decisions from another device's.
  */
@@ -109,6 +117,15 @@ export function threadItems(items: PcItem[], session: PhoneSession, ops: Record<
         const row = packets.after.get(i.id);
         if (row) out.push(row);
       } else out.push(rig);
+      continue;
+    }
+    // A tool with no image joins the block of the tools just before it; anything shown in between starts a new block.
+    if (i.kind === 'tool' && !i.images?.length) {
+      const line: ToolLine = { id: i.id, name: toolShortName(i.tool), label: i.label, status: i.status };
+      const prev = out.at(-1);
+      if (prev?.kind === 'tools') prev.tools.push(line);
+      else out.push({ key: `tools-${i.id}`, kind: 'tools', at: i.at, tools: [line] });
+      lastTime = null; lastPacket = null;
       continue;
     }
     const before = out.length;

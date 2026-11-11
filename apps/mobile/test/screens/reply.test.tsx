@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, within, fireEvent, render, screen } from '@testing-library/react';
 import { MESSAGE_MAX, type PhoneServerMessage } from '@ledge/protocol';
 import { describe, expect, it } from 'vitest';
 import { Thread } from '../../src/screens/Thread';
@@ -68,7 +68,7 @@ describe('the model chip in the quick row', () => {
     render(<Thread store={t.store} sessionId="a" storage={t.storage} />);
     act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
     const row = screen.getByRole('group', { name: 'Consignes rapides' });
-    expect(row.firstElementChild).toBe(screen.getByRole('button', { name: /Modèle et effort :/ }));
+    expect(row.firstElementChild).toBe(within(row).getByRole('button', { name: /Modèle et effort :/ }));
     expect(row.children.length).toBeGreaterThan(1);
   });
 });

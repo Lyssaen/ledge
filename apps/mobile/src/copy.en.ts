@@ -286,7 +286,28 @@ export const en: Copy = {
       waiting: (n: number) => (n === 1 ? '1 is waiting for your decision.' : `${n} are waiting for your decision.`),
       idle: 'They are all available or ended.'
     },
-    seeWaiting: 'See waiting'
+    seeWaiting: 'See waiting',
+    view: { label: 'Session view', thread: 'Thread', terminal: 'Terminal' },
+    more: 'More actions',
+    moreOf: (bot: string) => `More actions for ${bot}`,
+    tools: (n: number) => (n === 1 ? '1 tool' : `${n} tools`),
+    toolsNamed: (n: number, names: string) => `${n === 1 ? '1 tool' : `${n} tools`} · ${names}`,
+    toolStatus: { running: 'running', success: 'done', failed: 'failed', unknown: 'state unknown' },
+    foot: (bot: string) => `${bot}'s state`,
+    contextLabel: (pct: number) => `Context used: ${pct} %`,
+    folder: (name: string) => `Folder ${name}`,
+    sheet: {
+      label: (bot: string) => `Actions for ${bot}`,
+      writeGroup: (group: string) => `Write to the group ${group}`,
+      planCount: (done: number, total: number) => `${done} / ${total}`,
+      interruptNote: 'Interrupting does not undo actions already done.',
+      faceId: 'Face ID'
+    },
+    modelOff: {
+      olderPc: 'Changing it from the phone comes with a later version of Ledge on the PC.',
+      outside: 'Started outside Ledge: change it in its terminal.',
+      ended: 'The session has ended.'
+    }
   },
   agents: {
     title: 'Sessions',

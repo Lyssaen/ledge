@@ -12,7 +12,7 @@ import type { MobileStore } from '../../state/store';
 import { Icon } from '../../ui/icons';
 import { Card } from '../../ui/kit/Box';
 import { kitButtonClass, RequestCode } from '../../ui/kit/Controls';
-import { Pill, RuntimeTag } from '../../ui/kit/marks';
+import { Dot, Pill, RuntimeTag } from '../../ui/kit/marks';
 import { isApple } from '../device';
 import { useDeviceCheck, type CheckProblem } from './check';
 import { Leaving, Receipt } from './Receipt';
@@ -47,6 +47,8 @@ export interface SessionCardProps {
   onCheck?: (() => void) | undefined;
   /** The one opened beside the list (a wide screen). */
   selected?: boolean;
+  /** At the foot of its session's thread (m2-sessions.html §3): the head says what is asked, not who asks. */
+  inThread?: boolean;
 }
 
 /**
@@ -54,7 +56,7 @@ export interface SessionCardProps {
  * that decide it here, then, once decided, a one-line receipt in its place. A tap on its head or its text opens it in full.
  */
 export function SessionCard(p: SessionCardProps) {
-  const { store, item, mode, outcome, fresh, ghost, changed, canConfirm, enroll, onGone, selected = false } = p;
+  const { store, item, mode, outcome, fresh, ghost, changed, canConfirm, enroll, onGone, selected = false, inThread = false } = p;
   const [sent, setSent] = useState<Sent | null>(null);
   const [refused, setRefused] = useState(false);
   const [otherOpen, setOtherOpen] = useState(mode.kind === 'question' && mode.options.length === 0 && mode.other);
@@ -140,7 +142,15 @@ export function SessionCard(p: SessionCardProps) {
   const where = [item.repo, item.branch].filter(Boolean).join(' · ');
   const btn = (variant: 'primary' | 'outline' = 'outline', extra = '') => kitButtonClass({ variant, className: `min-w-0 ${extra}` });
 
-  const head = (
+  const head = inThread ? (
+    <a href={open} className="-m-1 flex min-w-0 items-center gap-[7px] rounded-md p-1 active:bg-raised">
+      <Dot state={item.kind === 'question' ? 'ask' : item.kind === 'permission' ? 'perm' : 'work'} />
+      <b className="min-w-0 truncate font-semibold">{item.kind === 'permission' ? copy.atoi.line.permission : kindWord}</b>
+      <span className="flex-1" />
+      <span className="font-mono text-small whitespace-nowrap text-muted">{ageLabel(item.since, Date.now())}</span>
+      {high && <Pill tone="risk">{copy.risk.badge}</Pill>}
+    </a>
+  ) : (
     <a href={open} className="-m-1 flex min-w-0 items-center gap-[7px] rounded-md p-1 active:bg-raised">
       <RuntimeTag tool={item.tool} />
       <b className="font-semibold whitespace-nowrap">{bot}</b>

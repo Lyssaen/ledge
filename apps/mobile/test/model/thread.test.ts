@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AttachmentRef, PhoneSession, ThreadItem } from '@ledge/protocol';
-import { composerState, threadItems } from '../../src/model/thread';
+import { composerState, threadItems, toolNames } from '../../src/model/thread';
 import type { Op } from '../../src/state/operations';
 import { pending, session } from './fixtures';
 
@@ -26,12 +26,12 @@ describe('threadItems', () => {
       { kind: 'tool', ...base('t6', 4), tool: 'Bash', label: 'ls', status: 'success', files: [] },
       permission('t7', 5, 'pnpm test')
     ], s({ state: 'waiting_permission', pending: pending({ key: 'p1' }) }), {});
-    expect(items.map(i => i.kind)).toEqual(['me', 'event', 'agent', 'event', 'event', 'awaiting']);
+    expect(items.map(i => i.kind)).toEqual(['me', 'event', 'agent', 'event', 'event', 'tools', 'awaiting']);
     expect(items.filter(i => i.kind === 'event').map(i => i.kind === 'event' && i.label)).toEqual([
       'Accord pris en compte · depuis le PC', 'Refus pris en compte · depuis le PC', 'Traitée dans le terminal'
     ]);
     expect(items[2]).toMatchObject({ kind: 'agent', text: '**Prête.**' });
-    expect(items[5]).toMatchObject({ kind: 'awaiting', key: 'awaiting-p1', item: { sessionId: 'a', key: 'p1' } });
+    expect(items[6]).toMatchObject({ kind: 'awaiting', key: 'awaiting-p1', item: { sessionId: 'a', key: 'p1' } });
   });
 
   it('says a decision came from this phone when one of its applied decisions answered that request', () => {
@@ -138,6 +138,28 @@ describe('threadItems with images', () => {
   it('an unmatched own op carries its attachment ids', () => {
     const items = threadItems([], s(), ops({ ...withImages([IMG.id]), phase: 'sending' }));
     expect(items[0]).toMatchObject({ kind: 'me', delivery: 'sending', attachments: [IMG.id] });
+  });
+
+  it('folds the tools run in a row into one block, a capture or anything shown in between starting a new one (§3)', () => {
+    const tool = (id: string, m: number, name: string, label: string, status: 'running' | 'success' | 'failed' = 'success', extra: object = {}): ThreadItem =>
+      ({ kind: 'tool', ...base(id, m), tool: name, label, status, files: [], ...extra });
+    const REF: AttachmentRef = { id: 'c'.repeat(64), mime: 'image/png', width: 1280, height: 800, bytes: 30_000, preview: true };
+    const helper: ThreadItem = { kind: 'helper', ...base('h', 2), task: 'explore', state: 'working' };
+    const out = threadItems([
+      prompt('t1', 0, 'Monte la coque'),
+      tool('a', 1, 'Read', 'App.tsx'), tool('b', 1, 'Edit', 'App.tsx'), helper, tool('c', 2, 'Read', 'Shell.tsx'), tool('d', 2, 'Bash', 'pnpm typecheck', 'failed'),
+      reply('t2', 3, 'Le typecheck passe.'),
+      tool('e', 4, 'Bash', 'pnpm e2e', 'running'),
+      tool('f', 4, 'mcp__plugin_playwright_playwright__browser_take_screenshot', 'shot', 'success', { images: [REF] }),
+      tool('g', 5, 'Edit', 'Shell.tsx')
+    ], s(), {});
+    expect(out.map(i => i.kind)).toEqual(['me', 'tools', 'agent', 'tools', 'capture', 'tools']);
+    expect(out[1]).toEqual({ key: 'tools-a', kind: 'tools', at: T(1), tools: [
+      { id: 'a', name: 'Read', label: 'App.tsx', status: 'success' }, { id: 'b', name: 'Edit', label: 'App.tsx', status: 'success' },
+      { id: 'c', name: 'Read', label: 'Shell.tsx', status: 'success' }, { id: 'd', name: 'Bash', label: 'pnpm typecheck', status: 'failed' }
+    ] });
+    expect(out[1]!.kind === 'tools' && toolNames(out[1].tools)).toEqual(['Read', 'Edit', 'Bash']);
+    expect(out[3]).toMatchObject({ tools: [{ id: 'e', status: 'running' }] });
   });
 
   it('makes a capture entry only for tool rows with images', () => {
