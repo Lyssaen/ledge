@@ -8,7 +8,8 @@ import { startPresence } from './push/presence';
 import { startPruning } from './push/prune';
 import { startWake } from './link/wake';
 import { createStore, type MobileStore } from './state/store';
-import { registerPinnedSw, type UpdateWatch } from './sw/register';
+import { lang, onLang } from './copy';
+import { registerPinnedSw, sayLang, type UpdateWatch } from './sw/register';
 
 /**
  * The relay's `?signin=<issue>` (after GitHub), taken out of the address so a reload does not say it again; the path
@@ -70,5 +71,11 @@ export async function boot(): Promise<Booted> {
   startPruning(store, async () => ('serviceWorker' in navigator ? navigator.serviceWorker.getRegistration() : null));
   startWake(link);
   const updates = await registerPinnedSw().catch(() => null);
+  if (updates) {
+    // The notifications are written by the worker in the app's language (Q29): it is told now and at each change.
+    const say = () => sayLang(globalThis.navigator?.serviceWorker, lang);
+    say();
+    onLang(say);
+  }
   return { link, store, signin, lost, updates };
 }

@@ -384,6 +384,59 @@ describe('the pinned service worker', () => {
       }
     });
 
+    it('writes its own title from kind and name, in French before the app said its language (Q29)', async () => {
+      const w = await firstVisit(origin());
+      const show = w.self.registration.showNotification;
+      const titles: Record<string, string> = {
+        request: 'api attend ton accord', question: 'api a une question', finished: 'api a terminé', resolved: 'api · traitée', decision: 'api attend ta décision'
+      };
+      for (const [kind, title] of Object.entries(titles)) {
+        show.mockClear();
+        await w.push({ ...payload, kind, name: 'api' });
+        expect((show.mock.calls[0] as unknown as [string, { body: string }])[0], kind).toBe(title);
+        expect((show.mock.calls[0] as unknown as [string, { body: string }])[1].body).toBe('rm -rf build');
+      }
+    });
+
+    it('writes English titles and the English fallback once the app said English, and French again after', async () => {
+      const w = await firstVisit(origin());
+      const show = w.self.registration.showNotification;
+      await w.message({ type: 'lang', lang: 'en' });
+      await w.push({ ...payload, name: 'api' });
+      await w.push({ ...payload, kind: 'decision', name: 'dev-front' });
+      await w.push({ ...payload, kind: 'chat', title: 'Ledge a répondu', body: 'Touchez pour lire la réponse.', url: '/#/chat', tag: 'chat' });
+      await w.push(undefined);
+      expect(show.mock.calls.map((c) => [(c as unknown[])[0], ((c as unknown[])[1] as { body: string }).body])).toEqual([
+        ['api needs your approval', 'rm -rf build'],
+        ['dev-front needs your decision', 'rm -rf build'],
+        ['Ledge has answered', 'Tap to read the answer.'],
+        ['Ledge', 'A request is waiting']
+      ]);
+      show.mockClear();
+      await w.message({ type: 'lang', lang: 'fr' });
+      await w.push({ ...payload, kind: 'chat', title: 'Ledge a répondu', body: 'Touchez pour lire la réponse.', url: '/#/chat', tag: 'chat' });
+      expect(show).toHaveBeenCalledWith('Ledge a répondu', expect.objectContaining({ body: 'Touche pour lire la réponse.' }));
+    });
+
+    it('keeps the PC\'s title without a name (an older PC), and a chat\'s error body as the PC wrote it', async () => {
+      const w = await firstVisit(origin());
+      await w.message({ type: 'lang', lang: 'en' });
+      await w.push(payload);
+      await w.push({ ...payload, kind: 'chat', title: 'Ledge a répondu', body: 'Ledge n\'a pas pu répondre.', url: '/#/chat', tag: 'chat' });
+      const calls = w.self.registration.showNotification.mock.calls.map((c) => [(c as unknown[])[0], ((c as unknown[])[1] as { body: string }).body]);
+      expect(calls).toEqual([['api attend votre accord', 'rm -rf build'], ['Ledge has answered', 'Ledge n\'a pas pu répondre.']]);
+    });
+
+    it('a language it does not know counts as French; a name over 100 characters is not a payload', async () => {
+      const w = await firstVisit(origin());
+      const show = w.self.registration.showNotification;
+      await w.message({ type: 'lang', lang: 'de' });
+      await w.push({ ...payload, name: 'api' });
+      await w.push({ ...payload, name: 'n'.repeat(101) });
+      expect(show.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['api attend ton accord', 'Ledge']);
+      expect(PushPayloadSchema.safeParse({ ...payload, name: 'n'.repeat(101) }).success).toBe(false);
+    });
+
     it('a badge API that throws does not fail the push', async () => {
       const o = origin();
       const w = await firstVisit(o);

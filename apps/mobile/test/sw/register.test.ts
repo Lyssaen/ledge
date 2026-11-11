@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { registerPinnedSw } from '../../src/sw/register';
+import { registerPinnedSw, sayLang } from '../../src/sw/register';
 import type { BuildAnswer } from '../../src/sw/types';
 
 const V1 = { version: '0.11.0', fingerprint: '1'.repeat(64) };
@@ -86,5 +86,15 @@ describe('registerPinnedSw', () => {
     p.on.controllerchange!();
     await vi.waitFor(() => expect(p.watch.current()).toEqual(V1));
     expect(p.reload).not.toHaveBeenCalled();
+  });
+});
+
+describe('sayLang', () => {
+  it('tells the active worker the app\'s language, and does nothing without a worker', async () => {
+    const postMessage = vi.fn();
+    sayLang({ ready: Promise.resolve({ active: { postMessage } }) } as unknown as ServiceWorkerContainer, 'en');
+    await vi.waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'lang', lang: 'en' }));
+    expect(() => sayLang(undefined, 'fr')).not.toThrow();
+    sayLang({ ready: Promise.reject(new Error('no worker')) } as unknown as ServiceWorkerContainer, 'fr');
   });
 });
