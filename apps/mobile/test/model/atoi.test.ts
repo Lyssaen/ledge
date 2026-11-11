@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { HumanAsk, PhoneSession } from '@ledge/protocol';
-import { atoiOrder, cardMode, nextAfter, stepFrom, type AtoiTarget } from '../../src/model/atoi';
+import { alwaysLabel, alwaysScope, atoiOrder, cardMode, nextAfter, stepFrom, type AtoiTarget } from '../../src/model/atoi';
 import { requestsOf } from '../../src/model/requests';
 import { pending, session } from './fixtures';
 
@@ -77,5 +77,25 @@ describe('what a card decides in the list (cardMode)', () => {
   it('a permission offers « Toujours » where the agent does, never on a high-impact accept', () => {
     expect(cardMode(item({}), undefined, false)).toEqual({ kind: 'permission', always: true });
     expect(cardMode(item({ risk: 'high', riskReason: 'pushes' }), undefined, false)).toEqual({ kind: 'high' });
+  });
+});
+
+describe('what « Toujours » grants (alwaysScope, Q67)', () => {
+  const item = (p: Parameters<typeof pending>[0], tool: PhoneSession['tool'] = 'claude') =>
+    requestsOf([session('a', { tool, state: 'waiting_permission', pending: pending(p) })])[0]!;
+
+  it('follows Desktop: a Claude command is the project, its file tools the session, its plan auto mode, Codex the session', () => {
+    expect(alwaysScope(item({ tool: 'Bash' }))).toBe('project');
+    expect(alwaysScope(item({ tool: 'Edit' }))).toBe('edits');
+    expect(alwaysScope(item({ kind: 'diff' }))).toBe('edits');
+    expect(alwaysScope(item({ kind: 'plan' }))).toBe('plan');
+    expect(alwaysScope(item({ tool: 'shell' }, 'codex'))).toBe('session');
+  });
+
+  it('names the button after it', () => {
+    expect(alwaysLabel('project')).toBe('Toujours dans ce projet');
+    expect(alwaysLabel('edits')).toBe('Toujours pour cette session');
+    expect(alwaysLabel('session')).toBe('Toujours pour cette session');
+    expect(alwaysLabel('plan')).toBe('Approuver en mode auto');
   });
 });

@@ -38,9 +38,17 @@ describe('the decision footer of a wide screen (m1-a-toi.html §12)', () => {
   };
   const footer = () => [...document.querySelectorAll('footer button, footer span, footer p')].map(e => e.textContent).filter(Boolean);
 
+  it('« Toujours » says what it grants: a Codex command holds for the session, said under the buttons (Q67)', () => {
+    const t = setup();
+    t.deliver(snapshot([session('a', { name: 'Nova', tool: 'codex', state: 'waiting_permission', pending: pending({ key: 'kc', tool: 'shell' }) })]));
+    render(<RequestDetail store={t.store} sessionId="a" requestKey="kc" keys />);
+    expect(footer()).toContain('Toujours pour cette session');
+    expect(footer()).toContain('L’agent ne redemande plus pour cette commande ou ces fichiers jusqu’à la fin de la session.');
+  });
+
   it('one row: Autoriser, Refuser, Toujours dans ce projet, then the keys', () => {
     opened();
-    expect(footer()).toEqual(['Autoriser', 'Refuser', 'Toujours dans ce projet', 'Y / N au clavier', 'La décision sera transmise immédiatement au PC.']);
+    expect(footer()).toEqual(['Autoriser', 'Refuser', 'Toujours dans ce projet', 'Y / N au clavier', 'Claude Code enregistre la règle dans les réglages du projet : elle vaut aussi pour ses prochaines sessions dans ce projet.', 'La décision sera transmise immédiatement au PC.']);
   });
 
   it('Y allows, N refuses, « Toujours » sends `always`', () => {

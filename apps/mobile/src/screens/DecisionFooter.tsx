@@ -11,6 +11,7 @@ import { usePlatform } from './device';
 import { OnPc, RiskConfirm, type ConfirmReason } from './RiskConfirm';
 import { buttonClass } from '../ui/Button';
 import { useShortcuts } from '../ui/keys';
+import { alwaysLabel, alwaysScope } from '../model/atoi';
 
 const half = (variant?: 'primary') => buttonClass({ variant, className: 'flex-1' });
 const full = (variant?: 'primary' | 'ghost') => buttonClass({ variant, block: true });
@@ -83,8 +84,11 @@ export function DecisionFooter(p: DecisionFooterProps) {
   const live = fresh && !changed && stillPending;
   // Allow and Deny as two plain buttons (no question, no device check, nothing on the PC): the only footer Y / N may answer.
   const plain = item.kind !== 'question' && !optionReply && !multi && !answerable && !onPc;
-  // « Toujours dans ce projet » where the agent offers it; never for a high-impact accept (m1-a-toi.html §4).
+  // « Toujours » where the agent offers it, in the words of what it grants (m2-toujours.html §1); never for a high-impact accept (m1-a-toi.html §4).
   const always = plain && offers(item.tool, item.kind, 'always');
+  const scope = alwaysScope(item);
+  // The full request says what « Toujours » grants under the buttons: a phone has no hover (Q67).
+  const grants = always && <p className="text-small text-muted phone-side:hidden">{copy.atoi.scope[scope]}</p>;
   // Y / N only while the buttons they stand for are shown and enabled.
   const shown = outcome.kind !== 'sending' && outcome.kind !== 'uncertain'
     && !((outcome.kind === 'rejected' || outcome.kind === 'failed') && (outcome.reason === 'no_prompt' || outcome.reason === 'nothing_to_decide' || outcome.reason === 'stale'));
@@ -132,9 +136,10 @@ export function DecisionFooter(p: DecisionFooterProps) {
     <div className="flex flex-wrap items-center gap-2.5">
       <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={buttonClass({ variant: 'primary', className: 'min-w-[150px]' })}>{D.allow}</button>
       <button type="button" disabled={!enabled} onClick={() => onDecide('deny')} className={buttonClass({ className: 'min-w-[120px]' })}>{D.deny}</button>
-      {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={buttonClass({ variant: 'ghost' })}>{copy.atoi.always}</button>}
+      {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={buttonClass({ variant: 'ghost' })}>{alwaysLabel(scope)}</button>}
       <span className="flex-1" />
       <span className="font-mono text-small text-muted">{copy.atoi.keys}</span>
+      {grants && <div className="basis-full">{grants}</div>}
     </div>
   ) : (
     <div className="flex flex-col gap-2.5 phone-side:flex-row">
@@ -144,7 +149,8 @@ export function DecisionFooter(p: DecisionFooterProps) {
           ? <OnPc />
           : <button type="button" disabled={!enabled} onClick={() => onDecide('accept')} className={half('primary')}>{D.allow}</button>}
       </div>
-      {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={buttonClass({ variant: 'ghost', block: true, className: 'phone-side:w-auto phone-side:flex-1' })}>{copy.atoi.always}</button>}
+      {always && <button type="button" disabled={!enabled} onClick={() => onDecide('always')} className={buttonClass({ variant: 'ghost', block: true, className: 'phone-side:w-auto phone-side:flex-1' })}>{alwaysLabel(scope)}</button>}
+      {grants}
     </div>
   );
   const linkHint = !fresh ? D.offlineHint : optionReply ? (confirmable ? D.answerHint : D.onPcHint) : multi ? D.answerHint : onPc && !answerable && !confirmable ? D.onPcHint : answerable ? D.answerHint : D.hint;

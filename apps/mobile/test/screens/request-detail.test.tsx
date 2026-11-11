@@ -146,7 +146,7 @@ describe('a question', () => {
 describe('the decision footer', () => {
   it('reads as the board: the buttons, then the way to the thread, then what a tap does', () => {
     opened(pending());
-    expect(footerOrder()).toEqual(['Refuser', 'Autoriser', 'Toujours dans ce projet', 'Voir le fil de Kai', 'La décision sera transmise immédiatement au PC.']);
+    expect(footerOrder()).toEqual(['Refuser', 'Autoriser', 'Toujours dans ce projet', 'Claude Code enregistre la règle dans les réglages du projet : elle vaut aussi pour ses prochaines sessions dans ce projet.', 'Voir le fil de Kai', 'La décision sera transmise immédiatement au PC.']);
   });
 
   it('a question it cannot answer from here sends to the PC, the thread link before the hint', () => {

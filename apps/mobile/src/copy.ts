@@ -79,7 +79,15 @@ const fr = {
     keys: 'Y / N au clavier',
     /** A request's row on a wide screen (§12): « Pim Autoriser une commande »; a question keeps its pill's word. */
     line: { permission: 'Autoriser une commande' },
-    openThread: 'Ouvrir le fil'
+    openThread: 'Ouvrir le fil',
+    /** What « Toujours » grants (m2-toujours.html §1, Q67): the button by scope, and the line under the buttons in the full request. */
+    alwaysSession: 'Toujours pour cette session', approveAuto: 'Approuver en mode auto',
+    scope: {
+      project: 'Claude Code enregistre la règle dans les réglages du projet : elle vaut aussi pour ses prochaines sessions dans ce projet.',
+      edits: 'Claude Code acceptera toutes les modifications suivantes de cette session sans te les demander.',
+      session: 'L’agent ne redemande plus pour cette commande ou ces fichiers jusqu’à la fin de la session.',
+      plan: 'Claude Code passe en mode auto : il répond seul aux demandes suivantes, commandes comprises.'
+    }
   },
   /** OpenRig's asks, with Desktop's words (apps/desktop/src/i18n/fr.ts, `asks`), and the device check of an answer (Q63 to Q66). */
   asks: {

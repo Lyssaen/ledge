@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { PhoneSession } from '@ledge/protocol';
 import { copy } from '../../copy';
-import type { CardMode } from '../../model/atoi';
+import { alwaysLabel, alwaysScope, type CardMode } from '../../model/atoi';
 import { consequenceFor } from '../../model/consequence';
 import { checkFreeAnswer, OTHER_MAX } from '../../model/freeAnswer';
 import type { Outcome } from '../../model/requestOutcome';
@@ -173,7 +173,7 @@ export function SessionCard(p: SessionCardProps) {
               <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'accept' })} className={btn('primary')}>{turning({ kind: 'decide', decision: 'accept' }) && <Spin />}{copy.atoi.allow}</button>
               <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'deny' })} className={btn()}>{turning({ kind: 'decide', decision: 'deny' }) && <Spin />}{copy.atoi.deny}</button>
             </div>
-            {mode.always && <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'always' })} className={kitButtonClass({ variant: 'ghost', className: '-mt-1 self-stretch' })}>{turning({ kind: 'decide', decision: 'always' }) && <Spin />}{copy.atoi.always}</button>}
+            {mode.always && <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'always' })} className={kitButtonClass({ variant: 'ghost', className: '-mt-1 self-stretch' })}>{turning({ kind: 'decide', decision: 'always' }) && <Spin />}{alwaysLabel(alwaysScope(item))}</button>}
           </>
         );
       case 'high':

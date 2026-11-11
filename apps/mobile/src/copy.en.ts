@@ -79,7 +79,14 @@ export const en: Copy = {
     seeSessions: 'See the sessions',
     keys: 'Y / N on the keyboard',
     line: { permission: 'Allow a command' },
-    openThread: 'Open the thread'
+    openThread: 'Open the thread',
+    alwaysSession: 'Always for this session', approveAuto: 'Approve in auto mode',
+    scope: {
+      project: 'Claude Code saves the rule in the project’s settings: it also holds for its later sessions in this project.',
+      edits: 'Claude Code will accept every later edit in this session without asking you.',
+      session: 'The agent stops asking for this command or these files for the rest of the session.',
+      plan: 'Claude Code switches to auto mode: it answers the next requests by itself, commands included.'
+    }
   },
   /** OpenRig's asks, with Desktop's words (apps/desktop/src/i18n/en.ts, `asks`), and the device check of an answer (Q63 to Q66). */
   asks: {

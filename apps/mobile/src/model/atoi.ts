@@ -2,6 +2,7 @@ import { offers, type HumanAnswer, type HumanAsk, type PhoneSession } from '@led
 import type { Op } from '../state/operations';
 import { isLive } from '../state/operations';
 import type { InboxItem } from './requests';
+import { copy } from '../copy';
 
 /*
  * « À toi » (docs/mockups/ledge-mobile-refonte/m1-a-toi.html, commit 3228f5ed): the sessions' requests as cards, OpenRig's asks
@@ -33,6 +34,25 @@ export function cardMode(item: InboxItem, caps: { decide?: boolean; freeTextAnsw
   if (item.risk === 'high') return { kind: 'high' };
   return { kind: 'permission', always: offers(item.tool, item.kind, 'always') };
 }
+
+/** Claude Code's file tools: their « always » turns on accept-edits for the whole session. */
+const EDITS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
+/**
+ * What « Toujours » grants (m2-toujours.html §1, Q67), by Desktop's rule (`apps/desktop/src/session/PendingCard.tsx`
+ * `alwaysScope`) until it moves to `@ledge/protocol`: Claude's command rule goes to the project, its file tools and Codex
+ * hold for the session, its plan switches to auto mode.
+ */
+export type AlwaysScope = 'project' | 'edits' | 'session' | 'plan';
+export function alwaysScope(item: Pick<InboxItem, 'tool' | 'kind' | 'pendingTool'>): AlwaysScope {
+  if (item.tool !== 'claude') return 'session';
+  if (item.kind === 'plan') return 'plan';
+  return item.kind === 'diff' || EDITS.has(item.pendingTool ?? '') ? 'edits' : 'project';
+}
+
+/** The « Toujours » button's words for that scope. */
+export const alwaysLabel = (scope: AlwaysScope): string =>
+  scope === 'project' ? copy.atoi.always : scope === 'plan' ? copy.atoi.approveAuto : copy.atoi.alwaysSession;
 
 const RANK = { critical: 0, urgent: 1, routine: 2 } as const;
 
