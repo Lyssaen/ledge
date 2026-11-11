@@ -62,8 +62,9 @@ test('the terminal streams at the PC\'s size, then types after the passkey', asy
   });
 
   await test.step('xterm draws the pane, read-only, at 120 columns', async () => {
-    await expect(page.getByText(L.status.live)).toBeVisible();
-    await expect(page.getByText(L.meta('ledge', 120, 30))).toBeVisible();
+    // The banner (m2-sessions.html §6): the project, the state, the PC's size.
+    await expect(page.getByRole('status').filter({ hasText: L.status.live })).toBeVisible();
+    await expect(page.getByText('120 × 30', { exact: true })).toBeVisible();
     await expect(page.locator('.xterm-accessibility-tree')).toContainText('Read(src/routes/invoices.ts)');
     expect(sent('term.open')).toMatchObject([{ id: 's1' }]);
     await page.screenshot({ path: 'test-results/terminal-live.png' });
@@ -72,7 +73,7 @@ test('the terminal streams at the PC\'s size, then types after the passkey', asy
   await test.step('« Prendre la main » → the device → the PC verifies it; the keys reach the pane', async () => {
     await page.getByRole('button', { name: L.hold }).click();
     await page.getByRole('button', { name: L.go }).click();
-    await expect(page.getByText(L.heldTitle('Otto'))).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: L.status.held })).toBeVisible();
     expect(sent('term.hold')).toMatchObject([{ assertion: { id: expect.any(String) } }]);
     await page.keyboard.type('ls');
     await page.getByRole('button', { name: L.keyLabel.enter }).click();

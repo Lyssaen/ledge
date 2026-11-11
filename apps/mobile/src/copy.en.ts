@@ -557,9 +557,7 @@ export const en: Copy = {
     uncertain: 'Receipt not confirmed: check the terminal before trying again.',
     /** The live terminal (spec 2026-11-02 mobile terminal, mockup docs/mockups/mobile-terminal.html). */
     live2: {
-      meta: (project: string, cols: number, rows: number) => `${project} · ${cols} × ${rows}, PC size`,
-      ended: (project: string) => `${project} · ended`,
-      status: { connecting: 'Connecting to the terminal…', live: 'Live · read only', held: 'At the keyboard', offline: 'Connection lost · last screen known', ended: 'Session ended', refused: 'Terminal unavailable' },
+      status: { connecting: 'Connecting to the terminal…', live: 'Read only · live', held: 'At the keyboard', offline: 'Connection lost · last screen known', ended: 'Session ended', refused: 'Terminal unavailable' },
       view: 'View', readable: 'Readable', fit: 'Fit',
       screen: (bot: string) => `${bot}’s terminal`,
       position: 'Visible part of the columns',
@@ -567,9 +565,7 @@ export const en: Copy = {
       inputOff: 'To type here, turn on “Type into terminals from a linked device” on the PC, in Mobile access.',
       offlineHint: 'The screen comes back as soon as the PC answers.',
       back: 'Back to the thread',
-      heldTitle: (bot: string) => `You are typing in ${bot}`,
       heldLeft: (left: string) => `Hand given back in ${left} without a key press`,
-      heldTag: 'At the keyboard',
       released: { idle: 'Hand given back: 5 minutes without a key press.', expired: 'Hand given back: 30 minutes passed.', background: 'Hand given back: the app went to the background.', pc: 'The PC took the hand back.', link: 'Hand given back: connection lost.' },
       exit: { ended: null, gone: (bot: string) => `${bot}’s terminal no longer exists on the PC.`, closed: null, superseded: 'The terminal was opened elsewhere on this device.', failed: 'The PC could not follow this terminal.' },
       refused: { read_only: 'Session started outside Ledge: open its terminal on the PC.', unknown_session: 'This session no longer exists on the PC.', unavailable: 'The PC cannot show this terminal.' } as Partial<Record<string, string>>,
@@ -583,7 +579,13 @@ export const en: Copy = {
       key: { esc: 'Esc', tab: 'Tab', ctrl: 'Ctrl', alt: 'Alt', left: '←', up: '↑', down: '↓', right: '→', enter: '↵', interrupt: '^C', paste: 'Paste', line: 'Line' },
       keyLabel: { esc: 'Escape', tab: 'Tab', ctrl: 'Control', alt: 'Alt', left: 'Left arrow', up: 'Up arrow', down: 'Down arrow', right: 'Right arrow', enter: 'Enter', interrupt: 'Control C', paste: 'Paste', line: 'Line mode' },
       armed: 'armed', locked: 'locked',
-      lineField: 'Line to type in the terminal', lineSend: 'Type the line', withEnter: 'With ↵',
+      lineField: 'Line to type in the terminal', lineSend: 'Type the line',
+      /** The line's button (m2-sessions.html §6): it always sends with Enter. */
+      lineGo: 'Type ↵',
+      /** In the read-only bar, when the session has a request waiting (§6). */
+      alsoInThread: `The request is also in the thread and in “${ATOI}”.`,
+      /** The context keys for a numbered choice on the screen (§6, QUESTIONS.md « M2b · Le terminal » 3). */
+      contextKeys: { yes: 'Yes', always: 'Always', no: 'No' },
       pasteFailed: 'Nothing to paste, or the device refused access to the clipboard.'
     }
   },

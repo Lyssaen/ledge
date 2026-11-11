@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TERM_INPUT_MAX, type PhoneServerMessage } from '@ledge/protocol';
 import { Terminal } from '../../src/screens/Terminal';
 import { INPUT_BATCH_MS, TermController, inputChunk, paintScreen, type TermScreen, type TermWire } from '../../src/term/controller';
-import { keyBytes, withModifiers } from '../../src/term/keys';
+import { contextKeys, keyBytes, withModifiers } from '../../src/term/keys';
 import type { XtermScreen } from '../../src/term/xterm';
 import { session } from '../model/fixtures';
 import { snapshot } from '../state/helpers';
@@ -155,25 +155,36 @@ describe('keys', () => {
   it('never splits a surrogate pair across two inputs', () => {
     expect(inputChunk('a'.repeat(TERM_INPUT_MAX - 1) + '😀')).toBe('a'.repeat(TERM_INPUT_MAX - 1));
   });
+  it('reads a numbered choice under « ❯ 1. » as context keys, with fixed words, and a digit alone for an option it does not know', () => {
+    const fr = ['  Autoriser cette commande ?', '  ❯ 1. Oui', '    2. Oui, toujours dans ce projet', '    3. Non, et dire à Claude quoi faire', ''];
+    expect(contextKeys(fr)).toEqual([{ digit: '1', word: 'yes' }, { digit: '2', word: 'always' }, { digit: '3', word: 'no' }]);
+    const en = ['❯ 1. Yes', '  2. Yes, and don\'t ask again for this command', '     in this project', '  3. Plan first', '  4. No'];
+    expect(contextKeys(en)).toEqual([{ digit: '1', word: 'yes' }, { digit: '2', word: 'always' }, { digit: '3', word: null }, { digit: '4', word: 'no' }]);
+    // Numbers out of order end the choice; without « ❯ 1. » there is none.
+    expect(contextKeys(['❯ 1. Oui', '  3. Non'])).toEqual([{ digit: '1', word: 'yes' }]);
+    expect(contextKeys(['  1. Oui', '  2. Non'])).toEqual([]);
+  });
 });
 
 /** An xterm without a canvas: what the page asks of it is recorded. */
 function fakeXterm() {
   const calls: string[] = [];
+  let rows: string[] = [];
   let data: (d: string) => void = () => {};
+  let drawn: () => void = () => {};
   const x: XtermScreen = {
     reset: () => calls.push('reset'), write: () => calls.push('write'), resize: () => {},
     onData: fn => { data = fn; }, setFont: px => calls.push(`font ${px}`), font: () => 11, fitFont: () => 6,
     cursor: () => ({ x: 0, cellWidth: 6 }), setInput: on => calls.push(`input ${on}`), paste: () => {}, appCursor: () => false,
-    onDrawn: () => {}, focus: () => {}, setTheme: () => {}, dispose: () => calls.push('dispose')
+    onDrawn: fn => { drawn = fn; }, focus: () => {}, setTheme: () => {}, dispose: () => calls.push('dispose'), rows: () => rows
   };
-  return { make: () => x, calls, key: (d: string) => data(d) };
+  return { make: () => x, calls, key: (d: string) => data(d), show: (r: string[]) => { rows = r; drawn(); } };
 }
 
 describe('the live terminal screen', () => {
-  function page(daemon: Record<string, true>, device = { confirm: true }) {
+  function page(daemon: Record<string, true>, device = { confirm: true }, state: 'working' | 'waiting_permission' = 'working') {
     const t = setup();
-    const snap = snapshot([session('a', { name: 'Kai', state: 'working', project: 'billing-api' })], 'Atelier', undefined, device);
+    const snap = snapshot([session('a', { name: 'Kai', state, project: 'billing-api' })], 'Atelier', undefined, device);
     t.deliver({ ...snap, ...(snap.type === 'snapshot' ? { daemon: { ...snap.daemon, ...daemon } } : {}) } as PhoneServerMessage);
     const xt = fakeXterm();
     return { ...t, xt };
@@ -192,8 +203,9 @@ describe('the live terminal screen', () => {
     const view = render(<TerminalLive store={t.store} link={t.link} session={t.store.getState().sessions.get('a')!} storage={t.storage} makeScreen={t.xt.make} />);
     const op = t.of('term.open')[0]!.op;
     act(() => t.deliver(opened(op)));
-    expect(screen.getByText('En direct · lecture seule')).toBeInTheDocument();
-    expect(screen.getByText('billing-api · 200 × 50, taille du PC')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Lecture seule · en direct');
+    const banner = screen.getByRole('status').parentElement!;
+    expect(banner).toHaveTextContent(/^billing-apiLecture seule · en direct200 × 50$/);
     expect(screen.queryByRole('button', { name: /Prendre la main/ })).toBeNull();
     expect(screen.getByText(/active « Taper dans les terminaux depuis un appareil lié »/)).toBeInTheDocument();
     view.unmount();
@@ -212,7 +224,8 @@ describe('the live terminal screen', () => {
     expect(t.of('confirm.prepare')).toEqual([{ type: 'confirm.prepare', purpose: 'terminal', id: 'a' }]);
     // The PC gives the hand (the passkey's own path is RiskConfirm's, tested there).
     act(() => t.deliver({ type: 'term.held', tid: TID, until: new Date(Date.now() + 1_800_000).toISOString() }));
-    expect(screen.getByText('Tu tapes dans Kai')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Au clavier');
+    expect(screen.queryByText('200 × 50')).toBeNull();
     expect(t.xt.calls).toContain('input true');
     fireEvent.click(screen.getByRole('button', { name: 'Contrôle' }));
     expect(screen.getByRole('button', { name: 'Contrôle, armé' })).toHaveAttribute('aria-pressed', 'true');
@@ -233,5 +246,105 @@ describe('the live terminal screen', () => {
     act(() => t.deliver({ type: 'term.released', tid: TID, why: 'idle' }));
     expect(screen.getByText('Main rendue : 5 minutes sans frappe.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Reprendre la main/ })).toBeEnabled();
+  });
+
+  async function held(state: 'working' | 'waiting_permission', until = 1_800_000) {
+    const t = page({ terminal: true, terminalInput: true }, { confirm: true }, state);
+    const { TerminalLive } = await import('../../src/screens/TerminalLive');
+    render(<TerminalLive store={t.store} link={t.link} session={t.store.getState().sessions.get('a')!} storage={t.storage} makeScreen={t.xt.make} />);
+    act(() => t.deliver(opened(t.of('term.open')[0]!.op)));
+    act(() => t.deliver({ type: 'term.held', tid: TID, until: new Date(Date.now() + until).toISOString() }));
+    return t;
+  }
+  const choice = ['  Autoriser cette commande ?', '  ❯ 1. Oui', '    2. Oui, toujours dans ce projet', '    3. Non, et dire à Claude quoi faire'];
+
+  it('shows the context keys for a permission waiting, and a key types its digit alone', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = await held('waiting_permission');
+    act(() => t.xt.show(choice));
+    expect(screen.getByRole('button', { name: '2 Toujours' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '3 Non' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(INPUT_BATCH_MS + 5); });
+    expect(t.of('term.input').map(m => m.data).join('')).toBe('3');
+  });
+
+  it('shows no context key while nothing is asked, even with a numbered list on the screen', async () => {
+    const t = await held('working');
+    act(() => t.xt.show(choice));
+    expect(screen.queryByRole('button', { name: '1 Oui' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Échap' })).toBeInTheDocument();
+  });
+
+  it('« Taper ↵ » types the line with Enter', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const t = await held('working');
+    fireEvent.click(screen.getByRole('button', { name: 'Mode ligne' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Ligne à taper dans le terminal' }), { target: { value: 'git status' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Taper la ligne' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(INPUT_BATCH_MS + 5); });
+    expect(t.of('term.input').map(m => m.data).join('')).toBe('git status\r');
+  });
+
+  it('counts the last minute down in place of « Au clavier », the project giving it room', async () => {
+    await held('working', 45_000);
+    expect(screen.getByRole('status')).toHaveTextContent(/^Main rendue dans 0:4\d sans frappe$/);
+    expect(screen.getByRole('status').parentElement).not.toHaveTextContent('billing-api');
+  });
+
+  it('says in the read-only bar that a waiting request is also in the thread and in « À toi »', async () => {
+    const t = page({ terminal: true, terminalInput: true }, { confirm: true }, 'waiting_permission');
+    const { TerminalLive } = await import('../../src/screens/TerminalLive');
+    render(<TerminalLive store={t.store} link={t.link} session={t.store.getState().sessions.get('a')!} storage={t.storage} makeScreen={t.xt.make} />);
+    act(() => t.deliver(opened(t.of('term.open')[0]!.op)));
+    expect(screen.getByText('La demande est aussi dans le fil et dans « À toi ».')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Prendre la main/ })).toBeEnabled();
+  });
+
+  it('keeps no such sentence when nothing waits', async () => {
+    const t = page({ terminal: true, terminalInput: true });
+    const { TerminalLive } = await import('../../src/screens/TerminalLive');
+    render(<TerminalLive store={t.store} link={t.link} session={t.store.getState().sessions.get('a')!} storage={t.storage} makeScreen={t.xt.make} />);
+    act(() => t.deliver(opened(t.of('term.open')[0]!.op)));
+    expect(screen.queryByText(/La demande est aussi dans le fil/)).toBeNull();
+  });
+
+  it('switches « Lisible » and « Ajusté » from « Affichage » in « Plus d’actions », and remembers it', async () => {
+    const t = page({ terminal: true, terminalInput: true });
+    const { TerminalLive } = await import('../../src/screens/TerminalLive');
+    render(<TerminalLive store={t.store} link={t.link} session={t.store.getState().sessions.get('a')!} storage={t.storage} makeScreen={t.xt.make} />);
+    act(() => t.deliver(opened(t.of('term.open')[0]!.op)));
+    expect(t.xt.calls).toContain('font 11');
+    fireEvent.click(screen.getByRole('button', { name: 'Plus d’actions pour Kai' }));
+    const line = screen.getByRole('button', { name: /Affichage/ });
+    expect(line).toHaveTextContent('Lisible');
+    fireEvent.click(line);
+    expect(screen.queryByRole('button', { name: /Affichage/ })).toBeNull();
+    expect(t.xt.calls.at(-1)).toBe('font 6');
+    expect(t.storage.getItem('ledge.mobile.terminalView')).toBe('fit');
+    fireEvent.click(screen.getByRole('button', { name: 'Plus d’actions pour Kai' }));
+    expect(screen.getByRole('button', { name: /Affichage/ })).toHaveTextContent('Ajusté');
+  });
+
+  it('« Fil » keeps the pane\'s place, which « Terminal » finds again', async () => {
+    const pane = (el: HTMLElement) => {
+      const at = { left: 0, top: 0 };
+      for (const [k, v] of [['scrollWidth', 1200], ['clientWidth', 360], ['scrollHeight', 700], ['clientHeight', 400]] as const) Object.defineProperty(el, k, { configurable: true, get: () => v });
+      Object.defineProperty(el, 'scrollLeft', { configurable: true, get: () => at.left, set: (v: number) => { at.left = v; } });
+      Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => at.top, set: (v: number) => { at.top = v; } });
+      return at;
+    };
+    const t = page({ terminal: true, terminalInput: true });
+    const { TerminalLive } = await import('../../src/screens/TerminalLive');
+    const first = render(<TerminalLive store={t.store} link={t.link} session={t.store.getState().sessions.get('a')!} storage={t.storage} makeScreen={t.xt.make} />);
+    act(() => t.deliver(opened(t.of('term.open')[0]!.op)));
+    const a = pane(screen.getByLabelText('Terminal de Kai'));
+    a.left = 500; a.top = 120;
+    fireEvent.click(screen.getByRole('link', { name: 'Fil' }));
+    first.unmount();
+    const u = page({ terminal: true, terminalInput: true });
+    render(<TerminalLive store={u.store} link={u.link} session={u.store.getState().sessions.get('a')!} storage={u.storage} makeScreen={u.xt.make} />);
+    const b = pane(screen.getByLabelText('Terminal de Kai'));
+    act(() => u.xt.show(['$ ls']));
+    expect(b).toEqual({ left: 500, top: 120 });
   });
 });

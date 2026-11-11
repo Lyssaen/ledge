@@ -376,7 +376,7 @@ export function ViewToggle({ sessionId, current, onLeave }: { sessionId: string;
  * The session's foot (§3, §4): its model (a tap opens « Modèle et effort » when the phone can change it), its context in percent,
  * amber past « Contexte max », and its branch, or its folder without Git. No MR/PR before M5. What is not known is not there.
  */
-function SessionFoot({ store, session, wide, threshold, onModel }: { store: MobileStore; session: PhoneSession; wide: boolean; threshold: number; onModel: () => void }) {
+export function SessionFoot({ store, session, wide, threshold, onModel }: { store: MobileStore; session: PhoneSession; wide: boolean; threshold: number; onModel: () => void }) {
   const { daemon, fresh, usage, usageAlert } = useMobile(store);
   const now = useNow();
   const i = indicators(session, now, threshold);

@@ -10,6 +10,7 @@ import { buttonClass, iconButtonClass } from '../ui/Button';
 import { Icon } from '../ui/icons';
 import type { PhoneLink } from '../link/link';
 import { TerminalLive } from './TerminalLive';
+import { SessionHead } from './SessionHead';
 
 const SIZE_KEY = 'ledge.mobile.terminalSize';
 export const SIZE_MIN = 11;
@@ -91,7 +92,7 @@ function TerminalPreview({ store, sessionId, storage }: { store: MobileStore; se
 
   return (
     <>
-      <BackHeader title={copy.terminal.title(session.name)} fallback={backRoute} label={copy.terminal.back} link={link} />
+      <SessionHead store={store} session={session} current="terminal" />
       <main className="flex min-h-0 flex-1 flex-col">
         <div className="mt-2 mb-4 flex items-center justify-between gap-2">
           <span role="status" className="text-small text-muted">{status}</span>

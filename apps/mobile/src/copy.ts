@@ -565,9 +565,7 @@ const fr = {
     uncertain: 'Réception non confirmée : vérifie le terminal avant de recommencer.',
     /** The live terminal (spec 2026-11-02 mobile terminal, mockup docs/mockups/mobile-terminal.html). */
     live2: {
-      meta: (project: string, cols: number, rows: number) => `${project} · ${cols} × ${rows}, taille du PC`,
-      ended: (project: string) => `${project} · terminée`,
-      status: { connecting: 'Connexion au terminal…', live: 'En direct · lecture seule', held: 'Au clavier', offline: 'Connexion perdue · dernier écran connu', ended: 'Session terminée', refused: 'Terminal indisponible' },
+      status: { connecting: 'Connexion au terminal…', live: 'Lecture seule · en direct', held: 'Au clavier', offline: 'Connexion perdue · dernier écran connu', ended: 'Session terminée', refused: 'Terminal indisponible' },
       view: 'Affichage', readable: 'Lisible', fit: 'Ajusté',
       screen: (bot: string) => `Terminal de ${bot}`,
       position: 'Partie visible des colonnes',
@@ -575,9 +573,7 @@ const fr = {
       inputOff: 'Pour taper ici, active « Taper dans les terminaux depuis un appareil lié » sur le PC, dans Accès mobile.',
       offlineHint: 'L’écran reprend dès que le PC répond.',
       back: 'Retour au fil',
-      heldTitle: (bot: string) => `Tu tapes dans ${bot}`,
       heldLeft: (left: string) => `Main rendue dans ${left} sans frappe`,
-      heldTag: 'Au clavier',
       released: { idle: 'Main rendue : 5 minutes sans frappe.', expired: 'Main rendue : 30 minutes écoulées.', background: 'Main rendue : l’appli est passée en arrière-plan.', pc: 'Le PC a repris la main.', link: 'Main rendue : connexion perdue.' },
       exit: { ended: null, gone: (bot: string) => `Le terminal de ${bot} n’existe plus sur le PC.`, closed: null, superseded: 'Le terminal a été ouvert ailleurs sur cet appareil.', failed: 'Le PC n’a pas pu suivre ce terminal.' },
       refused: { read_only: 'Session démarrée hors de Ledge : ouvre son terminal sur le PC.', unknown_session: 'Cette session n’existe plus sur le PC.', unavailable: 'Le PC ne peut pas montrer ce terminal.' } as Partial<Record<string, string>>,
@@ -591,7 +587,13 @@ const fr = {
       key: { esc: 'Échap', tab: 'Tab', ctrl: 'Ctrl', alt: 'Alt', left: '←', up: '↑', down: '↓', right: '→', enter: '↵', interrupt: '^C', paste: 'Coller', line: 'Ligne' },
       keyLabel: { esc: 'Échap', tab: 'Tabulation', ctrl: 'Contrôle', alt: 'Alt', left: 'Flèche gauche', up: 'Flèche haut', down: 'Flèche bas', right: 'Flèche droite', enter: 'Entrée', interrupt: 'Contrôle C', paste: 'Coller', line: 'Mode ligne' },
       armed: 'armé', locked: 'verrouillé',
-      lineField: 'Ligne à taper dans le terminal', lineSend: 'Taper la ligne', withEnter: 'Avec ↵',
+      lineField: 'Ligne à taper dans le terminal', lineSend: 'Taper la ligne',
+      /** The line's button (m2-sessions.html §6): it always sends with Enter. */
+      lineGo: 'Taper ↵',
+      /** In the read-only bar, when the session has a request waiting (§6). */
+      alsoInThread: 'La demande est aussi dans le fil et dans « À toi ».',
+      /** The context keys for a numbered choice on the screen (§6, QUESTIONS.md « M2b · Le terminal » 3). */
+      contextKeys: { yes: 'Oui', always: 'Toujours', no: 'Non' },
       pasteFailed: 'Rien à coller, ou l’appareil a refusé l’accès au presse-papiers.'
     }
   },
