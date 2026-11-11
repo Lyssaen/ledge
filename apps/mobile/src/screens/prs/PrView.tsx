@@ -397,6 +397,10 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
     forge.readDetail(id, failed.id);
   }, [forge, id, failed?.id, read?.data?.log?.jobId]);
 
+  // Another view starts at its top, not where the last one was left.
+  const main = useRef<HTMLElement>(null);
+  useEffect(() => { main.current?.scrollTo?.({ top: 0 }); }, [view]);
+
   const scroll = `tab-main flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain pb-[18px] ${wide ? 'pt-[18px]' : 'pt-3'}`;
   // A request the list no longer holds, and never read: it is not followed any more (§4, §8).
   if (!pr) {
@@ -424,7 +428,7 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
     <>
       <Head pr={pr} />
       <Views pr={pr} d={d} view={view} onView={setView} />
-      <main data-tab-scroll="" className={scroll}>
+      <main ref={main} data-tab-scroll="" className={scroll}>
         <LinkStrip body={C.offlineBody} />
         {gone && !run && <Receipt mark="warn" title={C.gone(w.kind, name)} sub={C.goneBody} />}
         {run && <ForgeRunNote run={run} pr={pr} detail={d} forge={forge} pc={name} onReload={() => forge.readDetail(id)} />}

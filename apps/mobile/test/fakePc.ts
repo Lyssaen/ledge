@@ -11,6 +11,7 @@ import {
 import { startTestRelay, type TestRelay } from '../../../packages/ledge/test/mobile-relay-harness';
 // The daemon's own verification, not a copy: both modules import only node:crypto.
 import { createChallengeStore, CHALLENGE_TTL_MS } from '../../../packages/ledge/src/mobile/challenges';
+import { forgeSubject } from '../../../packages/ledge/src/mobile/forge';
 import {
   challengeOf, rpOf, verifyAssertion, verifyRegistration, type DeviceCredential
 } from '../../../packages/ledge/src/mobile/webauthn';
@@ -353,6 +354,12 @@ export function createDeviceCheck(publicUrl: string) {
         if (!credential || credential.rpId !== rp.rpId) return 'invalid';
         return { type: 'confirm.challenge', purpose: 'terminal', challenge: challenges.issue({ deviceId, purpose: 'terminal', subject: m.id }), rpId: rp.rpId, credentialId: credential.id, expiresInMs: CHALLENGE_TTL_MS };
       }
+      // An action on a pull or merge request: bound to the request and the action, its text included (M5, contract §4).
+      if (m.purpose === 'forge') {
+        if (!m.forge) return 'invalid';
+        if (!credential || credential.rpId !== rp.rpId) return 'invalid';
+        return { type: 'confirm.challenge', purpose: 'forge', challenge: challenges.issue({ deviceId, purpose: 'forge', subject: forgeSubject(m.forge.prId, m.forge.action) }), rpId: rp.rpId, credentialId: credential.id, expiresInMs: CHALLENGE_TTL_MS };
+      }
       // A session's own close or resume: bound to the session.
       if ((m.purpose === 'close' || m.purpose === 'act') && !m.qid && m.id) {
         if (!live) return 'unknown_session';
@@ -428,6 +435,19 @@ export function createDeviceCheck(publicUrl: string) {
       const challenge = challengeOf(m.assertion.clientDataJSON);
       if (challenge === null) return 'assertion_invalid';
       const verdict = challenges.consume(challenge, { deviceId, purpose: m.type === 'session.close' ? 'close' : 'act', subject: `session:${m.id}` });
+      if (verdict === 'expired') return 'assertion_expired';
+      if (verdict !== 'ok') return 'assertion_invalid';
+      const verified = verifyAssertion(m.assertion, credential, rp, challenge);
+      if (!verified.ok) return 'assertion_invalid';
+      credential = { ...credential, counter: verified.counter };
+      return undefined;
+    },
+    /** The assertion of an action on a pull or merge request (purpose `forge`); undefined lets it through. The challenge is spent first. */
+    assertForge(m: Extract<PhoneClientMessage, { type: 'forge.act' }>): Reason | undefined {
+      if (!credential || !rp || !m.assertion) return 'confirm_required';
+      const challenge = challengeOf(m.assertion.clientDataJSON);
+      if (challenge === null) return 'assertion_invalid';
+      const verdict = challenges.consume(challenge, { deviceId, purpose: 'forge', subject: forgeSubject(m.prId, m.action) });
       if (verdict === 'expired') return 'assertion_expired';
       if (verdict !== 'ok') return 'assertion_invalid';
       const verified = verifyAssertion(m.assertion, credential, rp, challenge);

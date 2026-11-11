@@ -42,15 +42,15 @@ function SentNote({ sent, onClose }: { sent: Sent; onClose: () => void }) {
 }
 
 /** A text for the forge: its field, then the device's check over it and where it goes (« Publié sous ton nom sur GitHub. »). */
-function Write({ id, label, placeholder, verb, value, onChange, confirm, live, onPost, host, autoFocus = false }: {
+function Write({ id, label, placeholder, verb, value, onChange, confirm, live, onPost, host, autoFocus = false, rows = 2 }: {
   id: string; label: string; placeholder: string; verb: string; value: string; onChange: (v: string) => void;
-  confirm: boolean; live: boolean; onPost: () => void; host: string; autoFocus?: boolean;
+  confirm: boolean; live: boolean; onPost: () => void; host: string; autoFocus?: boolean; rows?: number;
 }) {
   return (
     <div className="flex flex-col gap-2">
       <label htmlFor={id} className="sr-only">{label}</label>
       <textarea
-        id={id} rows={2} value={value} placeholder={placeholder} autoFocus={autoFocus} onChange={e => onChange(e.target.value)}
+        id={id} rows={value ? Math.max(rows, 2) : rows} value={value} placeholder={placeholder} autoFocus={autoFocus} onChange={e => onChange(e.target.value)}
         className="min-h-11 w-full resize-none rounded-[14px] border border-input bg-surface px-3.5 py-[11px] text-base leading-5 text-fg placeholder:text-muted"
       />
       {value.trim() !== '' && (
@@ -187,7 +187,7 @@ export function CommentFoot({ pr, forge, store, live, pc }: { pr: PullRequest; f
       {run && <ForgeRunNote run={run} pr={pr} detail={undefined} forge={forge} pc={pc} />}
       <Write
         id={`comment-${pr.id}`} label={C.addComment} placeholder={C.addComment} verb={C.post} value={draft} onChange={v => forge.setDraft(key, v)}
-        confirm={!!m.device?.confirm} live={live && !busy} onPost={() => void forge.act(pr.id, { kind: 'comment', body: draft.trim() })} host={forgeWords(pr).host}
+        confirm={!!m.device?.confirm} live={live && !busy} onPost={() => void forge.act(pr.id, { kind: 'comment', body: draft.trim() })} host={forgeWords(pr).host} rows={1}
       />
     </div>
   );
