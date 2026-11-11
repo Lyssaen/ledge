@@ -283,7 +283,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     const inbox = <Inbox store={store} onReconnect={retry} />;
     const sessions = <Sessions store={store} filter={route.name === 'sessions' ? route.filter : undefined} />;
     // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
-    const chat = mobile.device?.chat || (!mobile.fresh && !mobile.device) ? <Chat store={store} onReconnect={retry} /> : <ChatUnavailable />;
+    const chatOn = !!mobile.device?.chat || (!mobile.fresh && !mobile.device);
+    const chat = chatOn ? <Chat store={store} onReconnect={retry} /> : <ChatUnavailable />;
     // The Rigs tab once the PC sends its rigs (`daemon.rigs`, m4-rigs.html); before, it says the PC does not.
     const rigsOn = !!mobile.daemon?.rigs && rigs !== null;
     const rigsList = rigsOn ? <RigsList rigs={rigs} store={store} /> : <Rigs />;
@@ -334,7 +335,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       // The Rigs tab's header (m4-rigs.html): « Rigs », the host, Réglages; before the PC sends its rigs, M0's.
       case 'rigs': return framed(rigsList, rigsOn ? copy.rigs.title : true);
       case 'rig': case 'kernel': case 'max': return rigsDetail ? framed(rigsDetail, false) : framed(rigsList, rigsOn ? copy.rigs.title : true);
-      case 'chat': return framed(chat);
+      // The Ledge tab brings its own head (m3-chat.html §1): Ledge, the host, its conversation buttons and Réglages.
+      case 'chat': return framed(chat, !chatOn);
       case 'connection': return framed(connection, false);
       case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />, false);
       case 'terminal': return framed(<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />, false);

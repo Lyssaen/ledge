@@ -139,7 +139,6 @@ const fr = {
       body: 'Le chat avec Ledge arrive avec une prochaine version de Ledge sur le PC.',
       seeAtoi: 'Voir « À toi »'
     },
-    subtitle: (agents: number, repos: number) => `Fil de cet appareil · ${agents} ${agents > 1 ? 'agents' : 'agent'}, ${repos} ${repos > 1 ? 'repos' : 'repo'}`,
     point: {
       title: 'Le point', label: 'Le point', ago: (s: string) => `il y a ${s}`,
       yours: 'À TOI', yoursLabel: 'À toi', given: 'CONFIÉES PAR LEDGE', givenLabel: 'Confiées par Ledge',
@@ -174,12 +173,17 @@ const fr = {
       given: (name: string, id: string, state: string) => `Confiée à ${name} · ${id} · ${state}`, notGiven: 'Pas confiée.'
     },
     reset: 'Nouvelle conversation',
+    /** The empty thread's suggestions (M3 Q32): questions sent at once, and « Nouvelle session », an action. */
     suggestions: {
       waiting: 'Qui attend quelque chose de moi ?',
+      summarize: 'Résumer la nuit',
+      rig: (name: string) => `Où en est ${name} ?`,
       session: (name: string) => `Où en est ${name} sur le badge d'attente ?`,
-      repo: (repo: string) => `Qu'est-ce qui a changé dans ${repo} aujourd'hui ?`
+      newSession: 'Nouvelle session'
     },
     stop: 'Arrêter',
+    answering: 'Ledge répond…',
+    askAgain: 'Reposer la question',
     stepsLabel: 'Étapes',
     sources: 'Sources : ',
     field: 'Question pour Ledge',

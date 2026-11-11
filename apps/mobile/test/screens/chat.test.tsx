@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { setCodecForTests } from '@ledge/ui/images';
 import { describe, expect, it } from 'vitest';
 import { copy } from '../../src/copy';
-import { Chat } from '../../src/screens/Chat';
+import { Chat, suggestionsOf } from '../../src/screens/Chat';
 import { session } from '../model/fixtures';
 import { chat, snapshot } from '../state/helpers';
 import { app } from './app-setup';
@@ -50,24 +50,48 @@ describe('the tab bar', () => {
 });
 
 describe('the chat screen', () => {
-  it('an empty thread opens on « Le point » and offers suggestions with real names; a tap puts one in the field', () => {
+  // m3-chat.html §1, Q32 (design-ux 355eade2): who waits, « Résumer la nuit » before noon, one name from the snapshot (the first
+  // rig's, else the first session's), and « Nouvelle session » with a PC that launches.
+  describe('the suggestions', () => {
+    const at = (h: number) => new Date(2026, 10, 11, h, 0);
+    it('before noon: who waits, the night, the first session; after noon, no night', () => {
+      const list = [session('a', { name: 'Bix' }), session('b', { name: 'Nova' })];
+      expect(suggestionsOf(list, at(9))).toEqual(['Qui attend quelque chose de moi ?', 'Résumer la nuit', 'Où en est Bix sur le badge d\'attente ?']);
+      expect(suggestionsOf(list, at(14))).toEqual(['Qui attend quelque chose de moi ?', 'Où en est Bix sur le badge d\'attente ?']);
+    });
+    it('a rig of the snapshot comes before a session, never the kernel; nothing named without one', () => {
+      const seat = session('s', { name: 'dev-back', rig: { name: 'ledge-dev', role: 'dev.back' } });
+      const kernel = session('k', { name: 'operator', rig: { name: 'kernel' } });
+      expect(suggestionsOf([session('a', { name: 'Bix' }), kernel, seat], at(14))).toEqual(['Qui attend quelque chose de moi ?', 'Où en est ledge-dev ?']);
+      expect(suggestionsOf([kernel], at(14))).toEqual(['Qui attend quelque chose de moi ?']);
+      expect(suggestionsOf([], at(14))).toEqual(['Qui attend quelque chose de moi ?']);
+    });
+    it('a tap on a question sends it at once (Q32); « Nouvelle session » opens the launch, only on a PC that launches', () => {
+      const t = setup();
+      const m = snapshot([session('a', { name: 'Bix' })], 'Atelier', undefined, ON);
+      t.deliver(m.type === 'snapshot' ? { ...m, daemon: { ...m.daemon, launch: true } } : m);
+      render(<Chat store={t.store} />);
+      expect(screen.getByRole('region', { name: copy.chat.point.label })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Nouvelle session' })).toHaveAttribute('href', '#/new');
+      fireEvent.click(screen.getByRole('button', { name: 'Qui attend quelque chose de moi ?' }));
+      expect(t.of('chat.ask')).toMatchObject([{ text: 'Qui attend quelque chose de moi ?' }]);
+      expect(screen.getByLabelText('Question pour Ledge')).toHaveValue('');
+    });
+    it('no « Nouvelle session » from a PC that does not launch; offline, no suggestion at all', () => {
+      const t = chatSetup();
+      expect(screen.queryByRole('link', { name: 'Nouvelle session' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Qui attend quelque chose de moi ?' })).toBeInTheDocument();
+      act(() => t.set('pc_offline'));
+      expect(screen.queryByRole('button', { name: 'Qui attend quelque chose de moi ?' })).toBeNull();
+    });
+  });
+
+  it('its head: Ledge, Nouvelle conversation and, on a phone, Réglages', () => {
     chatSetup();
-    expect(screen.getByRole('region', { name: copy.chat.point.label })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Qui attend quelque chose de moi ?' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Où en est Bix sur le badge d\'attente ?' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Qu\'est-ce qui a changé dans ledge aujourd\'hui ?' }));
-    expect(screen.getByLabelText('Question pour Ledge')).toHaveValue('Qu\'est-ce qui a changé dans ledge aujourd\'hui ?');
-  });
-
-  it('omits the suggestions that need a session or a repo when there is none', () => {
-    chatSetup([]);
-    expect(screen.getAllByRole('button', { name: /\?$/ })).toHaveLength(1);
-  });
-
-  it('the subtitle counts the sessions and their distinct repos', () => {
-    chatSetup([session('a', { repo: 'x' }), session('b', { repo: 'x' }), session('c', { repo: 'y' })]);
-    expect(screen.getByText('Fil de cet appareil · 3 agents, 2 repos')).toBeInTheDocument();
-    expect(copy.chat.subtitle(1, 1)).toBe('Fil de cet appareil · 1 agent, 1 repo');
+    const head = screen.getByRole('banner');
+    expect(within(head).getByRole('heading', { name: 'Ledge' })).toBeInTheDocument();
+    expect(within(head).getByRole('button', { name: 'Nouvelle conversation' })).toBeEnabled();
+    expect(within(head).getByRole('link', { name: 'Réglages' })).toHaveAttribute('href', '#/connection');
   });
 
   it('asking sends chat.ask, shows the bubble, then the steps and « Arrêter », which sends chat.cancel', () => {
@@ -106,7 +130,9 @@ describe('the chat screen', () => {
     send();
     const qid = t.of('chat.ask')[0]!.qid;
     act(() => t.deliver(chat.error(qid, 'busy')));
-    expect(screen.getByText(copy.chat.busy)).toBeInTheDocument();
+    // In the thread, under the question (§3).
+    expect(within(screen.getByRole('main')).getByText(copy.chat.busy)).toBeInTheDocument();
+    expect(within(screen.getByRole('main')).getByText('Une question')).toBeInTheDocument();
     expect(screen.getByLabelText('Question pour Ledge')).toHaveValue('Une question');
     expect(screen.queryByText('Arrêter')).not.toBeInTheDocument();
   });
@@ -118,6 +144,34 @@ describe('the chat screen', () => {
     const qid = t.of('chat.ask')[0]!.qid;
     act(() => t.deliver(chat.error(qid, 'timeout')));
     expect(screen.getByText(copy.chat.timeout)).toBeInTheDocument();
+  });
+
+  it('« Arrêter » takes the send button’s place while Ledge answers, the field still usable (Q37)', () => {
+    const t = chatSetup();
+    type('Une question');
+    send();
+    expect(screen.queryByRole('button', { name: 'Envoyer la question' })).toBeNull();
+    expect(screen.getByLabelText('Question pour Ledge')).toBeEnabled();
+    expect(screen.getByLabelText('Question pour Ledge')).toHaveAttribute('placeholder', 'Ledge répond…');
+    act(() => t.deliver(chat.done(t.of('chat.ask')[0]!.qid)));
+    expect(screen.queryByRole('button', { name: 'Arrêter' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Envoyer la question' })).toBeInTheDocument();
+  });
+
+  it('« Reposer la question » after a timeout or a failure sends the same question as a new one; a stop has none (Q37)', () => {
+    const t = chatSetup();
+    type('Une question');
+    send();
+    const qid = t.of('chat.ask')[0]!.qid;
+    act(() => t.deliver(chat.error(qid, 'failed')));
+    expect(screen.getByText(copy.chat.failed)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reposer la question' }));
+    const [, again] = t.of('chat.ask');
+    expect(again).toMatchObject({ text: 'Une question' });
+    expect(again!.qid).not.toBe(qid);
+    act(() => t.deliver(chat.error(again!.qid, 'cancelled')));
+    expect(screen.getByText(copy.chat.cancelled)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Reposer la question' })).toHaveLength(1);
   });
 
   it('offline, the send button is disabled, the note is shown and nothing is sent', () => {

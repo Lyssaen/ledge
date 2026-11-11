@@ -138,7 +138,6 @@ export const en: Copy = {
       body: 'The chat with Ledge comes with a later version of Ledge on the PC.',
       seeAtoi: `See “${ATOI}”`
     },
-    subtitle: (agents: number, repos: number) => `This device’s thread · ${agents} ${plural(agents, 'agent', 'agents')}, ${repos} ${plural(repos, 'repo', 'repos')}`,
     point: {
       title: 'The point', label: 'The point', ago: (s: string) => `${s} ago`,
       yours: 'YOURS', yoursLabel: 'Yours', given: 'GIVEN BY LEDGE', givenLabel: 'Given by Ledge',
@@ -173,12 +172,17 @@ export const en: Copy = {
       given: (name: string, id: string, state: string) => `Given to ${name} · ${id} · ${state}`, notGiven: 'Not given.'
     },
     reset: 'New conversation',
+    /** The empty thread's suggestions (M3 Q32): questions sent at once, and « New session », an action. */
     suggestions: {
-      waiting: 'Who is waiting on me for something?',
-      session: (name: string) => `How far is ${name} with the wait badge?`,
-      repo: (repo: string) => `What changed in ${repo} today?`
+      waiting: 'Who is waiting for me?',
+      summarize: 'Sum up the night',
+      rig: (name: string) => `Where is ${name}?`,
+      session: (name: string) => `Where is ${name} on the waiting badge?`,
+      newSession: 'New session'
     },
     stop: 'Stop',
+    answering: 'Ledge is answering…',
+    askAgain: 'Ask again',
     stepsLabel: 'Steps',
     sources: 'Sources: ',
     field: 'Question for Ledge',
@@ -188,7 +192,7 @@ export const en: Copy = {
     timeout: 'Ledge did not answer in time.',
     failed: 'Ledge could not answer.',
     cancelled: 'Question stopped.',
-    offline: 'Offline: ask the question once the PC can be reached.',
+    offline: 'Offline: ask the question when the PC is reachable.',
     cut: 'Answer cut: the rest is on the PC.',
     relayLabel: 'Proposed instruction', launchLabel: 'Proposed session',
     relayHead: (name: string) => `Send to ${name}`,
