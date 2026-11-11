@@ -17,6 +17,8 @@ import { Receipt, RigSheet, Spinner, Strip, rigButtonClass } from '../rigs/kit';
 import { Cancel, CheckedButton } from '../rigs/sheets';
 import { PipeChip, condText, dayTime, forgeWords, repoName } from './parts';
 import { ForgeRunNote } from './runs';
+import { Changes } from './Changes';
+import { Commits } from './Commits';
 
 /*
  * A request (m5-mr-pr.html, §3 and §8, the board PhonePR): its head, four views, the overview (the pipeline top to bottom, the failed
@@ -357,6 +359,9 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
           {view === 'overview' && (!read?.error || d) && (
             <Overview pr={pr} read={read} onJob={j => { setSheetJob(j.id); openLog(j); }} onLog={openLog} />
           )}
+          {(view === 'changes' || view === 'commits') && !d && !read?.error && <Loading />}
+          {view === 'changes' && d && <Changes detail={d} />}
+          {view === 'commits' && d && <Commits detail={d} />}
         </div>
       </main>
       <footer className="flex flex-none items-center gap-2.5 border-t border-line bg-sidebar px-3.5 py-[9px]">

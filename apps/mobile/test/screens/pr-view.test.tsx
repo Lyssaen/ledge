@@ -75,6 +75,15 @@ describe('a request', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('shows its changes and its commits in their views, each with its count', () => {
+    const t = open(pr().id);
+    t.give(detail());
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${C.tabs.changes}\\s*1$`) }));
+    expect(screen.getByText(/Term\.tsx/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${C.tabs.commits}\\s*1$`) }));
+    expect(screen.getByText('feat: detached windows')).toBeTruthy();
+  });
+
   it('reads a merged request without a button, the footer saying where it went', () => {
     const merged = pr({ state: 'merged' });
     const t = app('ready', { hash: at(merged.id) });
