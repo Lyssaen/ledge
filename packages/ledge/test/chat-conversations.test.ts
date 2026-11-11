@@ -47,6 +47,22 @@ describe('a device keeps its conversations', { timeout: 20_000 }, () => {
     expect(past).toEqual([]);
   });
 
+  it('a question still unanswered when the daemon stopped comes back failed, not running for ever', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'ledge-conv-')), clock = { t: '2026-10-20T08:00:00.000Z' };
+    // A CLI that never answers: the daemon stops while it reads.
+    const silent = (() => Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), killed: false, kill: () => {} })) as unknown as typeof nodeSpawn;
+    const first = createChatThreads({ store: new Store({ journalPath: join(home, 'j.json') }), tmux, home, now: () => clock.t, today: () => clock.t.slice(0, 10), env: async () => ({ ...process.env }), spawn: silent });
+    void first.device('d1').ask('q1', 'Où en est ledge-dev ?', quiet);
+    await vi.waitFor(async () => { expect((await first.device('d1').conversations!()).current).toMatchObject({ count: 1 }); });
+    const again = setup(home, clock);
+    const [turn] = again.d1().history();
+    expect(turn).toMatchObject({ qid: 'q1', error: 'the daemon stopped before Ledge answered' });
+    expect(turn!.answeredAt).toBeUndefined();
+    // The phone reads it as « Ledge could not answer »; nothing is reading any more, so the next question goes.
+    await again.d1().ask('q2', 'Et maintenant ?', quiet);
+    expect(again.d1().history().map(t => [t.qid, t.answer])).toEqual([['q1', undefined], ['q2', 'ok']]);
+  });
+
   it('« Nouvelle conversation » puts it away, read-only; nothing without a question', async () => {
     const s = setup();
     await s.d1().reset(quiet);
