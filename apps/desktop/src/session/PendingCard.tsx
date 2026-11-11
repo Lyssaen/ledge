@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { Pending, Tool } from '@ledge/protocol';
+import type { AlwaysScope, Pending } from '@ledge/protocol';
 import { Badge } from '@ledge/ui/ui/Badge';
 import { Button } from '@ledge/ui/ui/Button';
 import { Kbd } from '@ledge/ui/ui/Kbd';
@@ -13,17 +13,6 @@ export const sortOf = (p: Pending): Sort => (p.kind === 'question' ? 'question' 
 
 /** Tools whose request is a command to run. */
 const COMMANDS = new Set(['Bash', 'shell', 'exec_command']);
-/** Claude Code's file tools: their « always » turns on accept-edits for the whole session. */
-const EDITS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
-
-/** What « always » really grants (the option adapters/claude.ts and codex.ts pick on the dialog): Claude's Bash rule goes to
- *  the project's settings, its file tools switch the session to accept-edits, its plan option is accept-edits or auto mode
- *  (2.1); Codex's « don't ask again » holds for that command or those files until the session ends. */
-export function alwaysScope(tool: Tool, p: Pending): 'project' | 'edits' | 'session' | 'plan' {
-  if (tool !== 'claude') return 'session';
-  if (p.kind === 'plan') return 'plan';
-  return p.kind === 'diff' || EDITS.has(p.tool ?? '') ? 'edits' : 'project';
-}
 
 /** Claude Code's own free-text row in a question's dialog (adapters/claude.ts FREE_ROW): its digit only moves the cursor
  *  there, so it is no answer to pick; « Write your own answer » takes its place. */
@@ -32,7 +21,7 @@ export const isFreeRow = (label: string) => /^Type something\.?$/.test(label);
 /** The pinned plan sums up this many steps, then « … ». */
 const SUMMED_STEPS = 4;
 
-export type Scope = ReturnType<typeof alwaysScope>;
+export type Scope = AlwaysScope;
 
 export interface PendingActions {
   busy: boolean;

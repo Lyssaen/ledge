@@ -150,8 +150,10 @@ export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   model: true, effort: true, modelNext: true, canSwitch: true,
   /** Its context and its relief (context handover spec §3.2): the phone shows the gauge; the relief is started from the PC. */
   context: true, relieves: true,
-  /** When it ended: « Terminée · à 18:42 » in the list. */
-  exitedAt: true
+  /** When it ended: « Terminée · à 18:42 » in the list; and `killed` when Ledge's close had to force it (« Fermée de force »). */
+  exitedAt: true, closedHow: true,
+  /** What it is running now (« pnpm --filter desktop test »): the list row and « En cours ». Older phones drop the field. */
+  doing: true
 }).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional(),
   /** Absent: the agent has no checklist. */ checklist: PhoneChecklistSummarySchema.optional(),
   /** Started without Ledge (`hook_only`): the phone can neither close nor resume it. */ readOnly: z.literal(true).optional(),

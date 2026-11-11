@@ -1,4 +1,4 @@
-import { LEDGE_GIVER, openDecision, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
+import { DOING_LABEL_MAX, DOING_TOOL_MAX, LEDGE_GIVER, openDecision, pendingKey, PENDING_BODY_MAX, SNAPSHOT_BODY_MAX, taskClosed, THREAD_BUDGET, THREAD_ITEMS_MAX, THREAD_TEXT_MAX, TOOL_TEXT_MAX, TOPIC_MAX, ToolSchema } from '@ledge/protocol';
 import { EffortSchema, PhoneModelChoiceSchema, type ModelChoice, type PhoneModelChoice } from '@ledge/protocol';
 import { PHONE_COMMANDS_MAX, PhoneSlashCommandSchema, type PhoneSlashCommand, type SlashCommand } from '@ledge/protocol';
 import { CHECKLIST_TASKS_MAX, CHECKLIST_TEXT_MAX, doneCount } from '@ledge/protocol';
@@ -100,7 +100,9 @@ export function toPhoneSession(s: Session, readAt: string, checklist?: PhoneChec
     startedAt: s.startedAt, lastActivityAt: s.lastActivityAt,
     // Topics are already cut to TOPIC_MAX where they are set; clipped again so no source can swell a snapshot.
     ...(s.topic !== undefined ? { topic: clip(s.topic, TOPIC_MAX).text } : {}),
-    ...pickSet(s, ['repo', 'branch', 'worktree', 'context', 'relieves', 'exitedAt']),
+    ...pickSet(s, ['repo', 'branch', 'worktree', 'context', 'relieves', 'exitedAt', 'closedHow']),
+    // Cut where it is set already; clipped again so no source can swell a snapshot.
+    ...(s.doing ? { doing: { tool: clip(s.doing.tool, DOING_TOOL_MAX).text, label: clip(s.doing.label, DOING_LABEL_MAX).text, since: s.doing.since } } : {}),
     // Known up front: the phone shows neither Close nor Resume for it, rather than learning it from a refusal.
     ...(s.source === 'hook_only' ? { readOnly: true as const } : {}),
     // Its relief's state only (context handover spec §3.2): the phone shows it, the PC starts it.

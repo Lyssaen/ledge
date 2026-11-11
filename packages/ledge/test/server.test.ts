@@ -3282,8 +3282,17 @@ describe('close a session', () => {
     expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
     expect(texts()).toEqual([['text', 'ledge-a', '/exit']]);
     expect(tmux.sent.at(-1)).toEqual(['kill', 'ledge-a']);
-    expect(store.get('a')).toMatchObject({ state: 'exited' });
+    // Kept on the session: a front that did not close it can still say « Fermée de force ».
+    expect(store.get('a')).toMatchObject({ state: 'exited', closedHow: 'killed' });
     expect(logged()).toMatch(/close of a: killed \(.+\)/);
+  });
+
+  it('a close the agent leaves on its own marks nothing', async () => {
+    await closing({ 'ledge-a': ['> '] });
+    store.upsert(mk('a', { state: 'idle' }));
+    expect(await srv.closeSession('a')).toEqual({ how: 'exit' });
+    expect(store.get('a')!.state).toBe('exited');
+    expect(store.get('a')).not.toHaveProperty('closedHow');
   });
 
   it('a session its close had to kill resumes on its own conversation', async () => {
@@ -3291,11 +3300,14 @@ describe('close a session', () => {
     store.upsert(mk('a', { state: 'idle', cwd: tmpdir(), agentSessionId: 'u-1' }));
     expect(await srv.closeSession('a')).toEqual({ how: 'killed' });
     // The kill leaves the agent's conversation id: the resume continues it, not a new one.
-    expect(store.get('a')).toMatchObject({ state: 'exited', agentSessionId: 'u-1' });
+    expect(store.get('a')).toMatchObject({ state: 'exited', agentSessionId: 'u-1', closedHow: 'killed' });
     const c = await connect({ port: srv.port }); await c.next('snapshot');
     c.send({ type: 'session.resume', id: 'a' });
     await until(() => tmux.created.length > 0, 3000);
     expect(tmux.created.at(-1)!.command.slice(-2)).toEqual(['--resume', 'u-1']);
+    // Started again: the forced close belongs to its previous life.
+    await until(() => store.get('a')!.state !== 'exited', 3000);
+    expect(store.get('a')).not.toHaveProperty('closedHow');
     c.close();
   });
 

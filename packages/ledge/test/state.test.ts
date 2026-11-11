@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Session, SessionEvent, SessionState } from '@ledge/protocol';
 import { pendingKey } from '@ledge/protocol';
-import { reduce, answeredBy, HOOK_PRIORITY_MS } from '../src/daemon/state.js';
+import { reduce, answeredBy, doingLabel, HOOK_PRIORITY_MS } from '../src/daemon/state.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const later = (ms: number) => new Date(Date.parse(T0) + ms).toISOString();
@@ -251,7 +251,8 @@ describe('reduce: pending rules', () => {
     expect(next.lastActivityAt).toBe(later(7000));
   });
   it('returns the same object when nothing changes', () => {
-    const s = session('working');
+    // Already running that tool: the repeated hook changes nothing.
+    const s = session('working', { doing: { tool: 'Read', label: 'Read', since: T0 } });
     expect(reduce(s, ev('PreToolUse', { tool: 'Read', at: s.lastActivityAt }))).toBe(s);
   });
 });
@@ -762,5 +763,66 @@ describe('answeredBy: the hook that confirms a reply typed from Ledge (#35)', ()
   it('nothing for a request no tool is tied to: the pane\'s, or a Notification\'s', () => {
     expect(answeredBy({ ...question, source: 'pane' }, ev('PostToolUse', { tool: 'AskUserQuestion' }))).toBe(false);
     expect(answeredBy({ kind: 'permission', text: 'Claude needs your permission', source: 'hook' }, ev('PostToolUse', { tool: 'Bash' }))).toBe(false);
+  });
+});
+
+describe('reduce: what the agent is running (doing)', () => {
+  const pre = (tool: string, text: string, extra: Partial<SessionEvent> = {}) => ev('PreToolUse', { tool, text, ...extra });
+
+  it('is set by its own PreToolUse, with the tool, its label and when', () => {
+    const s = reduce(session('working'), pre('Bash', 'pnpm --filter desktop test'));
+    expect(s.doing).toEqual({ tool: 'Bash', label: 'pnpm --filter desktop test', since: later(5000) });
+  });
+
+  it('starts working from rest on a tool, and the next tool replaces it', () => {
+    const a = reduce(session('idle'), pre('Read', 'Read e2e/workspace.spec.ts'));
+    expect(a).toMatchObject({ state: 'working', doing: { tool: 'Read' } });
+    const b = reduce(a, pre('Edit', 'Edit apps/desktop/src/App.tsx', { at: later(6000) }));
+    expect(b.doing).toEqual({ tool: 'Edit', label: 'Edit apps/desktop/src/App.tsx', since: later(6000) });
+  });
+
+  it('is dropped by the end of that tool, failed or not, but not by the end of another one', () => {
+    const s = reduce(session('working'), pre('Bash', 'npm test'));
+    expect(reduce(s, ev('PostToolUse', { tool: 'Bash' }))).not.toHaveProperty('doing');
+    expect(reduce(s, ev('PostToolUseFailure', { tool: 'Bash', error: 'exit 1' }))).not.toHaveProperty('doing');
+    expect(reduce(s, ev('PostToolUse', { tool: 'Read' })).doing).toMatchObject({ tool: 'Bash' });
+  });
+
+  it('is dropped at rest, on an error, on a request, on a new prompt and at the end', () => {
+    const s = reduce(session('working'), pre('Bash', 'npm test'));
+    for (const e of [ev('Stop'), ev('StopFailure', { text: 'boom' }), ev('PermissionRequest', { tool: 'Bash', text: 'rm -rf dist' }),
+      ev('UserPromptSubmit', { text: 'autre chose' }), ev('SessionEnd'), ev('PaneGone', { source: 'pane' })]) {
+      expect(reduce(s, e), e.name).not.toHaveProperty('doing');
+    }
+  });
+
+  it('a question or a plan is a request, not something it runs', () => {
+    const q = reduce(session('working'), pre('AskUserQuestion', 'Which?', { options: ['A', 'B'] }));
+    expect(q.state).toBe('waiting_input');
+    expect(q).not.toHaveProperty('doing');
+    expect(reduce(session('working'), pre('ExitPlanMode', 'Plan'))).not.toHaveProperty('doing');
+  });
+
+  it('a subagent\'s tools neither set nor drop it', () => {
+    const s = reduce(reduce(session('working'), ev('SubagentStart', { helperId: 'h' })), pre('Bash', 'npm test'));
+    expect(reduce(s, pre('Grep', 'Grep tabs', { helperId: 'h' })).doing).toMatchObject({ tool: 'Bash' });
+    expect(reduce(s, ev('PostToolUse', { tool: 'Bash', helperId: 'h' })).doing).toMatchObject({ tool: 'Bash' });
+    expect(reduce(session('working'), pre('Grep', 'Grep tabs', { helperId: 'h' }))).not.toHaveProperty('doing');
+  });
+
+  it('keeps one short line: the first line, spaces collapsed, cut with « … »; the tool when there is no label', () => {
+    const long = `cd /w && ${'x'.repeat(200)}`;
+    const s = reduce(session('working'), pre('Bash', `\n  pnpm   test\n--watch`));
+    expect(s.doing!.label).toBe('pnpm test');
+    const cut = reduce(session('working'), pre('Bash', long)).doing!.label;
+    expect(cut).toHaveLength(120);
+    expect(cut.endsWith('…')).toBe(true);
+    expect(reduce(session('working'), pre('Task', '')).doing!.label).toBe('Task');
+    expect(doingLabel(`${'a'.repeat(118)}😀b`)).toBe(`${'a'.repeat(118)}…`);
+  });
+
+  it('a repeated PreToolUse of the same call keeps its start', () => {
+    const s = reduce(session('working'), pre('Bash', 'npm test'));
+    expect(reduce(s, pre('Bash', 'npm test', { at: later(7000) })).doing!.since).toBe(later(5000));
   });
 });

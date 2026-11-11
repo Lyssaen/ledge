@@ -33,6 +33,22 @@ export function offers(tool: Tool, kind: Pending['kind'], what: 'always' | 'note
   return DECISION_OFFERS[tool][what].includes(kind);
 }
 
+/** What an offered « always » grants, so every front names it the same: Desktop's button and title, the phone's card. */
+export type AlwaysScope = 'project' | 'edits' | 'session' | 'plan';
+
+/** Claude Code's file tools: their « always » turns on accept-edits for the whole session. */
+const EDIT_TOOLS: ReadonlySet<string> = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
+/** What « always » really grants (the option adapters/claude.ts and codex.ts pick on the dialog): Claude's Bash rule goes to
+ *  the project's settings, its file tools switch the session to accept-edits, its plan option is accept-edits or auto mode
+ *  (2.1); Codex's « don't ask again » holds for that command or those files until the session ends. Only meaningful where
+ *  `offers(tool, kind, 'always')`. */
+export function alwaysScope(tool: Tool, p: Pick<Pending, 'kind' | 'tool'>): AlwaysScope {
+  if (tool !== 'claude') return 'session';
+  if (p.kind === 'plan') return 'plan';
+  return p.kind === 'diff' || EDIT_TOOLS.has(p.tool ?? '') ? 'edits' : 'project';
+}
+
 /** cyrb53: a fast 53-bit string hash, the same in Node and the browser (no async crypto). */
 function cyrb53(str: string, seed: number): string {
   let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;

@@ -1,4 +1,4 @@
-import { cleanTopic, pendingKey, parseRigPrompt, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
+import { cleanTopic, DOING_LABEL_MAX, pendingKey, parseRigPrompt, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 import { crossSession, crossSessionNotices, ledgeNotice, ledgeTask } from './crossSession.js';
 import { sameQuestion } from '../adapters/types.js';
@@ -209,8 +209,41 @@ function withTopic(s: Session, text: string, source: TopicSource | undefined): S
   return { ...next, title: sessionTitle(next) };
 }
 
+/** A tool's label as one short line: its first non-empty line, spaces collapsed, cut to DOING_LABEL_MAX with « … ». */
+export function doingLabel(text: string): string {
+  const line = (text.split(/\r?\n/).map(l => l.trim()).find(l => l.length > 0) ?? '').replace(/\s+/g, ' ');
+  if (line.length <= DOING_LABEL_MAX) return line;
+  let end = DOING_LABEL_MAX - 1;
+  if (/[\ud800-\udbff]/.test(line[end - 1] ?? '')) end--;
+  return `${line.slice(0, end).trimEnd()}…`;
+}
+
+function withoutDoing(s: Session): Session {
+  if (!s.doing) return s;
+  const { doing: _gone, ...rest } = s;
+  return rest;
+}
+
+/**
+ * What the agent itself is running (`doing`), after an event: set by its own PreToolUse, unless that tool is a request
+ * (a question, a plan), dropped by that tool's end, a new prompt, or anything that leaves `working` or puts a request up.
+ * A subagent's tools never set or drop it.
+ */
+function withDoing(next: Session, ev: SessionEvent): Session {
+  if (next.state !== 'working' || next.pending) return withoutDoing(next);
+  if (ev.helperId) return next;
+  if (ev.name === 'PreToolUse' && ev.tool && !QUESTION_TOOLS.has(ev.tool) && ev.tool !== 'ExitPlanMode') {
+    const label = doingLabel(ev.text ?? '') || ev.tool;
+    if (next.doing?.tool === ev.tool && next.doing.label === label) return next;
+    return { ...next, doing: { tool: ev.tool, label, since: ev.at } };
+  }
+  if ((ev.name === 'PostToolUse' || ev.name === 'PostToolUseFailure') && (!ev.tool || ev.tool === next.doing?.tool)) return withoutDoing(next);
+  if (ev.name === 'UserPromptSubmit') return withoutDoing(next);
+  return next;
+}
+
 export function reduce(s: Session, ev: SessionEvent): Session {
-  const next = reduceEvent(s, ev);
+  const next = withDoing(reduceEvent(s, ev), ev);
   if (next === s) return s;
   let changed = false;
   const helpers = next.helpers.map(h => {

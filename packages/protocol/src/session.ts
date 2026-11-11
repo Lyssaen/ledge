@@ -12,6 +12,11 @@ export type Tool = z.infer<typeof ToolSchema>;
 export const BackendSchema = z.enum(['tmux', 'omp-rpc']);
 export type Backend = z.infer<typeof BackendSchema>;
 
+/** The longest `doing.label` the daemon keeps (cut with « … »): one line of a list row. */
+export const DOING_LABEL_MAX = 120;
+/** The longest `doing.tool` a phone receives. */
+export const DOING_TOOL_MAX = 100;
+
 export const SessionStateSchema = z.enum(['starting', 'working', 'waiting_input', 'waiting_permission', 'idle', 'exited', 'error']);
 export type SessionState = z.infer<typeof SessionStateSchema>;
 
@@ -92,6 +97,10 @@ export const SessionSchema =z.object({
   /** Left out for a tmux session. `omp-rpc`: no pane, nothing to attach to; the daemon holds the process (see `agentSessionFile`). */
   backend: BackendSchema.optional(),
   state: SessionStateSchema,
+  /** What the agent itself is running now, as its harness announced it (a hook's PreToolUse, OMP's event): the tool, its
+   *  one-line label (a command, a file, OMP's intent; cut to DOING_LABEL_MAX), since when. Set only while it works on a
+   *  tool of its own (a subagent's tool does not count); left out between tools, at rest, on a request and once ended. */
+  doing: z.object({ tool: z.string(), label: z.string(), since: z.string().datetime() }).optional(),
   pending: PendingSchema.optional(),
   helpers: z.array(HelperSchema).default([]),
   /** OMP: the instructions waiting in its own queue (typed while it works), as it reports them; left out when none. */
@@ -132,6 +141,9 @@ export const SessionSchema =z.object({
   transcriptPath: z.string().optional(),
   exitCode: z.number().int().nullable().optional(),
   exitedAt: z.string().datetime().optional(),
+  /** `killed`: Ledge's close had to kill its terminal, the agent did not leave on its exit command (« Fermée de force »).
+   *  Left out for any other end; dropped when it starts again. */
+  closedHow: z.literal('killed').optional(),
   lastError: z.string().optional(),
   /** `launcher`: Ledge launched it; `hook_only`: only its hooks are known (read-only); `rig`: an OpenRig seat Ledge follows through
    *  its tmux pane on the user's default server, answered like its own, whose life stays OpenRig's (no close, kill, resume, model). */
