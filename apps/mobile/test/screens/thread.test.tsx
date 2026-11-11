@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { AttachmentRef, ThreadItem } from '@ledge/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Thread } from '../../src/screens/Thread';
@@ -184,6 +184,20 @@ describe('the thread on a wide screen (m2-sessions.html §10, Q27)', () => {
     expect(screen.getByText('84 %', { selector: 'b' })).toHaveClass('text-attention');
     fireEvent.keyDown(document.body, { key: 'y' });
     expect(t.of('session.decide')).toEqual([expect.objectContaining({ id: 'a', decision: 'accept', expect: expect.objectContaining({ key: 'k1' }) })]);
+  });
+
+  it('puts Autoriser, Refuser and « Toujours dans ce projet » on one line, where a phone puts « Toujours » under them (review-qa a79d8655)', () => {
+    const row = () => screen.getByRole('button', { name: 'Autoriser' }).parentElement!;
+    wide(true);
+    const t = opened({ project: 'ledge', state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }) });
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
+    expect([...row().querySelectorAll('button')].map(b => b.textContent)).toEqual(['Autoriser', 'Refuser', 'Toujours dans ce projet']);
+    cleanup();
+    wide(false);
+    const u = opened({ project: 'ledge', state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }) });
+    act(() => u.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
+    expect([...row().querySelectorAll('button')].map(b => b.textContent)).toEqual(['Autoriser', 'Refuser']);
+    expect(screen.getByRole('button', { name: 'Toujours dans ce projet' })).toBeInTheDocument();
   });
 
   it('on a phone keeps the head, the card and the foot as §3 draws them', () => {

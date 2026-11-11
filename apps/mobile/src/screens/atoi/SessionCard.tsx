@@ -17,6 +17,7 @@ import { isApple } from '../device';
 import { useDeviceCheck, type CheckProblem } from './check';
 import { Leaving, Receipt } from './Receipt';
 import { useShortcuts } from '../../ui/keys';
+import { useWide } from '../../ui/layout';
 
 /** What was tapped last on this card: the button that turns while it goes, and what « Réessayer » sends again. */
 type Sent = { kind: 'decide'; decision: 'accept' | 'deny' | 'always' } | { kind: 'reply'; text: string; label: string };
@@ -67,6 +68,9 @@ export function SessionCard(p: SessionCardProps) {
   const [checking, setChecking] = useState(false);
   const [problem, setProblem] = useState<CheckProblem | null>(null);
   const check = useDeviceCheck(store);
+  // In a wide screen's thread the three answers share one line (m2-sessions.html §10); on a phone « Toujours » goes under them (§3).
+  const wide = useWide();
+  const oneRow = inThread && wide;
   const R = copy.atoi.receipt;
   const bot = item.botName;
   const kindWord = copy.atoi.pill[item.kind];
@@ -192,7 +196,13 @@ export function SessionCard(p: SessionCardProps) {
       case 'answerOnPc':
         return hint(copy.decide.answerOnPc);
       case 'permission':
-        return (
+        return oneRow ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'accept' })} className={btn('primary', 'min-w-[140px]')}>{turning({ kind: 'decide', decision: 'accept' }) && <Spin />}{copy.atoi.allow}</button>
+            <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'deny' })} className={btn('outline', 'min-w-[120px]')}>{turning({ kind: 'decide', decision: 'deny' }) && <Spin />}{copy.atoi.deny}</button>
+            {mode.always && <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'always' })} className={kitButtonClass({ variant: 'ghost' })}>{turning({ kind: 'decide', decision: 'always' }) && <Spin />}{alwaysLabel(alwaysScope(item))}</button>}
+          </div>
+        ) : (
           <>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" disabled={!live} onClick={() => send({ kind: 'decide', decision: 'accept' })} className={btn('primary')}>{turning({ kind: 'decide', decision: 'accept' }) && <Spin />}{copy.atoi.allow}</button>
