@@ -1158,6 +1158,7 @@ export const en: Copy = {
     failed: (agent: string) => `The PC could not start ${agent}`,
     failedBody: (agent: string) => `Nothing was launched. Check ${agent} and tmux on the PC, then try again.`,
     timeout: 'The start did not answer.', timeoutBody: 'Check the machine, then try again.',
+    lostBody: 'The session may have started: check Sessions before launching again.',
     retry: 'Retry', settings: 'Settings',
     started: (name: string, table: string) => `${name} is starting at the ${table} table.`
   }

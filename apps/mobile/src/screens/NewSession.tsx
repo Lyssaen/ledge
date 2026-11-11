@@ -3,7 +3,7 @@ import { PHONE_LAUNCH_MULTI, type OperationReason, type PhoneFolder, type PhoneL
 import { copy } from '../copy';
 import { MOBILE_STORAGE_PREFIX } from '../link/keys';
 import { effortLabel, efforts, modelHint, type Pick } from '../model/modelChoice';
-import { goBack, replaceRoute } from '../router';
+import { goBack, href, replaceRoute } from '../router';
 import { hostName, useShell } from '../shell/Shell';
 import { isLive } from '../state/operations';
 import { localStore } from '../state/storage';
@@ -337,7 +337,10 @@ function MenuRow({ on, disabled = false, onClick, lead, text, sub }: { on: boole
 /** One receipt per end (m2-lancement.html §2, M2 §9): a title, what was kept or what to do, and the action that helps. */
 function OutcomeReceipt({ outcome, agent, machine, onRetry }: { outcome: Outcome; agent: string; machine: string; onRetry: (() => void) | null }) {
   const retry = { label: L.retry, onClick: onRetry ?? (() => {}) };
-  if (outcome.kind === 'timeout') return <Receipt tone="warn" title={L.timeout} body={L.timeoutBody} {...(onRetry ? { action: retry } : {})} />;
+  // A launch that may not go again may have started a session (Q88): the receipt sends to Sessions, never to a new launch.
+  if (outcome.kind === 'timeout') return onRetry
+    ? <Receipt tone="warn" title={L.timeout} body={L.timeoutBody} action={retry} />
+    : <Receipt tone="warn" title={L.timeout} body={L.lostBody} action={{ label: copy.atoi.seeSessions, href: href({ name: 'sessions' }) }} />;
   if (outcome.kind === 'failed') return <Receipt tone="fail" title={L.failed(agent)} body={L.failedBody(agent)} action={retry} />;
   const R = L.refused;
   switch (outcome.reason) {

@@ -1,9 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { PhoneServerMessage, PhoneSession } from '@ledge/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { setLang } from '../../src/copy';
+import { copy, setLang } from '../../src/copy';
 import { getAssertion, platformAvailable } from '../../src/link/webauthn';
 import { LAUNCH_TIMEOUT_MS, NewSession } from '../../src/screens/NewSession';
+import { href } from '../../src/router';
 import { RESEND_MAX_MS } from '../../src/state/operations';
 import { Sessions } from '../../src/screens/Sessions';
 import { Thread } from '../../src/screens/Thread';
@@ -280,7 +281,7 @@ describe('« Nouvelle session » (m2-sessions.html §9)', () => {
       act(() => t.set('ready'));
       act(() => t.deliver(snap({ boot })));
       act(() => { vi.advanceTimersByTime(LAUNCH_TIMEOUT_MS + 100); });
-      expect(screen.getByText('Le démarrage n’a pas répondu.')).toBeInTheDocument();
+      expect(screen.getByText(copy.launch.timeout)).toBeInTheDocument();
       return { t, m };
     }
 
@@ -290,6 +291,20 @@ describe('« Nouvelle session » (m2-sessions.html §9)', () => {
       expect(t.of('session.launch')).toHaveLength(1);
       expect(t.of('confirm.prepare')).toHaveLength(1);
       expect(screen.queryByText(/Démarrage refusé/)).not.toBeInTheDocument();
+    });
+
+    it('its receipt (Q88): check Sessions before launching again, « Voir les sessions » opens Sessions, the form stays filled', async () => {
+      await lostAfterReceipt('b2');
+      expect(screen.getByText('La session a peut-être démarré : vérifie dans Sessions avant de relancer.')).toBeInTheDocument();
+      expect(screen.queryByText('Vérifie la machine puis réessaie.')).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Voir les sessions' })).toHaveAttribute('href', href({ name: 'sessions' }));
+      expect(screen.getByLabelText('Premier message')).toHaveValue('Corrige les tests');
+    });
+
+    it('its receipt in English', () => {
+      setLang('en');
+      expect(copy.launch.lostBody).toBe('The session may have started: check Sessions before launching again.');
+      expect(copy.atoi.seeSessions).toBe('See the sessions');
     });
 
     it('the PC restarted and its « received » was lost too: not sent again, by itself or by Réessayer', async () => {

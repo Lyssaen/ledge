@@ -1184,6 +1184,7 @@ const fr = {
     failed: (agent: string) => `Le PC n’a pas pu démarrer ${agent}`,
     failedBody: (agent: string) => `Rien n’a été lancé. Vérifie ${agent} et tmux sur le PC, puis réessaie.`,
     timeout: 'Le démarrage n’a pas répondu.', timeoutBody: 'Vérifie la machine puis réessaie.',
+    lostBody: 'La session a peut-être démarré : vérifie dans Sessions avant de relancer.',
     retry: 'Réessayer', settings: 'Réglages',
     started: (name: string, table: string) => `${name} démarre à la table ${table}.`
   }
