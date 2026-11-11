@@ -127,11 +127,12 @@ export const rigsEn: RigsCopy = {
     cancelled: 'check cancelled.',
     unavailable: 'this PC does not expose OpenRig.',
     unsent: 'not sent, the PC does not answer.',
-    again: (verb: string) => `Nothing was sent. ${verb} again to check once more.`,
+    againStop: 'Nothing was sent. Stop again to check once more.',
     nothingSent: 'Nothing was sent.'
   },
   busy: { title: (pc: string) => `Another OpenRig action is running on ${pc}.`, body: 'Try again when it is over.' },
   failed: (why: string) => `Failure: ${why}`,
+  because: (verb: string, why: string) => `${verb}: ${why}`,
   errors: {
     not_installed: 'OpenRig is not installed on the PC.',
     spec_unknown: 'The PC does not know this rig\'s spec: “Spec” is not possible.',
@@ -147,7 +148,7 @@ export const rigsEn: RigsCopy = {
   resumeLastBody: 'each seat finds its conversation again',
   fresh: 'Fresh',
   freshBody: 'new conversations, from the spec',
-  startingSeats: (rig: string, up: number, all: number) => `Starting ${rig}… · ${up}/${all} ${plural(all, 'seat', 'seats')}`,
+  startingSeats: (rig: string, up: number, all: number) => `Starting ${rig}… · ${up}/${all} ${plural(up, 'seat', 'seats')}`,
   partial: (stopped: string[], others: number) => `${list(stopped)} ${stopped.length === 1 ? 'is' : 'are'} stopped; ${others === 1 ? 'the other runs' : `the ${others} others run`}.`,
   reseat: {
     title: (rig: string, pc: string) => `Seats of the rig “${rig}” · ${pc}`,
@@ -194,8 +195,8 @@ export const rigsEn: RigsCopy = {
     model: 'Model', whenResume: 'on resume',
     effort: 'Effort',
     permissions: 'Permissions', whenLaunch: 'at launch',
-    perm: { inherit: 'The rig\'s', auto: 'Auto', full_bypass: 'YOLO', floor: 'Floor' } as Record<string, string>,
-    effortLevel: { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Very high', max: 'Max' } as Record<string, string>,
+    perm: { inherit: 'The rig\'s', auto: 'Auto', full_bypass: 'YOLO' },
+    effortLevel: { medium: 'Medium', high: 'High', xhigh: 'Very high' },
     moveNote: 'Changing the harness stops the seat: a successor takes its context.',
     save: 'Save',
     modelLabel: 'Seat model'
@@ -264,6 +265,5 @@ export const rigsEn: RigsCopy = {
     goalsUnavailable: 'Max\'s goals could not be read.'
   },
   readError: { unknown_rig: 'This rig no longer exists on the PC.', not_installed: 'OpenRig is not installed on the PC.', daemon_stopped: 'OpenRig is stopped.', unavailable: 'OpenRig did not answer in time.' },
-  openRig: 'Open the rig',
-  paneKernel: { title: 'Nothing to show', body: 'The kernel or a rig opens here.' }
+  openRig: 'Open the rig'
 };

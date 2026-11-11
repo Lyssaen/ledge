@@ -19,13 +19,18 @@ export type Route =
   /** An OpenRig ask in full (`#/ask/<qitem>`), opened from its card in « À toi » (m1-a-toi.html §2, §12). */
   | { name: 'ask'; id: string }
   /** Réglages; `#/connection/link` opens it on its « Connexion » section (the host pill). */
-  | { name: 'connection'; section?: 'link' };
+  | { name: 'connection'; section?: 'link' }
+  /** A rig of the Rigs tab (`#/rigs/<rig>`), the kernel and its daemon (`#/kernel`), and Max's goals (`#/max`, `#/max/<goalId>` one of them as a
+   *  thread): docs/mockups/ledge-mobile-refonte/m4-rigs.html. */
+  | { name: 'rig'; rig: string }
+  | { name: 'kernel' }
+  | { name: 'max'; goalId?: string };
 
 /** Every route, as the Ledge guide (docs/ledge-guide.md) must describe them: a Record, so a new route fails to compile until it is listed here. */
-const ROUTE_NAME: Record<Route['name'], true> = { atoi: true, sessions: true, prs: true, rigs: true, atelier: true, chat: true, thread: true, terminal: true, request: true, ask: true, connection: true };
+const ROUTE_NAME: Record<Route['name'], true> = { atoi: true, sessions: true, prs: true, rigs: true, atelier: true, chat: true, thread: true, terminal: true, request: true, ask: true, connection: true, rig: true, kernel: true, max: true };
 export const ROUTE_NAMES = Object.keys(ROUTE_NAME) as Route['name'][];
 
-const SIMPLE = ['sessions', 'prs', 'rigs', 'chat', 'connection'] as const;
+const SIMPLE = ['sessions', 'prs', 'rigs', 'chat', 'connection', 'kernel', 'max'] as const;
 
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean);
@@ -36,6 +41,8 @@ export function parseRoute(hash: string): Route {
     if (parts[0] === 'atelier' && parts.length === 4 && parts[2] === 'request') return { name: 'atelier', sessionId: decodeURIComponent(parts[1]!), requestKey: decodeURIComponent(parts[3]!) };
     if (parts[0] === 'atelier' && parts.length <= 2) return parts[1] ? { name: 'atelier', sessionId: decodeURIComponent(parts[1]) } : { name: 'atelier' };
     if (parts[0] === 'connection' && parts.length === 2 && parts[1] === 'link') return { name: 'connection', section: 'link' };
+    if (parts[0] === 'rigs' && parts.length === 2) return { name: 'rig', rig: decodeURIComponent(parts[1]!) };
+    if (parts[0] === 'max' && parts.length === 2) return { name: 'max', goalId: decodeURIComponent(parts[1]!) };
   } catch { /* malformed escape: fall through to À toi */ }
   if (parts[0] === 'agents' && parts.length === 1) return { name: 'sessions' };
   const simple = SIMPLE.find((n) => n === parts[0]);
@@ -50,6 +57,8 @@ export function href(r: Route): string {
   if (r.name === 'atelier') return !r.sessionId ? '#/atelier'
     : r.requestKey ? `#/atelier/${encodeURIComponent(r.sessionId)}/request/${encodeURIComponent(r.requestKey)}` : `#/atelier/${encodeURIComponent(r.sessionId)}`;
   if (r.name === 'connection' && r.section) return `#/connection/${r.section}`;
+  if (r.name === 'rig') return `#/rigs/${encodeURIComponent(r.rig)}`;
+  if (r.name === 'max' && r.goalId) return `#/max/${encodeURIComponent(r.goalId)}`;
   return r.name === 'atoi' ? '#/' : `#/${r.name}`;
 }
 

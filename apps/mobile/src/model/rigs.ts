@@ -194,3 +194,19 @@ export function daysAgo(d: Date, now: Date): number {
 
 /** A seat id is the kernel's operator, Max (`operator.agent`). */
 export const isOperator = (logicalId: string): boolean => logicalId.startsWith('operator.');
+
+/** A kernel seat's name as the list and the kernel's view write it: the operator is Max, the others their session's name. */
+export const kernelSeatName = (n: Pick<RigSeat, 'logicalId' | 'session'>): string => (isOperator(n.logicalId) ? 'Max' : seatName(n.logicalId, n.session));
+
+/** The chip's tone of a rig's status (Q48): green, blue, amber, grey. */
+export const STATUS_TONE: Record<RigStatus, 'on' | 'go' | 'part' | 'plain'> = { running: 'on', starting: 'go', partial: 'part', stopped: 'plain' };
+
+/** The daemon runs (a start is offered otherwise): `stale` stopped without a clean stop counts as stopped. */
+export const daemonDown = (s: Pick<PhoneOpenRigState, 'daemon'>): boolean => s.daemon.state === 'stopped' || s.daemon.state === 'stale';
+
+/** The rig an action names, or null (the daemon, the kernel, a seat). */
+export function actionRig(a: { kind: string; rig?: string; seat?: string }): string | null {
+  if (a.rig) return a.rig;
+  if (a.seat) return a.seat.split('@')[1] ?? null;
+  return null;
+}

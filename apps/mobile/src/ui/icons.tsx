@@ -64,7 +64,11 @@ export const ICONS = {
   clock: [circle(12, 12, 9), 'M12 7v5l3 2'],
   lock: [rect(3, 11, 18, 11, 2), 'M7 11V7a5 5 0 0 1 10 0v4'],
   bell: ['M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0'],
-  alert: ['M12 3l10 18H2z', 'M12 10v4M12 17.5v.01']
+  alert: ['M12 3l10 18H2z', 'M12 10v4M12 17.5v.01'],
+  /** The Rigs tab (docs/mockups/ledge-mobile-refonte/m4-rigs.html): the daemon, a snapshot, the snapshots' list. */
+  cpu: [rect(6, 6, 12, 12, 2), 'M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4'],
+  camera: ['M4 8h3l2-3h6l2 3h3v11H4z', circle(12, 13, 3.5)],
+  list: ['M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2']
 } as const satisfies Record<string, readonly string[]>;
 
 export type IconName = keyof typeof ICONS;

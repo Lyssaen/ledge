@@ -163,8 +163,11 @@ export function Rail({ route, active, badges, atelier }: { route: Route; active:
   );
 }
 
-/** The banner at the top of a tab's content when the PC or the relay does not answer: what is shown is the last known state. */
-export function LinkStrip() {
+/**
+ * The banner at the top of a tab's content when the PC or the relay does not answer: what is shown is the last known state.
+ * `body`: a tab's own sentence for a PC that does not answer (the Rigs tab: nothing can be started or stopped).
+ */
+export function LinkStrip({ body }: { body?: ((since: string) => string) | undefined } = {}) {
   const { pc, look, reach, since, retry } = useShell();
   const [busy, setBusy] = useBusy();
   if (look !== 'offline') return null;
@@ -174,7 +177,7 @@ export function LinkStrip() {
       <Icon name={relay ? 'cloud' : 'wifioff'} className="mt-px size-4 text-attention" />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <b className="font-semibold">{relay ? copy.compare.relayTitle : copy.offline.title(pc)}</b>
-        <span className="text-muted">{relay ? copy.compare.relayBody : since ? copy.offline.body(since) : copy.offline.bodyUnknown}</span>
+        <span className="text-muted">{relay ? copy.compare.relayBody : since ? (body ?? copy.offline.body)(since) : copy.offline.bodyUnknown}</span>
         <button type="button" disabled={busy} onClick={() => { setBusy(true); retry(); }} className={kitButtonClass({ size: 'sm', className: 'self-start' })}>
           <Icon name="refresh" className="size-4" />{copy.offline.retry}
         </button>
@@ -205,11 +208,13 @@ function Loading() {
  * A tab's page. On a phone: the banner, then the tab's title and what it says, then its content. On a wide screen, the list's
  * head carries the title, the host pill beside it. Before the PC's first state, its outline instead of the content.
  */
-export function TabPage({ title, subtitle, wideSubtitle, children, bodyClassName = 'flex flex-col gap-3' }: {
+export function TabPage({ title, subtitle, wideSubtitle, children, bodyClassName = 'flex flex-col gap-3', offlineBody }: {
   title: string; subtitle?: string | undefined;
   /** What the list's head says beside the title on a wide screen (« 3 demandes »); only the tabs whose mockup shows it give one. */
   wideSubtitle?: string | undefined;
   children: ReactNode; bodyClassName?: string;
+  /** The offline strip's words for this tab (M4: « Dernier état connu · … »). */
+  offlineBody?: (since: string) => string;
 }) {
   const wide = useWide();
   const { pc, look } = useShell();
@@ -224,7 +229,7 @@ export function TabPage({ title, subtitle, wideSubtitle, children, bodyClassName
         </div>
       )}
       <main data-tab-scroll="" className="tab-main flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pt-3.5 pb-[18px]">
-        <LinkStrip />
+        <LinkStrip body={offlineBody} />
         {!wide && (
           <div className="flex flex-none items-baseline gap-2">
             <h1 className="text-[22px] leading-7 font-semibold tracking-[-.02em]">{title}</h1>

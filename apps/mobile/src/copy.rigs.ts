@@ -134,11 +134,13 @@ export const rigsFr = {
     cancelled: 'vérification annulée.',
     unavailable: 'ce PC n\'expose pas OpenRig.',
     unsent: 'pas envoyé, le PC ne répond pas.',
-    again: (verb: string) => `Rien n'a été envoyé. ${verb} de nouveau pour vérifier encore.`,
+    againStop: 'Rien n\'a été envoyé. Arrête de nouveau pour vérifier encore.',
     nothingSent: 'Rien n\'a été envoyé.'
   },
   busy: { title: (pc: string) => `Une autre action OpenRig est en cours sur ${pc}.`, body: 'Réessaie quand elle sera finie.' },
   failed: (why: string) => `Échec : ${why}`,
+  /** « Pas arrêté : la vérification Face ID a expiré. » */
+  because: (verb: string, why: string) => `${verb} : ${why}`,
   errors: {
     not_installed: 'OpenRig n\'est pas installé sur le PC.',
     spec_unknown: 'La spec de ce rig est inconnue du PC : « Spec » n\'est pas possible.',
@@ -155,7 +157,7 @@ export const rigsFr = {
   resumeLastBody: 'chaque siège retrouve sa conversation',
   fresh: 'À neuf',
   freshBody: 'nouvelles conversations, depuis la spec',
-  startingSeats: (rig: string, up: number, all: number) => `Démarrage de ${rig}… · ${up}/${all} ${plural(all, 'siège', 'sièges')}`,
+  startingSeats: (rig: string, up: number, all: number) => `Démarrage de ${rig}… · ${up}/${all} ${plural(up, 'siège', 'sièges')}`,
   partial: (stopped: string[], others: number) => `${stopped.length === 1 ? `« ${stopped[0]} » est arrêté` : `${list(stopped.map(s => `« ${s} »`))} sont arrêtés`} ; ${others === 1 ? 'l\'autre tourne' : `les ${others} autres tournent`}.`,
   /** §6: seats. */
   reseat: {
@@ -204,8 +206,8 @@ export const rigsFr = {
     model: 'Modèle', whenResume: 'à la reprise',
     effort: 'Effort',
     permissions: 'Permissions', whenLaunch: 'au lancement',
-    perm: { inherit: 'Celle du rig', auto: 'Auto', full_bypass: 'YOLO', floor: 'Plancher' } as Record<string, string>,
-    effortLevel: { low: 'Bas', medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé', max: 'Max' } as Record<string, string>,
+    perm: { inherit: 'Celle du rig', auto: 'Auto', full_bypass: 'YOLO' },
+    effortLevel: { medium: 'Moyen', high: 'Élevé', xhigh: 'Très élevé' },
     moveNote: 'Changer de harnais arrête le siège : un successeur reprend son contexte.',
     save: 'Enregistrer',
     modelLabel: 'Modèle du siège'
@@ -277,8 +279,7 @@ export const rigsFr = {
   },
   readError: { unknown_rig: 'Ce rig n\'existe plus sur le PC.', not_installed: 'OpenRig n\'est pas installé sur le PC.', daemon_stopped: 'OpenRig est arrêté.', unavailable: 'OpenRig n\'a pas répondu à temps.' },
   /** Sessions › a rig's group (Q48): its rig opens in the Rigs tab. */
-  openRig: 'Ouvrir le rig',
-  paneKernel: { title: 'Rien à afficher', body: 'Le kernel ou un rig s\'ouvre ici.' }
+  openRig: 'Ouvrir le rig'
 };
 
 export type RigsCopy = typeof rigsFr;

@@ -15,6 +15,8 @@ export function tabOf(r: Route): Tab | null {
     case 'atoi': case 'request': case 'ask': return 'atoi';
     case 'sessions': case 'thread': case 'terminal': return 'sessions';
     case 'prs': case 'rigs': case 'chat': return r.name;
+    // A rig, the kernel and Max belong to the Rigs tab, even opened from Sessions (m4-rigs.html, §11, Q48).
+    case 'rig': case 'kernel': case 'max': return 'rigs';
     case 'atelier': return 'atelier';
     case 'connection': return null;
   }
