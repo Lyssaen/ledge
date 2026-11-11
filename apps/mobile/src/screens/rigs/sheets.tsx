@@ -33,7 +33,7 @@ export function snapWhen(createdAt: string, now = new Date()): { short: string; 
 }
 
 /** The button that sends an action asking the device's check: « Arrêter avec Face ID », filled red; or, without a passkey, why not. */
-function CheckedButton({ verb, confirm, disabled, onClick }: { verb: string; confirm: boolean; disabled: boolean; onClick: () => void }) {
+export function CheckedButton({ verb, confirm, disabled, onClick }: { verb: string; confirm: boolean; disabled: boolean; onClick: () => void }) {
   const apple = isApple();
   if (!confirm) {
     return (
@@ -50,7 +50,21 @@ function CheckedButton({ verb, confirm, disabled, onClick }: { verb: string; con
   );
 }
 
-const Cancel = ({ onClose }: { onClose: () => void }) => <button type="button" onClick={onClose} className={rigButtonClass({ className: 'w-full' })}>{C.confirm.cancel}</button>;
+export const Cancel = ({ onClose }: { onClose: () => void }) => <button type="button" onClick={onClose} className={rigButtonClass({ className: 'w-full' })}>{C.confirm.cancel}</button>;
+
+/** A confirmation that asks the device's check (§8: the kernel's and the daemon's restart and stop): what it costs, then the button. */
+export function ConfirmSheet({ title, conseq, note, verb, confirm, live, onConfirm, onClose }: {
+  title: string; conseq?: { title: string; body?: string } | undefined; note?: string | undefined; verb: string; confirm: boolean; live: boolean; onConfirm: () => void; onClose: () => void;
+}) {
+  return (
+    <RigSheet title={title} onClose={onClose}>
+      {conseq && <Conseq title={conseq.title} {...(conseq.body ? { body: conseq.body } : {})} />}
+      {note && <p className="text-[12.5px] leading-[18px] text-muted">{note}</p>}
+      <CheckedButton verb={verb} confirm={confirm} disabled={!live} onClick={() => { onClose(); onConfirm(); }} />
+      <Cancel onClose={onClose} />
+    </RigSheet>
+  );
+}
 
 /** A line of a menu sheet: its glyph, its words, what it holds on the right. */
 function MenuItem({ icon, label, aside, onClick, disabled = false }: { icon: 'camera' | 'list' | 'shield' | 'refresh'; label: string; aside?: string; onClick: () => void; disabled?: boolean }) {

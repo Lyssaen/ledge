@@ -32,7 +32,7 @@ type Rig = PhoneOpenRigState['rigs'][number];
 type Open = { kind: 'more' | 'stop' | 'restart' | 'reseat' | 'permissions' | 'snapshots' } | { kind: 'seat' | 'settings'; id: string } | null;
 
 /** OpenRig's UTC time as an ISO one, for the ages and clocks of the queue. */
-const iso = (t: string): string => parseRigTime(t)?.toISOString() ?? t;
+export const iso = (t: string): string => parseRigTime(t)?.toISOString() ?? t;
 
 const TONE_CLASS: Record<RowTone, string> = {
   mine: 'border-attention/50 text-attention', progress: 'border-info/45 text-info', pending: 'border-input text-muted', blocked: 'border-approval/45 text-approval'
@@ -43,14 +43,18 @@ const RowChip = ({ tone }: { tone: RowTone }) =>
 
 const who = (address: string): string => address.split('@')[0] ?? address;
 
-/** A node of the topology: its dot, its name, its harness when it differs from the lead's, and its state and context in words. */
-function Node({ seat, state, pod, tag, near, isNew, pulse, onOpen, top = false }: {
+/**
+ * A node of the topology: its dot, its name, its harness when it differs from the lead's, and its state and context in words. The kernel
+ * names its operator Max (`name`) and writes only what is not idle (`words`).
+ */
+export function Node({ seat, state, pod, tag, near, isNew, pulse, onOpen, top = false, name: given, words: givenWords }: {
   seat: RigGraphSeat; state: ReturnType<typeof seatState>; pod?: string | undefined; tag: boolean; near: number; isNew: boolean; pulse: boolean; onOpen?: (() => void) | undefined; top?: boolean;
+  name?: string; words?: string;
 }) {
-  const name = seatName(seat.logicalId, seat.session);
+  const name = given ?? seatName(seat.logicalId, seat.session);
   const tool = toolOf(seat.runtime);
   const ctx = seat.context !== undefined && state !== 'off' && state !== 'waiting' ? Math.round(seat.context) : null;
-  const words = [top ? pod : undefined, C.seatState[state]].filter(Boolean).join(' · ');
+  const words = givenWords ?? [top ? pod : undefined, C.seatState[state]].filter(Boolean).join(' · ');
   const border = isNew ? 'border-ok/55' : state === 'ask' ? 'border-attention/55' : state === 'perm' ? 'border-approval/55' : state === 'off' || state === 'waiting' ? 'border-dashed border-input bg-transparent' : 'border-line';
   const body = (
     <>

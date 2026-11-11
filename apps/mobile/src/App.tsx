@@ -36,6 +36,11 @@ import { Split, SplitEmpty, useWide } from './ui/layout';
 import { useShortcuts } from './ui/keys';
 import { ownName } from './screens/ThisDevice';
 import { useMobile, type MobileStore } from './state/store';
+import { createRigs, type RigsStore } from './state/rigs';
+import { RigsList } from './screens/rigs/RigsList';
+import { RigView } from './screens/rigs/RigView';
+import { KernelView } from './screens/rigs/KernelView';
+import { Max } from './screens/rigs/Max';
 import type { UpdateWatch } from './sw/register';
 import type { BuildInfo } from './sw/types';
 
@@ -172,6 +177,13 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   useEffect(() => { remember(route); }, [route]);
 
   const wide = useWide();
+  // OpenRig on the PC (the Rigs tab): its reads and actions live with the link, and end with it.
+  const [rigs, setRigs] = useState<RigsStore | null>(null);
+  useEffect(() => {
+    const r = createRigs(link, store, storage);
+    setRigs(r);
+    return () => { r.close(); setRigs(null); };
+  }, [link, store, storage]);
   // `#/atelier` on a phone, or once the PC says it has no Atelier (an older daemon): the agents instead. Before the first
   // snapshot the last known PC decides, so an offline iPad keeps its Atelier.
   const atelierOff = route.name === 'atelier' && (!wide || ((mobile.fresh || mobile.daemon !== null) && !mobile.daemon?.atelier));
@@ -271,6 +283,16 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
     const sessions = <Agents store={store} />;
     // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
     const chat = mobile.device?.chat || (!mobile.fresh && !mobile.device) ? <Chat store={store} onReconnect={retry} /> : <ChatUnavailable />;
+    // The Rigs tab once the PC sends its rigs (`daemon.rigs`, m4-rigs.html); before, it says the PC does not.
+    const rigsOn = !!mobile.daemon?.rigs && rigs !== null;
+    const rigsList = rigsOn ? <RigsList rigs={rigs} store={store} /> : <Rigs />;
+    const rigsDetail = (() => {
+      if (!rigsOn) return null;
+      if (route.name === 'rig') return <RigView key={route.rig} rig={route.rig} rigs={rigs} store={store} />;
+      if (route.name === 'kernel') return <KernelView rigs={rigs} store={store} />;
+      if (route.name === 'max') return <Max key={route.goalId ?? ''} goalId={route.goalId} rigs={rigs} store={store} />;
+      return null;
+    })();
     const connection = <Connection store={store} fetchImpl={fetchImpl} login={login} relay={relay} pinned={pinned} linkState={state} build={build} onSignOut={signOut} section={route.name === 'connection' ? route.section : undefined} />;
     // A wide screen keeps the list on the left and opens what it lists on the right (m0-socle.html, §2), the rail on its left.
     if (wide) {
@@ -283,7 +305,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
           case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
           case 'prs': return <Split list={<Prs />} detail={<EmptyPane icon="pr" {...copy.prs.pane} />} />;
-          case 'rigs': return <Split list={<Rigs />} detail={<EmptyPane icon="rigs" {...copy.rigs.pane} />} />;
+          case 'rigs': case 'rig': case 'kernel': case 'max': return <Split list={rigsList} detail={rigsDetail ?? <EmptyPane icon="rigs" {...copy.rigs.pane} />} />;
           case 'atelier': return mobile.daemon?.atelier
             ? <AtelierScreen store={store} {...(route.sessionId ? { sessionId: route.sessionId } : {})} {...(route.requestKey ? { requestKey: route.requestKey } : {})} storage={storage} onReconnect={retry} />
             : <Split list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
@@ -306,7 +328,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'atoi': return framed(inbox);
       case 'sessions': case 'atelier': return framed(sessions);
       case 'prs': return framed(<Prs />);
-      case 'rigs': return framed(<Rigs />);
+      case 'rigs': return framed(rigsList);
+      case 'rig': case 'kernel': case 'max': return rigsDetail ? framed(rigsDetail, false) : framed(rigsList);
       case 'chat': return framed(chat);
       case 'connection': return framed(connection, false);
       case 'thread': return framed(<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />, false);
