@@ -8,7 +8,7 @@ import {
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
-import { newOperationId, UNCERTAIN_MS } from './operations';
+import { newOperationId, RESEND_MAX_MS, UNCERTAIN_MS } from './operations';
 import { localStore } from './storage';
 import type { ConfirmRequest, MobileStore } from './store';
 
@@ -26,7 +26,8 @@ export type PermissionsData = Pick<Msg<'rigs.permissions'>, 'policy' | 'seats'>;
  * came: `ok` or not), `rejected` (refused before it ran: `reason`), `cancelled` (Face ID cancelled, nothing sent), `expired` (the
  * check took too long, nothing sent), `unsent` (it could not leave) or `uncertain` (it left, but the PC did not say it has it within
  * `UNCERTAIN_MS`, or the link dropped first: it may have run). An uncertain run still takes the PC's late answer, and goes again with its
- * own op on the next link (the PC replays an op it has seen, never runs it twice).
+ * own op on the next link (the PC replays an op it has seen, never runs it twice), but only to the same PC process and while young enough
+ * for it to still hold the op; otherwise it stays uncertain for good (`lost`).
  */
 export type RunPhase = 'checking' | 'sending' | 'received' | 'done' | 'rejected' | 'cancelled' | 'expired' | 'unsent' | 'uncertain';
 
@@ -51,6 +52,13 @@ export interface Run {
   /** When it was tapped and when it ended (ms). */
   startedAt: number;
   endedAt?: number;
+  /** When it first left, and the PC's boot then: the PC keeps its ops in memory, and a passkey signs that process's challenge only. */
+  sentAt?: number;
+  boot?: string | null;
+  /** It left more than once: a refusal of a later send says nothing of the first one, which may have run. */
+  again?: true;
+  /** An uncertain run the PC can no longer settle (it restarted, or the run is too old to be sent again): nothing is sent again. */
+  lost?: true;
 }
 
 export interface RigsState {
@@ -111,6 +119,8 @@ const idOf = (): string => crypto.randomUUID();
 export const newGoalId = (): string => crypto.randomUUID();
 
 const isFinal = (p: RunPhase) => p !== 'checking' && p !== 'sending' && p !== 'received';
+/** The refusals a send again may get for itself, whatever became of the first send: another process's check, or an op it does not take. */
+const RESENT_REFUSALS = new Set(['assertion_invalid', 'assertion_expired', 'confirm_required', 'conflict']);
 
 function loadKept(storage?: Storage): { state: PhoneOpenRigState; at: string } | null {
   try {
@@ -141,6 +151,10 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
   const inFlight = new Map<string, PhoneClientMessage>();
   /** Each run's end, awaited by its `act` / `reseat` / goal call. */
   const ends = new Map<string, (r: Run) => void>();
+  /** The PC's boot of this link, from its snapshot (null when it sends none); `undefined` until the snapshot of a new link. */
+  let boot: string | null | undefined = store.getState().daemon ? (store.getState().daemon?.boot ?? null) : undefined;
+  /** The runs sent on this link before its snapshot came: they went to the process that snapshot names. */
+  const unbooted = new Set<string>();
 
   const ready = () => !closed && link.state() === 'ready';
   const offered = () => !!store.getState().daemon?.rigs;
@@ -191,8 +205,8 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
     }
   }
   const runOfOp = (op: string) => state.runs.find(r => r.op === op);
-  /** A run the PC may still answer: under way, or uncertain (its answer may come late, or after the next link). */
-  const open = (r: Run | undefined): r is Run => !!r && (!isFinal(r.phase) || r.phase === 'uncertain');
+  /** A run the PC may still answer: under way, or uncertain and not lost (its answer may come late, or after the next link). */
+  const open = (r: Run | undefined): r is Run => !!r && (!isFinal(r.phase) || (r.phase === 'uncertain' && !r.lost));
   const end = (op: string, patch: Partial<Run>) => {
     const r = runOfOp(op);
     answered(`op:${op}`);
@@ -208,6 +222,38 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
     }, UNCERTAIN_MS));
   };
 
+  /**
+   * Whether a run that left may go again under its op: the PC keeps its operations in memory, and a passkey signed the challenge of the
+   * process it was first sent to. Under another boot, or once too old for the PC to still hold it, a send again would be refused or run
+   * as new (a rig started twice, seats stopped twice): the run stays uncertain for good.
+   */
+  const resendable = (r: Run): boolean =>
+    r.sentAt !== undefined && Date.now() - r.sentAt < RESEND_MAX_MS && boot !== undefined && (r.boot ?? null) === boot;
+  /** Gives up on a run the PC can no longer settle: uncertain, never sent again. */
+  const lose = (r: Run) => {
+    answered(`op:${r.op}`);
+    inFlight.delete(r.op);
+    patchRun(r.id, x => ({ ...x, phase: 'uncertain', lost: true, endedAt: x.endedAt ?? Date.now() }));
+  };
+  /** Sends again, under their own op, the runs of the last link the PC may still settle; the others are lost. */
+  function resendAll(skip: Set<string>) {
+    for (const [op, m] of [...inFlight]) {
+      if (skip.has(op)) continue;
+      const r = runOfOp(op);
+      if (!r) { inFlight.delete(op); continue; }
+      if (!resendable(r)) { lose(r); continue; }
+      patchRun(r.id, x => ({ ...x, again: true }));
+      send(m);
+      if (r.phase === 'sending') armAnswer(op);
+    }
+  }
+  /** A refusal that ends nothing: a send again refused for itself says nothing of the first send, which may have run. */
+  const refusedAgain = (r: Run | undefined, reason: string | undefined): boolean => {
+    if (!r || !r.again || !RESENT_REFUSALS.has(reason ?? '')) return false;
+    if (!r.lost) lose(r);
+    return true;
+  };
+
   /** After an action that touched a rig, its view is read again (the state itself is pushed). */
   const reread = (s: RunSubject) => {
     const rig = s.kind === 'seats' ? s.rig : s.kind === 'act' && 'rig' in s.action ? s.action.rig : null;
@@ -217,9 +263,19 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
 
   function onMessage(m: PhoneServerMessage) {
     switch (m.type) {
-      case 'snapshot':
+      case 'snapshot': {
+        // The snapshot says which process answers this link: what the last one may have run is sent again only to that same one.
+        // A new boot on the same link (the PC restarted behind the relay) loses what the old process held, as a new link would.
+        const was = boot;
+        boot = m.daemon.boot ?? null;
+        // The runs that left on this link before its snapshot went to the process it names, and need not go again.
+        const fresh = new Set(unbooted);
+        unbooted.clear();
+        for (const op of fresh) { const r = runOfOp(op); if (r) patchRun(r.id, x => ({ ...x, boot })); }
+        if (was === undefined || was !== boot) resendAll(fresh);
         resume();
         return;
+      }
       case 'rigs.state':
         answered('state');
         stateAsked = wantState;
@@ -264,6 +320,7 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
           if (r.phase === 'sending' || r.phase === 'uncertain') patchRun(r.id, x => { const { endedAt: _e, ...rest } = x; return { ...rest, phase: 'received' }; });
           return;
         }
+        if (m.status === 'rejected' && refusedAgain(r, m.reason)) return;
         // A refusal before it ran: its detail (`rigs.done`…) follows, but the run already says why.
         if (m.status === 'rejected') end(m.op, { phase: 'rejected', reason: m.reason ?? 'invalid' });
         // `applied` and `failed` wait for the detail, which carries the commands and OpenRig's words.
@@ -271,15 +328,18 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
       }
       case 'rigs.done': {
         const r = runOfOp(m.op);
+        if (m.rejected && refusedAgain(r, m.rejected)) return;
         if (r) { end(m.op, m.rejected ? { phase: 'rejected', reason: m.rejected, done: m } : { phase: 'done', done: m, ...(m.error ? { reason: m.error } : {}) }); reread(r.subject); }
         return;
       }
       case 'rigs.reseated': {
         const r = runOfOp(m.op);
+        if (m.rejected && refusedAgain(r, m.rejected)) return;
         if (r) { end(m.op, m.rejected ? { phase: 'rejected', reason: m.rejected, reseated: m } : { phase: 'done', reseated: m, ...(m.error ? { reason: m.error } : {}) }); reread(r.subject); }
         return;
       }
       case 'rigs.goal.sent': case 'rigs.goal.replied':
+        if (m.rejected && refusedAgain(runOfOp(m.op), m.rejected)) return;
         end(m.op, m.rejected ? { phase: 'rejected', reason: m.rejected, sent: m } : { phase: 'done', sent: m, ...(m.error ? { reason: m.error } : {}) });
         return;
       default:
@@ -296,9 +356,11 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
     if (now && !wasReady) {
       wasReady = true;
       linkGen++;
-      // A new link: the subscriptions are asked again, and the runs whose end never came go again with their own op.
+      // A new link: the subscriptions are asked again. The runs whose end never came go again with their own op once this link's
+      // snapshot names the PC's boot.
       stateAsked = false; goalsAsked = false;
-      for (const [op, m] of inFlight) { send(m); if (runOfOp(op)?.phase === 'sending') armAnswer(op); }
+      boot = undefined;
+      unbooted.clear();
     } else if (!now && wasReady) {
       wasReady = false;
       stateAsked = false; goalsAsked = false;
@@ -354,7 +416,8 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
       const parsed = PhoneClientMessageSchema.safeParse(build(op, assertion));
       if (!parsed.success || !ready()) { patchRun(id, x => ({ ...x, phase: 'unsent', endedAt: Date.now() })); return; }
       inFlight.set(op, parsed.data);
-      patchRun(id, x => ({ ...x, op, phase: 'sending' }));
+      if (boot === undefined) unbooted.add(op);
+      patchRun(id, x => ({ ...x, op, phase: 'sending', sentAt: Date.now(), ...(boot !== undefined ? { boot } : {}) }));
       armAnswer(op);
       const gen = linkGen;
       const left = await link.send(parsed.data).catch(() => false);
