@@ -90,7 +90,7 @@ export function ActionCard(p: ActionCardProps) {
   // A denied row keeps its accept summary and decision (the daemon's): its line is the denial's.
   const denial = (r: ActionRowView) => (r.vars && r.action === 'session.decide' ? c.words.line['session.decide']?.({ ...r.vars, decision: 'deny' }) : undefined) ?? r.deny?.summary ?? line(r);
   const why = (r: ActionRowView) => c.words.why(r.code ?? (r.state === 'failed' ? 'failed' : undefined), r.action, r.vars ?? {});
-  const verb = (r: ActionRowView) => (r.decision === 'deny' ? c.deny : (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);
+  const verb = (r: ActionRowView) => (r.decision === 'deny' ? c.deny : c.words.verb(r.action, r.vars ?? {}) ?? (r.action !== undefined ? c.verbs[r.action] : undefined) ?? c.apply);
   const dots = (rows: readonly number[]) => (risky(rows) ? '…' : '');
   const ignore = <Button variant="ghost" size="sm" disabled={p.disabled} onClick={() => { folding.current = true; p.onIgnore(); }} style={{ ...small, ...muted }}>{c.ignore}</Button>;
 

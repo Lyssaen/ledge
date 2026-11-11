@@ -51,7 +51,7 @@ export interface Chat {
   /** The turn's generic card row (spec 2026-10-26 action registry §5). */
   action(qid: string, row: number): ChatAction | undefined;
   /** The row is running, done (`doneAt`) or failed (`error`); every client gets the new history. */
-  markAction(qid: string, row: number, patch: Partial<Pick<ChatAction, 'state' | 'doneAt' | 'error' | 'code'>>, emit: (m: ChatMessage) => void): void;
+  markAction(qid: string, row: number, patch: Partial<Pick<ChatAction, 'state' | 'doneAt' | 'error' | 'code' | 'vars'>>, emit: (m: ChatMessage) => void): void;
   /** « Ignorer » the turn's cards (`undo`: « Revoir », open again): why not, or null once every client has the turn's
    *  `ignoredAt`. Ledge hears of a card set aside at the next question, unless it was opened again meanwhile. */
   ignore(qid: string, undo: boolean, emit: (m: ChatMessage) => void): string | null;

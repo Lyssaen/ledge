@@ -58,10 +58,10 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
     for (const r of todo) {
       const row = deny ? denied(chat.action(qid, r)!) : chat.action(qid, r)!;
       chat.markAction(qid, r, { state: 'running' }, safe);
-      let refused: ActionErrorCode | null = 'changed';
+      let refused: ActionErrorCode | null = 'changed'; let missing: string | undefined;
       try {
         const current = deps.resolve(row);
-        if ('refused' in current) { refused = current.code ?? 'changed'; throw new Error(current.refused); }
+        if ('refused' in current) { refused = current.code ?? 'changed'; missing = current.missing; throw new Error(current.refused); }
         // The same args at another risk is another action: confirmed for neither.
         if (JSON.stringify(current.args) !== JSON.stringify(row.args) || current.risk !== row.risk) throw new Error(row.action === 'session.decide' ? 'the request has changed since the card' : 'the target has changed since the card');
         // The seats the user confirmed are the ones it stops: another seat in their place, or a role that grew, is not what was confirmed.
@@ -74,7 +74,8 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
       } catch (e) {
         const message = (e as Error).message;
         failed.push({ row: r, message, ...(refused ? { refused: true as const } : {}) });
-        chat.markAction(qid, r, { state: refused ? 'refused' : 'failed', error: message, code: refused ?? 'failed' }, safe);
+        // What an OpenRig row no longer finds rides its words, so the card names that cause and no other.
+        chat.markAction(qid, r, { state: refused ? 'refused' : 'failed', error: message, code: refused ?? 'failed', ...(missing ? { vars: { ...row.vars, missing } } : {}) }, safe);
         break;
       } finally { inFlight.delete(`${qid}#${r}`); }
       done.push(r);

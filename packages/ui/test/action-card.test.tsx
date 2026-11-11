@@ -448,12 +448,42 @@ describe('the action card (#94): its words from the row\'s vars, in the front\'s
     expect(en.why('running', 'rig.act', kernel)).toBe('the kernel is already running.');
     expect(fr.why('unchanged', 'rig.seats', seats)).toBe('**ledge-dev** a déjà 2 sièges **dev.back**.');
     expect(en.why('unchanged', 'rig.seats', seats)).toBe('**ledge-dev** already has 2 **dev.back** seats.');
-    expect(fr.why('unknown', 'rig.act', rig)).toBe('Ledge ne trouve plus le rig **ledge-dev**.');
-    expect(fr.why('unknown', 'rig.seats', seats)).toBe('**ledge-dev** n’a pas de siège **dev.back**.');
-    expect(fr.why('unknown', 'rig.act', kernel)).toBe('OpenRig n’est pas sur ce PC.');
-    expect(en.why('unknown', 'rig.seats', seats)).toBe('**ledge-dev** has no **dev.back** seat.');
-    expect(en.why('unknown', 'rig.act', kernel)).toBe('OpenRig is not on this PC.');
+    // `unknown` names the cause the PC gives (`missing`), whichever row it is: a rig gone under a seat change is the rig.
+    expect(fr.why('unknown', 'rig.act', { ...rig, missing: 'rig' })).toBe('Ledge ne trouve plus le rig **ledge-dev**.');
+    expect(fr.why('unknown', 'rig.seats', { ...seats, missing: 'rig' })).toBe('Ledge ne trouve plus le rig **ledge-dev**.');
+    expect(fr.why('unknown', 'rig.seats', { ...seats, missing: 'role' })).toBe('**ledge-dev** n’a pas de siège **dev.back**.');
+    expect(fr.why('unknown', 'rig.act', { ...rig, missing: 'openrig' })).toBe('OpenRig n’est pas sur ce PC.');
+    expect(fr.why('unknown', 'rig.act', { ...kernel, missing: 'openrig' })).toBe('OpenRig n’est pas sur ce PC.');
+    expect(en.why('unknown', 'rig.seats', { ...seats, missing: 'role' })).toBe('**ledge-dev** has no **dev.back** seat.');
+    expect(en.why('unknown', 'rig.seats', { ...seats, missing: 'rig' })).toBe('Ledge can no longer find the rig **ledge-dev**.');
+    expect(en.why('unknown', 'rig.act', { ...kernel, missing: 'openrig' })).toBe('OpenRig is not on this PC.');
+    // No cause given (an older PC): none is claimed.
+    expect(fr.why('unknown', 'rig.seats', seats)).toBe('cette action n’est plus possible.');
+    expect(en.why('unknown', 'rig.act', rig)).toBe('this action is no longer possible.');
     expect(fr.why('failed', 'rig.act', rig)).toBe('l’action est partie, mais n’a pas abouti.');
+  });
+
+  it('an OpenRig row\'s button is its line\'s verb (M3 Q34); without its kind or its count, the action\'s verb', () => {
+    const seats = (count: string, from?: string) => ({ rig: 'ledge-dev', role: 'dev.back', count, ...(from ? { from } : {}) });
+    const fr = actionWords.fr.verb, en = actionWords.en.verb;
+    expect(['rig.start', 'rig.stop', 'rig.restart', 'rig.snapshot', 'kernel.start', 'kernel.stop', 'kernel.restart'].map(kind => fr('rig.act', { kind, rig: 'x' })))
+      .toEqual(['Démarrer', 'Arrêter', 'Redémarrer', 'Prendre le snapshot', 'Démarrer', 'Arrêter', 'Redémarrer']);
+    expect(en('rig.act', { kind: 'rig.snapshot', rig: 'x' })).toBe('Take the snapshot');
+    expect(en('rig.act', { kind: 'kernel.restart', rig: 'kernel' })).toBe('Restart');
+    expect([fr('rig.seats', seats('3', '1')), fr('rig.seats', seats('0', '2')), en('rig.seats', seats('2', '1')), en('rig.seats', seats('1', '2'))])
+      .toEqual(['Ajouter', 'Retirer', 'Add', 'Remove']);
+    expect(fr('rig.act', { rig: 'x' })).toBeUndefined();
+    expect(fr('rig.seats', seats('2'))).toBeUndefined();
+    expect(fr('session.archive', { session: 'Nova' })).toBeUndefined();
+    card([actionRowOf({ action: 'rig.act', args: { kind: 'rig.stop', rig: 'ledge-dev' }, summary: 'Arrêter le rig **ledge-dev**', vars: { kind: 'rig.stop', rig: 'ledge-dev' }, risk: 'destructive' })]);
+    // An irreversible row carries its own button: the line's verb, and the action's when the card lacks `from`.
+    card([actionRowOf({ action: 'rig.seats', args: { rig: 'ledge-dev', role: 'dev.back', count: 0 }, summary: 'Passer', vars: { rig: 'ledge-dev', role: 'dev.back', count: '0', from: '2' }, risk: 'destructive' })]);
+    card([actionRowOf({ action: 'rig.seats', args: { rig: 'ledge-dev', role: 'dev.back', count: 0 }, summary: 'Passer', vars: { rig: 'ledge-dev', role: 'dev.back', count: '0' }, risk: 'destructive' })]);
+    expect(within(rowsOf()[0]!).getByRole('button', { name: /^Stop/ })).toBeTruthy();
+    expect(within(rowsOf()[1]!).getByRole('button', { name: /^Remove/ })).toBeTruthy();
+    // The fixture's copy has no verb for rig.seats; the shipped one says « Changer » / « Change » (M3 § 5).
+    expect(within(rowsOf()[2]!).getByRole('button', { name: /^Apply/ })).toBeTruthy();
+    expect([shipped.fr.verbs['rig.act'], shipped.fr.verbs['rig.seats'], shipped.en.verbs['rig.act'], shipped.en.verbs['rig.seats']]).toEqual(['Appliquer', 'Changer', 'Apply', 'Change']);
   });
 
   it('refused or failed: the front\'s words by code, the daemon\'s error never on screen', () => {

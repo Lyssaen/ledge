@@ -12,7 +12,10 @@ export interface ResolveCtx {
   rigs?: OpenRigState;
 }
 /** Why not: the daemon's words (the log, the PC's error) and a code for a front's own. */
-export type Refusal = { refused: string; code: ActionErrorCode };
+/** `missing`: for `unknown`, what is gone (OpenRig, the rig, the role's seats), so a front names the right cause. */
+export type Refusal = { refused: string; code: ActionErrorCode; missing?: RigMissing };
+/** What an OpenRig row no longer finds: the front's words for `unknown` follow it (M3 Q34). */
+export type RigMissing = 'openrig' | 'rig' | 'role';
 export type Resolved = ChatAction | Refusal;
 type Args = Record<string, unknown>;
 
@@ -20,7 +23,7 @@ type Args = Record<string, unknown>;
 const DECIDABLE = ['permission', 'diff', 'plan'] as const;
 const KIND: Record<(typeof DECIDABLE)[number], string> = { permission: 'permission', diff: 'diff', plan: 'plan' };
 
-const no = (code: ActionErrorCode, refused: string): Refusal => ({ refused, code });
+const no = (code: ActionErrorCode, refused: string, missing?: RigMissing): Refusal => ({ refused, code, ...(missing ? { missing } : {}) });
 const isRefusal = (x: object): x is Refusal => 'refused' in x;
 /** A session by id, or by bot name among those not ended (the archive included): refused when none or several fit. */
 export function sessionOf(ref: string, ctx: Pick<ResolveCtx, 'sessions'>): Session | Refusal {
@@ -80,7 +83,7 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
   // A rig's or the kernel's power, checked against OpenRig as last read: a start of what runs, or a stop of what does not, is refused.
   'rig.act': (a, ctx) => {
     const st = ctx.rigs;
-    if (!st?.installed) return no('unknown', 'OpenRig is not on this machine');
+    if (!st?.installed) return no('unknown', 'OpenRig is not on this machine', 'openrig');
     const kind = String(a.kind); const verb = RIG_VERB[kind.split('.')[1]!]!;
     if (kind.startsWith('kernel.')) {
       const runs = st.kernel.state === 'ready' || st.kernel.state === 'starting';
@@ -92,7 +95,7 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
       return row('rig.act', { kind }, `${verb} kernel`, { kind, rig: KERNEL_RIG, ...(cut ? cutVars(KERNEL_RIG, cut) : {}) }, cut ? { cuts: cut } : {});
     }
     const rig = st.rigs.find(r => r.name === a.rig);
-    if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`);
+    if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`, 'rig');
     if (kind === 'rig.start' && rigRuns(rig)) return no('running', `${rig.name} already runs`);
     if ((kind === 'rig.stop' || kind === 'rig.restart') && !rigRuns(rig)) return no('not_running', `${rig.name} does not run`);
     const cut = kind === 'rig.stop' || kind === 'rig.restart' ? rig.nodes.map(n => n.session) : undefined;
@@ -100,12 +103,13 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
   },
   // A role's seats, as the Rigs screen changes them: removing one stops its agent, so that row is destructive.
   'rig.seats': (a, ctx) => {
-    const rig = ctx.rigs?.rigs.find(r => r.name === a.rig);
-    if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`);
+    if (!ctx.rigs?.installed) return no('unknown', 'OpenRig is not on this machine', 'openrig');
+    const rig = ctx.rigs.rigs.find(r => r.name === a.rig);
+    if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`, 'rig');
     if (!rigRuns(rig)) return no('not_running', `${rig.name} does not run`);
     const role = String(a.role); const count = Number(a.count);
     const now = seatsByRole(rig.nodes).get(role)?.length ?? 0;
-    if (now === 0) return no('unknown', `${rig.name} has no ${role} seat`);
+    if (now === 0) return no('unknown', `${rig.name} has no ${role} seat`, 'role');
     if (now === count) return no('unchanged', `${rig.name} already has ${count} ${role} seat(s)`);
     const removed = seatPlan(rig.nodes, { [role]: count }).remove;
     // The seats OpenRig removes are the role's last ones: their sessions, for the sheet's « … s'arrêtent ».

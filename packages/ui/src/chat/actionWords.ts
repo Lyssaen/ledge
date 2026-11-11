@@ -10,6 +10,9 @@ export interface ActionWords {
   line: Record<string, (v: ActionVars) => string | undefined>;
   /** Why a row was refused or failed, by its code: `undefined` (no code) or a word missing reads as « no longer possible ». */
   why: (code: ActionErrorCode | undefined, action: string | undefined, v: ActionVars) => string;
+  /** A row's button when it says more than its action's verb (M3 Q34: an OpenRig row's button is its line's verb);
+   *  `undefined`: the action's verb (`verbs`). */
+  verb: (action: string | undefined, v: ActionVars) => string | undefined;
   /** A permission's request, by its kind (`vars.kind`): the line above the request quoted. */
   kind: Record<string, string>;
   /** A request too long to be quoted whole (`detailCut`): the mark at the foot of its quote, and why it is not accepted here. */
@@ -28,6 +31,13 @@ const KERNEL = 'kernel';
 const seatChange = (v: ActionVars) => {
   const from = Number(v.from), count = Number(v.count);
   return v.from && v.count && Number.isInteger(from) && Number.isInteger(count) && from !== count ? { from, count, n: Math.abs(count - from), add: count > from } : undefined;
+};
+
+/** Which verb an OpenRig row's button carries (M3 Q34): its kind's, or adding or removing seats; none when a word is missing. */
+const rigVerb = (action: string | undefined, v: ActionVars): string | undefined => {
+  if (action === 'rig.act') return v.kind?.split('.')[1];
+  if (action === 'rig.seats') { const c = seatChange(v); return c ? (c.add ? 'add' : 'remove') : undefined; }
+  return undefined;
 };
 
 /** Which target a code speaks of: the action's own kind first, then whatever the row names. */
@@ -70,8 +80,10 @@ const fr: ActionWords = {
         case 'not_running': return r ? `${r} ne tourne pas.` : gone;
         case 'running': return r ? `${r} tourne déjà.` : gone;
         case 'unchanged': { const n = Number(v.count); return r && v.role && v.count ? `${r} a déjà ${n} ${n > 1 ? 'sièges' : 'siège'} ${b(v.role)}.` : gone; }
-        case 'unknown': return action === 'rig.seats' && v.rig && v.role ? `${b(v.rig)} n’a pas de siège ${b(v.role)}.`
-          : v.rig && v.rig !== KERNEL ? `Ledge ne trouve plus le rig ${b(v.rig)}.` : 'OpenRig n’est pas sur ce PC.';
+        // The cause the PC names (`missing`); none (an older PC): no cause is claimed.
+        case 'unknown': return v.missing === 'openrig' ? 'OpenRig n’est pas sur ce PC.'
+          : v.missing === 'rig' && v.rig && v.rig !== KERNEL ? `Ledge ne trouve plus le rig ${b(v.rig)}.`
+          : v.missing === 'role' && v.rig && v.role ? `${b(v.rig)} n’a pas de siège ${b(v.role)}.` : gone;
       }
     }
     switch (code) {
@@ -95,6 +107,7 @@ const fr: ActionWords = {
       default: return gone;
     }
   },
+  verb: (action, v) => ({ start: 'Démarrer', stop: 'Arrêter', restart: 'Redémarrer', snapshot: 'Prendre le snapshot', add: 'Ajouter', remove: 'Retirer' } as Record<string, string>)[rigVerb(action, v) ?? ''],
   kind: { permission: 'Permission', diff: 'Modifications', plan: 'Plan' },
   cut: { mark: '… (tronqué, voir la session)', note: name => `Trop longue pour être citée en entier : lis-la dans ${name} pour l’accepter. Tu peux la refuser d’ici.` }
 };
@@ -135,8 +148,9 @@ const en: ActionWords = {
         case 'not_running': return r ? `${r} is not running.` : gone;
         case 'running': return r ? `${r} is already running.` : gone;
         case 'unchanged': { const n = Number(v.count); return r && v.role && v.count ? `${r} already has ${n} ${b(v.role)} ${n > 1 ? 'seats' : 'seat'}.` : gone; }
-        case 'unknown': return action === 'rig.seats' && v.rig && v.role ? `${b(v.rig)} has no ${b(v.role)} seat.`
-          : v.rig && v.rig !== KERNEL ? `Ledge can no longer find the rig ${b(v.rig)}.` : 'OpenRig is not on this PC.';
+        case 'unknown': return v.missing === 'openrig' ? 'OpenRig is not on this PC.'
+          : v.missing === 'rig' && v.rig && v.rig !== KERNEL ? `Ledge can no longer find the rig ${b(v.rig)}.`
+          : v.missing === 'role' && v.rig && v.role ? `${b(v.rig)} has no ${b(v.role)} seat.` : gone;
       }
     }
     switch (code) {
@@ -160,6 +174,7 @@ const en: ActionWords = {
       default: return gone;
     }
   },
+  verb: (action, v) => ({ start: 'Start', stop: 'Stop', restart: 'Restart', snapshot: 'Take the snapshot', add: 'Add', remove: 'Remove' } as Record<string, string>)[rigVerb(action, v) ?? ''],
   kind: { permission: 'Permission', diff: 'Changes', plan: 'Plan' },
   cut: { mark: '… (truncated, see the session)', note: name => `Too long to be quoted in full: read it in ${name} to accept it. You can deny it from here.` }
 };
