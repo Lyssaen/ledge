@@ -367,8 +367,11 @@ describe('<Surface>', () => {
   });
 
   it('a bot that finishes its task (working → idle) unfolds a finished bubble that folds after 6 s', async () => {
+    // A frozen clock: with shouldAdvanceTime, the real time a loaded machine spends rendering would count toward the 6 s.
+    vi.useFakeTimers({ shouldAdvanceTime: false });
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); });
+    // The socket is real: wait for the update itself, on real time, without moving the frozen clock.
+    await act(async () => { mock.upsert(pim({ state: 'idle' })); await vi.waitFor(() => expect(daemonStore.getState().byId.get('b')?.state).toBe('idle')); });
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     await act(async () => { vi.advanceTimersByTime(540); });
     expect(surface()).toHaveStyle({ width: '440px' });
