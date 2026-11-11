@@ -210,3 +210,32 @@ export function actionRig(a: { kind: string; rig?: string; seat?: string }): str
   if (a.seat) return a.seat.split('@')[1] ?? null;
   return null;
 }
+
+/** A run's rig: the one its action or its seats name, null for the daemon, the kernel or a goal. */
+export function runRig(s: { kind: string; rig?: string; action?: { kind: string; rig?: string; seat?: string } }): string | null {
+  if (s.kind === 'seats') return s.rig ?? null;
+  return s.kind === 'act' && s.action ? actionRig(s.action) : null;
+}
+
+/** The snapshots, newest first (OpenRig's UTC times). */
+export const newestFirst = <T extends { createdAt: string }>(snaps: readonly T[]): T[] =>
+  [...snaps].sort((a, b) => (parseRigTime(b.createdAt)?.getTime() ?? 0) - (parseRigTime(a.createdAt)?.getTime() ?? 0));
+
+/** How a seat is linked to the others in the graph, as its sheet says it: who delegates to it, to whom it delegates, with whom it works. */
+export type SeatLink = { kind: 'delegatesTo' | 'delegates' | 'collaborates' | 'escalates'; who: string } | { kind: 'linked'; who: string; label: string };
+
+export function seatLinks(id: string, links: readonly { from: string; to: string; kind: string }[]): SeatLink[] {
+  const out: SeatLink[] = [];
+  for (const l of links) {
+    if (l.from !== id && l.to !== id) continue;
+    const other = l.from === id ? l.to : l.from;
+    if (/delegat/.test(l.kind)) out.push({ kind: l.to === id ? 'delegatesTo' : 'delegates', who: other });
+    else if (/collaborat/.test(l.kind)) { if (!out.some(x => x.kind === 'collaborates' && x.who === other)) out.push({ kind: 'collaborates', who: other }); }
+    else if (/escalat/.test(l.kind) && l.from === id) out.push({ kind: 'escalates', who: other });
+    else out.push({ kind: 'linked', who: other, label: l.kind });
+  }
+  return out;
+}
+
+/** The rig's working seats, by name (what a stop costs). */
+export const workingSeats = (r: Pick<Rig, 'nodes'>): string[] => r.nodes.filter(n => !n.stopped && isWorking(n)).map(n => seatName(n.logicalId, n.session));
