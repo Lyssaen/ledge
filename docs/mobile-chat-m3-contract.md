@@ -11,7 +11,7 @@ Les schémas zod font foi :
 Le comportement est fixé par les tests :
 - `packages/ledge/test/chat-conversations.test.ts` et `mobile-chat-conversations.test.ts` (Q33) ;
 - `chat-limits.test.ts` (Q31) ;
-- `daemon-actions.test.ts` (Q34 et Q35).
+- `daemon-actions.test.ts` (Q34 et Q35) et `chat-act.test.ts` (la cause d'un refus `unknown` dans `vars.missing`).
 
 Aucun texte visible n'est écrit par le PC pour ces quatre points : le téléphone écrit ses propres mots, ceux de la
 fiche de passation de la maquette.
@@ -115,7 +115,15 @@ bouton de §5 de la maquette :
   - `not_running` : le rig ou le kernel ne tourne pas ;
   - `running` : il tourne déjà ;
   - `unchanged` : le rôle a déjà ce nombre de sièges ;
-  - `unknown` : le rig n'existe plus, le rôle n'a aucun siège, ou OpenRig n'est pas sur ce PC.
+  - `unknown` : quelque chose a disparu depuis la carte. La ligne refusée porte alors la cause dans `vars.missing`, une clé
+    ajoutée par le PC au moment du refus :
+    - `openrig` : OpenRig n'est pas sur ce PC ;
+    - `rig` : le rig n'existe plus (aussi pour un changement de sièges dont le rig a disparu) ;
+    - `role` : le rig tourne, mais le rôle n'a aucun siège.
+
+    Sans `vars.missing` (un PC d'avant #283), le téléphone n'affirme aucune cause : il dit seulement que l'action n'est
+    plus possible. La cause se lit sur la ligne de `chat.history` (ou de `chat.done`), pas dans `operation.result`.
+    Desktop, l'île et la TUI disent la même chose : `packages/ui/src/chat/actionWords.ts` (`why`, cas `unknown`).
 
   Un code inconnu se lit comme `failed`.
 
