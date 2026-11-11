@@ -10,7 +10,7 @@ import { getAssertion } from '../link/webauthn';
 import { actionChecked } from '../model/actionCard';
 import { adoptRuns } from '../model/sessionEnd';
 import { createImages } from './images';
-import { asked, emptyChat, reduceChat, type ChatAction, type ChatState } from './chat';
+import { asked, emptyChat, noConversations, reduceChat, type ChatAction, type ChatState, type Conversations } from './chat';
 import { PC_STALL_MS, pcFailed, pcProgress, pcRunning, pcSnapshot, type PcRun } from './pc';
 import { clearOps, expectKey, isLive, isNew, loadOps, newOperationId, pruneOps, resendable, saveOps, UNCERTAIN_MS, type Op, type OpMessage } from './operations';
 import { clearLastState, loadLastState, loadReads, saveLastState, saveReads } from './persist';
@@ -37,7 +37,7 @@ export interface MobileState {
   /** `id`, `kind`, `name`: this device as the PC knows it (absent from an older PC; `name` absent: none given yet). */
   device: { confirm: boolean; /** Its passkey can bring it back after a reinstall: without it, « Mettre à jour la passkey ». */ recover?: true; push?: 'on' | 'off' | 'stale' | 'unavailable'; chat?: true; contextNear?: number; id?: string; kind?: DeviceKind; name?: string; /** This device's own settings (`daemon.settings`). */ prefs?: DevicePrefs } | null;
   /** `update`: the PC can install a version and restart; `restart`: it can restart (both absent from daemons before 0.27.0). */
-  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true; /** Sends `usage.state`. */ usage?: true; /** Answers `openrig.asks` (« À toi »). */ openrig?: true; /** Answers the `rigs.*` reads and takes their actions (M4, the Rigs tab). */ rigs?: true; /** Takes `session.launch` (« Nouvelle session »). */ launch?: true } | null;
+  daemon: { version: string; name: string; boot?: string; models?: true; update?: true; restart?: true; checklist?: true; sessionClose?: true; terminal?: true; terminalInput?: true; commands?: true; /** Takes `session.broadcast` (« Écrire au groupe »). */ broadcast?: true; /** Answers `openrig.row`. */ rigRows?: true; /** Sends `projects` and places sessions in them: the iPad's Atelier. */ atelier?: true; /** Takes `device.prefs` and `context.set` (Réglages). */ settings?: true; /** Takes `project.*` (Réglages › Projets). */ projectEdit?: true; /** Browses its folders and adds them to projects. */ projectFolders?: true; /** Sends `usage.state`. */ usage?: true; /** Answers `openrig.asks` (« À toi »). */ openrig?: true; /** Answers the `rigs.*` reads and takes their actions (M4, the Rigs tab). */ rigs?: true; /** Takes `session.launch` (« Nouvelle session »). */ launch?: true; /** Keeps the device's conversations 7 days (M3 Q33). */ conversations?: true } | null;
   /** The user's projects, in their order (`daemon.atelier`): the Atelier's rooms. Kept for an offline start; empty from an older PC. */
   projects: PhoneProject[];
   /** The models each agent offers on the PC, by tool, as `models.listing` said; kept for the link's life, reset when the PC boots again. `error`: the agent could not be asked. */
@@ -230,6 +230,12 @@ export interface MobileStore {
   cancelAsk(): void;
   /** Starts the thread over. */
   resetChat(): void;
+  /** The device's conversations (M3 §6); the same object until it changes. */
+  conversations(): Conversations;
+  /** Asks the PC for the list of conversations (a PC with `daemon.conversations`), which shows `null` until it comes. */
+  askConversations(): void;
+  /** Asks the PC for a past conversation's turns, read-only. */
+  openConversation(id: string): void;
   clearChatError(): void;
   /** Sends the turn's instruction to its session; resolves when the operation is final. */
   relay(qid: string): Promise<ChatAction>;
@@ -344,6 +350,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   let previewsDirty = false;
   let closed = false;
   let chatState: ChatState = emptyChat();
+  let convState: Conversations = noConversations();
   /** `chat.history` was asked since the last ready; the snapshot of a first connection asks it when the ready could not. */
   let historyAsked = false;
   /** The questions asked since the last ready: only these may be newer than a history reply. */
@@ -380,6 +387,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
   const notify = () => { for (const fn of [...listeners]) fn(); };
   const setChat = (c: ChatState) => { chatState = c; notify(); };
+  const setConversations = (c: Conversations) => { convState = c; notify(); };
   let asksAsked = false;
   const askHistory = () => { historyAsked = true; send({ type: 'chat.history' }); };
   const set = (patch: Partial<MobileState>) => { state = { ...state, ...patch }; notify(); };
@@ -624,8 +632,16 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         if (m.status === 'rejected' && m.reason === 'stale' && ready() && o.message.type.startsWith('session.') && 'id' in o.message && typeof o.message.id === 'string') send({ type: 'session.pending', id: o.message.id });
         return;
       }
-      case 'chat.history': case 'chat.step': case 'chat.delta': case 'chat.done': case 'chat.error':
+      case 'chat.history': case 'chat.step': case 'chat.delta': case 'chat.done': case 'chat.error': case 'chat.limits':
         setChat(reduceChat(chatState, m, askedSinceReady));
+        return;
+      case 'chat.conversations':
+        setConversations({ ...convState, list: { ...(m.current ? { current: m.current } : {}), past: m.past } });
+        return;
+      case 'chat.conversation':
+        // Only one this phone asked for: a reply nobody waits for is not kept.
+        if (!(m.id in convState.open)) return;
+        setConversations({ ...convState, open: { ...convState.open, [m.id]: m.error ? { gone: true } : { turns: m.turns ?? [], limits: m.limits ?? [] } } });
         return;
       case 'confirm.challenge':
         if (preparing?.purpose === m.purpose) settle(m);
@@ -733,6 +749,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     historyAsked = false;
     asksAsked = false;
     chatState = emptyChat();
+    convState = noConversations();
     settle(new Error('lost'));
     previewsDirty = false;
     clearLastState(storage);
@@ -1012,6 +1029,20 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 
     chat: () => chatState,
 
+    conversations: () => convState,
+
+    askConversations() {
+      if (closed || !ready() || !state.daemon?.conversations) return;
+      setConversations({ ...convState, list: null });
+      send({ type: 'chat.conversations' });
+    },
+
+    openConversation(id) {
+      if (closed || !ready() || !state.daemon?.conversations) return;
+      setConversations({ ...convState, open: { ...convState.open, [id]: null } });
+      send({ type: 'chat.conversation', id });
+    },
+
     putImage: image => images.putImage(image),
     imageUrl: (id, preview) => images.imageUrl(id, preview),
     knownImage: id => images.knownImage(id),
@@ -1198,6 +1229,10 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
 /** The chat in a component, re-rendered when it changes. */
 export function useChat(store: MobileStore): ChatState {
   return useSyncExternalStore(store.subscribe, store.chat);
+}
+
+export function useConversations(store: MobileStore): Conversations {
+  return useSyncExternalStore(store.subscribe, store.conversations);
 }
 
 /** The store's state in a component, re-rendered on every change. */

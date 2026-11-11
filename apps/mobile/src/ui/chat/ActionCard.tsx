@@ -15,7 +15,9 @@ import { CARD, GHOST, PRIMARY } from './RelayCard';
 
 const C = copy.chat.action;
 const DANGER = buttonClass({ size: 'sm', className: 'border-danger-fg/50 text-danger-fg' });
-const DANGER_FILL = buttonClass({ block: true, className: 'border-transparent bg-[var(--destructive)] text-[var(--destructive-foreground)] active:opacity-75' });
+// The sheet's « Confirmer » is filled red (m3-chat.html §5 `.btn.dangerfill`): `!` wins over the outline variant's own
+// border and background, which otherwise left it as bare text (review caeb9e32).
+const DANGER_FILL = buttonClass({ block: true, className: '!border-transparent !bg-destructive !text-primary-fg active:opacity-75' });
 
 /** `**name**` in a line, bold; the rest as text. */
 function bold(text: string): ReactNode {
@@ -26,7 +28,16 @@ const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString(locale, 
 const lineOf = (r: ActionRowView) => (r.vars && r.action !== undefined ? C.line(r.action, r.vars) : undefined) ?? r.summary;
 const deniedLine = (r: ActionRowView) => (r.vars && r.action === 'session.decide' ? C.line('session.decide', { ...r.vars, decision: 'deny' }) : undefined) ?? lineOf(r);
 const whyOf = (r: ActionRowView) => C.why(r.code ?? (r.state === 'failed' ? 'failed' : undefined), r.action, r.vars ?? {});
-const verbOf = (r: ActionRowView) => (r.action !== undefined ? C.verbs[r.action] : undefined) ?? C.apply;
+/** What an OpenRig step stops, from the seats the daemon listed (Q85); nothing without that list: « Irréversible » alone. */
+function stopsOf(r: ActionRowView): string | undefined {
+  const v = r.vars;
+  if (!v?.seats) return undefined;
+  const how = r.action === 'rig.seats' ? 'removed' : r.action !== 'rig.act' ? undefined : v.kind?.endsWith('.restart') ? 'restart' : v.kind?.endsWith('.stop') ? 'stop' : undefined;
+  if (!how) return undefined;
+  const n = Number(v.seatCount) || v.seats.split(', ').length;
+  return C.stops(how, n, v.seats, Number(v.seatsMore ?? 0) || 0);
+}
+const verbOf = (r: ActionRowView) => C.verb(r.action, r.vars ?? {}) ?? (r.action !== undefined ? C.verbs[r.action] : undefined) ?? C.apply;
 
 function Risk({ r }: { r: ActionRowView }) {
   const destructive = r.risk === 'destructive';
@@ -40,12 +51,14 @@ function Risk({ r }: { r: ActionRowView }) {
 /** The step's node on the rail: its number, a check once applied, a cross once failed or refused. */
 function Node({ s, k, r, last }: { s: Shown; k: number; r: ActionRowView; last: boolean }) {
   const label = s === 'done' || s === 'failed' || s === 'refused' || s === 'running' ? C.stepState[s](k) : C.step(k);
-  const look = s === 'done' ? 'border-ok bg-ok text-bg' : s === 'failed' ? 'border-transparent bg-[var(--destructive)] text-[var(--destructive-foreground)]'
-    : r.risk === 'destructive' ? `border-danger-fg/60 text-danger-fg ${s === 'held' ? 'border-dashed' : ''}` : `border-input text-muted ${s === 'held' ? 'border-dashed' : ''}`;
+  // Its background is part of each look, never added beside it: two backgrounds left a failed step's ✕ white on white (review
+  // caeb9e32). A failed or refused step is a red disc with its ✕ (m3-chat.html §5 `.nd span.fail`).
+  const look = s === 'done' ? 'border-ok bg-ok text-bg' : s === 'failed' || s === 'refused' ? 'border-transparent bg-destructive text-primary-fg'
+    : r.risk === 'destructive' ? `border-danger-fg/60 bg-surface text-danger-fg ${s === 'held' ? 'border-dashed' : ''}` : `border-input bg-surface text-muted ${s === 'held' ? 'border-dashed' : ''}`;
   return (
     <div className="relative flex justify-center self-stretch">
       {!last && <span aria-hidden="true" className="absolute top-5 -bottom-3 left-1/2 w-px -translate-x-1/2 bg-muted/45" />}
-      <span role="img" aria-label={label} className={`relative grid size-5 place-items-center rounded-full border-[1.5px] bg-surface font-mono text-[11px] ${look}`}>
+      <span role="img" aria-label={label} className={`relative grid size-5 place-items-center rounded-full border-[1.5px] font-mono text-[11px] ${look}`}>
         {s === 'done' ? <Icon name="check" className="size-3" /> : s === 'failed' || s === 'refused' ? <Icon name="close" className="size-3" /> : s === 'running' ? <Icon name="spinner" className="size-3 motion-safe:animate-spin" /> : k}
       </span>
     </div>
@@ -58,6 +71,7 @@ function RowText({ r, s, whole }: { r: ActionRowView; s: Shown; whole: boolean }
     <div className="min-w-0">
       <p className="break-words text-body">{bold(s === 'denied' ? deniedLine(r) : lineOf(r))}</p>
       {s !== 'denied' && <Risk r={r} />}
+      {whole && stopsOf(r) && <p className="mt-1 break-words text-small text-muted">{stopsOf(r)}</p>}
       {r.detail && <p className={`mt-1 break-words text-small text-muted ${whole || s === 'done' ? '' : 'line-clamp-2'}`}>{r.detail}</p>}
       {r.request && (
         <pre className={`mt-1.5 max-h-40 overflow-auto rounded-md border border-line border-l-2 border-l-muted bg-bg px-2.5 py-2 font-mono text-small whitespace-pre-wrap break-words ${s === 'stale' ? 'line-through opacity-60' : s === 'denied' ? 'opacity-60' : ''}`}>
@@ -74,7 +88,9 @@ function RowText({ r, s, whole }: { r: ActionRowView; s: Shown; whole: boolean }
  * up to the first failure. A row the device must check, or that cannot be undone, is confirmed in a sheet first; the others
  * apply at the tap. « Ignorer » sets the turn's cards aside on every device.
  */
-export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { store: MobileStore; qid: string; actions: PhoneChatAction[]; ignoredAt?: string | undefined; canConfirm: boolean }) {
+export function ActionCards({ store, qid, actions, ignoredAt, canConfirm, readOnly = false }: { store: MobileStore; qid: string; actions: PhoneChatAction[]; ignoredAt?: string | undefined; canConfirm: boolean;
+  /** A past conversation's card (m3-chat.html §6): each row's outcome, « Pas appliquée » for the others, no button. */
+  readOnly?: boolean }) {
   const [asking, setAsking] = useState<number[] | null>(null);
   const [sending, setSending] = useState<ReadonlySet<number>>(new Set());
   const [note, setNote] = useState<{ rows: number[]; text: string } | null>(null);
@@ -105,7 +121,7 @@ export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { st
     return (
       <p className="flex flex-wrap items-center gap-x-2 px-1 text-small text-muted">
         {C.ignored(rows.length, clock(ignoredAt), { done: count('done'), denied: count('denied'), failed: count('failed') })}
-        <button type="button" className={GHOST} onClick={() => ignore(true)}>{C.review}</button>
+        {!readOnly && <button type="button" className={GHOST} onClick={() => ignore(true)}>{C.review}</button>}
       </p>
     );
   }
@@ -116,6 +132,7 @@ export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { st
     const accept = <button type="button" className={destructive ? DANGER : GHOST} disabled={busy || (sheeted([i]) && !canConfirm)} onClick={() => ask([i])}>{verbOf(r)}{sheeted([i]) ? '…' : ''}</button>;
     const deny = r.deny && <button type="button" className={GHOST} disabled={busy} onClick={() => send([i], { deny: true })}>{C.deny}</button>;
     const target = actions[i]!.session;
+    if (readOnly && (s === 'proposed' || s === 'held' || s === 'failed' || s === 'cut' || s === 'stale' || s === 'running')) return <span className="text-small text-muted">{copy.chat.history.notApplied}</span>;
     switch (s) {
       case 'proposed': case 'held': return <>{!many && s === 'proposed' && ignoreButton}{deny}{accept}</>;
       case 'running': return <span className="text-body text-attention">{C.running}</span>;
@@ -149,6 +166,7 @@ export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { st
 
   const foot = (): ReactNode => {
     if (!many) return null;
+    if (readOnly && !shown.every(s => s === 'done')) return null;
     if (shown.every(s => s === 'done')) {
       const last = rows.map(r => r.doneAt).filter((x): x is string => !!x).sort().at(-1);
       return <p className="inline-flex items-center gap-1.5 text-body text-ok"><Icon name="check" className="size-3.5" />{C.planDone(clock(last))}</p>;
@@ -169,7 +187,7 @@ export function ActionCards({ store, qid, actions, ignoredAt, canConfirm }: { st
     );
   };
 
-  const needsSetup = !canConfirm && cardState(rows).open.some(i => actionChecked(actions[i]!));
+  const needsSetup = !readOnly && !canConfirm && cardState(rows).open.some(i => actionChecked(actions[i]!));
   const shownNote = note && note.rows.every(i => (rows[i]!.state ?? 'proposed') === 'proposed' || rows[i]!.state === 'failed') ? note.text : null;
   return (
     <section aria-label={C.label(rows.length)} aria-live="polite" className={CARD}>
