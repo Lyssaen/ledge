@@ -294,6 +294,7 @@ export const en: Copy = {
     seats: (n: number) => (n === 1 ? '1 seat' : `${n} seats`),
     deskTitle: 'Ledge’s desk',
     seatOf: (role: string, rig: string) => `seat ${role} · ${rig}`,
+    new: 'New', newSession: 'New session',
     view: { label: 'Session view', thread: 'Thread', terminal: 'Terminal' },
     more: 'More actions',
     moreOf: (bot: string) => `More actions for ${bot}`,
@@ -1106,5 +1107,57 @@ export const en: Copy = {
     entrance: 'ENTRANCE',
     more: (n: number) => `+${n} at this table`,
     zoom: { bar: 'Atelier zoom', out: 'Zoom out', in: 'Zoom in', reset: 'Back to 100 %', fit: 'Fit', fitTitle: 'Back to the readable view' }
+  },
+  launch: {
+    title: 'New session', close: 'Close',
+    project: 'Project', where: 'Where to work', agent: 'Agent', model: 'Model', message: 'First message',
+    remembered: 'Last choice for this project kept', offline: 'offline',
+    noProjects: 'No project yet.', noProjectsBody: 'Create a project in Settings to launch agents in it.', chooseProject: 'Choose a project',
+    done: 'Done',
+    more: (n: number) => `+ ${n}`, moreLabel: (first: string, n: number) => `${first} and ${n === 1 ? '1 more folder' : `${n} more folders`}`,
+    permissions: 'Permissions',
+    approvals: { 'always-ask': ['Ask', 'Before every write or command'], write: ['Auto files', 'Writes without asking, asks before commands'], yolo: ['Auto', 'Approves everything, commands included'] },
+    onBranch: (branch: string) => `On ${branch}, in the project folder`, inFolder: 'In the project folder',
+    tools: { claude: 'Design, review', codex: 'Code and tests', cursor: 'In the editor', omp: 'Driven natively' },
+    placeholder: 'What should the agent do? Describe the expected result.',
+    ideas: ['Review the latest pull request', 'Fix the failing tests', 'Update the documentation'],
+    pick: (model: string, effort: string | null) => (effort ? `${model} · ${effort}` : model),
+    summary: (tool: string, model: string | null, machine: string, project: string) => `${model ? `${tool} · ${model}` : tool} on ${machine}, in ${project}`,
+    launchCheck: 'Launch with Face ID', launchDevice: 'Launch with my device', launching: 'Launching…',
+    missing: {
+      prompt: 'Write the instruction', machine: 'No machine online', setup: 'Protect your agreements first',
+      pcOld: (machine: string) => `${machine} does not launch from the phone yet`
+    },
+    setupBody: 'Launching asks for this device’s passkey, like closing a session.', openSettings: 'Open Settings',
+    pcOldBody: 'Launching from the phone comes with a later version of Ledge on the PC. Your message is kept.',
+    cancelled: 'Check cancelled. Nothing was launched.',
+    folders: (project: string) => `The folders the project ${project} declares`,
+    projectFolder: 'The project’s folder',
+    folder: {
+      missing: (machine: string) => `Not found on ${machine}`,
+      elsewhere: (other: string, machine: string) => `On ${other}: this phone launches on ${machine} only`,
+      single: 'Codex and Cursor Agent take a single folder; Claude Code and OMP can take several.'
+    },
+    kept: 'Nothing was launched. Your message is kept.',
+    refused: {
+      not_found: 'Start refused: the folder is not found',
+      invalid: 'Start refused: the PC does not take these choices',
+      invalidBody: (agent: string) => `The folder, the model or the effort does not suit ${agent}. A folder cannot be your home folder. Your message is kept.`,
+      stale: 'Start refused: the project changed on the PC',
+      staleBody: 'Nothing was launched. The projects are reloaded: check Project and Where to work.',
+      confirm_required: 'Start refused: the device check is required',
+      setupKept: 'Protect your agreements first in Settings. Your message is kept.',
+      assertion_invalid: 'Start refused: the device check was refused',
+      assertion_expired: 'Start refused: the check has expired',
+      expiredBody: 'Nothing was launched. Check again to launch.',
+      unavailable: (machine: string) => `Start refused: ${machine} does not launch from the phone`,
+      unavailableBody: 'Update Ledge on the PC. Your message is kept.',
+      other: 'Start refused'
+    },
+    failed: (agent: string) => `The PC could not start ${agent}`,
+    failedBody: (agent: string) => `Nothing was launched. Check ${agent} and tmux on the PC, then try again.`,
+    timeout: 'The start did not answer.', timeoutBody: 'Check the machine, then try again.',
+    retry: 'Retry', settings: 'Settings',
+    started: (name: string, table: string) => `${name} is starting at the ${table} table.`
   }
 };

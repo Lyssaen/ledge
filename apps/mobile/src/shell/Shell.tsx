@@ -211,10 +211,12 @@ function Loading() {
  * A tab's page. On a phone: the banner, then the tab's title and what it says, then its content. On a wide screen, the list's
  * head carries the title, the host pill beside it. Before the PC's first state, its outline instead of the content.
  */
-export function TabPage({ title, subtitle, wideSubtitle, actions, children, bodyClassName = 'flex flex-col gap-3', offlineBody, heading = true }: {
+export function TabPage({ title, subtitle, wideSubtitle, actions, wideActions, children, bodyClassName = 'flex flex-col gap-3', offlineBody, heading = true }: {
   title: string; subtitle?: string | undefined;
   /** On a phone, what the title's line carries on its right (Sessions: Liste · Atelier, m2-sessions.html §1, §7). */
   actions?: ReactNode;
+  /** What the list's head carries on its right on a wide screen (Sessions: « Nouvelle », m2-sessions.html §10). */
+  wideActions?: ReactNode;
   /** What the list's head says beside the title on a wide screen (« 3 demandes »); only the tabs whose mockup shows it give one. */
   wideSubtitle?: string | undefined;
   children: ReactNode; bodyClassName?: string;
@@ -233,6 +235,7 @@ export function TabPage({ title, subtitle, wideSubtitle, actions, children, body
           <h1 className="text-lg font-semibold">{title}</h1>
           {wideSubtitle && <span className="min-w-0 truncate text-small text-muted">{wideSubtitle}</span>}
           <HostPill />
+          {wideActions && <span className="ml-auto flex flex-none items-center gap-2">{wideActions}</span>}
         </div>
       )}
       <main data-tab-scroll="" className="tab-main flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pt-3.5 pb-[18px]">

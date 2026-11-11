@@ -146,6 +146,8 @@ export function Sessions({ store, filter: fromRoute, storage }: { store: MobileS
   const threshold = state.device?.contextNear ?? CONTEXT_NEAR;
   const subtitle = offline ? (state.syncedAt ? copy.link.lastKnownAt(clock(state.syncedAt)) : copy.agents.offline) : undefined;
 
+  // « Nouvelle » (§1, §10): the screen opens even when the PC cannot launch; its button then says why (m2-lancement.html §1).
+  const newButton = <a href={href({ name: 'launch' })} className={kitButtonClass({ variant: 'primary', size: 'sm', className: 'flex-none' })}><Icon name="plus" className="size-4" />{copy.sessions.new}</a>;
   const seeButton = (to: SessionFilter, label: string) => <button type="button" onClick={() => setFilter(to)} className={kitButtonClass({ size: 'xs' })}>{label}</button>;
   const S = copy.sessions;
   // A filter with nothing in it says so and leads on (§1; « Au travail »: m2-vides.html, Q70).
@@ -160,11 +162,15 @@ export function Sessions({ store, filter: fromRoute, storage }: { store: MobileS
   );
 
   return (
-    <TabPage title={copy.agents.title} subtitle={subtitle} bodyClassName="flex flex-col gap-2.5" actions={wide ? undefined : <ModeToggle value={mode} onChange={setMode} />}>
+    <TabPage
+      title={copy.agents.title} subtitle={subtitle} bodyClassName="flex flex-col gap-2.5"
+      actions={wide ? undefined : <><ModeToggle value={mode} onChange={setMode} />{newButton}</>} wideActions={wide ? newButton : undefined}
+    >
       {pressedSession && <SessionActions store={store} session={pressedSession} onDone={() => setPressed(null)} />}
       {sessions.length === 0 ? (
         <Box label={copy.agents.empty}>
-          <EmptyState glyph={<Icon name="sessions" />} title={copy.agents.empty} body={copy.agents.emptyHint} />
+          <EmptyState glyph={<Icon name="sessions" />} title={copy.agents.empty} body={copy.agents.emptyHint}
+            action={<a href={href({ name: 'launch' })} className={kitButtonClass({ variant: 'primary', size: 'sm' })}><Icon name="plus" className="size-4" />{copy.sessions.newSession}</a>} />
         </Box>
       ) : atelier ? (
         <SessionsAtelier

@@ -72,7 +72,9 @@ export const ICONS = {
   camera: ['M4 8h3l2-3h6l2 3h3v11H4z', circle(12, 13, 3.5)],
   folder: ['M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
   list: ['M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18h2'],
-  down: ['M6 9l6 6 6-6']
+  down: ['M6 9l6 6 6-6'],
+  /** A git branch: a project folder on its branch (m2-lancement.html §1). */
+  branch: [circle(6, 5, 2), circle(6, 19, 2), circle(18, 8, 2), 'M6 7v10M18 10c0 4-6 3-12 7']
 } as const satisfies Record<string, readonly string[]>;
 
 export type IconName = keyof typeof ICONS;

@@ -41,6 +41,7 @@ import { RigsList } from './screens/rigs/RigsList';
 import { RigView } from './screens/rigs/RigView';
 import { KernelView } from './screens/rigs/KernelView';
 import { Max } from './screens/rigs/Max';
+import { NewSession } from './screens/NewSession';
 import type { UpdateWatch } from './sw/register';
 import type { BuildInfo } from './sw/types';
 
@@ -303,6 +304,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           case 'request': return <Split list={inbox} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} onSettled={moveOn({ name: 'request', sessionId: route.sessionId, key: route.key })} keys />} />;
           case 'sessions': return <Split list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
           case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} />} />;
+          // Not drawn for a tablet (§9 is a phone's): « Nouvelle session » opens beside the list, like a session.
+          case 'launch': return <Split list={sessions} detail={<NewSession store={store} storage={storage} />} />;
           case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />} />;
           case 'prs': return <Split list={<Prs />} detail={<EmptyPane icon="pr" {...copy.prs.pane} />} />;
           case 'rigs': case 'rig': case 'kernel': case 'max': return <Split list={rigsList} detail={rigsDetail ?? <EmptyPane icon="rigs" {...copy.rigs.pane} />} />;
@@ -337,6 +340,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       case 'terminal': return framed(<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} />, false);
       // Keyed by the session only: a request replaced in place rewrites the address, and must not start the screen over.
       case 'ask': return framed(<AskDetail key={route.id} store={store} id={route.id} />, false);
+      // Full screen, over the tabs (m2-sessions.html §9).
+      case 'launch': return <ShellProvider value={shell}><NewSession store={store} storage={storage} /></ShellProvider>;
       case 'request': return framed(<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} />, false);
     }
   })();

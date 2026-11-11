@@ -323,6 +323,16 @@ Les sessions groupées par projet, puis par rig OpenRig. Les filtres en haut : �
 
 Sur un téléphone, « Liste · Atelier » à côté du titre montre les agents en îlots : un îlot par projet puis par rig, ou, avec « Rigs », les rigs puis « Hors rig ». Chaque agent est un siège avec son point d'état ; ses sous-agents sont de petits sièges en pointillés, que l'œil masque (leur nombre revient alors sur l'agent, « +2 »). Toucher un siège ouvre le fil, un appui long ses actions. En bas, le bureau de Ledge ouvre l'onglet Ledge. Le téléphone garde ces choix.
 
+### Nouvelle session (`launch`)
+
+« Nouvelle », en haut de Sessions, lance un agent sur le PC. Sur un téléphone, l'écran s'ouvre par-dessus les onglets. Il reprend les champs de Ledge Desktop :
+- **Projet :** le projet et sa machine.
+- **Où travailler :** les dossiers que le projet déclare sur ce PC. Un dossier absent ou d'une autre machine reste dans la liste, grisé, avec sa raison. Claude Code et OMP peuvent prendre plusieurs dossiers ; l'agent démarre dans le premier coché.
+- **Agent** et **Modèle :** le modèle et l'effort. Pour OMP seulement, **Permissions** s'ajoute : Demander, Fichiers auto ou Auto.
+- **Premier message :** avec trois idées pour commencer.
+
+Le dernier choix d'agent, de modèle et d'effort est retenu pour chaque projet. Tant qu'il manque quelque chose, le bouton du bas dit quoi : la consigne, une machine en ligne, une version plus récente de Ledge sur le PC, ou des accords protégés sur cet appareil. Sinon, il lance avec Face ID ou la vérification de l'appareil. Un refus le dit au-dessus du bouton, avec le formulaire encore rempli. « Fermer » garde le brouillon. Une fois l'agent lancé, l'écran passe au fil de la nouvelle session.
+
 ### MR et PR (`prs`)
 
 Les MR et PR des branches des sessions et des sièges. Le PC ne les transmet pas encore au téléphone : l'onglet le dit, en attendant une prochaine version de Ledge sur le PC.

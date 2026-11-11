@@ -29,6 +29,7 @@ import { TaskCard } from '../ui/TaskCard';
 import { PhoneThumbs } from '../ui/PhoneThumbs';
 import { useAttachments } from '../ui/useAttachments';
 import { Checklist } from './Checklist';
+import { startedHere } from './launchStarted';
 import { Reply, replyFailure, replyProblem } from './Reply';
 import { ChangeSheet, SessionModelChip, SessionModelNote, available as modelSwitchable } from './SessionModel';
 import { EndErrorNotice, EndFooter, EndSheet } from './SessionClose';
@@ -301,6 +302,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
   // An OMP seat launched by OpenRig has no thread Ledge reads: in the panel, its terminal instead (as on Desktop).
   const omp = !!panel && session.tool === 'omp';
   const dot = dotOf(session);
+  const startedIn = startedHere(sessionId, storage);
   const endedAt = session.state === 'exited' && session.exitedAt ? copy.sessions.line.ended(endedAtLabel(session.exitedAt, now)) : undefined;
   // A wide screen's head also says where the session works (§10): its project and its branch.
   const where = wide ? [session.project, session.branch].filter(Boolean).join(' · ') || undefined : undefined;
@@ -327,6 +329,8 @@ export function Thread({ store, sessionId, storage, onReconnect, panel }: { stor
       <main ref={scroller} onScroll={onScroll} aria-label={copy.thread.log(session.name)} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain pt-5 pb-4 phone-side:pt-3 phone-side:pb-3">
         {state.daemon?.checklist && state.checklists.get(sessionId) && <Checklist checklist={state.checklists.get(sessionId)!} current={session?.checklist?.current} />}
         {thread?.more && <p className="text-center text-meta text-muted">{copy.thread.more}</p>}
+        {/* A session this phone launched starts with where it sits (m2-sessions.html §9, design-ux Q77). */}
+        {!thread?.more && startedIn !== null && <p className="flex items-center gap-2 text-[12px] text-muted before:h-px before:flex-1 before:bg-line before:content-[''] after:h-px after:flex-1 after:bg-line after:content-['']">{copy.launch.started(session.name, startedIn)}</p>}
         {!ready && items.length === 0 && <p className="text-center text-meta text-muted" role="status">{fresh ? copy.thread.loading : copy.thread.unavailable}</p>}
         {ready && items.length === 0 && <p className="text-center text-meta text-muted">{copy.thread.empty}</p>}
         {items.map(it => <Bubble key={it.key} item={it} store={store} storage={storage} inPanel={!!panel} onReconnect={onReconnect} keys={wide && !panel} />)}

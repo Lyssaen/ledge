@@ -300,6 +300,8 @@ const fr = {
     seats: (n: number) => (n === 1 ? '1 siège' : `${n} sièges`),
     deskTitle: 'Bureau de Ledge',
     seatOf: (role: string, rig: string) => `siège ${role} · ${rig}`,
+    /** The header's and the empty list's way to « Nouvelle session » (m2-sessions.html §1). */
+    new: 'Nouvelle', newSession: 'Nouvelle session',
     /** A session's screen (m2-sessions.html §3 to §5): its head, its folded tools, its foot and « Plus d'actions ». */
     view: { label: 'Vue de la session', thread: 'Fil', terminal: 'Terminal' },
     more: 'Plus d’actions',
@@ -1128,6 +1130,59 @@ const fr = {
     entrance: 'ENTRÉE',
     more: (n: number) => `+${n} à cette table`,
     zoom: { bar: 'Zoom de l’atelier', out: 'Dézoomer', in: 'Zoomer', reset: 'Revenir à 100 %', fit: 'Ajuster', fitTitle: 'Revenir à la vue lisible' }
+  },
+  /** « Nouvelle session » (m2-sessions.html §9, Desktop's `launch.*` said with « tu »; its refusals: m2-lancement.html). */
+  launch: {
+    title: 'Nouvelle session', close: 'Fermer',
+    project: 'Projet', where: 'Où travailler', agent: 'Agent', model: 'Modèle', message: 'Premier message',
+    remembered: 'Dernier choix pour ce projet retenu', offline: 'hors ligne',
+    noProjects: 'Aucun projet pour l’instant.', noProjectsBody: 'Crée un projet dans Réglages pour y lancer des agents.', chooseProject: 'Choisis un projet',
+    done: 'Terminer le choix',
+    more: (n: number) => `+ ${n}`, moreLabel: (first: string, n: number) => `${first} et ${n === 1 ? '1 autre dossier' : `${n} autres dossiers`}`,
+    permissions: 'Permissions',
+    approvals: { 'always-ask': ['Demander', 'Avant chaque écriture ou commande'], write: ['Fichiers auto', 'Écrit sans demander, demande avant les commandes'], yolo: ['Auto', 'Approuve tout, commandes comprises'] },
+    onBranch: (branch: string) => `Sur ${branch}, dans le dossier du projet`, inFolder: 'Dans le dossier du projet',
+    tools: { claude: 'Conception, revue', codex: 'Code et tests', cursor: 'Dans l’éditeur', omp: 'Piloté en natif' },
+    placeholder: 'Que doit faire l’agent ? Décris le résultat attendu.',
+    ideas: ['Relire la dernière pull request', 'Corriger les tests qui échouent', 'Mettre à jour la documentation'],
+    pick: (model: string, effort: string | null) => (effort ? `${model} · ${effort}` : model),
+    summary: (tool: string, model: string | null, machine: string, project: string) => `${model ? `${tool} · ${model}` : tool} sur ${machine}, dans ${project}`,
+    launchCheck: 'Lancer avec Face ID', launchDevice: 'Lancer avec mon appareil', launching: 'Lancement…',
+    missing: {
+      prompt: 'Écris la consigne', machine: 'Aucune machine en ligne', setup: 'Protège d’abord tes accords',
+      pcOld: (machine: string) => `${machine} ne lance pas encore depuis le téléphone`
+    },
+    setupBody: 'Lancer demande la passkey de cet appareil, comme fermer une session.', openSettings: 'Ouvrir Réglages',
+    pcOldBody: 'Le lancement depuis le téléphone arrive avec une prochaine version de Ledge sur le PC. Ton message est conservé.',
+    cancelled: 'Vérification annulée. Rien n’a été lancé.',
+    folders: (project: string) => `Les dossiers que le projet ${project} déclare`,
+    projectFolder: 'Le dossier du projet',
+    folder: {
+      missing: (machine: string) => `Introuvable sur ${machine}`,
+      elsewhere: (other: string, machine: string) => `Sur ${other} : ce téléphone ne lance que sur ${machine}`,
+      single: 'Codex et Cursor Agent ne prennent qu’un dossier ; Claude Code et OMP peuvent en prendre plusieurs.'
+    },
+    kept: 'Rien n’a été lancé. Ton message est conservé.',
+    refused: {
+      not_found: 'Démarrage refusé : le dossier est introuvable',
+      invalid: 'Démarrage refusé : le PC n’accepte pas ces choix',
+      invalidBody: (agent: string) => `Le dossier, le modèle ou l’effort ne convient pas à ${agent}. Un dossier ne peut pas être ton dossier personnel. Ton message est conservé.`,
+      stale: 'Démarrage refusé : le projet a changé sur le PC',
+      staleBody: 'Rien n’a été lancé. Les projets sont rechargés : vérifie Projet et Où travailler.',
+      confirm_required: 'Démarrage refusé : la vérification de l’appareil est requise',
+      setupKept: 'Protège d’abord tes accords depuis Réglages. Ton message est conservé.',
+      assertion_invalid: 'Démarrage refusé : la vérification de l’appareil a été refusée',
+      assertion_expired: 'Démarrage refusé : la vérification a expiré',
+      expiredBody: 'Rien n’a été lancé. Vérifie de nouveau pour lancer.',
+      unavailable: (machine: string) => `Démarrage refusé : ${machine} ne lance pas depuis le téléphone`,
+      unavailableBody: 'Mets à jour Ledge sur le PC. Ton message est conservé.',
+      other: 'Démarrage refusé'
+    },
+    failed: (agent: string) => `Le PC n’a pas pu démarrer ${agent}`,
+    failedBody: (agent: string) => `Rien n’a été lancé. Vérifie ${agent} et tmux sur le PC, puis réessaie.`,
+    timeout: 'Le démarrage n’a pas répondu.', timeoutBody: 'Vérifie la machine puis réessaie.',
+    retry: 'Réessayer', settings: 'Réglages',
+    started: (name: string, table: string) => `${name} démarre à la table ${table}.`
   }
 } as const;
 
