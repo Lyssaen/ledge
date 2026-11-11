@@ -17,10 +17,12 @@ const agent = fileURLToPath(new URL('./fake-agent.mjs', import.meta.url));
 const noop: Tmux = { async newSession() {}, async sendText() {}, async sendKeys() {}, async capture() { return ''; }, async hasSession() { return false; }, async listSessions() { return []; }, async setOption() {}, async killSession() {}, attachArgs: () => [] };
 const freePort = async () => { const s = createServer(); await new Promise<void>(r => s.listen(0, '127.0.0.1', r)); const p = (s.address() as { port: number }).port; await new Promise(r => s.close(r)); return p; };
 
-/** Runs the real `tmux attach` inside a pseudo-terminal (util-linux `script`), like a user's terminal tab. */
+/** Runs the real `tmux attach` inside a pseudo-terminal (util-linux `script`), like a user's terminal tab. That tab
+ *  declares a real terminal type: the test runner's own may be `dumb` (an agent's shell) or unset, and tmux refuses to
+ *  attach to a terminal that cannot clear the screen, which would fail the attach whatever the launcher does. */
 const ptyAttach = (args: string[], env: NodeJS.ProcessEnv) => new Promise<number>(resolve => {
   const cmd = ['tmux', ...args].map(a => `'${a.replace(/'/g, `'\\''`)}'`).join(' ');
-  const c = spawn('script', ['-qec', cmd, '/dev/null'], { stdio: 'ignore', env });
+  const c = spawn('script', ['-qec', cmd, '/dev/null'], { stdio: 'ignore', env: { ...env, TERM: 'xterm-256color' } });
   c.on('exit', code => resolve(code ?? 1));
 });
 
