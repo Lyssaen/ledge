@@ -11,7 +11,12 @@ const routes: Route[] = [
   { name: 'terminal', sessionId: 's1' },
   { name: 'request', sessionId: 's1', key: 'k1' },
   { name: 'connection' },
-  { name: 'connection', section: 'link' }
+  { name: 'connection', section: 'link' },
+  { name: 'rig', rig: 'ledge-dev' },
+  { name: 'rig', rig: 'a b/c' },
+  { name: 'kernel' },
+  { name: 'max' },
+  { name: 'max', goalId: 'g-12345678' }
 ];
 
 describe('router', () => {

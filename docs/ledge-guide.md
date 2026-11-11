@@ -327,7 +327,19 @@ Les MR et PR des branches des sessions et des sièges. Le PC ne les transmet pas
 
 ### Rigs (`rigs`)
 
-Les rigs OpenRig, leurs sièges et leur file. Le PC ne les transmet pas encore au téléphone : l'onglet le dit, et renvoie à « À toi », où leurs demandes arrivent déjà.
+OpenRig sur le PC : en tête, le daemon (son état, sa version) et le kernel ; puis les rigs, ceux qui tournent d'abord, chacun avec sa pastille (en marche, démarrage, partiel, arrêté) et, en mots, les autorisations et les questions qui t'attendent. OpenRig arrêté : « Démarrer OpenRig », avec ses deux choix de démarrage. Aucun rig : « Parler à Max ». Un PC qui ne transmet pas encore ses rigs : l'onglet le dit, et renvoie à « À toi ». Hors ligne, le dernier état connu reste affiché, grisé, sans action possible.
+
+### Rig (`rig`)
+
+Un rig : ses sièges, ses permissions et son dernier snapshot en tuiles, le siège qui attend (« Voir »), la topologie par pod (toucher un siège ouvre sa fiche : harnais, contexte, travail, liens, « Ouvrir sa session », « Réglages du siège »), puis la file OpenRig de ce rig (une ligne se déplie, en lecture seule ; les lignes closes sont repliées). En bas : « Sièges » (un siège de plus ou de moins par rôle), « Redémarrer », « Arrêter » ; un rig arrêté propose « Démarrer », depuis le dernier snapshot ou à neuf. « ⋯ » : prendre un snapshot, les snapshots, les permissions, « Actualiser ». Arrêter, redémarrer, retirer un siège, YOLO, « Spec » et un changement de harnais demandent Face ID (ou la vérification de l'appareil). Sur tablette, les actions passent dans l'en-tête du volet et la vue se met sur deux colonnes, avec « Sièges par rôle » et les snapshots ; toucher un siège ouvre sa session, un appui long ou un clic droit ouvre sa fiche (un siège dont Ledge ne suit pas la session ouvre sa fiche). Un bloc qui n'a pas pu être lu le dit à sa place, avec « Réessayer » ; un rig qui n'existe plus sur le PC le dit sur tout l'écran.
+
+### Kernel (`kernel`)
+
+Le rig d'OpenRig lui-même : sa topologie (Max, l'advisor, le queue worker), le dernier mot de Max et « Parler à Max », les rigs pilotés (leurs sièges et leur niveau de permissions), le routage de la file (les 20 derniers mouvements, tous les rigs, le plus récent en haut). Plus bas, « Redémarrer » et « Arrêter » le kernel, puis le daemon avec ses deux choix de démarrage gardés sur ce téléphone (« relancer les rigs qui tournaient », « Démarrer sans le kernel ») et ses propres « Redémarrer » et « Arrêter ». Ces arrêts et redémarrages demandent Face ID. « ⋯ » : « Actualiser », « Redémarrer le kernel », « Arrêter le kernel ». Sur tablette, l'objectif en cours de Max s'affiche en fil.
+
+### Max (`max`)
+
+Les objectifs donnés à Max, l'opérateur du kernel, le plus récent en haut, avec leur état ; le champ du bas en envoie un nouveau. Un objectif s'ouvre en fil : ton texte, sa trace, la proposition d'équipe ou la question de Max (qui se répondent dans « À toi »), et le champ pour lui écrire sur cet objectif. Une demande qui n'est pas partie le dit, avec « Renvoyer » quand c'est sans risque ; le champ garde alors ton texte.
 
 ### Atelier (`atelier`)
 

@@ -74,10 +74,13 @@ export function HostPill() {
 }
 
 /** The header of the five tabs on a phone: the mark, the host pill, Réglages. */
-export function TopBar() {
+export function TopBar({ title }: { title?: string } = {}) {
   return (
     <header className="bleed flex h-14 flex-none items-center gap-1.5 border-b border-line pr-1.5 pl-4">
-      <span className="mr-1 flex items-center gap-2 text-[17px] font-semibold"><LedgeMark />{copy.brand}</span>
+      {/* A tab with its own validated header names itself (M4 « Rigs »); the others carry Ledge's mark. */}
+      {title
+        ? <h1 className="mr-1 text-[20px] font-semibold">{title}</h1>
+        : <span className="mr-1 flex items-center gap-2 text-[17px] font-semibold"><LedgeMark />{copy.brand}</span>}
       <HostPill />
       <span className="flex-1" />
       <a href={href({ name: 'connection' })} aria-label={copy.nav.settings} title={copy.nav.settings} className="grid size-11 flex-none place-items-center rounded-lg text-muted active:bg-raised">
@@ -163,8 +166,11 @@ export function Rail({ route, active, badges, atelier }: { route: Route; active:
   );
 }
 
-/** The banner at the top of a tab's content when the PC or the relay does not answer: what is shown is the last known state. */
-export function LinkStrip() {
+/**
+ * The banner at the top of a tab's content when the PC or the relay does not answer: what is shown is the last known state.
+ * `body`: a tab's own sentence for a PC that does not answer (the Rigs tab: nothing can be started or stopped).
+ */
+export function LinkStrip({ body }: { body?: ((since: string) => string) | undefined } = {}) {
   const { pc, look, reach, since, retry } = useShell();
   const [busy, setBusy] = useBusy();
   if (look !== 'offline') return null;
@@ -174,7 +180,7 @@ export function LinkStrip() {
       <Icon name={relay ? 'cloud' : 'wifioff'} className="mt-px size-4 text-attention" />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <b className="font-semibold">{relay ? copy.compare.relayTitle : copy.offline.title(pc)}</b>
-        <span className="text-muted">{relay ? copy.compare.relayBody : since ? copy.offline.body(since) : copy.offline.bodyUnknown}</span>
+        <span className="text-muted">{relay ? copy.compare.relayBody : since ? (body ?? copy.offline.body)(since) : copy.offline.bodyUnknown}</span>
         <button type="button" disabled={busy} onClick={() => { setBusy(true); retry(); }} className={kitButtonClass({ size: 'sm', className: 'self-start' })}>
           <Icon name="refresh" className="size-4" />{copy.offline.retry}
         </button>
@@ -205,11 +211,15 @@ function Loading() {
  * A tab's page. On a phone: the banner, then the tab's title and what it says, then its content. On a wide screen, the list's
  * head carries the title, the host pill beside it. Before the PC's first state, its outline instead of the content.
  */
-export function TabPage({ title, subtitle, wideSubtitle, children, bodyClassName = 'flex flex-col gap-3' }: {
+export function TabPage({ title, subtitle, wideSubtitle, children, bodyClassName = 'flex flex-col gap-3', offlineBody, heading = true }: {
   title: string; subtitle?: string | undefined;
   /** What the list's head says beside the title on a wide screen (« 3 demandes »); only the tabs whose mockup shows it give one. */
   wideSubtitle?: string | undefined;
   children: ReactNode; bodyClassName?: string;
+  /** The offline strip's words for this tab (M4: « Dernier état connu · … »). */
+  offlineBody?: (since: string) => string;
+  /** False: on a phone the title is already in the top bar (M4 « Rigs »). */
+  heading?: boolean;
 }) {
   const wide = useWide();
   const { pc, look } = useShell();
@@ -224,8 +234,8 @@ export function TabPage({ title, subtitle, wideSubtitle, children, bodyClassName
         </div>
       )}
       <main data-tab-scroll="" className="tab-main flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pt-3.5 pb-[18px]">
-        <LinkStrip />
-        {!wide && (
+        <LinkStrip body={offlineBody} />
+        {!wide && heading && (
           <div className="flex flex-none items-baseline gap-2">
             <h1 className="text-[22px] leading-7 font-semibold tracking-[-.02em]">{title}</h1>
             {(loading || subtitle) && <span className="min-w-0 truncate text-[12.5px] text-muted">{loading ? copy.link.connecting(hostName(pc)) : subtitle}</span>}

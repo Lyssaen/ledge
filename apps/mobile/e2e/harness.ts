@@ -39,6 +39,17 @@ export const waiting = (): PhoneSession => ({
  * The daemon's side of the fake PC: it answers every `snapshot.request` with `sessions`, and types each decision once,
  * by its `op`, however often the phone sends it; every copy is answered with the same `applied`.
  */
+/** OpenRig on the fake PC, as the Rigs tab reads it. */
+export interface FakeOpenRig {
+  state: Extract<PhoneServerMessage, { type: 'rigs.state' }>['state'] & object;
+  graphs: Record<string, Extract<PhoneServerMessage, { type: 'rigs.graph' }>['graph'] & object>;
+  queues: Record<string, Pick<Extract<PhoneServerMessage, { type: 'rigs.queue' }>, 'rows' | 'closed'>>;
+  permissions: Record<string, Extract<PhoneServerMessage, { type: 'rigs.permissions' }>['seats']>;
+  snapshots: Record<string, Extract<PhoneServerMessage, { type: 'rigs.snapshots' }>['snapshots']>;
+  routing: Extract<PhoneServerMessage, { type: 'rigs.routing' }>['entries'];
+  goals: Extract<PhoneServerMessage, { type: 'rigs.goals' }>['goals'];
+}
+
 export interface FakeDaemon {
   sessions: PhoneSession[];
   /** The `op` of every decision typed into a terminal, in order. */
@@ -84,6 +95,10 @@ export interface FakeDaemon {
   threads: Record<string, ThreadItem[]>;
   /** Set: the snapshot says `daemon.usage`, and `usage.state` follows it with these limits and an 80 % threshold (docs/mockups/ledge-harness-usage.html). */
   usage: PhoneHarnessUsage[] | null;
+  /** Set: the snapshot says `daemon.rigs`, and the PC answers the Rigs tab's reads with these (m4-rigs.html); null: an older PC. */
+  openrig: FakeOpenRig | null;
+  /** The OpenRig actions the phone sent (`rigs.act`, `rigs.seats`, `rigs.goal.*`), in order. */
+  rigActs: PhoneClientMessage[];
   /** Replaces a session (or adds it) and tells the phone. */
   update(s: PhoneSession): Promise<void>;
   stop(): void;
@@ -94,7 +109,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   let seen = 0;
   let busy = false;
   const d: FakeDaemon = {
-    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [], terminal: false, termTyped: [], projects: null, broadcast: false, broadcasts: [], threads: {}, usage: null,
+    sessions: [waiting()], typed: [], answer: true, device: null, push: null, subscription: null, chat: false, hold: false, turns: [], launched: [], closeCard: false, closed: [], sessionClose: false, ended: [], resumed: [], terminal: false, termTyped: [], projects: null, broadcast: false, broadcasts: [], threads: {}, usage: null, openrig: null, rigActs: [],
     finishChat() { d.turns = d.turns.map((t) => (t.answer === undefined ? finished(t) : t)); },
     async update(s) {
       d.sessions = [...d.sessions.filter((x) => x.id !== s.id), s];
@@ -104,7 +119,7 @@ function runDaemon(pc: FakePc): FakeDaemon {
   };
   const snapshot = (): PhoneServerMessage => ({
     type: 'snapshot', protocol: PHONE_PROTOCOL, sessions: d.sessions,
-    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}), ...(d.terminal ? { terminal: true as const, terminalInput: true as const } : {}), ...(d.projects ? { atelier: true as const } : {}), ...(d.broadcast ? { broadcast: true as const } : {}), ...(d.usage ? { usage: true as const } : {}) },
+    capabilities: { claude: CAPS, codex: CAPS, cursor: CAPS, omp: { freeTextAnswer: false } }, daemon: { version: '0.0.0-e2e', name: PC_NAME, boot, ...(d.sessionClose ? { sessionClose: true as const } : {}), ...(d.terminal ? { terminal: true as const, terminalInput: true as const } : {}), ...(d.projects ? { atelier: true as const } : {}), ...(d.broadcast ? { broadcast: true as const } : {}), ...(d.usage ? { usage: true as const } : {}), ...(d.openrig ? { rigs: true as const } : {}) },
     ...(d.projects ? { projects: d.projects } : {}),
     ...(d.device || d.push || d.chat ? { device: { confirm: d.device ? d.device.registered : true, ...(d.push ? { push: d.push } : {}), ...(d.chat ? { chat: true as const } : {}) } } : {})
   });
@@ -193,10 +208,27 @@ function runDaemon(pc: FakePc): FakeDaemon {
     }
     if (m.type === 'term.release' && held) { held = false; return pc.send({ type: 'term.released', tid: TID, why: 'asked' }); }
   };
+  /** The Rigs tab's reads, answered from `d.openrig`; its actions recorded and taken as done. */
+  const rigsMessage = async (o: FakeOpenRig, m: PhoneClientMessage) => {
+    switch (m.type) {
+      case 'rigs.state': return pc.send({ type: 'rigs.state', state: o.state });
+      case 'rigs.graph': return pc.send(o.graphs[m.rig] ? { type: 'rigs.graph', rig: m.rig, graph: o.graphs[m.rig] } : { type: 'rigs.graph', rig: m.rig, error: 'unknown_rig' });
+      case 'rigs.queue': return pc.send({ type: 'rigs.queue', rig: m.rig, rows: o.queues[m.rig]?.rows ?? [], closed: o.queues[m.rig]?.closed ?? [], truncated: false });
+      case 'rigs.permissions': return pc.send({ type: 'rigs.permissions', rig: m.rig, seats: o.permissions[m.rig] ?? [] });
+      case 'rigs.snapshots': return pc.send({ type: 'rigs.snapshots', rig: m.rig, snapshots: o.snapshots[m.rig] ?? [] });
+      case 'rigs.routing': return pc.send({ type: 'rigs.routing', entries: o.routing });
+      case 'rigs.goals': return pc.send({ type: 'rigs.goals', goals: o.goals });
+      case 'rigs.act': d.rigActs.push(m); await pc.send({ type: 'operation.result', op: m.op, status: 'received' }); return pc.send({ type: 'rigs.done', op: m.op, ok: true, commands: [] });
+      case 'rigs.goal.send': d.rigActs.push(m); return pc.send({ type: 'rigs.goal.sent', op: m.op, goalId: m.goalId, ok: true });
+      case 'rigs.goal.reply': d.rigActs.push(m); return pc.send({ type: 'rigs.goal.replied', op: m.op, goalId: m.goalId, replyId: m.replyId, ok: true });
+      default: d.rigActs.push(m);
+    }
+  };
   const handle = async (m: PhoneClientMessage) => {
     if (m.type === 'snapshot.request') { await pc.send(snapshot()); if (d.usage) await pc.send({ type: 'usage.state', harnesses: d.usage, prefs: { alert: 0.8 } }); return; }
     if (d.terminal && m.type.startsWith('term.')) return terminalMessage(m);
     if (d.chat && (m.type === 'chat.history' || m.type === 'chat.ask' || m.type === 'chat.relay' || m.type === 'chat.launch' || m.type === 'chat.close')) return chatMessage(m);
+    if (d.openrig && m.type.startsWith('rigs.')) return rigsMessage(d.openrig, m);
     if (m.type === 'session.thread') return pc.send({ type: 'session.thread', id: m.id, items: d.threads[m.id] ?? [], cut: [], more: false });
     if (m.type === 'session.broadcast' && d.broadcast) {
       d.broadcasts.push({ sessions: m.sessions, text: m.text });

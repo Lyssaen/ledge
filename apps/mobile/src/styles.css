@@ -158,6 +158,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .split-detail > * { width: 100%; max-width: 720px; margin-inline: auto; }
   /* « Retour » to the list beside it says nothing on a wide screen; back to the thread from its terminal stays. */
   .split-detail [data-back="atoi"], .split-detail [data-back="sessions"] { display: none; }
+  /* A rig and the kernel open beside the Rigs list: their « Retour » has nowhere to go. */
+  .split-detail [data-back="rigs"] { display: none; }
   .app:not(:has(.split)) > :not(.rail) { width: 100%; max-width: 720px; margin-inline: auto; }
 }
 @media (min-width: 768px) and (min-height: 501px) and (orientation: portrait) {

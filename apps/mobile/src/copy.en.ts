@@ -1,5 +1,6 @@
 import { MESSAGE_MAX, type ActionErrorCode } from '@ledge/protocol';
 import { actionWords, type ActionVars } from '@ledge/ui/chat/actionWords';
+import { rigsEn } from './copy.rigs.en';
 
 import type { Copy, Model } from './copy';
 
@@ -121,7 +122,7 @@ export const en: Copy = {
     atoi: ATOI, sessions: 'Sessions', prs: 'MR/PR', rigs: 'Rigs', chat: 'Ledge', atelier: 'Atelier', settings: 'Settings',
     /** « Back », named after the screen it leads to; plain when that screen is not known (after a reload). */
     back: 'Back',
-    backTo: { atoi: `Back to ${ATOI}`, sessions: 'Back to sessions', prs: 'Back to MR and PR', rigs: 'Back to rigs', chat: 'Back to Ledge', atelier: 'Back to the atelier', thread: 'Back to the thread', terminal: 'Back to the terminal', request: 'Back to the request', connection: 'Back to settings' } as Partial<Record<string, string>>
+    backTo: { atoi: `Back to ${ATOI}`, sessions: 'Back to sessions', prs: 'Back to MR and PR', rigs: 'Back to rigs', chat: 'Back to Ledge', atelier: 'Back to the atelier', thread: 'Back to the thread', terminal: 'Back to the terminal', request: 'Back to the request', connection: 'Back to settings', rig: 'Back to the rig', kernel: 'Back to the kernel', max: 'Back to Max' } as Partial<Record<string, string>>
   },
   images: {
     attach: 'Attach an image', remove: 'Remove image', tooLarge: 'Image too large, even reduced', notImage: 'This file is not an image', max: '5 images per message at most',
@@ -1013,7 +1014,8 @@ export const en: Copy = {
     notSent: (pc: string) => `${pc} does not send its rigs to this device yet`,
     notSentBody: `The rigs, their seats and their queue come with a later version of Ledge on the PC. Their requests already arrive in “${ATOI}”.`,
     seeAtoi: `See “${ATOI}”`,
-    pane: { title: 'Nothing to show', body: 'A rig\'s seats and topology open here.' }
+    pane: { title: 'Nothing to show', body: 'A rig\'s seats and topology open here.' },
+    ...rigsEn
   },
   /** The Atelier on iPad (docs/mockups/ledge-ipad-atelier.html): the PC's rooms, tables and agents, as Ledge Desktop draws them. */
   atelier: {

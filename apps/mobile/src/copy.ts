@@ -1,5 +1,6 @@
 import { MESSAGE_MAX, type ActionErrorCode } from '@ledge/protocol';
 import { actionWords, type ActionVars } from '@ledge/ui/chat/actionWords';
+import { rigsFr } from './copy.rigs';
 
 import { useSyncExternalStore } from 'react';
 import { createI18n } from '@ledge/ui/i18n/lang';
@@ -122,7 +123,7 @@ const fr = {
     atoi: 'À toi', sessions: 'Sessions', prs: 'MR/PR', rigs: 'Rigs', chat: 'Ledge', atelier: 'Atelier', settings: 'Réglages',
     /** « Retour », named after the screen it leads to; plain when that screen is not known (after a reload). */
     back: 'Retour',
-    backTo: { atoi: 'Retour à À toi', sessions: 'Retour aux sessions', prs: 'Retour aux MR et PR', rigs: 'Retour aux rigs', chat: 'Retour à Ledge', atelier: 'Retour à l’Atelier', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour aux réglages' } as Partial<Record<string, string>>
+    backTo: { atoi: 'Retour à À toi', sessions: 'Retour aux sessions', prs: 'Retour aux MR et PR', rigs: 'Retour aux rigs', chat: 'Retour à Ledge', atelier: 'Retour à l’Atelier', thread: 'Retour au fil', terminal: 'Retour au terminal', request: 'Retour à la demande', connection: 'Retour aux réglages', rig: 'Retour au rig', kernel: 'Retour au kernel', max: 'Retour à Max' } as Partial<Record<string, string>>
   },
   images: {
     attach: 'Joindre une image', remove: 'Retirer l\'image', tooLarge: 'Image trop lourde, même réduite', notImage: 'Ce fichier n\'est pas une image', max: '5 images au plus par message',
@@ -1028,7 +1029,8 @@ const fr = {
     notSent: (pc: string) => `${pc} ne transmet pas encore ses rigs à cet appareil`,
     notSentBody: 'Les rigs, leurs sièges et leur file arrivent avec une prochaine version de Ledge sur le PC. Leurs demandes arrivent déjà dans « À toi ».',
     seeAtoi: 'Voir « À toi »',
-    pane: { title: 'Rien à afficher', body: 'Les sièges et la topologie d’un rig s’ouvrent ici.' }
+    pane: { title: 'Rien à afficher', body: 'Les sièges et la topologie d’un rig s’ouvrent ici.' },
+    ...rigsFr
   },
   /** The Atelier on iPad (docs/mockups/ledge-ipad-atelier.html): the PC's rooms, tables and agents, as Ledge Desktop draws them. */
   atelier: {
