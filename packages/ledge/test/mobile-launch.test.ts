@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { PhoneClientMessageSchema, PhoneServerMessageSchema, type PhoneLaunch, type Projects, type RepoInfo } from '@ledge/protocol';
+import { PhoneClientMessageSchema, PhoneServerMessageSchema, type ModelChoice, type PhoneLaunch, type Projects, type RepoInfo } from '@ledge/protocol';
 import { createPhoneGateway, PhoneLaunchRefused } from '../src/mobile/gateway.js';
 import { phoneLaunch } from '../src/mobile/launch.js';
 import { softAuthenticator } from './mobile-soft-authenticator.js';
@@ -194,6 +194,29 @@ describe('the PC side of a phone launch (phoneLaunch)', () => {
     fail = new Error('tmux: no server');
     await expect(run({ tool: 'claude', cwd: api, prompt: 'Go' })).rejects.toThrow('tmux: no server');
     expect(calls).toEqual([api, api, api]);
+  });
+
+  it('a model the agent does not offer, or an effort its model does not take, is invalid; a list the PC could not read refuses nothing', async () => {
+    const h = realpathSync(mkdtempSync(join(tmpdir(), 'ledge-phone-launch-model-')));
+    const api = join(h, 'api'); mkdirSync(api);
+    const calls: Array<string | undefined> = [];
+    let listing: { models: ModelChoice[]; error?: string } = { models: [
+      { id: 'opus', label: 'Opus', efforts: ['low', 'high'], isDefault: true }, { id: 'sonnet', label: 'Sonnet' }] };
+    const asked: string[] = [];
+    const run = phoneLaunch(async req => { calls.push(req.model); return { id: 'local:s1' } as never; }, h, async tool => { asked.push(tool); return listing; });
+    expect(await run({ tool: 'claude', cwd: api, prompt: 'Go', model: 'sonnet' })).toEqual({ id: 'local:s1' });
+    expect(await run({ tool: 'claude', cwd: api, prompt: 'Go', model: 'opus', effort: 'high' })).toEqual({ id: 'local:s1' });
+    await expect(run({ tool: 'claude', cwd: api, prompt: 'Go', model: 'gpt-9' })).rejects.toMatchObject({ name: 'PhoneLaunchRefused', reason: 'invalid' });
+    await expect(run({ tool: 'claude', cwd: api, prompt: 'Go', model: 'opus', effort: 'max' })).rejects.toMatchObject({ reason: 'invalid' });
+    // No model: the effort is judged against the agent's default model.
+    await expect(run({ tool: 'claude', cwd: api, prompt: 'Go', effort: 'max' })).rejects.toMatchObject({ reason: 'invalid' });
+    // No model nor effort: the list is not even asked.
+    expect(await run({ tool: 'claude', cwd: api, prompt: 'Go' })).toEqual({ id: 'local:s1' });
+    expect(asked).toEqual(['claude', 'claude', 'claude', 'claude', 'claude']);
+    // The agent could not be asked: the PC cannot tell, the launch goes and the agent says it in its terminal.
+    listing = { models: [], error: 'not installed' };
+    expect(await run({ tool: 'codex', cwd: api, prompt: 'Go', model: 'gpt-9' })).toEqual({ id: 'local:s1' });
+    expect(calls).toEqual(['sonnet', 'opus', undefined, 'gpt-9']);
   });
 
   it('a folder that is a link to the home folder or the root is refused as they are, first folder or added one', async () => {
