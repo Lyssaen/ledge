@@ -2,7 +2,7 @@
 // restart, « Nouvelle conversation » and a new day put it away, and what is older than 7 days is pruned.
 import { describe, it, expect, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, existsSync, readdirSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
@@ -122,6 +122,101 @@ describe('a device keeps its conversations', { timeout: 20_000 }, () => {
     await s.threads.drop('d1');
     expect(existsSync(join(s.home, 'mobile', 'chat', 'd1'))).toBe(false);
     expect(await s.d1().conversations!()).toEqual({ past: [] });
+  });
+
+  describe('a device put back under a new key (passkey recovery): held, its folder moved, then dropped', () => {
+    const d1 = (s: ReturnType<typeof setup>) => join(s.home, 'mobile', 'chat', 'd1');
+    const d2 = (s: ReturnType<typeof setup>) => join(s.home, 'mobile', 'chat', 'd2');
+    /** What restore() and the gateway do: hold, rename, release, then drop the old id. */
+    const move = async (s: ReturnType<typeof setup>) => {
+      const release = await s.threads.hold('d1');
+      renameSync(d1(s), d2(s));
+      release();
+      await s.threads.drop('d1');
+    };
+
+    it('a write still under way when the recovery comes lands before the move: the answer just given is in the moved conversation', async () => {
+      const s = setup();
+      await s.d1().ask('q1', 'un', quiet);
+      // No settle: the answer's write is still queued.
+      await move(s);
+      expect(existsSync(d1(s))).toBe(false);
+      expect(s.threads.device('d2').history().map(t => [t.qid, t.answer])).toEqual([['q1', 'ok']]);
+    });
+
+    it('a conversation being put away when the recovery comes is in the moved list', async () => {
+      const s = setup();
+      await s.d1().ask('q1', 'un', quiet);
+      void s.d1().reset(quiet);
+      await move(s);
+      const { current, past } = await s.threads.device('d2').conversations!();
+      expect(current).toBeUndefined();
+      expect(past.map(p => p.first)).toEqual(['un']);
+    });
+
+    it('a question under way is stopped; nothing is written to the old path after the move', async () => {
+      const s = setup();
+      await s.d1().ask('q1', 'un', quiet);
+      const asked = s.d1().ask('q2', 'deux', quiet);
+      await move(s);
+      await asked.catch(() => {});
+      await new Promise(r => setTimeout(r, 50));
+      expect(existsSync(d1(s))).toBe(false);
+      expect(s.threads.device('d2').history()[0]).toMatchObject({ qid: 'q1', answer: 'ok' });
+    });
+
+    /** Threads whose CLI only stops when the test says so (`stop`), once its question has started (`started`). */
+    const slow = () => {
+      const home = mkdtempSync(join(tmpdir(), 'ledge-conv-'));
+      let child: EventEmitter | undefined; let ready!: () => void;
+      const started = new Promise<void>(r => { ready = r; });
+      const spawnSlow = (() => {
+        child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), killed: false, kill: () => {} });
+        ready();
+        return child;
+      }) as unknown as typeof nodeSpawn;
+      const threads = createChatThreads({ store: new Store({ journalPath: join(home, 'j.json') }), tmux, home, env: async () => ({ ...process.env }), spawn: spawnSlow });
+      return { threads, started, stop: () => child!.emit('close', null), dir: join(home, 'mobile', 'chat', 'd1') };
+    };
+
+    it('the device forgotten while a hold stops its question: its folder is gone once all is done (review-qa f6ce9941)', async () => {
+      const s = slow();
+      const asked = s.threads.device('d1').ask('q1', 'secret', quiet);
+      await s.started;
+      const holding = s.threads.hold('d1');
+      await new Promise(r => setTimeout(r, 20));
+      const dropped = s.threads.drop('d1');
+      // Time for a drop that would not wait to remove the folder before the question's last write.
+      await new Promise(r => setTimeout(r, 20));
+      s.stop();
+      const release = await holding;
+      await asked; await dropped;
+      release();
+      expect(existsSync(s.dir)).toBe(false);
+    });
+
+    it('a hold that comes during a drop waits for it, and the drop does not wait for the hold', async () => {
+      const s = slow();
+      const asked = s.threads.device('d1').ask('q1', 'secret', quiet);
+      await s.started;
+      const dropped = s.threads.drop('d1');
+      const holding = s.threads.hold('d1');
+      s.stop();
+      await dropped;
+      const release = await holding;
+      await asked;
+      release();
+      expect(existsSync(s.dir)).toBe(false);
+    });
+
+    it('held, no thread opens; released without a move, the device finds its conversation again', async () => {
+      const s = setup();
+      await s.d1().ask('q1', 'un', quiet);
+      const release = await s.threads.hold('d1');
+      expect(() => s.d1()).toThrow('held');
+      release();
+      expect(s.d1().history().map(t => [t.qid, t.answer])).toEqual([['q1', 'ok']]);
+    });
   });
 
   it('what was under way when the daemon stopped is not any more', async () => {

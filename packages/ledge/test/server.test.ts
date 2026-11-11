@@ -2610,7 +2610,7 @@ describe('mobile access', () => {
     const sends: unknown[] = [];
     const state = { enabled: true, relayUrl: 'https://relay.test', account: null, signin: null, signinError: null, link: { state: 'online' }, devices: [{ id: 'dev1', label: 'dev1', approvedAt: T0, online: true }], pairings: [] };
     const mobile = {
-      state: () => state, onChange: () => () => {}, handle: async () => {}, send: async () => true, revoke: async () => {},
+      state: () => state, onChange: () => () => {}, onRecovery: () => () => {}, handle: async () => {}, send: async () => true, revoke: async () => {},
       credential: () => null, setCredential: () => {}, pushOf: (id: string) => (id === 'dev1' ? sub : null), setPush: () => {}, relayPushKey: () => 'K1',
       sendPush: async (m: unknown) => { sends.push(m); return { result: 'sent' as const }; },
       onMessage: (fn: (d: string, t: string) => void) => { messageFns.add(fn); return () => { messageFns.delete(fn); }; },
@@ -2649,7 +2649,7 @@ describe('mobile access', () => {
     const raw: string[] = [];
     const state = { enabled: true, relayUrl: 'https://relay.test', account: null, signin: null, signinError: null, link: { state: 'online' }, devices: [{ id: 'dev1', label: 'dev1', approvedAt: T0, online: true }], pairings: [] };
     const mobile = {
-      state: () => state, onChange: () => () => {}, handle: async () => {}, revoke: async () => {},
+      state: () => state, onChange: () => () => {}, onRecovery: () => () => {}, handle: async () => {}, revoke: async () => {},
       send: async (_d: string, t: string) => { raw.push(t); phone.push(JSON.parse(t)); return true; },
       credential: () => null, setCredential: () => {}, pushOf: () => null, setPush: () => {}, relayPushKey: () => 'K1',
       sendPush: async () => ({ result: 'sent' as const }),

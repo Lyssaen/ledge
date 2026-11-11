@@ -395,7 +395,9 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     launch: PhoneLaunchSchema.optional(),
     /** A `forge` challenge: the request and the action it covers, exactly as they will be sent. */
     forge: z.object({ prId: z.string().min(1).max(500), action: ForgeActionSchema }).strict().optional() }),
-  z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema }),
+  /** `userId`: the passkey's `user.id` as the phone made it (« L1 » ‖ the PC key's digest ‖ random, docs/mobile-passkey-recover-contract.md);
+   *  given and made for this PC, the passkey can bring the device back after a reinstall (the snapshot's `device.recover`). */
+  z.object({ type: z.literal('credential.register'), op: OperationIdSchema, credential: CredentialSchema, userId: B64U.max(128).optional() }),
   z.object({
     type: z.literal('session.decide'), op: OperationIdSchema, id: sessionId, decision: DecisionSchema, note: z.string().trim().min(1).max(NOTE_MAX).optional(),
     /** The request the phone showed: refused unless it is still the pending one. */
@@ -598,7 +600,7 @@ export const PhoneServerMessageSchema = z.discriminatedUnion('type', [
      *  `chat.reset` puts the conversation away. Absent (an older PC): « Nouvelle conversation » forgets it. */
     conversations: z.literal(true).optional() }),
   /** The user's projects (`daemon.atelier`), whole, in their order: absent from an older PC's snapshot. */
-  projects: z.array(PhoneProjectSchema).max(PHONE_PROJECTS_MAX).optional(), device: z.object({ confirm: z.boolean(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
+  projects: z.array(PhoneProjectSchema).max(PHONE_PROJECTS_MAX).optional(), device: z.object({ confirm: z.boolean(), /** Its passkey can bring it back after a reinstall: without it, « Mettre à jour la passkey ». */ recover: z.literal(true).optional(), push: z.enum(['on', 'off', 'stale', 'unavailable']).optional(), chat: z.literal(true).optional(), contextNear: ContextPrefsSchema.shape.near.optional(),
     /** This device's id (its fingerprint, as decisions name it in `by`), its kind, and the name the user gave it (absent: none given). */
     id: z.string().optional(), kind: DeviceKindSchema.optional(), name: z.string().optional(),
     /** This device's own settings (`daemon.settings`). */
