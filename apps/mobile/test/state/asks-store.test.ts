@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage } from '@ledge/protocol';
 import { askEndOf } from '../../src/model/atoi';
+import { UNCERTAIN_MS } from '../../src/state/operations';
 import { createStore, type MobileStore } from '../../src/state/store';
 import { fakeLink, MemoryStorage, snapshot } from './helpers';
 
@@ -54,5 +55,31 @@ describe('answering an OpenRig ask (store.answerAsk)', () => {
       t.deliver({ type: 'openrig.answered', op, qitemId: 'r1', ...end } as PhoneServerMessage);
       expect(askEndOf('r1', t.store.getState().ops)).toEqual(expected);
     }
+  });
+});
+
+describe('an answer of unknown outcome (store.resendAsk)', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('sends the same operation again, so the PC replays its end; nothing when no answer is uncertain', () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const op = t.store.answerAsk('r1', choice, { assertion })!;
+    expect(t.store.resendAsk('r1')).toBe(false);
+    vi.advanceTimersByTime(UNCERTAIN_MS);
+    expect(askEndOf('r1', t.store.getState().ops)).toEqual({ kind: 'uncertain', answer: choice });
+    expect(t.store.resendAsk('r2')).toBe(false);
+    expect(t.store.resendAsk('r1')).toBe(true);
+    const sent = t.of('openrig.answer');
+    expect(sent.map(m => m.op)).toEqual([op, op]);
+    expect(sent[1]).toEqual(sent[0]);
+  });
+
+  it('an end the PC gave as « uncertain » is no operation to send again', () => {
+    const t = setup();
+    const op = t.store.answerAsk('r1', choice, { assertion })!;
+    t.deliver({ type: 'openrig.answered', op, qitemId: 'r1', ok: false, error: 'uncertain', message: 'lost' } as PhoneServerMessage);
+    expect(askEndOf('r1', t.store.getState().ops)).toEqual({ kind: 'uncertain', answer: choice });
+    expect(t.store.resendAsk('r1')).toBe(false);
   });
 });

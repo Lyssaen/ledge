@@ -134,6 +134,27 @@ describe('OpenRig\'s asks in « À toi » (§2, m1-reponses-rig.html)', () => {
     expect(within(card).getAllByRole('button').map(b => b.textContent)).toEqual(['Fusionner maintenantrecommandé', 'Attendre la relecture', 'Répondre autrement…']);
   });
 
+  it('a tap answers the request the card shows, even when the PC replaced it just before (review-qa)', () => {
+    const t = setup();
+    t.deliver(snapshot([perm('a', 'Pim')]));
+    render(<Inbox store={t.store} />);
+    const allow = screen.getByRole('button', { name: 'Autoriser' });
+    // The replacement is in the store, not yet drawn: the tap still names the request on screen, which the PC turns down.
+    t.deliver(snapshot([session('a', { name: 'Pim', state: 'waiting_permission', pending: pending({ key: 'ka2', text: 'pnpm build e2e' }) })]));
+    fireEvent.click(allow);
+    expect(t.of('session.decide')).toEqual([expect.objectContaining({ id: 'a', decision: 'accept', expect: expect.objectContaining({ key: 'ka', text: 'pnpm build a' }) })]);
+  });
+
+  it('an option tapped after the question went still names that question (review-qa)', () => {
+    const t = setup();
+    t.deliver(snapshot([session('b', { name: 'Ada', state: 'waiting_input', pending: pending({ key: 'kb', kind: 'question', text: 'Quelle base ?', options: ['sqlite', 'postgres'] }) })]));
+    render(<Inbox store={t.store} />);
+    const option = screen.getByRole('button', { name: 'sqlite' });
+    t.deliver(snapshot([session('b', { name: 'Ada' })]));
+    fireEvent.click(option);
+    for (const m of t.of('session.reply')) expect(m.expect).toMatchObject({ key: 'kb', kind: 'question', text: 'Quelle base ?' });
+  });
+
   it('without protected accepts: the options are greyed, the card says where to answer (Q64)', () => {
     const t = setup();
     t.deliver(withOpenRig(snapshot([]), { confirm: false }));
@@ -161,6 +182,77 @@ describe('OpenRig\'s asks in « À toi » (§2, m1-reponses-rig.html)', () => {
     const sent = t.of('openrig.answer')[0]!;
     act(() => t.deliver({ type: 'openrig.answered', op: sent.op, qitemId: 'r1', ok: true, outcome: 'answered' }));
     expect(await screen.findByText('Envoyé à pilot-lead')).toBeInTheDocument();
+  });
+
+  describe('answers that need the device (review-qa)', () => {
+    const assertion = { id: 'AQ', clientDataJSON: 'AQ', authenticatorData: 'AQ', signature: 'AQ' };
+    const ready = async (list: HumanAsk[]) => {
+      vi.mocked(platformAvailable).mockResolvedValue(true);
+      vi.mocked(getAssertion).mockResolvedValue(assertion as never);
+      const t = setup();
+      t.deliver(withOpenRig(snapshot([]), { confirm: true }));
+      t.deliver(asks(list));
+      render(<Inbox store={t.store} />);
+      return t;
+    };
+    const rigPrepares = (t: ReturnType<typeof setup>) => t.of('confirm.prepare').filter(m => m.purpose === 'rig');
+    /** Taps the option, signs the n-th check, and returns the answer that left. */
+    const answer = async (t: ReturnType<typeof setup>, name: RegExp, n: number) => {
+      const option = await screen.findByRole('button', { name });
+      await waitFor(() => expect(option).toBeEnabled());
+      fireEvent.click(option);
+      return signed(t, n);
+    };
+    /** The ask's receipt (the passkey card above may have its own « Réessayer »). */
+    const retryOf = async (title: RegExp) => within((await screen.findByText(title)).closest('[data-receipt]') as HTMLElement).getByRole('button', { name: 'Réessayer' });
+    const signed = async (t: ReturnType<typeof setup>, n: number) => {
+      await waitFor(() => expect(rigPrepares(t)).toHaveLength(n));
+      act(() => t.deliver({ type: 'confirm.challenge', purpose: 'rig', challenge: 'Y2hhbGw', rpId: 'relay.example', credentialId: 'AQ', expiresInMs: 60_000 }));
+      await waitFor(() => expect(t.of('openrig.answer')).toHaveLength(n));
+      return t.of('openrig.answer')[n - 1]!;
+    };
+
+    it('an ask of two questions: once the first is recorded, the second can be answered', async () => {
+      const two = ask('r2', { questions: [
+        { id: 'q1', question: 'Fusionner ?', options: [{ id: 'now', label: 'Fusionner maintenant', recommended: true }] },
+        { id: 'q2', question: 'Publier ?', options: [{ id: 'pub', label: 'Publier la version', recommended: false }] }
+      ] } as Partial<HumanAsk>);
+      const t = await ready([two]);
+      const first = await answer(t, /Fusionner maintenant/, 1);
+      act(() => t.deliver({ type: 'openrig.answered', op: first.op, qitemId: 'r2', ok: true, outcome: 'recorded', remaining: ['q2'] }));
+      act(() => t.deliver({ type: 'operation.result', op: first.op, status: 'applied' }));
+      const second = await answer(t, /Publier la version/, 2);
+      expect(second.answer).toEqual({ kind: 'choice', questionId: 'q2', optionId: 'pub' });
+    });
+
+    it('« Réessayer » after a failure asks the device again and sends a new answer', async () => {
+      const t = await ready([ask('r1')]);
+      const first = await answer(t, /Fusionner maintenant/, 1);
+      act(() => t.deliver({ type: 'openrig.answered', op: first.op, qitemId: 'r1', ok: false, error: 'openrig_stopped' }));
+      act(() => t.deliver({ type: 'operation.result', op: first.op, status: 'failed' }));
+      fireEvent.click(await retryOf(/Pas envoyée/));
+      const again = await signed(t, 2);
+      expect(again.op).not.toBe(first.op);
+      expect(again.answer).toEqual(first.answer);
+    });
+
+    it('after a refused check the options come back', async () => {
+      const t = await ready([ask('r1')]);
+      const first = await answer(t, /Fusionner maintenant/, 1);
+      act(() => t.deliver({ type: 'openrig.answered', op: first.op, qitemId: 'r1', ok: false, rejected: 'assertion_expired' }));
+      act(() => t.deliver({ type: 'operation.result', op: first.op, status: 'rejected', reason: 'assertion_expired' }));
+      expect(await screen.findByText('La vérification a expiré. Recommence.')).toBeInTheDocument();
+      await answer(t, /Attendre la relecture/, 2);
+    });
+
+    it('an answer the PC calls uncertain is answered again on « Réessayer », which OpenRig records once', async () => {
+      const t = await ready([ask('r1')]);
+      const first = await answer(t, /Fusionner maintenant/, 1);
+      act(() => t.deliver({ type: 'openrig.answered', op: first.op, qitemId: 'r1', ok: false, error: 'uncertain', message: 'lost' }));
+      act(() => t.deliver({ type: 'operation.result', op: first.op, status: 'failed' }));
+      fireEvent.click(await retryOf(/Envoi incertain/));
+      expect((await signed(t, 2)).answer).toEqual(first.answer);
+    });
   });
 
   it('« Vu » goes without a check, even on a device without protected accepts', () => {

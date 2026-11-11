@@ -89,8 +89,9 @@ export function AskCard({ store, ask, end, fresh, ghost, canConfirm, enroll, onG
   }
   const retry = (a: HumanAnswer) => { void go(last?.key ?? 'retry', a); };
   if (end.kind === 'uncertain') {
-    // It may have arrived: the same operation goes again, never a new answer, and OpenRig says where it stands.
-    return <Receipt tone="warn" title={copy.decide.uncertain} body={A.uncertain} action={{ label: A.retry, onClick: () => { store.resendAsk(ask.id); }, disabled: !fresh }} />;
+    // It may have arrived. An operation the PC never answered goes again as itself, so the PC replays its end; one the PC
+    // answered « uncertain » (OpenRig's reply was lost) is answered again, which OpenRig records once and says so.
+    return <Receipt tone="warn" title={copy.decide.uncertain} body={A.uncertain} action={{ label: A.retry, onClick: () => { if (!store.resendAsk(ask.id)) retry(end.answer); }, disabled: !fresh || turning !== null }} />;
   }
   if (end.kind === 'failed') {
     const why = end.error === 'openrig_stopped' ? A.stopped : end.error === 'unreachable' ? A.unreachable : end.message ?? end.error;
