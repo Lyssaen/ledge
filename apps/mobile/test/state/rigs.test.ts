@@ -143,6 +143,23 @@ describe('the rigs store', () => {
     expect(t.rigs.getState().runs[0]!.phase).toBe('done');
   });
 
+  it('no longer sends an uncertain run whose receipt was closed, and ignores its late answer', async () => {
+    const t = setup();
+    const ended = t.rigs.act({ kind: 'rig.start', rig: 'ledge-dev' });
+    await vi.waitFor(() => expect(t.of('rigs.act')).toHaveLength(1));
+    const op = t.of('rigs.act')[0]!.op;
+    t.set('pc_offline');
+    const run = await ended;
+    expect(run.phase).toBe('uncertain');
+    t.rigs.dismiss(run.id);
+    t.set('ready');
+    t.set('pc_offline');
+    t.set('ready');
+    expect(t.of('rigs.act')).toHaveLength(1);
+    t.deliver({ type: 'rigs.done', op, ok: true, commands: [] });
+    expect(t.rigs.getState().runs).toHaveLength(0);
+  });
+
   it('forgets the old PC’s OpenRig when the phone is unpaired', () => {
     const t = setup();
     t.rigs.follow();

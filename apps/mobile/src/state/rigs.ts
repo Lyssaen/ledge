@@ -407,7 +407,12 @@ export function createRigs(link: PhoneLink, store: MobileStore, storage?: Storag
     replyGoal(goalId, text, replyId = newGoalId()) {
       return run({ kind: 'reply', goalId, replyId, text }, null, op => ({ type: 'rigs.goal.reply', op, goalId, replyId, text }));
     },
-    dismiss(id) { set({ runs: state.runs.filter(r => r.id !== id || !isFinal(r.phase)) }); },
+    dismiss(id) {
+      // A closed receipt is no longer followed: an uncertain run's message is not sent again on the next link.
+      const r = state.runs.find(x => x.id === id);
+      if (r && isFinal(r.phase) && r.op) { inFlight.delete(r.op); answered(`op:${r.op}`); }
+      set({ runs: state.runs.filter(x => x.id !== id || !isFinal(x.phase)) });
+    },
     close() {
       closed = true;
       offState(); offMessage();
