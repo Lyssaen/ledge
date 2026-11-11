@@ -82,6 +82,8 @@ export const prsFr = {
   reload: 'Relire',
   refused: (forge: string, why: string) => `${forge} refuse la fusion maintenant : ${why}`,
   failed: (cli: string) => `Échec : dernière ligne de ${cli}`,
+  /** « Fil non résolu : dernière ligne de gh ». */
+  lastLine: (cli: string) => `dernière ligne de ${cli}`,
   /** What did not happen, before the reason (« Pas fusionnée : la vérification Face ID a expiré. »). */
   notDone: { merge: 'Pas fusionnée', rerun: 'Relance refusée', comment: 'Non publié', reply: 'Non publié', resolve: 'Fil non résolu' },
   /** « Rien n'a été envoyé. Fusionne de nouveau pour vérifier encore. » */

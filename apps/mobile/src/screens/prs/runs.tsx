@@ -24,7 +24,7 @@ const codeOf = (run: ForgeRun): string | undefined =>
 
 /** The band while a run goes, then its receipt. `pc`: the PC's name. */
 export function ForgeRunNote({ run, pr, detail, forge, pc, onReload }: {
-  run: ForgeRun; pr: PullRequest; detail: PrDetail | undefined; forge: ForgeStore; pc: string; onReload: () => void;
+  run: ForgeRun; pr: PullRequest; detail: PrDetail | undefined; forge: ForgeStore; pc: string; onReload?: () => void;
 }) {
   const w = forgeWords(pr);
   const apple = isApple();
@@ -49,14 +49,29 @@ export function ForgeRunNote({ run, pr, detail, forge, pc, onReload }: {
       return <Receipt mark="ok" title={C.merged(pr.ref)} sub={C.mergedSub(at, pr.target)} {...close}>{d.command && <Commands commands={[d.command]} />}</Receipt>;
     }
     if (run.action.kind === 'rerun') return <Receipt mark="ok" title={C.rerunDone(pr.ref)} sub={C.rerunDoneSub(at)} {...close}>{d.command && <Commands commands={[d.command]} />}</Receipt>;
+    if (run.action.kind === 'reply') return <Receipt mark="ok" title={C.replyPosted(w.host)} sub={at} {...close} />;
+    if (run.action.kind === 'comment') return <Receipt mark="ok" title={C.commentPosted(w.host)} sub={at} {...close} />;
     return null;
+  }
+  // A text not posted stays in its field (§6): the receipt says so, and « Réessayer » posts it again after a new check.
+  const text = run.action.kind === 'comment' || run.action.kind === 'reply';
+  if (text && code !== 'unavailable' && code !== 'confirm_required') {
+    const a = run.action;
+    const why = code === 'assertion_expired' ? R.rejected.assertion_expired(apple) : code === 'assertion_invalid' ? R.rejected.assertion_invalid(apple)
+      : code === 'cancelled' ? R.rejected.cancelled : code === 'unsent' ? R.rejected.unsent : C.lastLine(w.cli);
+    const failed = !['assertion_expired', 'assertion_invalid', 'cancelled', 'unsent'].includes(code ?? '');
+    return (
+      <Receipt mark="bad" title={`${R.because(notDone(run), why)} ${C.keptText}`} {...(failed && d?.message ? { sub: <span className="font-mono">{d.message}</span> } : {})} {...close}>
+        <button type="button" onClick={() => { forge.dismiss(run.id); void forge.act(run.prId, a); }} className={rigButtonClass({ size: 'xs', className: 'mt-1.5' })}>{C.retry}</button>
+      </Receipt>
+    );
   }
   const again = run.action.kind === 'merge' ? R.rejected.again(C.mergeAgain) : R.rejected.nothingSent;
   switch (code) {
     // The branch moved since it was read: its new head, from the list (§4).
     case 'stale': return (
       <Receipt mark="warn" title={C.stale(shortSha(pr.headSha))} sub={C.staleBody} {...close}>
-        <button type="button" onClick={onReload} className={rigButtonClass({ size: 'xs', className: 'mt-1.5' })}>{C.reload}</button>
+        <button type="button" onClick={onReload ?? (() => forge.readDetail(run.prId))} className={rigButtonClass({ size: 'xs', className: 'mt-1.5' })}>{C.reload}</button>
       </Receipt>
     );
     case 'not_offered': {
@@ -73,7 +88,7 @@ export function ForgeRunNote({ run, pr, detail, forge, pc, onReload }: {
     case 'unsent': return <Receipt mark="bad" title={R.because(notDone(run), R.rejected.unsent)} sub={R.rejected.nothingSent} {...close} />;
     case 'unavailable': return <Receipt mark="warn" title={C.gone(w.kind, pc)} sub={C.goneBody} {...close} />;
     default: return (
-      <Receipt mark="bad" title={C.failed(w.cli)} {...(d?.message ? { sub: <span className="font-mono">{d.message}</span> } : {})} {...close}>
+      <Receipt mark="bad" title={run.action.kind === 'resolve' ? R.because(notDone(run), C.lastLine(w.cli)) : C.failed(w.cli)} {...(d?.message ? { sub: <span className="font-mono">{d.message}</span> } : {})} {...close}>
         {d?.command && <Commands commands={[d.command]} />}
       </Receipt>
     );

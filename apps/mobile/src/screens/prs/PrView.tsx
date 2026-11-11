@@ -9,7 +9,6 @@ import { useForge, type DetailRead, type ForgeRun, type ForgeStore } from '../..
 import { useMobile, type MobileStore } from '../../state/store';
 import { dotOf } from '../../model/sessions';
 import { href } from '../../router';
-import type { PhoneSession } from '@ledge/protocol';
 import { iconButtonClass } from '../../ui/Button';
 import { Sheet } from '../../ui/Dialog';
 import { BackLink } from '../../ui/Header';
@@ -18,10 +17,11 @@ import { Dot } from '../../ui/kit/marks';
 import { useWide } from '../../ui/layout';
 import { Receipt, RigSheet, Spinner, Strip, rigButtonClass } from '../rigs/kit';
 import { Cancel, CheckedButton } from '../rigs/sheets';
-import { PipeChip, condText, dayTime, forgeWords, repoName } from './parts';
+import { PipeChip, condText, dayTime, forgeWords, repoName, sessionsOf } from './parts';
 import { ForgeRunNote } from './runs';
 import { Changes } from './Changes';
 import { Commits } from './Commits';
+import { CommentFoot, Discussion } from './Discussion';
 
 /*
  * A request (m5-mr-pr.html, §3 and §8, the board PhonePR): its head, four views, the overview (the pipeline top to bottom, the failed
@@ -235,10 +235,6 @@ function Loading() {
   );
 }
 
-/** The sessions of the branch, most active first, as the phone knows them. */
-const sessionsOf = (pr: PullRequest, sessions: ReadonlyMap<string, PhoneSession>): PhoneSession[] =>
-  pr.sessions.map(id => sessions.get(id)).filter((s): s is PhoneSession => !!s);
-
 /**
  * « Demander à Tom de corriger » (§5): Desktop's text to the branch's most active session, as a reply in its thread (`session.reply`,
  * no device check: it acts on no forge). « ▾ » offers the others; without a session, a line says why.
@@ -370,8 +366,9 @@ function MergeSheet({ d, pc, confirm, live, onMerge, onClose }: { d: PrDetail; p
   );
 }
 
-/** A run on this request still to show: the last one, under way or not dismissed. */
-const lastRun = (runs: readonly ForgeRun[], id: string): ForgeRun | undefined => runs.filter(r => r.prId === id).at(-1);
+/** The merge or rerun on this request still to show at the top: the last one, under way or not dismissed. A text's run shows by its field. */
+const lastRun = (runs: readonly ForgeRun[], id: string): ForgeRun | undefined =>
+  runs.filter(r => r.prId === id && (r.action.kind === 'merge' || r.action.kind === 'rerun')).at(-1);
 const going = (r: ForgeRun | undefined) => !!r && (r.phase === 'checking' || r.phase === 'sending' || r.phase === 'received');
 
 /** A request of the MR/PR tab (`#/prs/<id>`). */
@@ -437,13 +434,14 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
           {view === 'overview' && (!read?.error || d) && (
             <Overview pr={pr} read={read} store={store} live={live && !busy && !gone} onJob={j => { setSheetJob(j.id); openLog(j); }} onLog={openLog} onRerun={() => setRerunning(true)} />
           )}
-          {(view === 'changes' || view === 'commits') && !d && !read?.error && <Loading />}
+          {view !== 'overview' && !d && !read?.error && <Loading />}
+          {view === 'discussion' && d && <Discussion detail={d} forge={forge} store={store} live={live && !gone} pc={name} />}
           {view === 'changes' && d && <Changes detail={d} />}
           {view === 'commits' && d && <Commits detail={d} />}
         </div>
       </main>
       <footer className="flex flex-none items-center gap-2.5 border-t border-line bg-sidebar px-3.5 py-[9px]">
-        {done ? (
+        {view === 'discussion' && !done ? <CommentFoot pr={pr} forge={forge} store={store} live={live && !gone} pc={name} /> : done ? (
           <span data-foot="done" className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-[12px] leading-4 text-muted">
             <span className="inline-flex h-[22px] items-center rounded-full border border-input px-[9px] text-[12px] font-medium">{C.state[pr.state]}</span>
             {pr.state === 'merged' ? C.mergedInto(pr.target, dayTime(pr.updatedAt)) : dayTime(pr.updatedAt)}

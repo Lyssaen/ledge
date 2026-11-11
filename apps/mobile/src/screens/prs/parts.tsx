@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { PhoneForgeStatus, PipeStatus, PullRequest } from '@ledge/protocol';
+import type { PhoneForgeStatus, PhoneSession, PipeStatus, PullRequest } from '@ledge/protocol';
 import { copy, locale } from '../../copy';
 import { cliOf, PIPE_DOT, type MergeCondition } from '../../model/prs';
 import { daysAgo } from '../../model/rigs';
@@ -28,6 +28,10 @@ export const repoName = (repo: string): string => repo.split('/').at(-1) ?? repo
 
 /** The words a forge's sentences need: its host's name (GitHub), its CLI (glab), what it calls a request (MR). */
 export const forgeWords = (f: Pick<PullRequest, 'forge'> | Pick<PhoneForgeStatus, 'forge'>) => ({ host: C.host[f.forge], cli: cliOf(f.forge), kind: C.kind[f.forge] });
+
+/** The sessions of the branch, most active first, as the phone knows them. */
+export const sessionsOf = (pr: PullRequest, sessions: ReadonlyMap<string, PhoneSession>): PhoneSession[] =>
+  pr.sessions.map(id => sessions.get(id)).filter((s): s is PhoneSession => !!s);
 
 /** A day as a folded row says it: today's time, « hier », the weekday within a week, else the date. */
 export function dayWord(iso: string, now = new Date()): string {

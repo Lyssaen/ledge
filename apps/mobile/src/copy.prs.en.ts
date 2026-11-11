@@ -70,6 +70,7 @@ export const prsEn: PrsCopy = {
   reload: 'Reload',
   refused: (forge: string, why: string) => `${forge} refuses the merge now: ${why}`,
   failed: (cli: string) => `Failure: ${cli}'s last line`,
+  lastLine: (cli: string) => `${cli}'s last line`,
   notDone: { merge: 'Not merged', rerun: 'Rerun refused', comment: 'Not posted', reply: 'Not posted', resolve: 'Thread not resolved' },
   mergeAgain: 'Merge',
   keptText: 'Your text is kept.',
