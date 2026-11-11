@@ -19,9 +19,17 @@ export interface ActionWords {
 const b = (name: string) => `**${name}**`;
 /** A title quoted in a line, as the daemon's summary shortens it. */
 const short = (text: string) => (text.length <= 100 ? text : `${text.slice(0, 99)}…`);
-/** The line when every word it names is there. */
-const need = <K extends string>(v: ActionVars, keys: readonly K[], say: (w: Record<K, string>) => string) =>
+/** The line when every word it names is there (and `say` knows them: an unknown kind is the daemon's summary too). */
+const need = <K extends string>(v: ActionVars, keys: readonly K[], say: (w: Record<K, string>) => string | undefined) =>
   (keys.every(k => v[k]) ? say(v as Record<K, string>) : undefined);
+/** OpenRig's kernel, as `rig.act` names it (`vars.rig`). */
+const KERNEL = 'kernel';
+/** A role's seat change: how many, and whether it adds or removes (M3 Q34); `undefined` when a number is missing. */
+const seatChange = (v: ActionVars) => {
+  const from = Number(v.from), count = Number(v.count);
+  return v.from && v.count && Number.isInteger(from) && Number.isInteger(count) && from !== count ? { from, count, n: Math.abs(count - from), add: count > from } : undefined;
+};
+
 /** Which target a code speaks of: the action's own kind first, then whatever the row names. */
 const about = (action: string | undefined, v: ActionVars): 'session' | 'task' | null =>
   action?.startsWith('task.') && v.task ? 'task' : v.session ? 'session' : v.task ? 'task' : null;
@@ -38,11 +46,34 @@ const fr: ActionWords = {
     'task.cancel': v => need(v, ['task', 'owner'], w => `Annuler la tâche « ${short(w.task)} » de ${b(w.owner)}`),
     'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Passer la tâche « ${short(w.task)} » de ${b(w.owner)} à ${b(w.session)}`),
     'task.answer': v => need(v, ['task', 'session'], w => `Répondre à la décision « ${short(w.task)} » de ${b(w.session)}`),
-    'note.add': v => need(v, ['note'], w => `Ajouter à la note ${b(w.note)}`)
+    'note.add': v => need(v, ['note'], w => `Ajouter à la note ${b(w.note)}`),
+    'rig.act': v => need(v, ['kind', 'rig'], w => {
+      const verb = ({ start: 'Démarrer', stop: 'Arrêter', restart: 'Redémarrer' } as Record<string, string>)[w.kind.split('.')[1]!];
+      if (w.kind.startsWith('kernel.')) return verb ? `${verb} le kernel` : undefined;
+      if (w.kind === 'rig.snapshot') return `Prendre un snapshot du rig ${b(w.rig)}`;
+      return verb ? `${verb} le rig ${b(w.rig)}` : undefined;
+    }),
+    'rig.seats': v => need(v, ['rig', 'role'], w => {
+      const c = seatChange(v);
+      if (!c) return undefined;
+      const span = `(${c.from} → ${c.count})`;
+      if (c.add) return `Ajouter ${c.n} ${c.n > 1 ? 'sièges' : 'siège'} ${b(w.role)} à ${b(w.rig)} ${span}`;
+      return c.count === 0 ? `Retirer tous les sièges ${b(w.role)} de ${b(w.rig)} ${span}` : `Retirer ${c.n} ${c.n > 1 ? 'sièges' : 'siège'} ${b(w.role)} de ${b(w.rig)} ${span}`;
+    })
   },
   why: (code, action, v) => {
     const s = v.session ? b(v.session) : undefined, k = v.task ? `« ${short(v.task)} »` : undefined;
     const gone = 'cette action n’est plus possible.';
+    if (action === 'rig.act' || action === 'rig.seats') {
+      const r = v.rig === KERNEL && action === 'rig.act' ? 'le kernel' : v.rig ? b(v.rig) : undefined;
+      switch (code) {
+        case 'not_running': return r ? `${r} ne tourne pas.` : gone;
+        case 'running': return r ? `${r} tourne déjà.` : gone;
+        case 'unchanged': { const n = Number(v.count); return r && v.role && v.count ? `${r} a déjà ${n} ${n > 1 ? 'sièges' : 'siège'} ${b(v.role)}.` : gone; }
+        case 'unknown': return action === 'rig.seats' && v.rig && v.role ? `${b(v.rig)} n’a pas de siège ${b(v.role)}.`
+          : v.rig && v.rig !== KERNEL ? `Ledge ne trouve plus le rig ${b(v.rig)}.` : 'OpenRig n’est pas sur ce PC.';
+      }
+    }
     switch (code) {
       case 'unknown': { const on = about(action, v); return on === 'task' ? `Ledge ne trouve plus la tâche ${k}.` : on === 'session' ? `Ledge ne trouve plus ${s}.` : gone; }
       case 'ambiguous': { const on = about(action, v); return on === 'session' ? `plusieurs sessions s’appellent ${s} : redemande à Ledge en précisant laquelle.` : gone; }
@@ -80,11 +111,34 @@ const en: ActionWords = {
     'task.cancel': v => need(v, ['task', 'owner'], w => `Cancel ${b(w.owner)}’s task “${short(w.task)}”`),
     'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Pass ${b(w.owner)}’s task “${short(w.task)}” to ${b(w.session)}`),
     'task.answer': v => need(v, ['task', 'session'], w => `Answer ${b(w.session)}’s decision “${short(w.task)}”`),
-    'note.add': v => need(v, ['note'], w => `Add to the note ${b(w.note)}`)
+    'note.add': v => need(v, ['note'], w => `Add to the note ${b(w.note)}`),
+    'rig.act': v => need(v, ['kind', 'rig'], w => {
+      const verb = ({ start: 'Start', stop: 'Stop', restart: 'Restart' } as Record<string, string>)[w.kind.split('.')[1]!];
+      if (w.kind.startsWith('kernel.')) return verb ? `${verb} the kernel` : undefined;
+      if (w.kind === 'rig.snapshot') return `Take a snapshot of the rig ${b(w.rig)}`;
+      return verb ? `${verb} the rig ${b(w.rig)}` : undefined;
+    }),
+    'rig.seats': v => need(v, ['rig', 'role'], w => {
+      const c = seatChange(v);
+      if (!c) return undefined;
+      const span = `(${c.from} → ${c.count})`;
+      if (c.add) return `Add ${c.n} ${b(w.role)} ${c.n > 1 ? 'seats' : 'seat'} to ${b(w.rig)} ${span}`;
+      return c.count === 0 ? `Remove every ${b(w.role)} seat from ${b(w.rig)} ${span}` : `Remove ${c.n} ${b(w.role)} ${c.n > 1 ? 'seats' : 'seat'} from ${b(w.rig)} ${span}`;
+    })
   },
   why: (code, action, v) => {
     const s = v.session ? b(v.session) : undefined, k = v.task ? `“${short(v.task)}”` : undefined;
     const gone = 'this action is no longer possible.';
+    if (action === 'rig.act' || action === 'rig.seats') {
+      const r = v.rig === KERNEL && action === 'rig.act' ? 'the kernel' : v.rig ? b(v.rig) : undefined;
+      switch (code) {
+        case 'not_running': return r ? `${r} is not running.` : gone;
+        case 'running': return r ? `${r} is already running.` : gone;
+        case 'unchanged': { const n = Number(v.count); return r && v.role && v.count ? `${r} already has ${n} ${b(v.role)} ${n > 1 ? 'seats' : 'seat'}.` : gone; }
+        case 'unknown': return action === 'rig.seats' && v.rig && v.role ? `${b(v.rig)} has no ${b(v.role)} seat.`
+          : v.rig && v.rig !== KERNEL ? `Ledge can no longer find the rig ${b(v.rig)}.` : 'OpenRig is not on this PC.';
+      }
+    }
     switch (code) {
       case 'unknown': { const on = about(action, v); return on === 'task' ? `Ledge can no longer find the task ${k}.` : on === 'session' ? `Ledge can no longer find ${s}.` : gone; }
       case 'ambiguous': { const on = about(action, v); return on === 'session' ? `several sessions are called ${s}: ask Ledge again and say which one.` : gone; }

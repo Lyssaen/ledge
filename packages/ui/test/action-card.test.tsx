@@ -420,6 +420,42 @@ describe('the action card (#94): its words from the row\'s vars, in the front\'s
     for (const l of ['fr', 'en'] as const) expect(generic.filter(id => !actionWords[l].line[id]), l).toEqual([]);
   });
 
+  it('OpenRig rows by their words (M3 Q34): a rig\'s or the kernel\'s power, a snapshot, a role\'s seats, and their refusals', () => {
+    const fr = actionWords.fr, en = actionWords.en;
+    expect(fr.line['rig.act']!({ kind: 'rig.start', rig: 'ledge-dev' })).toBe('Démarrer le rig **ledge-dev**');
+    expect(fr.line['rig.act']!({ kind: 'rig.restart', rig: 'ledge-dev' })).toBe('Redémarrer le rig **ledge-dev**');
+    expect(fr.line['rig.act']!({ kind: 'rig.snapshot', rig: 'ledge-dev' })).toBe('Prendre un snapshot du rig **ledge-dev**');
+    expect(fr.line['rig.act']!({ kind: 'kernel.stop', rig: 'kernel' })).toBe('Arrêter le kernel');
+    expect(en.line['rig.act']!({ kind: 'rig.stop', rig: 'ledge-dev' })).toBe('Stop the rig **ledge-dev**');
+    expect(en.line['rig.act']!({ kind: 'rig.snapshot', rig: 'ledge-dev' })).toBe('Take a snapshot of the rig **ledge-dev**');
+    expect(en.line['rig.act']!({ kind: 'kernel.start', rig: 'kernel' })).toBe('Start the kernel');
+    // A kind this front does not know: the daemon's summary.
+    expect(fr.line['rig.act']!({ kind: 'rig.fly', rig: 'ledge-dev' })).toBeUndefined();
+    expect(fr.line['rig.seats']!({ rig: 'ledge-dev', role: 'dev.back', count: '2', from: '1' })).toBe('Ajouter 1 siège **dev.back** à **ledge-dev** (1 → 2)');
+    expect(fr.line['rig.seats']!({ rig: 'ledge-dev', role: 'dev.back', count: '3', from: '1' })).toBe('Ajouter 2 sièges **dev.back** à **ledge-dev** (1 → 3)');
+    expect(fr.line['rig.seats']!({ rig: 'ledge-dev', role: 'dev.back', count: '1', from: '2' })).toBe('Retirer 1 siège **dev.back** de **ledge-dev** (2 → 1)');
+    expect(fr.line['rig.seats']!({ rig: 'ledge-dev', role: 'dev.back', count: '0', from: '2' })).toBe('Retirer tous les sièges **dev.back** de **ledge-dev** (2 → 0)');
+    expect(en.line['rig.seats']!({ rig: 'ledge-dev', role: 'dev.back', count: '2', from: '1' })).toBe('Add 1 **dev.back** seat to **ledge-dev** (1 → 2)');
+    expect(en.line['rig.seats']!({ rig: 'ledge-dev', role: 'dev.back', count: '3', from: '1' })).toBe('Add 2 **dev.back** seats to **ledge-dev** (1 → 3)');
+    expect(en.line['rig.seats']!({ rig: 'ledge-dev', role: 'dev.back', count: '1', from: '2' })).toBe('Remove 1 **dev.back** seat from **ledge-dev** (2 → 1)');
+    expect(en.line['rig.seats']!({ rig: 'ledge-dev', role: 'dev.back', count: '0', from: '2' })).toBe('Remove every **dev.back** seat from **ledge-dev** (2 → 0)');
+    // Without `from` (an older PC), the daemon's summary.
+    expect(fr.line['rig.seats']!({ rig: 'ledge-dev', role: 'dev.back', count: '2' })).toBeUndefined();
+    const rig = { kind: 'rig.start', rig: 'ledge-dev' }, kernel = { kind: 'kernel.start', rig: 'kernel' }, seats = { rig: 'ledge-dev', role: 'dev.back', count: '2', from: '2' };
+    expect(fr.why('not_running', 'rig.act', rig)).toBe('**ledge-dev** ne tourne pas.');
+    expect(fr.why('not_running', 'rig.act', kernel)).toBe('le kernel ne tourne pas.');
+    expect(fr.why('running', 'rig.act', rig)).toBe('**ledge-dev** tourne déjà.');
+    expect(en.why('running', 'rig.act', kernel)).toBe('the kernel is already running.');
+    expect(fr.why('unchanged', 'rig.seats', seats)).toBe('**ledge-dev** a déjà 2 sièges **dev.back**.');
+    expect(en.why('unchanged', 'rig.seats', seats)).toBe('**ledge-dev** already has 2 **dev.back** seats.');
+    expect(fr.why('unknown', 'rig.act', rig)).toBe('Ledge ne trouve plus le rig **ledge-dev**.');
+    expect(fr.why('unknown', 'rig.seats', seats)).toBe('**ledge-dev** n’a pas de siège **dev.back**.');
+    expect(fr.why('unknown', 'rig.act', kernel)).toBe('OpenRig n’est pas sur ce PC.');
+    expect(en.why('unknown', 'rig.seats', seats)).toBe('**ledge-dev** has no **dev.back** seat.');
+    expect(en.why('unknown', 'rig.act', kernel)).toBe('OpenRig is not on this PC.');
+    expect(fr.why('failed', 'rig.act', rig)).toBe('l’action est partie, mais n’a pas abouti.');
+  });
+
   it('refused or failed: the front\'s words by code, the daemon\'s error never on screen', () => {
     card([actionRowOf({ ...cancelRow, state: 'refused', code: 'closed', error: 'task t91b0d4 is closed' })]);
     expect(rowsOf()[0]).toHaveTextContent('Refused: the task “Relire” is already closed. Nothing was sent.');

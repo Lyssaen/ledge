@@ -14,7 +14,8 @@ const fr: ActionCopy = {
   verbs: {
     'session.model': 'Changer', 'session.interrupt': 'Interrompre', 'session.archive': 'Archiver', 'session.restore': 'Restaurer', 'session.resume': 'Reprendre',
     'session.decide': 'Accepter',
-    'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais', 'task.answer': 'Répondre', 'note.add': 'Ajouter'
+    'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais', 'task.answer': 'Répondre', 'note.add': 'Ajouter',
+    'rig.act': 'Appliquer', 'rig.seats': 'Changer'
   } as Record<string, string>,
   apply: 'Appliquer', deny: 'Refuser', ignore: 'Ignorer', review: 'Revoir', retry: 'Réessayer', running: 'En cours…',
   done: (at: string) => `Appliquée${at ? ` · ${at}` : ''}`, refusedState: 'Refusée', denied: (at: string) => `Refus envoyé${at ? ` · ${at}` : ''}`, open: (name: string) => `Ouvrir ${name}`,
@@ -53,7 +54,8 @@ const en: ActionCopy = {
   verbs: {
     'session.model': 'Change', 'session.interrupt': 'Interrupt', 'session.archive': 'Archive', 'session.restore': 'Restore', 'session.resume': 'Resume',
     'session.decide': 'Accept',
-    'task.cancel': 'Drop', 'task.pass': 'Hand over', 'task.answer': 'Answer', 'note.add': 'Add'
+    'task.cancel': 'Drop', 'task.pass': 'Hand over', 'task.answer': 'Answer', 'note.add': 'Add',
+    'rig.act': 'Apply', 'rig.seats': 'Change'
   } as Record<string, string>,
   apply: 'Apply', deny: 'Deny', ignore: 'Ignore', review: 'Review', retry: 'Retry', running: 'Running…',
   done: (at: string) => `Applied${at ? ` · ${at}` : ''}`, refusedState: 'Refused', denied: (at: string) => `Denial sent${at ? ` · ${at}` : ''}`, open: (name: string) => `Open ${name}`,
