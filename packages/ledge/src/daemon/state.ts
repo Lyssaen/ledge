@@ -1,4 +1,4 @@
-import { cleanTopic, DOING_LABEL_MAX, pendingKey, parseRigPrompt, sessionTitle, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
+import { cleanTopic, DOING_LABEL_MAX, RUNNING_MAX, pendingKey, parseRigPrompt, sessionTitle, type RunningCall, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 import { crossSession, crossSessionNotices, ledgeNotice, ledgeTask } from './crossSession.js';
 import { sameQuestion } from '../adapters/types.js';
@@ -218,32 +218,50 @@ export function doingLabel(text: string): string {
   return `${line.slice(0, end).trimEnd()}…`;
 }
 
-function withoutDoing(s: Session): Session {
-  if (!s.doing) return s;
-  const { doing: _gone, ...rest } = s;
+function withRunning(s: Session, running: RunningCall[]): Session {
+  if (running.length) return { ...s, running };
+  if (!s.running) return s;
+  const { running: _gone, ...rest } = s;
   return rest;
 }
 
+/** The index of the call an end or a refusal is for: its id when both have one, else the oldest call of that tool. */
+function callIndex(running: RunningCall[], tool: string | undefined, id: string | undefined): number {
+  if (id) { const i = running.findIndex(c => c.id === id); if (i >= 0) return i; }
+  return running.findIndex(c => c.tool === tool && (!id || !c.id));
+}
+
 /**
- * What the agent itself is running (`doing`), after an event: set by its own PreToolUse, unless that tool is a request
- * (a question, a plan), dropped by that tool's end, a new prompt, or anything that leaves `working` or puts a request up.
- * A subagent's tools never set or drop it.
+ * The tools the agent itself is running (`running`), after an event. Its own PreToolUse adds a call, unless that tool is a
+ * request (a question, a plan); the call's end removes it, matched by id, else the oldest of that tool, so parallel calls
+ * end in any order. A request keeps the calls (an accepted one runs on); a refusal from Ledge removes the call it refused.
+ * The end of the turn (rest, error, exit, a new prompt) drops them all. A subagent's events never touch them.
  */
-function withDoing(next: Session, ev: SessionEvent): Session {
-  if (next.state !== 'working' || next.pending) return withoutDoing(next);
+function withCalls(before: Session, next: Session, ev: SessionEvent): Session {
+  const running = next.running ?? [];
+  if (next.state === 'idle' || next.state === 'error' || next.state === 'exited' || next.state === 'starting') return withRunning(next, []);
   if (ev.helperId) return next;
+  if (ev.name === 'UserPromptSubmit') return withRunning(next, []);
   if (ev.name === 'PreToolUse' && ev.tool && !QUESTION_TOOLS.has(ev.tool) && ev.tool !== 'ExitPlanMode') {
-    const label = doingLabel(ev.text ?? '') || ev.tool;
-    if (next.doing?.tool === ev.tool && next.doing.label === label) return next;
-    return { ...next, doing: { tool: ev.tool, label, since: ev.at } };
+    if (ev.toolUseId && running.some(c => c.id === ev.toolUseId)) return next; // the same call announced again
+    const call: RunningCall = { ...(ev.toolUseId ? { id: ev.toolUseId } : {}), tool: ev.tool, label: doingLabel(ev.text ?? '') || ev.tool, since: ev.at };
+    return withRunning(next, [...running, call].slice(-RUNNING_MAX));
   }
-  if ((ev.name === 'PostToolUse' || ev.name === 'PostToolUseFailure') && (!ev.tool || ev.tool === next.doing?.tool)) return withoutDoing(next);
-  if (ev.name === 'UserPromptSubmit') return withoutDoing(next);
+  if (ev.name === 'PostToolUse' || ev.name === 'PostToolUseFailure') {
+    const i = callIndex(running, ev.tool, ev.toolUseId);
+    return i < 0 ? next : withRunning(next, running.filter((_, j) => j !== i));
+  }
+  // Refused from Ledge: the tool will not run. Its request named the tool; the newest such call is the one that asked.
+  if (ev.name === 'Decided' && ev.decision === 'deny' && before.pending && !before.pending.helperId && before.pending.tool) {
+    const tool = before.pending.tool;
+    const i = running.map(c => c.tool).lastIndexOf(tool);
+    return i < 0 ? next : withRunning(next, running.filter((_, j) => j !== i));
+  }
   return next;
 }
 
 export function reduce(s: Session, ev: SessionEvent): Session {
-  const next = withDoing(reduceEvent(s, ev), ev);
+  const next = withCalls(s, reduceEvent(s, ev), ev);
   if (next === s) return s;
   let changed = false;
   const helpers = next.helpers.map(h => {

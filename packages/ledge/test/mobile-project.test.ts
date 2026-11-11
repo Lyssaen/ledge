@@ -56,8 +56,12 @@ describe('toPhoneSession', () => {
 
   it('carries what it is running and a forced close, and an older phone ignores both without dropping the session', () => {
     const doing = { tool: 'Bash', label: 'pnpm --filter desktop test', since: T };
-    const p = toPhoneSession(session({ doing }), T);
+    const p = toPhoneSession(session({ running: [{ id: 'old', tool: 'Read', label: 'Read a.ts', since: T }, { id: 't', ...doing }] }), T);
     expect(p.doing).toEqual(doing);
+    expect(p).not.toHaveProperty('running');
+    // Nothing shows while a request waits, nor at rest.
+    expect(toPhoneSession(session({ running: [{ ...doing }], state: 'waiting_permission', pending: { kind: 'permission', text: 'x', tool: 'Bash', source: 'hook' } }), T)).not.toHaveProperty('doing');
+    expect(toPhoneSession(session({ running: [{ ...doing }], state: 'idle' }), T)).not.toHaveProperty('doing');
     const ended = toPhoneSession(session({ state: 'exited', exitedAt: T, closedHow: 'killed' }), T);
     expect(ended).toMatchObject({ exitedAt: T, closedHow: 'killed' });
     expect(toPhoneSession(session(), T)).not.toHaveProperty('doing');
@@ -73,7 +77,7 @@ describe('toPhoneSession', () => {
   });
 
   it('clips a label no source should have let grow', () => {
-    const p = toPhoneSession(session({ doing: { tool: 'T'.repeat(300), label: 'x'.repeat(5_000), since: T } }), T);
+    const p = toPhoneSession(session({ running: [{ tool: 'T'.repeat(300), label: 'x'.repeat(5_000), since: T }] }), T);
     expect(p.doing!.tool).toHaveLength(100);
     expect(p.doing!.label).toHaveLength(120);
   });

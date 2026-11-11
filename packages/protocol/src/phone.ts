@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ATTACHMENTS_MAX, ATTACHMENT_MAX, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentRefSchema, AttachmentStoredSchema, ImageUploadSchema, b64Max } from './attachments.js';
 import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { HarnessUsageSchema, UsagePrefsSchema, dropUnknownHarnesses } from './usage.js';
-import { OmpApprovalSchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
+import { DOING_LABEL_MAX, DOING_TOOL_MAX, OmpApprovalSchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS, type CloseHow } from './chat.js';
 import { ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
@@ -151,10 +151,10 @@ export const PhoneSessionSchema = SwitchableSessionSchema.pick({
   /** Its context and its relief (context handover spec §3.2): the phone shows the gauge; the relief is started from the PC. */
   context: true, relieves: true,
   /** When it ended: « Terminée · à 18:42 » in the list; and `killed` when Ledge's close had to force it (« Fermée de force »). */
-  exitedAt: true, closedHow: true,
-  /** What it is running now (« pnpm --filter desktop test »): the list row and « En cours ». Older phones drop the field. */
-  doing: true
-}).extend({ pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional(),
+  exitedAt: true, closedHow: true
+}).extend({
+  /** What it is running now (« pnpm --filter desktop test »), `doingOf` on the PC: the list row and « En cours ». Older phones drop the field. */
+  doing: z.object({ tool: z.string().max(DOING_TOOL_MAX), label: z.string().max(DOING_LABEL_MAX), since: z.string().datetime() }).optional(), pending: PhonePendingSchema.optional(), unread: z.boolean(), handover: z.object({ state: HandoverStateSchema, toName: z.string().max(80).optional() }).strict().optional(),
   /** Absent: the agent has no checklist. */ checklist: PhoneChecklistSummarySchema.optional(),
   /** Started without Ledge (`hook_only`): the phone can neither close nor resume it. */ readOnly: z.literal(true).optional(),
   /** Its room in the Atelier (`daemon.atelier`): the user's project it belongs to, placed by the PC as the desktop places it; absent: none (« Sans projet »). */

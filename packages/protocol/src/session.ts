@@ -17,6 +17,12 @@ export const DOING_LABEL_MAX = 120;
 /** The longest `doing.tool` a phone receives. */
 export const DOING_TOOL_MAX = 100;
 
+/** One tool call the agent is running (`Session.running`). */
+export const RunningCallSchema = z.object({ id: z.string().optional(), tool: z.string(), label: z.string(), since: z.string().datetime() });
+export type RunningCall = z.infer<typeof RunningCallSchema>;
+/** The most calls `running` keeps: the newest win. */
+export const RUNNING_MAX = 20;
+
 export const SessionStateSchema = z.enum(['starting', 'working', 'waiting_input', 'waiting_permission', 'idle', 'exited', 'error']);
 export type SessionState = z.infer<typeof SessionStateSchema>;
 
@@ -97,10 +103,11 @@ export const SessionSchema =z.object({
   /** Left out for a tmux session. `omp-rpc`: no pane, nothing to attach to; the daemon holds the process (see `agentSessionFile`). */
   backend: BackendSchema.optional(),
   state: SessionStateSchema,
-  /** What the agent itself is running now, as its harness announced it (a hook's PreToolUse, OMP's event): the tool, its
-   *  one-line label (a command, a file, OMP's intent; cut to DOING_LABEL_MAX), since when. Set only while it works on a
-   *  tool of its own (a subagent's tool does not count); left out between tools, at rest, on a request and once ended. */
-  doing: z.object({ tool: z.string(), label: z.string(), since: z.string().datetime() }).optional(),
+  /** The tools the agent itself is running, oldest first, as its harness announced them (a hook's PreToolUse, OMP's event):
+   *  the call's id when the harness gives one, the tool, its one-line label (a command, a file, OMP's intent; cut to
+   *  DOING_LABEL_MAX), since when. A call leaves on its own end (matched by id, else the oldest of that tool), on a refusal
+   *  from Ledge, or when the turn ends; a subagent's calls are not here. Read it through `doingOf`. */
+  running: z.array(RunningCallSchema).optional(),
   pending: PendingSchema.optional(),
   helpers: z.array(HelperSchema).default([]),
   /** OMP: the instructions waiting in its own queue (typed while it works), as it reports them; left out when none. */
@@ -159,6 +166,14 @@ export type Session = z.infer<typeof SessionSchema>;
 /** The transport a session's agent is driven through. */
 export function backendOf(s: Pick<Session, 'backend'>): Backend {
   return s.backend ?? 'tmux';
+}
+
+/** What the agent is doing now, for a list row: its newest call still running, only while it works with no request up;
+ *  when that call ends, the one before it if it still runs. */
+export function doingOf(s: Pick<Session, 'state' | 'pending' | 'running'>): { tool: string; label: string; since: string } | undefined {
+  if (s.state !== 'working' || s.pending) return undefined;
+  const last = s.running?.at(-1);
+  return last ? { tool: last.tool, label: last.label, since: last.since } : undefined;
 }
 
 /** Whether the session sits in the archive. */

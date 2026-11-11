@@ -8,7 +8,7 @@ Maquette validée : `docs/mockups/ledge-mobile-refonte/m2-sessions.html` (branch
 de `QUESTIONS.md`. « Nouvelle session » (§ 9) a son propre contrat : `docs/mobile-launch-contract.md`. Les rigs et le
 kernel (§ 1, § 7) : `docs/mobile-openrig-contract.md`. La pastille MR/PR : `docs/mobile-forge-contract.md`.
 
-Ce lot ajoute trois choses au PC : `doing` (§ 2), `closedHow` (§ 5) et `alwaysScope` partagé (§ 4). Tout le reste existait.
+Ce lot ajoute trois choses au PC : `doing` (§ 2, calculé à partir de `Session.running`), `closedHow` (§ 5) et `alwaysScope` partagé (§ 4). Tout le reste existait.
 
 ## 1. Ce que porte une session (`PhoneSession`)
 
@@ -49,9 +49,17 @@ doing?: { tool: string, label: string, since: datetime }
   il a commencé.
 - **Une ligne :** la première ligne non vide, espaces réduits, coupée à `DOING_LABEL_MAX` (120) avec « … ». Sans libellé :
   le nom de l'outil.
-- **Présent seulement** quand `state === 'working'`, sans `pending`, pendant un outil de l'agent lui-même. **Absent** entre
-  deux outils (l'agent réfléchit ou écrit), au repos, sur une erreur, quand une demande attend, après un nouveau message, une
-  fois terminée. Un sous-agent ne le pose ni ne l'enlève.
+- **Plusieurs outils à la fois :** le PC suit chaque appel en cours (`Session.running`, interne au PC) ; `doing` est le plus
+  récent encore en cours. Quand il finit, `doing` redevient le précédent s'il tourne encore. Chaque fin retire son propre
+  appel (par identifiant d'appel, sinon le plus ancien de cet outil) : des appels parallèles, même du même outil, finissent
+  dans n'importe quel ordre.
+- **Présent seulement** quand `state === 'working'` et sans `pending`. **Absent** entre deux outils (l'agent réfléchit ou
+  écrit), au repos, sur une erreur, après un nouveau message, une fois terminée. Un sous-agent ne compte pas.
+- **Une demande le cache sans l'oublier :** pendant une autorisation, `doing` est absent (la ligne dit la demande). Accordée
+  depuis Ledge, l'outil tourne : `doing` revient sur lui jusqu'à sa fin. Refusée depuis Ledge, l'outil ne tourne pas : son
+  appel est retiré.
+  Refusée dans le terminal du PC : Ledge ne le sait que si le harnais signale l'échec de l'outil ; sinon l'appel reste
+  jusqu'à la fin du tour (non vérifié pour chaque harnais).
 - Une question (`AskUserQuestion`) ou un plan (`ExitPlanMode`) n'est pas un `doing` : c'est une demande (`pending`).
 - **Repli :** absent, la ligne dit l'état (« au travail · 38 % »), comme aujourd'hui. Un PC plus ancien n'envoie jamais
   `doing` : même repli, pas de drapeau.
@@ -122,8 +130,9 @@ dans `docs/mobile-openrig-contract.md` § 9.
 
 ## 8. Vérifié, et non vérifié
 
-- Vérifié par les tests (Node 24) : `doing` posé, remplacé, enlevé (fin de l'outil, repos, erreur, demande, nouveau message,
-  fin), ignoré pour un sous-agent, libellé coupé (`packages/ledge/test/state.test.ts`) ; `doing` et `closedHow` dans la
+- Vérifié par les tests (Node 24) : appels suivis un par un (fins hors ordre, même outil en parallèle, avec et sans
+  identifiant), demande accordée puis fin de l'outil, demande refusée, fin du tour, sous-agent ignoré, libellé coupé
+  (`packages/ledge/test/state.test.ts`) ; `doing` et `closedHow` dans la
   projection du téléphone, ignorés par un schéma plus ancien (`mobile-project.test.ts`) ; `closedHow` posé par une fermeture
   forcée, absent d'une fermeture propre, retiré à la reprise (`server.test.ts`) ; `alwaysScope` (`protocol/test/decisions.test.ts`).
 - Non vérifié : un vrai téléphone ; les sièges OpenRig (ils n'envoient `doing` que si les hooks de Ledge sont installés
