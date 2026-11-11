@@ -186,6 +186,21 @@ describe('the thread on a wide screen (m2-sessions.html §10, Q27)', () => {
     expect(t.of('session.decide')).toEqual([expect.objectContaining({ id: 'a', decision: 'accept', expect: expect.objectContaining({ key: 'k1' }) })]);
   });
 
+  it('takes no Y or N while « Plus d\'actions » is open over the card, and takes them again once it closes (review-qa 891a9a47)', () => {
+    wide(true);
+    const t = opened({ project: 'ledge', state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }) });
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
+    fireEvent.click(screen.getByRole('button', { name: 'Plus d’actions pour Kai' }));
+    const sheet = screen.getByRole('dialog');
+    fireEvent.keyDown(sheet, { key: 'y' });
+    fireEvent.keyDown(document.body, { key: 'n' });
+    expect(t.of('session.decide')).toEqual([]);
+    fireEvent.keyDown(sheet, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.keyDown(document.body, { key: 'n' });
+    expect(t.of('session.decide')).toEqual([expect.objectContaining({ id: 'a', decision: 'deny' })]);
+  });
+
   it('puts Autoriser, Refuser and « Toujours dans ce projet » on one line, where a phone puts « Toujours » under them (review-qa a79d8655)', () => {
     const row = () => screen.getByRole('button', { name: 'Autoriser' }).parentElement!;
     wide(true);
