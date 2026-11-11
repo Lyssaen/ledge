@@ -93,6 +93,7 @@ export function ConversationsSheet({ conversations, kept, turns, running, now, o
           <p className="text-small text-muted">{H().kept}</p>
         </>
       )}
+      {list && !list.current && groups.length === 0 && <p className="text-body text-muted">{H().empty}</p>}
     </Sheet>
   );
 }

@@ -26,6 +26,15 @@ const clock = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString(locale, 
 const lineOf = (r: ActionRowView) => (r.vars && r.action !== undefined ? C.line(r.action, r.vars) : undefined) ?? r.summary;
 const deniedLine = (r: ActionRowView) => (r.vars && r.action === 'session.decide' ? C.line('session.decide', { ...r.vars, decision: 'deny' }) : undefined) ?? lineOf(r);
 const whyOf = (r: ActionRowView) => C.why(r.code ?? (r.state === 'failed' ? 'failed' : undefined), r.action, r.vars ?? {});
+/** What an OpenRig step stops, from the seats the daemon listed (Q85); nothing without that list: « Irréversible » alone. */
+function stopsOf(r: ActionRowView): string | undefined {
+  const v = r.vars;
+  if (!v?.seats) return undefined;
+  const how = r.action === 'rig.seats' ? 'removed' : r.action !== 'rig.act' ? undefined : v.kind?.endsWith('.restart') ? 'restart' : v.kind?.endsWith('.stop') ? 'stop' : undefined;
+  if (!how) return undefined;
+  const n = Number(v.seatCount) || v.seats.split(', ').length;
+  return C.stops(how, n, v.seats, Number(v.seatsMore ?? 0) || 0);
+}
 const verbOf = (r: ActionRowView) => C.verb(r.action, r.vars ?? {}) ?? (r.action !== undefined ? C.verbs[r.action] : undefined) ?? C.apply;
 
 function Risk({ r }: { r: ActionRowView }) {
@@ -58,6 +67,7 @@ function RowText({ r, s, whole }: { r: ActionRowView; s: Shown; whole: boolean }
     <div className="min-w-0">
       <p className="break-words text-body">{bold(s === 'denied' ? deniedLine(r) : lineOf(r))}</p>
       {s !== 'denied' && <Risk r={r} />}
+      {whole && stopsOf(r) && <p className="mt-1 break-words text-small text-muted">{stopsOf(r)}</p>}
       {r.detail && <p className={`mt-1 break-words text-small text-muted ${whole || s === 'done' ? '' : 'line-clamp-2'}`}>{r.detail}</p>}
       {r.request && (
         <pre className={`mt-1.5 max-h-40 overflow-auto rounded-md border border-line border-l-2 border-l-muted bg-bg px-2.5 py-2 font-mono text-small whitespace-pre-wrap break-words ${s === 'stale' ? 'line-through opacity-60' : s === 'denied' ? 'opacity-60' : ''}`}>

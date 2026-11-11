@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { PhoneChatAction, PhoneChatTurn } from '@ledge/protocol';
-import { copy } from '../../src/copy';
+import { copy, setLang } from '../../src/copy';
 import { getAssertion } from '../../src/link/webauthn';
 import { Chat } from '../../src/screens/Chat';
 import { session } from '../model/fixtures';
@@ -33,6 +33,51 @@ describe('the action card', () => {
     ] });
     expect(within(card()).getByRole('button', { name: 'Redémarrer…' })).toBeInTheDocument();
     expect(within(card()).getByRole('button', { name: 'Appliquer…' })).toBeInTheDocument();
+  });
+
+  // Q85: the sheet of an irreversible OpenRig step says what it stops, from the daemon's list; without it, « Irréversible » alone.
+  describe('what an OpenRig step stops, in its sheet (Q85)', () => {
+    const sheetOf = (a: PhoneChatAction, verb: string) => {
+      open({ actions: [a] });
+      fireEvent.click(within(card()).getByRole('button', { name: `${verb}…` }));
+      return screen.getByRole('dialog');
+    };
+    const rig = (kind: string, seats: Record<string, string>): PhoneChatAction =>
+      ({ action: 'rig.act', summary: 'Rig **ledge-dev**', vars: { kind, rig: 'ledge-dev', ...seats }, risk: 'destructive' });
+
+    it('a restart: its seats stop, then start again', () => {
+      const s = sheetOf(rig('rig.restart', { seats: 'lead, dev-front, dev-back, reviewer, design-ux', seatCount: '5' }), 'Redémarrer');
+      expect(within(s).getByText('Ses 5 sièges s’arrêtent puis redémarrent : lead, dev-front, dev-back, reviewer, design-ux.')).toBeInTheDocument();
+    });
+    it('a stop of the kernel, its list cut by the PC', () => {
+      const s = sheetOf(rig('kernel.stop', { seats: 'operator, advisor', seatCount: '5', seatsMore: '3' }), 'Arrêter');
+      expect(within(s).getByText('Ses 5 sièges s’arrêtent : operator, advisor … et 3 autres.')).toBeInTheDocument();
+    });
+    it('one seat', () => {
+      const s = sheetOf(rig('rig.stop', { seats: 'lead', seatCount: '1' }), 'Arrêter');
+      expect(within(s).getByText('Son siège s’arrête : lead.')).toBeInTheDocument();
+    });
+    it('removed seats', () => {
+      const s = sheetOf({ action: 'rig.seats', summary: 'Retirer', vars: { rig: 'ledge-dev', role: 'dev.back', count: '1', from: '3', seats: 'dev-back-2, dev-back-3', seatCount: '2' }, risk: 'destructive' }, 'Retirer');
+      expect(within(s).getByText('Les 2 sièges retirés s’arrêtent : dev-back-2, dev-back-3.')).toBeInTheDocument();
+    });
+    it('without the list, « Irréversible » alone', () => {
+      const s = sheetOf(rig('rig.restart', {}), 'Redémarrer');
+      expect(within(s).getByText(C.risk.destructive)).toBeInTheDocument();
+      expect(within(s).queryByText(/sièges? .*s’arrête/)).toBeNull();
+    });
+    it('in English', () => {
+      setLang('en');
+      try {
+        const en = copy.chat.action.stops;
+        expect(en('stop', 5, 'lead, dev-front', 3)).toBe('Its 5 seats stop: lead, dev-front … and 3 more.');
+        expect(en('restart', 3, 'a, b, c', 0)).toBe('Its 3 seats stop, then start again: a, b, c.');
+        expect(en('removed', 2, 'dev-back-2, dev-back-3', 0)).toBe('The 2 removed seats stop: dev-back-2, dev-back-3.');
+        expect(en('stop', 1, 'lead', 0)).toBe('Its seat stops: lead.');
+        expect(en('restart', 1, 'lead', 0)).toBe('Its seat stops, then starts again: lead.');
+        expect(en('removed', 1, 'dev-back-2', 0)).toBe('The removed seat stops: dev-back-2.');
+      } finally { setLang('fr'); }
+    });
   });
 
   it('draws a cancellation with its risk, and confirms it in a sheet before any check', async () => {

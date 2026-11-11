@@ -150,7 +150,7 @@ export const en: Copy = {
       limits: 'LIMITS', limitsLabel: 'Limits', harness: { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent' } as Record<string, string>,
       harnessShort: { claude: 'Claude', codex: 'Codex', cursor: 'Cursor' } as Record<string, string>,
       five: '5 h', week: 'Week', month: 'Month', poolCursor: 'Cursor', poolOther: 'Others', model: (m: string) => m,
-      weekShort: 'wk',
+      weekShort: 'wk', monthShort: 'mo.',
       resumes: (at: string) => `resumes at ${at}`, resumesOn: (at: string) => `resumes on ${at}`, loading: 'Reading…',
       notOnPc: (harness: string) => `Cannot read: reconnect ${harness} on the PC.`,
       unread: 'Limit not read: Cursor does not give it for this plan.', unreach: (age: string) => `Not read for ${age}.`, unreachNever: 'Cannot read for now.', stale: (age: string) => `Read ${age} ago.`,
@@ -177,7 +177,8 @@ export const en: Copy = {
       title: 'Conversations', current: 'In progress', count: (n: number) => n > 1 ? `${n} questions` : '1 question', since: (time: string) => `since ${time}`,
       today: 'Today', yesterday: 'Yesterday', kept: 'Kept 7 days on the PC, for this device only.',
       pastBanner: 'Past conversation · read only · its cards no longer apply', backToday: 'Back to the current conversation',
-      notApplied: 'Not applied', none: 'No conversation today.', quote: (q: string) => `“${q}”`
+      notApplied: 'Not applied', none: 'No conversation today.',
+      empty: 'No conversation yet.', gone: 'This conversation is no longer kept on the PC.', quote: (q: string) => `“${q}”`
     },
     /** The empty thread's suggestions (M3 Q32): questions sent at once, and « New session », an action. */
     suggestions: {
@@ -194,10 +195,11 @@ export const en: Copy = {
     sources: 'Sources: ',
     inAnswer: {
       request: (name: string) => `Waiting in ${name}'s session`, settled: 'Settled since',
-      more: (n: number) => `See the ${n} others in For you`
+      more: (n: number) => n > 1 ? `See the ${n} others in For you` : 'See the other one in For you'
     },
     field: 'Question for Ledge',
     placeholder: 'Ask Ledge…',
+    plusImage: '+ Image', enterSends: 'Enter sends',
     send: 'Send the question',
     busy: 'Ledge is already answering other questions. Try again in a moment.',
     timeout: 'Ledge did not answer in time.',
@@ -254,6 +256,12 @@ export const en: Copy = {
       deniedNote: (name: string) => `${name} got your denial: the command did not run.`,
       cutMark: 'Request cut: the rest is on the PC.',
       cutNote: 'Request too long for this device: it is accepted on the PC. You can deny it from here.',
+      stops: (how: 'stop' | 'restart' | 'removed', n: number, seats: string, more: number) => {
+        const head = how === 'removed' ? (n > 1 ? `The ${n} removed seats stop` : 'The removed seat stops')
+          : how === 'restart' ? (n > 1 ? `Its ${n} seats stop, then start again` : 'Its seat stops, then starts again')
+          : n > 1 ? `Its ${n} seats stop` : 'Its seat stops';
+        return `${head}: ${seats}${more > 0 ? ` … and ${more} more` : ''}.`;
+      },
       all: (n: number) => `Apply all (${n})`, resume: (k: number, n: number) => `Resume at step ${k} (${n})`, skip: (k: number, n: number) => `Continue without step ${k} (${n})`,
       inOrder: 'In order, stops at the first failure.', notReplayed: 'Steps already done are not replayed.',
       progress: (k: number, n: number) => `Step ${k} of ${n}…`, planDone: (at: string) => `Plan applied${at ? ` at ${at}` : ''}`,

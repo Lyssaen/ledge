@@ -88,6 +88,31 @@ describe('« Conversations » (m3-chat.html §6)', () => {
     expect(within(card).queryByText(H.notApplied)).toBeNull();
   });
 
+  // Q87: the sheet with nothing kept, and a past conversation the PC no longer keeps.
+  it('no conversation, current or past: « Aucune conversation pour l’instant. »', () => {
+    const t = chatSetup(true);
+    fireEvent.click(clock());
+    act(() => t.deliver({ type: 'chat.conversations', past: [] }));
+    const sheet = screen.getByRole('dialog', { name: H.title });
+    expect(within(sheet).getByText('Aucune conversation pour l’instant.')).toBeInTheDocument();
+    expect(within(sheet).queryByText(H.kept)).toBeNull();
+  });
+
+  it('control: while the list comes, no « Aucune conversation »', () => {
+    chatSetup(true);
+    fireEvent.click(clock());
+    expect(screen.queryByText(H.empty)).toBeNull();
+  });
+
+  it('a past conversation the PC no longer keeps says so in the thread’s place', () => {
+    const t = chatSetup(true);
+    fireEvent.click(clock());
+    act(() => t.deliver({ type: 'chat.conversations', past: [{ id: ID(4), startedAt: at(1, 11, 30), lastAt: at(1, 11, 31), first: 'Redémarre ledge-dev', count: 1 }] }));
+    fireEvent.click(screen.getByRole('button', { name: /Redémarre ledge-dev/ }));
+    act(() => t.deliver({ type: 'chat.conversation', id: ID(4), error: 'unknown' } as PhoneServerMessage));
+    expect(screen.getByText('Cette conversation n’est plus gardée sur le PC.')).toBeInTheDocument();
+  });
+
   it('« Nouvelle conversation » in the sheet starts over', () => {
     const t = chatSetup(true);
     fireEvent.click(clock());

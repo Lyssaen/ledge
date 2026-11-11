@@ -152,7 +152,7 @@ const fr = {
       harnessShort: { claude: 'Claude', codex: 'Codex', cursor: 'Cursor' } as Record<string, string>,
       five: '5 h', week: 'Semaine', month: 'Mois', poolCursor: 'Cursor', poolOther: 'Autres', model: (m: string) => m,
       /** A week in a compact row under an answer (m3-chat.html §2, Q31): « Claude sem. ». */
-      weekShort: 'sem.',
+      weekShort: 'sem.', monthShort: 'mois',
       resumes: (at: string) => `reprend à ${at}`, resumesOn: (at: string) => `reprend le ${at}`, loading: 'Lecture en cours…',
       notOnPc: (harness: string) => `Lecture impossible : reconnecte ${harness} sur le PC.`,
       unread: 'Limite non lue : Cursor ne la donne pas pour cette offre.', unreach: (age: string) => `Pas de lecture depuis ${age}.`, unreachNever: 'Lecture impossible pour l’instant.', stale: (age: string) => `Lu il y a ${age}.`,
@@ -180,7 +180,8 @@ const fr = {
       title: 'Conversations', current: 'En cours', count: (n: number) => n > 1 ? `${n} questions` : '1 question', since: (time: string) => `depuis ${time}`,
       today: 'Aujourd’hui', yesterday: 'Hier', kept: 'Gardées 7 jours sur le PC, pour cet appareil seulement.',
       pastBanner: 'Conversation passée · lecture seule · ses cartes ne s’appliquent plus', backToday: 'Revenir à la conversation en cours',
-      notApplied: 'Pas appliquée', none: 'Aucune conversation aujourd’hui.', quote: (q: string) => `« ${q} »`
+      notApplied: 'Pas appliquée', none: 'Aucune conversation aujourd’hui.',
+      empty: 'Aucune conversation pour l’instant.', gone: 'Cette conversation n’est plus gardée sur le PC.', quote: (q: string) => `« ${q} »`
     },
     /** The empty thread's suggestions (M3 Q32): questions sent at once, and « Nouvelle session », an action. */
     suggestions: {
@@ -198,10 +199,12 @@ const fr = {
     /** A request waiting in a session the answer read (M3 Q30): its card under the latest answer, a line under an older one. */
     inAnswer: {
       request: (name: string) => `En attente dans la session de ${name}`, settled: 'Réglée depuis',
-      more: (n: number) => `Voir les ${n} autres dans À toi`
+      more: (n: number) => n > 1 ? `Voir les ${n} autres dans À toi` : 'Voir l’autre dans À toi'
     },
     field: 'Question pour Ledge',
     placeholder: 'Demander à Ledge…',
+    /** Under the focused field (Q86): « + Image », then « · Entrée envoie » from a physical keyboard. */
+    plusImage: '+ Image', enterSends: 'Entrée envoie',
     send: 'Envoyer la question',
     busy: 'Ledge répond déjà à d\'autres questions. Réessaie dans un instant.',
     timeout: 'Ledge n\'a pas répondu à temps.',
@@ -260,6 +263,13 @@ const fr = {
       deniedNote: (name: string) => `${name} a reçu ton refus : la commande n’a pas été lancée.`,
       cutMark: 'Demande coupée : la suite est sur le PC.',
       cutNote: 'Demande trop longue pour cet appareil : elle s’accepte sur le PC. Tu peux la refuser d’ici.',
+      /** What an irreversible OpenRig step stops, in its sheet (Q85): the daemon's list, « … et 3 autres » when it cut it. */
+      stops: (how: 'stop' | 'restart' | 'removed', n: number, seats: string, more: number) => {
+        const head = how === 'removed' ? (n > 1 ? `Les ${n} sièges retirés s’arrêtent` : 'Le siège retiré s’arrête')
+          : how === 'restart' ? (n > 1 ? `Ses ${n} sièges s’arrêtent puis redémarrent` : 'Son siège s’arrête puis redémarre')
+          : n > 1 ? `Ses ${n} sièges s’arrêtent` : 'Son siège s’arrête';
+        return `${head} : ${seats}${more > 0 ? ` … et ${more} ${more > 1 ? 'autres' : 'autre'}` : ''}.`;
+      },
       all: (n: number) => `Tout appliquer (${n})`, resume: (k: number, n: number) => `Reprendre à l’étape ${k} (${n})`, skip: (k: number, n: number) => `Continuer sans l’étape ${k} (${n})`,
       inOrder: 'Dans l’ordre ; s’arrête au premier échec.', notReplayed: 'Les étapes faites ne sont pas rejouées.',
       progress: (k: number, n: number) => `Étape ${k} sur ${n}…`, planDone: (at: string) => `Plan appliqué${at ? ` à ${at}` : ''}`,

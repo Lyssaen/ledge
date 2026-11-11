@@ -203,17 +203,31 @@ describe('the chat screen', () => {
     fireEvent.keyDown(field, { key: 'Enter' });
     expect(t.of('chat.ask')).toHaveLength(1);
   });
+
+  // Q86: under the field, « + Image » alone on a touch keyboard, « + Image · Entrée envoie » with a physical one; no ＋ beside it.
+  it('the line under the field: « + Image » alone on a phone', () => {
+    pointer(false);
+    chatSetup();
+    expect(screen.getByRole('button', { name: '+ Image' })).toBeInTheDocument();
+    expect(screen.queryByText('· Entrée envoie')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Joindre une image' })).toBeNull();
+  });
+  it('the line under the field: « + Image · Entrée envoie » with a physical keyboard', () => {
+    pointer(true);
+    chatSetup();
+    expect(screen.getByRole('button', { name: '+ Image' }).parentElement).toHaveTextContent('+ Image· Entrée envoie');
+  });
 });
 
 describe('images in the chat', () => {
   const ID = 'd'.repeat(64);
   const REF = { id: ID, mime: 'image/webp' as const, width: 800, height: 600, bytes: 31_000, preview: true };
 
-  it('＋ then send asks with the image id and the turn shows its thumbnail', async () => {
+  it('« + Image » then send asks with the image id and the turn shows its thumbnail', async () => {
     setCodecForTests({ async decode() { return { width: 800, height: 600, async draw() { return { async encode(mime: 'image/webp' | 'image/jpeg') { return new Blob([new Uint8Array(1000)], { type: mime }); } }; } }; } });
     try {
       const t = chatSetup();
-      expect(screen.getByRole('button', { name: 'Joindre une image' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: '+ Image' })).toBeEnabled();
       const input = document.querySelector<HTMLInputElement>('input[type=file][accept="image/*"][multiple]')!;
       fireEvent.change(input, { target: { files: [new File([new Uint8Array(10)], 'a.png', { type: 'image/png' })] } });
       await waitFor(() => expect(t.of('attachment.put')).toHaveLength(1));

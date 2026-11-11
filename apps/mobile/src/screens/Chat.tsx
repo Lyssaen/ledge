@@ -127,6 +127,7 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
           back={<button type="button" aria-label={copy.nav.backTo.chat} title={copy.nav.backTo.chat} onClick={() => setPast(null)} className={iconButtonClass({ className: 'text-muted' })}><Icon name="back" /></button>} />
         <p className="bleed flex flex-none items-center gap-2 border-b border-line bg-raised px-3.5 py-2 text-small text-muted"><Icon name="clock" className="size-4 flex-none" />{copy.chat.history.pastBanner}</p>
         <main data-tab-scroll="" className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain py-3 text-[14px]">
+          {shown && 'gone' in shown && <p className="px-1 text-body text-muted">{copy.chat.history.gone}</p>}
           {shown && 'turns' in shown && shown.turns.map(t => {
             const read = shown.limits.find(r => r.qid === t.qid);
             return <TurnView key={t.qid} store={store} turn={t} list={list} canConfirm={false} live={null} sessions={sessions.length} readOnly limits={read && limitsOf(read.at)} />;

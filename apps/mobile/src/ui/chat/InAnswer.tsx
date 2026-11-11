@@ -32,8 +32,7 @@ export function AnswerRequests({ store, items, onGo }: { store: MobileStore; ite
   return (
     <div className={IN_ANSWER}>
       {cards.entries.map(e => <Card key={e.id} store={store} item={e.value} ghost={e.ghost} onGone={() => cards.dismiss(e.id)} onGo={onGo} />)}
-      {/* One other waits for Q87's singular. */}
-      {more > 1 && <a href={href({ name: 'atoi' })} className="text-small text-info underline underline-offset-2">{copy.chat.inAnswer.more(more)}</a>}
+      {more > 0 && <a href={href({ name: 'atoi' })} className="text-small text-info underline underline-offset-2">{copy.chat.inAnswer.more(more)}</a>}
     </div>
   );
 }

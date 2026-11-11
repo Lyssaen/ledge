@@ -12,7 +12,9 @@ const MAX = 120;
 
 /**
  * The question for Ledge (m3-chat.html §1, §3): the field with its send button inside, « Arrêter » in that button's place while
- * Ledge answers (Q37), the images waiting above it, and ＋ beside it. The field stays usable during an answer; offline it is greyed and takes nothing.
+ * Ledge answers (Q37), the images waiting above it, and under it while it has the focus « + Image », with « · Entrée envoie » from
+ * a physical keyboard only (Q86: on a touch keyboard Enter breaks the line). The field stays usable during an answer; offline it
+ * is greyed and takes nothing.
  */
 export function Composer({ value, onChange, onSend, canSend, images, running, offline, onStop, fieldRef }: {
   value: string; onChange: (v: string) => void; onSend: () => void; canSend: boolean; images: Attachments;
@@ -29,12 +31,9 @@ export function Composer({ value, onChange, onSend, canSend, images, running, of
   }, [value, field]);
   const noAttach = running || offline;
   return (
-    <div className="flex flex-none flex-col gap-1.5 pt-1.5 pb-2">
+    <div className="group flex flex-none flex-col gap-1.5 pt-1.5 pb-2">
       {images.items.length > 0 && <AttachmentChips items={images.items} onRemove={images.remove} size={{ w: 72, h: 54 }} removeLabel={copy.images.remove} lang={lang} />}
-      <div className="flex items-end gap-2">
-      {/* The ＋ stays beside the field until the line under it is validated (Q86). */}
-      <AttachButton onFiles={images.add} disabled={noAttach} />
-      <div className={`flex min-w-0 flex-1 items-end gap-2 rounded-[10px] border border-input bg-surface py-[5px] pr-[5px] pl-3 focus-within:border-ring focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-ring)_30%,transparent)] ${offline ? 'opacity-55' : ''}`}>
+      <div className={`flex min-w-0 items-end gap-2 rounded-[10px] border border-input bg-surface py-[5px] pr-[5px] pl-3 focus-within:border-ring focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-ring)_30%,transparent)] ${offline ? 'opacity-55' : ''}`}>
         <label htmlFor="chat-ask" className="sr-only">{copy.chat.field}</label>
         <textarea
           id="chat-ask" ref={field} rows={1} value={offline ? '' : value} disabled={offline} maxLength={MESSAGE_MAX} enterKeyHint="enter"
@@ -53,7 +52,10 @@ export function Composer({ value, onChange, onSend, canSend, images, running, of
           ? <button type="button" onClick={onStop} aria-label={copy.chat.stop} title={copy.chat.stop} className="grid size-9 flex-none place-items-center rounded-lg bg-raised text-fg"><Icon name="stop" className="size-4" /></button>
           : <button type="button" disabled={!canSend} onClick={onSend} aria-label={copy.chat.send} title={copy.chat.send} className="grid size-9 flex-none place-items-center rounded-lg bg-primary text-primary-fg disabled:opacity-40"><Icon name="send" className="size-[18px]" /></button>}
       </div>
-      </div>
+      <p className="hidden items-center gap-1 text-[12px] leading-4 text-muted group-focus-within:flex">
+        <AttachButton onFiles={images.add} disabled={noAttach} className="text-[12px] leading-4 text-muted disabled:opacity-50">{copy.chat.plusImage}</AttachButton>
+        {physicalKeyboard() && <span>· {copy.chat.enterSends}</span>}
+      </p>
       {images.error && <p role="alert" className="text-body text-attention">{images.error}</p>}
     </div>
   );
