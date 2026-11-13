@@ -9,7 +9,7 @@ import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
 import { gitSummary } from '../daemon/git.js';
-import { writeContext, stepFor, LIMITS_MD, type ContextInput } from './context.js';
+import { writeContext, stepFor, LIMITS_MD, type Context, type ContextInput } from './context.js';
 import type { DeviceId, JournalEvent } from '../operator/journal.js';
 import { installedAgents, readGuide } from './guide.js';
 import { LEDGE_VERSION } from '../version.js';
@@ -102,8 +102,29 @@ export interface ChatDeps {
 }
 
 const TOOL_LABEL: Record<Tool, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' };
-const runTool = (tool: Tool, o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawn?: typeof nodeSpawn) =>
+export const runTool = (tool: Tool, o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawn?: typeof nodeSpawn) =>
   tool === 'omp' ? runOmp(o, onEvent, spawn) : tool === 'codex' ? runCodex(o, onEvent, spawn) : tool === 'cursor' ? runCursor(o, onEvent, spawn) : runClaude(o, onEvent, spawn);
+
+/** The environment a chat run gets: the CLI's own login (an API key the daemon inherited is never billed, spec §5.2), no session identity. */
+export async function chatEnv(deps: Pick<ChatDeps, 'env'>): Promise<NodeJS.ProcessEnv> {
+  const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
+  return env;
+}
+
+/**
+ * Writes the context folder a run reads (sessions, panes, tasks, rigs, journal, notes, forge files) into `dir`. Questions and the
+ * operator's wakes share it: `extra.journal` replaces the thread's journal events (a wake passes the events it covers), and the forge
+ * is read over the network only when `extra.forgeRead` is set.
+ */
+export async function writeChatContext(deps: ChatDeps, dir: string, extra: { journal?: JournalEvent[]; forgeRead?: boolean; qid?: string }): Promise<Context> {
+  const env = await chatEnv(deps);
+  const ledge = { guide: await readGuide(), version: LEDGE_VERSION, agents: await installedAgents(env.PATH) };
+  const capture = async (s: Session) => { if (!s.tmuxSession) return null; const p = await deps.tmux.capture(s.tmuxSession, PANE_LINES); return p === null ? null : p.split('\n'); };
+  const ctx = await writeContext(dir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), tasks: deps.tasks?.(), rigs: deps.rigs?.(), asks: deps.asks?.(), goals: deps.goals?.(), queue: deps.queue?.(), journal: extra.journal ?? deps.journal?.(deps.thread ?? 'desktop'), usage: deps.usage?.(), now: (deps.now ?? (() => new Date().toISOString()))(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
+  // Only a question about the forge runs gh/glab: the others never wait on the network, and get what was read before, dated.
+  if (deps.forge) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }, { read: extra.forgeRead ?? false }).catch(e => log(`chat ${extra.qid ?? 'wake'}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
+  return ctx;
+}
 
 export const ONE_AT_A_TIME = 'one question at a time: wait for the answer';
 export const TOO_MANY = 'too many questions at once: try again in a moment';
@@ -338,11 +359,8 @@ export function createChat(deps: ChatDeps): Chat {
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
     // The chat runs on the CLI's own login: an API key the daemon inherited is never billed (spec §5.2).
-    const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
-    const ledge = { guide: await readGuide(), version: LEDGE_VERSION, agents: await installedAgents(env.PATH) };
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), tasks: deps.tasks?.(), rigs: deps.rigs?.(), asks: deps.asks?.(), goals: deps.goals?.(), queue: deps.queue?.(), journal: deps.journal?.(deps.thread ?? 'desktop'), usage: deps.usage?.(), now: now(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
-    // Only a question about the forge runs gh/glab: the others never wait on the network, and get what was read before, dated.
-    if (deps.forge) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }, { read: asksForge(turn.question) }).catch(e => log(`chat ${turn.qid}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
+    const env = await chatEnv(deps);
+    const ctx = await writeChatContext(deps, contextDir, { forgeRead: asksForge(turn.question), qid: turn.qid });
     if (mine.cancelled) return CANCELLED;
     const { sessionId, resume } = await daySession(fresh, tool);
     const label = TOOL_LABEL[tool];
