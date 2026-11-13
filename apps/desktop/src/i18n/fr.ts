@@ -1552,7 +1552,7 @@ export const fr = {
       newTerminal: 'Nouveau terminal', newTerminalTip: 'Nouveau terminal : choisir le shell',
       /** A tile's tab: « , ou hors de la fenêtre » comes with the windows (lot 9). */ drag: 'Glisser vers un groupe', close: 'Fermer',
       // #299 (docs/mockups/ledge-shell-marks.html): a free shell's command marks.
-      marks: { exitCode: (n: number, d: string) => `Code de sortie ${n} · ${d}`, running: (d: string) => `En cours · ${d}`, copyCommand: 'Copier la commande', copyOutput: 'Copier la sortie', runAgain: 'Relancer' },
+      marks: { exitCode: (n: number, d?: string) => (d ? `Code de sortie ${n} · ${d}` : `Code de sortie ${n}`), running: (d?: string) => (d ? `En cours · ${d}` : 'En cours'), copyCommand: 'Copier la commande', copyOutput: 'Copier la sortie', runAgain: 'Relancer' },
       shellKind: 'shell', shellTitle: (title: string) => `>_ ${title}`, noTerms: 'Aucun terminal. « + » en ouvre un.',
       lastClosed: 'Dernier terminal fermé : le panneau du bas se masque. Ctrl+J le rouvre avec un shell.',
       /** A dock tab dropped on the panel: a terminal comes back; anything else stays. */

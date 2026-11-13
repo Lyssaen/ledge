@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { commandRows, commandText, dirLabel, outputText, parse633, ShellMarks, statusOf, unescape633, type Mark } from '../src/term/shellMarks';
+import { commandRows, commandText, dirLabel, draftText, outputText, parse633, ShellMarks, statusOf, unescape633, type Mark, type ShellCommand } from '../src/term/shellMarks';
 
 /** #299 (docs/mockups/ledge-shell-marks.html, form A): the OSC 633 model of a free shell. */
+
+/** A buffer read between columns, as xterm's translateToString (ASCII here: a column is a character). */
+const columns = (screen: string[]) => ({ line: (n: number, start = 0, end?: number) => screen[n]?.slice(start, end) });
 
 /** A fake terminal: a cursor (line, column) moved by the test, marks at the cursor. */
 function fakeTerm() {
   const pos = { line: 0, x: 0 };
   let now = 1000;
   const mk = (line: number): Mark => ({ line, isDisposed: false, dispose() {} });
-  const marks = new ShellMarks({ mark: () => mk(pos.line), cursorX: () => pos.x, now: () => now });
+  const marks = new ShellMarks({ mark: () => mk(pos.line), markAt: line => mk(line), cursorX: () => pos.x, now: () => now });
   return { pos, marks, tick: (ms: number) => { now += ms; } };
 }
 
@@ -72,7 +75,7 @@ describe('ShellMarks', () => {
   it('the command from E, else from the screen; the output without its trailing blank lines', () => {
     const { pos, marks } = fakeTerm();
     const screen = ['u@wsl:~$ pnpm lint', 'src/a.ts', '  1:1 error', '', 'u@wsl:~$ '];
-    const buf = { line: (n: number) => screen[n] };
+    const buf = columns(screen);
     marks.handle('A'); pos.x = 9; marks.handle('B');
     pos.line = 1; pos.x = 0; marks.handle('C');
     pos.line = 4; marks.handle('D;1');
@@ -81,6 +84,56 @@ describe('ShellMarks', () => {
     expect(outputText(c, buf, 4)).toBe('src/a.ts\n  1:1 error');
     c.commandLine = 'pnpm lint --fix';
     expect(commandText(c, buf)).toBe('pnpm lint --fix');
+  });
+});
+
+describe('review #299', () => {
+  it('copies only the output before the next prompt on the same line (review-qa repro: `printf foo`)', () => {
+    const mark = (line: number) => ({ line, isDisposed: false, dispose() {} });
+    const c: ShellCommand = { id: 1, prompt: mark(0), input: null, output: mark(1), end: { mark: mark(1), x: 3 }, commandLine: 'printf foo', code: 0, startedAt: 0, endedAt: 1 };
+    expect(outputText(c, columns(['$ printf foo', 'foo$ secret-draft']), 1)).toBe('foo');
+  });
+
+  it('the draft at the prompt: empty, typed, or unknown (no prompt being typed in)', () => {
+    const { pos, marks } = fakeTerm();
+    const screen = ['$ ls', 'README.md', '$ echo draft'];
+    expect(draftText(marks, columns(screen), 2)).toBeNull();
+    marks.handle('A'); pos.x = 2; marks.handle('B'); pos.line = 1; pos.x = 0; marks.handle('C'); pos.line = 2; marks.handle('D;0');
+    marks.handle('A'); pos.x = 2; marks.handle('B');
+    expect(draftText(marks, columns(screen), 2)).toBe('echo draft');
+    expect(draftText(marks, columns(['$ ls', 'README.md', '$ ']), 2)).toBe('');
+    // A command runs: the prompt is not being typed in.
+    pos.line = 3; pos.x = 0; marks.handle('C');
+    expect(draftText(marks, columns(screen), 3)).toBeNull();
+  });
+
+  it('D without C (bash with its own DEBUG trap): the command ends, its output starts under it, its duration is unknown', () => {
+    const { pos, marks } = fakeTerm();
+    marks.handle('A'); pos.x = 2; marks.handle('B');
+    pos.line = 3; pos.x = 0; marks.handle('D;1');
+    const c = marks.commands()[0]!;
+    expect(statusOf(c, true)).toBe('failed');
+    expect(c.output!.line).toBe(1);
+    expect(c.startedAt).toBeNull();
+    expect(commandRows(c, 3)).toEqual({ from: 0, to: 2 });
+  });
+
+  it('a prompt drawn again (A and B again, fish as one types): the last pair is the prompt', () => {
+    const { pos, marks } = fakeTerm();
+    marks.handle('A'); pos.x = 2; marks.handle('B');
+    pos.x = 0; marks.handle('A'); pos.x = 2; marks.handle('B');
+    pos.x = 0; marks.handle('A'); pos.x = 2; marks.handle('B');
+    expect(marks.commands()).toHaveLength(1);
+    pos.line = 1; marks.handle('C'); pos.line = 2; marks.handle('D;0');
+    pos.x = 0; marks.handle('A');
+    expect(marks.commands()).toHaveLength(2);
+  });
+
+  it('C without D (a pause #297 dropped it): the next prompt ends it as unknown, never red', () => {
+    const { pos, marks } = fakeTerm();
+    marks.handle('A'); marks.handle('B'); pos.line = 1; marks.handle('C');
+    pos.line = 5; marks.handle('A');
+    expect(statusOf(marks.commands()[0]!, false)).toBe('unknown');
   });
 });
 

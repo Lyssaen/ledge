@@ -15,7 +15,7 @@ const xt = vi.hoisted(() => {
     dispose = vi.fn();
     loadAddon = vi.fn();
     clearSelection = vi.fn(() => { this.selection = ''; });
-    modes = { mouseTrackingMode: 'none' };
+    modes = { mouseTrackingMode: 'none', bracketedPasteMode: false };
     osc = new Map<number, (d: string) => boolean>();
     csi = new Map<string, (p: (number | number[])[]) => boolean>();
     parser = {

@@ -68,7 +68,7 @@ export function parse633(data: string): Osc633 {
 }
 
 /** The terminal as the tracker needs it: a mark at the cursor and the cursor's column. */
-export interface MarkHost { mark(): Mark | null; cursorX(): number; now(): number }
+export interface MarkHost { mark(): Mark | null; /** A mark on an earlier line (`line` absolute), null once out of the buffer. */ markAt?(line: number): Mark | null; cursorX(): number; now(): number }
 
 /** The most commands kept: older ones go (their marks are trimmed by the scrollback long before). */
 const KEEP = 500;
@@ -104,6 +104,9 @@ export class ShellMarks {
       case 'A': {
         const mark = h.mark();
         if (!mark) break;
+        // A prompt drawn again (fish as one types, bash at times) sends A and B again: the last pair is the prompt (dev-back, #299).
+        const prev = this.last;
+        if (prev && !prev.output && !prev.end) { this.list.pop(); prev.prompt.dispose(); prev.input?.mark.dispose(); }
         this.list.push({ id: this.nextId++, prompt: mark, input: null, output: null, end: null, commandLine: null, code: undefined, startedAt: null, endedAt: null });
         while (this.list.length > KEEP) this.list.shift()?.prompt.dispose();
         break;
@@ -121,8 +124,20 @@ export class ShellMarks {
       }
       case 'D': {
         const c = this.last;
-        // A D right after a prompt with no command (Enter on an empty line, the first prompt) ends nothing.
-        if (!c || !c.output || c.end) break;
+        if (!c || c.end) break;
+        // No C before it: bash with a DEBUG trap of the person's own sends neither C nor E (dev-back, #299). A command was typed
+        // (B is known): its output starts on the line after it, its start time is unknown. A D after a prompt with nothing typed
+        // (none come from the scripts, an empty line gives no D) ends nothing.
+        if (!c.output) {
+          if (!c.input || c.input.mark.isDisposed) break;
+          // Enter moved the cursor under the typed line; still on it, nothing ran.
+          const here = h.mark();
+          const moved = !!here && here.line > c.input.mark.line;
+          here?.dispose();
+          if (!moved) break;
+          c.output = h.markAt?.(c.input.mark.line + 1) ?? null;
+          if (!c.output) break;
+        }
         const mark = h.mark();
         if (mark) c.end = { mark, x: h.cursorX() };
         c.code = m.code;
@@ -159,8 +174,9 @@ export function commandRows(c: ShellCommand, cursorLine: number): { from: number
   return { from, to: Math.max(from, to) };
 }
 
-/** What a buffer reads as text, a line at a time (xterm's `buffer.active`). */
-export interface LineReader { line(n: number): string | undefined }
+/** What a buffer reads as text, a line at a time, between two columns (cells, not characters: a wide character takes two), xterm's
+ *  `translateToString(true, start, end)`. */
+export interface LineReader { line(n: number, start?: number, end?: number): string | undefined }
 
 /** The command as typed: E's, else the screen from B to the end of its line (or C's line when it wrapped). */
 export function commandText(c: ShellCommand, buf: LineReader): string {
@@ -169,7 +185,7 @@ export function commandText(c: ShellCommand, buf: LineReader): string {
   const first = c.input.mark.line;
   const last = c.output ? Math.max(first, c.output.line - 1) : first;
   const parts: string[] = [];
-  for (let n = first; n <= last; n++) parts.push((buf.line(n) ?? '').slice(n === first ? c.input.x : 0));
+  for (let n = first; n <= last; n++) parts.push(buf.line(n, n === first ? c.input.x : 0) ?? '');
   return parts.join('').trimEnd();
 }
 
@@ -177,10 +193,23 @@ export function commandText(c: ShellCommand, buf: LineReader): string {
 export function outputText(c: ShellCommand, buf: LineReader, cursorLine: number): string {
   if (!c.output || c.output.isDisposed) return '';
   const { to } = commandRows(c, cursorLine);
+  // D in the middle of a line (output with no final newline: `printf foo`): the output stops at its column, before the next prompt.
+  const endCol = c.end && !c.end.mark.isDisposed && c.end.x > 0 && c.end.mark.line === to ? c.end.x : undefined;
   const lines: string[] = [];
-  for (let n = c.output.line; n <= to; n++) lines.push((buf.line(n) ?? '').trimEnd());
+  for (let n = c.output.line; n <= to; n++) lines.push((buf.line(n, 0, n === to ? endCol : undefined) ?? '').trimEnd());
   while (lines.length && !lines[lines.length - 1]) lines.pop();
   return lines.join('\n');
+}
+
+/** What is typed at the prompt now (B to the cursor), or null when the prompt is not known: the last command is not a prompt being
+ *  typed in (a pause #297 lost its marks, a program runs). « Relancer » types only into an empty prompt (#299 review). */
+export function draftText(marks: { commands(): readonly ShellCommand[] }, buf: LineReader, cursorLine: number): string | null {
+  const list = marks.commands();
+  const c = list[list.length - 1];
+  if (!c || statusOf(c, true) !== 'typing' || !c.input || c.input.mark.isDisposed) return null;
+  const parts: string[] = [];
+  for (let n = c.input.mark.line; n <= Math.max(c.input.mark.line, cursorLine); n++) parts.push(buf.line(n, n === c.input.mark.line ? c.input.x : 0) ?? '');
+  return parts.join('').trim();
 }
 
 /** The most a tab's folder takes before it is cut in the middle. */

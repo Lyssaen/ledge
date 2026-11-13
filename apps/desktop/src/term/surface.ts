@@ -37,11 +37,16 @@ export interface ShellSurface {
   view(): { top: number; rows: number; length: number; cursor: number; rowPx: number; /** The first row's top, in the window. */ y: number; normal: boolean };
   /** Scroll, render, resize, buffer switch: the view to draw again. */
   onView(fn: () => void): () => void;
-  line(n: number): string | undefined;
+  /** Line `n` as text, between two columns (cells). */
+  line(n: number, start?: number, end?: number): string | undefined;
   /** Puts `line` near the top of the screen. */
   scrollTo(line: number): void;
   /** Types into the shell, as the keyboard would. */
   type(text: string): void;
+  /** Whether the shell asked for bracketed paste (a multi-line text then reaches it as one paste, no line run alone). */
+  bracketed(): boolean;
+  /** Pastes `text` as xterm does (bracketed when the shell asked for it). */
+  paste(text: string): void;
   /** Ctrl ↑ / Ctrl ↓ typed in the terminal: `fn` answers whether it took the key (then the shell never sees it). One at a time. */
   onMarkKey(fn: ((dir: -1 | 1) => boolean) | null): void;
 }
@@ -158,7 +163,8 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     return { t, f };
   };
 
-  const markHost = { mark: (): Mark | null => term.registerMarker(0) ?? null, cursorX: () => term.buffer.active.cursorX, now: () => Date.now() };
+  const markHost = { mark: (): Mark | null => term.registerMarker(0) ?? null,
+    markAt: (line: number): Mark | null => { const b = term.buffer.active; return term.registerMarker(line - (b.baseY + b.cursorY)) ?? null; }, cursorX: () => term.buffer.active.cursorX, now: () => Date.now() };
   marks = new ShellMarks(markHost);
   let { t: term, f: fitter } = make();
   // The document the xterm was opened in. An xterm keeps it for good: its host adopted by another window's document (a
@@ -273,9 +279,11 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
         return { top: b.viewportY, rows: term.rows, length: b.length, cursor: b.baseY + b.cursorY, rowPx, y: box?.top ?? 0, normal: b.type === 'normal' };
       },
       onView: fn => { views.add(fn); return () => { views.delete(fn); }; },
-      line: n => term.buffer.active.getLine(n)?.translateToString(true),
+      line: (n, start, end) => term.buffer.active.getLine(n)?.translateToString(true, start, end),
       scrollTo: line => term.scrollToLine(Math.max(0, line - 2)),
       type: text => send(text),
+      bracketed: () => term.modes.bracketedPasteMode === true,
+      paste: text => term.paste(text),
       onMarkKey: fn => { markKey = fn; }
     },
     dispose: () => { marks.dispose(); term.dispose(); }

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { test, expect, seedAtelier } from './fixtures';
 import { fakeDaemon, session, twoProjects } from './daemon';
@@ -83,18 +84,57 @@ test('marks, the handle and its menu, the margin, the tab following cd', async (
   await expect(menu.getByRole('menuitem', { name: 'Run again' })).toBeDisabled();
   await page.keyboard.press('Escape');
 
-  // The build ends: « Run again » types the failed command into the shell.
+  // The build ends. A draft at the prompt: « Run again » waits too, it would run with it (review #299: « echo draft pnpm lint »).
   await emit(page, `✓ built in 2.1 s\r\n${ended(0)}${prompt('~/Workspace/ledge')}`);
   await expect(marks.locator('.shell-mark-line.running')).toHaveCount(0);
+  await screenEl(page).locator('.xterm').click();
+  await page.keyboard.type('echo draft ');
   await page.mouse.move(line!.x + 200, line!.y + line!.height / 2);
   await marks.locator('.shell-mark-handle').click();
+  await expect(page.getByRole('menu', { name: /^Exit code 1/ }).getByRole('menuitem', { name: 'Run again' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  // An empty prompt: « Run again » types the failed command alone, without Enter: the person confirms it (E can be forged).
+  await emit(page, `\r\n${prompt('~/Workspace/ledge')}`);
+  const before = (await writes(page)).length;
+  const moved = (await marks.locator('.shell-mark-line.failed').boundingBox())!;
+  await page.mouse.move(moved.x + 200, moved.y + moved.height / 2);
+  await marks.locator('.shell-mark-handle').click();
   await page.getByRole('menu', { name: /^Exit code 1/ }).getByRole('menuitem', { name: 'Run again' }).click();
-  await expect.poll(() => writes(page)).toContain('pnpm lint\r');
+  await expect.poll(async () => (await writes(page)).slice(before)).toBe('pnpm lint');
 
   // cd: the tab follows.
   await emit(page, `\r\n${o(`P;Cwd=${HOME}/Workspace/ledge/packages/ledge`)}`);
   await expect(panel(page).locator('.ide-btile-tab').first()).toHaveText(/^>_\s*WSL · Ubuntu 1 · ledge\/packages\/ledge$/);
 });
+
+// The real stream: dev-back's integration (feat/shell-integration 173362bd) for bash and fish in a tmux pane, recorded by a control
+// client (%output) — e2e/osc633-<shell>.json, home renamed /home/otto. The client attached after the first prompt, as Desktop does
+// after its opening screen: the first command has no marks (dev-back: a capture-pane screen carries none). zsh is not installed here.
+for (const shell of ['bash', 'fish'] as const) {
+  test(`the real stream through tmux (${shell}): failed, running, E unescaped, the tab following cd`, async ({ page }) => {
+    const chunks = JSON.parse(readFileSync(new URL(`./osc633-${shell}.json`, import.meta.url), 'utf8')) as string[];
+    await boot(page, 'light', 'en');
+    for (const c of chunks) await emit(page, c);
+    const marks = screenEl(page).locator('.shell-marks');
+    // false (1), ls nope (2): a red mark each in the margin (the whole buffer); sleep 30: running, on screen.
+    await expect(marks.locator('.shell-mark-fail')).toHaveCount(2);
+    await expect(marks.locator('.shell-mark-line.running')).toHaveCount(1);
+    // A margin mark scrolls to its command: its red line shows (fish's prompt takes a line more: they are above the panel).
+    await marks.locator('.shell-mark-fail').first().click();
+    await expect(marks.locator('.shell-mark-line.failed').first()).toBeVisible();
+    await screenEl(page).locator('.xterm').click();
+    await page.keyboard.press('Control+End');
+    await expect(panel(page).locator('.ide-btile-tab').first()).toHaveText(/^>_\s*WSL · Ubuntu 1 · ledge\/packages\/ledge$/);
+    // Ctrl ↑ from the running one up: echo 'a;bc' (E;echo 'a\x3bbc'), its command copied whole.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await screenEl(page).locator('.xterm').click();
+    for (let i = 0; i < 3; i++) await page.keyboard.press('Control+ArrowUp');
+    await expect(marks.locator('.shell-mark-handle')).toHaveAccessibleName(/^Exit code 0/);
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Copy command' }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("echo 'a;bc'");
+  });
+}
 
 test('Ctrl ↑ / Ctrl ↓ go from one command to the next, Enter opens its menu', async ({ page }) => {
   await boot(page, 'light', 'en');
