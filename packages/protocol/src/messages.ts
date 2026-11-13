@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { AskQuestionSchema, PendingSchema, SessionSchema, ToolSchema, OmpApprovalSchema } from './session.js';
 import { ChatStepSchema, ChatTurnSchema, ChatProposalSchema, ChatProposalsSchema, ChatRelaySchema, ChatClosesSchema, MAX_PROPOSALS, ChatProjectProposalSchema, ChatTasksSchema, ChatActionsSchema, ChatActionSchema } from './chat.js';
 import { BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX } from './broadcast.js';
+import { OperatorNoticeSchema, PointAnswerSchema } from './operator.js';
 import { ActionIdSchema } from './actions.js';
 import { ATTACHMENTS_MAX, AttachmentCaptureSchema, AttachmentDataSchema, AttachmentErrorSchema, AttachmentGetSchema, AttachmentIdSchema, AttachmentPutSchema, AttachmentStoredSchema, ImageUploadSchema } from './attachments.js';
 import { ReposInspectSchema, ReposInfoSchema } from './repos.js';
@@ -237,6 +238,8 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
   HandoverResultSchema,
   TaskUpdatedSchema,
   BrainResultSchema,
+  /** The operator's notices, broadcast on change and in the snapshot. */
+  z.object({ type: z.literal('operator.state'), notices: z.array(OperatorNoticeSchema).max(50) }),
   z.object({ type: z.literal('error'), message: z.string(), id: z.string().optional(), /** Le type du message client refusé. */ request: z.string().optional(),
     /** Ce que le front doit reconnaître au-delà du texte (NOTE_NOT_TYPED) ; une chaîne libre, qu'un front plus ancien ignore. */ code: z.string().optional() })
 ]);
@@ -325,6 +328,10 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
   /** « Ignorer » the turn's cards, for every device and for Ledge (who is told at the next question); `undo` opens them
    *  again (« Revoir »). Refused while one of them is under way. Every client gets the turn's `ignoredAt` through chat.history. */
   z.object({ type: z.literal('chat.ignore'), qid: z.string().min(1), undo: z.literal(true).optional() }),
+  /** The operator's point: answer a row (`item` is its id), set the point aside, or mark events up to `eventId` read by the sender's device. */
+  z.object({ type: z.literal('point.act'), qid: z.string().min(1), item: z.string().min(1).max(200), answer: PointAnswerSchema }),
+  z.object({ type: z.literal('point.later'), qid: z.string().min(1) }),
+  z.object({ type: z.literal('operator.read'), eventId: z.number().int().min(0) }),
   /** A registry action run outside the chat (#93, the CLI): the daemon resolves `args` as it does a generic card's row, then
    *  applies it through its own handler. `by` the session that asks, left out for the user; `confirmed` for a destructive one. */
   z.object({ type: z.literal('action.run'), rid: z.string().min(1).max(100), by: z.string().min(1).optional(), /** `by`'s key (LEDGE_SESSION_KEY) */ key: z.string().max(128).optional(), action: ActionIdSchema, args: z.record(z.unknown()), confirmed: z.literal(true).optional() }),

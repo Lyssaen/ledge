@@ -4,6 +4,7 @@ import { ContextPrefsSchema, HandoverStateSchema } from './handover.js';
 import { HarnessUsageSchema, UsagePrefsSchema, dropUnknownHarnesses } from './usage.js';
 import { DOING_LABEL_MAX, DOING_TOOL_MAX, OmpApprovalSchema, PendingSchema, SessionSchema, ToolSchema, type Tool } from './session.js';
 import { ActionVarsSchema, ChatActionStateSchema, ChatStepSchema, MAX_PROPOSALS, type CloseHow } from './chat.js';
+import { ChatPointSchema, PointAnswerSchema } from './operator.js';
 import { ActionRiskSchema } from './actions.js';
 import { DecisionSchema, NOTE_MAX } from './decisions.js';
 import { ThreadItemSchema } from './thread.js';
@@ -278,7 +279,8 @@ export const PhoneChatTurnSchema = z.object({
   relay: PhoneChatRelaySchema.optional(), closes: z.array(PhoneChatCloseSchema).min(1).max(MAX_PROPOSALS).optional(), cut: z.literal(true).optional(),
   tasks: z.array(PhoneChatTaskSchema).min(1).max(MAX_PROPOSALS).optional(),
   actions: z.array(PhoneChatActionSchema).min(1).max(MAX_PROPOSALS).optional(), ignoredAt: z.string().datetime().optional(),
-  attachments: z.array(AttachmentRefSchema).max(ATTACHMENTS_MAX).optional()
+  attachments: z.array(AttachmentRefSchema).max(ATTACHMENTS_MAX).optional(),
+  by: z.literal('ledge').optional(), point: ChatPointSchema.optional()
 }).strict();
 export type PhoneChatTurn = z.infer<typeof PhoneChatTurnSchema>;
 
@@ -496,6 +498,10 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
     deny: z.literal(true).optional() }),
   /** « Ignorer » the turn's cards, or `undo` (« Revoir »), as the local `chat.ignore`. */
   z.object({ type: z.literal('chat.ignore'), op: OperationIdSchema, qid: OperationIdSchema, undo: z.literal(true).optional() }),
+  /** The operator's point: `point.act` answers a row, `point.later` sets the point aside, `operator.read` marks events read for this device. */
+  z.object({ type: z.literal('point.act'), op: OperationIdSchema, qid: OperationIdSchema, item: z.string().min(1).max(200), answer: PointAnswerSchema }),
+  z.object({ type: z.literal('point.later'), op: OperationIdSchema, qid: OperationIdSchema }),
+  z.object({ type: z.literal('operator.read'), op: OperationIdSchema, eventId: z.number().int().min(0) }),
   /** The user's answer to a proposal about the notes (brain spec, lot 4): a `yes` carries an assertion of purpose `note` bound to the
    *  task and that exact choice; a `no` needs none. */
   z.object({ type: z.literal('brain.answer'), op: OperationIdSchema, task: z.string().min(1).max(40), choice: BrainChoiceSchema, assertion: AssertionSchema.optional() }),

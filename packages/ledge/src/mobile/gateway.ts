@@ -403,7 +403,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'device.rename' | 'device.prefs' | 'context.set' | 'project.edit' | 'project.order' | 'project.create' | 'project.delete' | 'project.folder.add' | 'project.folder.remove' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'session.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' | 'brain.answer' | 'rigs.act' | 'rigs.seats' | 'rigs.goal.send' | 'rigs.goal.reply' | 'forge.act' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'device.rename' | 'device.prefs' | 'context.set' | 'project.edit' | 'project.order' | 'project.create' | 'project.delete' | 'project.folder.add' | 'project.folder.remove' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'session.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' | 'brain.answer' | 'rigs.act' | 'rigs.seats' | 'rigs.goal.send' | 'rigs.goal.reply' | 'forge.act' | 'point.act' | 'point.later' | 'operator.read' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -1276,6 +1276,8 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'openrig.answer') return rigAnswer(deviceId, msg);
     if (msg.type === 'brain.answer') return brainAnswer(deviceId, msg);
     if (msg.type === 'rigs.act') return rigsAct(deviceId, msg);
+    // The operator's operations are wired by the daemon's operator task; until then the gateway refuses them.
+    if (msg.type === 'point.act' || msg.type === 'point.later' || msg.type === 'operator.read') return { status: 'rejected', reason: 'not_offered' };
     if (msg.type === 'forge.act') return forgeAct(deviceId, msg);
     if (msg.type === 'rigs.seats') return rigsSeats(deviceId, msg);
     if (msg.type === 'rigs.goal.send' || msg.type === 'rigs.goal.reply') return rigsGoal(deviceId, msg);

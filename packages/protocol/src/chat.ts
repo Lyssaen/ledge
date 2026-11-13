@@ -3,6 +3,7 @@ import { ToolSchema } from './session.js';
 import { EffortSchema, ModelIdSchema } from './models.js';
 import { ActionRiskSchema } from './actions.js';
 import { AttachmentRefSchema } from './attachments.js';
+import { ChatPointSchema } from './operator.js';
 
 /** What Ledge consulted while answering: a context file (a session's pane, reply or git summary, the sessions list) or a repository file. */
 export const ChatStepSchema = z.object({
@@ -113,7 +114,9 @@ export const ChatTurnSchema = z.object({
   tasks: ChatTasksSchema.optional(), actions: ChatActionsSchema.optional(),
   ignoredAt: z.string().datetime().optional(), attachments: z.array(AttachmentRefSchema).optional(),
   /** When Ledge read the account limits for this answer (`limits.md`): a phone shows the limits under it (M3 Q31). */
-  limitsAt: z.string().datetime().optional()
+  limitsAt: z.string().datetime().optional(),
+  /** `ledge`: a turn Ledge wrote on its own (a point), with an empty `question`; lazy because `operator.ts` imports this file. */
+  by: z.literal('ledge').optional(), point: z.lazy(() => ChatPointSchema).optional()
 });
 export type ChatTurn = z.infer<typeof ChatTurnSchema>;
 

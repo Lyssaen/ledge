@@ -15,6 +15,7 @@ export const NOTIFY: Record<NotifyLang, { title: Titles; fallbackTitle: string; 
       finished: (name) => `${name} a terminé`,
       resolved: (name) => `${name} · traitée`,
       decision: (name) => `${name} attend ta décision`,
+      point: (name) => `${name} te fait un point`,
       chat: 'Ledge a répondu'
     },
     fallbackTitle: 'Ledge',
@@ -28,6 +29,7 @@ export const NOTIFY: Record<NotifyLang, { title: Titles; fallbackTitle: string; 
       finished: (name) => `${name} has finished`,
       resolved: (name) => `${name} · handled`,
       decision: (name) => `${name} needs your decision`,
+      point: (name) => `${name} has a point for you`,
       chat: 'Ledge has answered'
     },
     fallbackTitle: 'Ledge',

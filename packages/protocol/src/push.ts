@@ -46,7 +46,7 @@ export const PushPayloadSchema = z.object({
   v: z.literal(1),
   /** `resolved`: a request or question answered (anywhere), replacing its notification under the same tag; only sent to a
    *  device whose subscription says its service worker knows it (`push.subscribe` `resolved`). */
-  kind: z.enum(['request', 'question', 'finished', 'chat', 'decision', 'resolved']),
+  kind: z.enum(['request', 'question', 'finished', 'chat', 'decision', 'resolved', 'point']),
   title: z.string().max(80),
   /**
    * Who the notification is about, so the phone writes its own title in its language (Q29): the session's name for `request`,
