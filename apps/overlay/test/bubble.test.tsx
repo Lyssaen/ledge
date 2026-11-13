@@ -38,30 +38,28 @@ describe('<Bubble>', () => {
   it('an ask has no timer; a notice drains for 6 s unless paused', () => {
     const { container, rerender } = render(<Bubble session={perm} moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
     expect(container.querySelector('[data-timer]')).toBeNull();
-    const idle = fakeSession('a', { state: 'idle' });
-    rerender(<Bubble session={idle} kind="finished" moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
+    rerender(<Bubble session={null} kind="offline" preview="Devbox" moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
     expect((container.querySelector('[data-timer]') as HTMLElement).style.animation).toContain('ledge-drain 6000ms linear');
-    rerender(<Bubble session={idle} kind="finished" moreCount={0} visible paused onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
+    rerender(<Bubble session={null} kind="offline" preview="Devbox" moreCount={0} visible paused onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
     expect(container.querySelector('[data-timer]')).toHaveAttribute('data-paused', 'true');
   });
-  it('the bar drains the controller remainder, holds it while paused, and restarts per notice rather than per session', () => {
-    const idle = fakeSession('a', { state: 'idle' });
-    const base = { moreCount: 0, visible: true, kind: 'finished' as const, onOpen: () => {}, onDecide: () => {}, onReply: () => {} };
-    const { container, rerender } = render(<Bubble {...base} session={idle} paused={false} remainingMs={6000} />);
+  it('the bar drains the controller remainder, holds it while paused, and restarts per notice', () => {
+    const base = { moreCount: 0, visible: true, kind: 'offline' as const, session: null, onOpen: () => {}, onDecide: () => {}, onReply: () => {} };
+    const { container, rerender } = render(<Bubble {...base} preview="Devbox" paused={false} remainingMs={6000} />);
     const bar = () => container.querySelector('[data-timer]') as HTMLElement;
     const first = bar();
-    rerender(<Bubble {...base} session={perm} paused remainingMs={2500} />);
+    rerender(<Bubble {...base} preview="Devbox" paused remainingMs={2500} />);
     expect(bar()).toHaveAttribute('data-remaining', '2500');
     expect(parseFloat(bar().style.width)).toBeCloseTo((2500 / 6000) * 100, 5);
     expect(bar().style.animation).toBe('none');
-    rerender(<Bubble {...base} session={idle} paused={false} remainingMs={2500} />);
+    rerender(<Bubble {...base} preview="Devbox" paused={false} remainingMs={2500} />);
     expect(bar().style.animation).toContain('ledge-drain 2500ms linear');
     expect(parseFloat(bar().style.getPropertyValue('--ledge-from'))).toBeCloseTo((2500 / 6000) * 100, 5);
     const running = bar();
-    rerender(<Bubble {...base} session={idle} paused={false} remainingMs={1200} />);
+    rerender(<Bubble {...base} preview="Devbox" paused={false} remainingMs={1200} />);
     expect(bar()).toBe(running);
     expect(bar()).toHaveAttribute('data-remaining', '2500');
-    rerender(<Bubble {...base} session={fakeSession('c', { state: 'idle' })} paused={false} remainingMs={6000} />);
+    rerender(<Bubble {...base} preview="Studio" paused={false} remainingMs={6000} />);
     expect(bar()).not.toBe(running);
     expect(bar()).not.toBe(first);
     expect(bar()).toHaveAttribute('data-remaining', '6000');
@@ -101,32 +99,11 @@ describe('<Bubble>', () => {
     rerender(<Bubble session={fakeSession('c', { state: 'waiting_permission', pending: { kind: 'permission', text: 'ls', tool: 'Bash', source: 'hook' } })} visible {...props} />);
     expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled();
   });
-  it('a finished notice speaks in the bot name, shows the work time and the project, and offers OK and Open', () => {
+  it('a machine that dropped is the one notice left: Ledge says it, with OK and Open', () => {
     const onOpen = vi.fn(); const onDismiss = vi.fn();
-    const idle = fakeSession('a', { state: 'idle' });
-    render(<Bubble session={idle} kind="finished" elapsedMs={160_000} moreCount={0} visible paused={false} onOpen={onOpen} onDismiss={onDismiss} onDecide={() => {}} onReply={() => {}} />);
-    expect(screen.getByText('Otto finished')).toBeInTheDocument();
-    expect(screen.getByText('2m 40s of work · harness-assistant')).toBeInTheDocument();
-    expect(screen.getByText('Available')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
-    expect(onDismiss).toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Open in Ledge' }));
-    expect(onOpen).toHaveBeenCalled();
-    expect(document.querySelector('[data-timer]')).toHaveAttribute('data-remaining', '6000');
-  });
-  it('a finished notice without a known work time shows the project alone', () => {
-    render(<Bubble session={fakeSession('a', { state: 'idle' })} kind="finished" moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
-    expect(screen.getByText('harness-assistant')).toBeInTheDocument();
-  });
-  it('a finished bubble survives its session being removed from under it', () => {
-    expect(() => render(<Bubble session={null} kind="finished" moreCount={0} visible={false} paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />)).not.toThrow();
-  });
-  it('a Ledge finish (no session) speaks in its name, shows the answer, and offers OK and Open', () => {
-    const onOpen = vi.fn(); const onDismiss = vi.fn();
-    render(<Bubble session={null} kind="finished" preview="Deux bots travaillent." elapsedMs={80_000} moreCount={0} visible paused={false} onOpen={onOpen} onDismiss={onDismiss} onDecide={() => {}} onReply={() => {}} />);
-    expect(screen.getByText('Ledge finished')).toBeInTheDocument();
-    expect(screen.getByText('Deux bots travaillent.')).toBeInTheDocument();
+    render(<Bubble session={null} kind="offline" preview="Devbox" moreCount={0} visible paused={false} onOpen={onOpen} onDismiss={onDismiss} onDecide={() => {}} onReply={() => {}} />);
+    expect(screen.getByText('Devbox')).toBeInTheDocument();
+    expect(screen.getByText('Reconnecting on its own')).toBeInTheDocument();
     expect(document.querySelector('svg.resident')).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'OK' }));
     expect(onDismiss).toHaveBeenCalled();
@@ -165,5 +142,11 @@ describe('<Bubble>', () => {
     expect(buttons).toEqual(['Attendre qa', 'Fusionner']);
     fireEvent.click(screen.getByRole('button', { name: 'Fusionner' }));
     expect(onOption).toHaveBeenCalledWith('merge');
+  });
+  it('a diff card keeps its stat under the sentence', () => {
+    const diff = fakeSession('d', { name: 'Rex', state: 'waiting_permission', pending: { kind: 'diff', text: 'src/app.ts +12 -3', source: 'hook' } });
+    render(<Bubble session={diff} moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
+    expect(document.querySelector('[data-ledge-sentence]')).toHaveTextContent('Rex has changes for you to review');
+    expect(screen.getByText('src/app.ts +12 -3 · harness-assistant')).toBeInTheDocument();
   });
 });

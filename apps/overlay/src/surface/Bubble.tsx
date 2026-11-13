@@ -2,15 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react';
 import type { OperatorNotice, Session } from '@ledge/protocol';
 import { inline } from '@ledge/ui/chat/inline';
 import { ledgeSentence } from './say.js';
-import { Bot } from '../bots/Bot';
 import { ResidentMascot } from '../bots/ResidentMascot';
-import { botState, poseFor } from '../bots/poseFor';
 import { Button } from '../ui/Button';
 import { transition } from '../motion';
 import { SIZES } from './geometry';
 import { useI18n } from '../i18n/lang';
 import { FINISHED_BUBBLE_MS, type BubbleKind } from './machine';
-import { duration } from '../format';
 import { Badge } from '../ui/Badge';
 import { Kbd } from '../ui/Kbd';
 
@@ -30,8 +27,6 @@ interface BubbleProps {
   ack?: BubbleAck;
   /** `ask` (default) is a request to decide; the other kinds are notices. */
   kind?: BubbleKind;
-  /** The work time of a finished notice (ms), when known. */
-  elapsedMs?: number;
   /** A Ledge chat finish, or the line under an offline machine. */
   preview?: string;
   /** Why the last decision failed (shown only with `ack === 'failed'`). */
@@ -61,14 +56,13 @@ interface BubbleProps {
   ref?: Ref<HTMLDivElement>;
 }
 
-export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', elapsedMs, preview, failure, deciding = false, quick = true, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, notice: opNotice, onLater, onSeePoint, onOption, theme = 'dark', ref, maxH }: BubbleProps) {
+export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', preview, failure, deciding = false, quick = true, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, notice: opNotice, onLater, onSeePoint, onOption, theme = 'dark', ref, maxH }: BubbleProps) {
   const pending = session?.pending;
   const notice = kind !== 'ask';
   const holdMs = FINISHED_BUBBLE_MS;
   const remaining = remainingMs ?? holdMs;
   const { t } = useI18n();
-  const ledge = kind === 'finished' && !session;
-  const askKey = ledge ? 'ledge:finished' : session ? (notice ? `${session.id}:${kind}` : `${session.id}:${pending?.helperId ?? ''}:${pending?.text ?? ''}`) : kind;
+  const askKey = notice ? `${kind}:${preview ?? ''}` : session ? `${session.id}:${pending?.helperId ?? ''}:${pending?.text ?? ''}` : kind;
   const [lockedKey, setLockedKey] = useState<string | undefined>(undefined);
   if (!visible && lockedKey !== undefined) setLockedKey(undefined);
   // Taller than the open views' cap: the question's text joins the choices in a scrolling area under the title, the
@@ -105,13 +99,8 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   const [reply, setReply] = useState('');
   const [nudge, setNudge] = useState(false);
   if (askKey !== undefined && lockedKey !== askKey && (choice !== null || reply !== '') && !visible) { /* a hidden bubble keeps nothing */ }
-  const title = ledge ? t.bubble.finished(t.resident.name)
-    : kind === 'offline' ? (preview ?? t.bubble.offline)
-    : !session ? ''
-    : kind === 'error' ? t.bubble.failedTitle(session.name)
-    : kind === 'finished' ? t.bubble.finished(session.name)
-    : '';
-  const finishedSub = preview ?? (elapsedMs !== undefined ? t.bubble.finishedSub(duration(elapsedMs, t), session?.project ?? '') : t.bubble.finishedSubNoTime(session?.project ?? ''));
+  /** The only notice left in the bubble: a machine dropped (sessions' finishes and errors reach the user through the point). */
+  const title = kind === 'offline' ? (preview ?? t.bubble.offline) : '';
   const act = (fn: () => void) => () => { if (disabled) return; setLockedKey(askKey); fn(); };
   const answer = () => {
     const text = reply.trim() || (choice !== null ? pending?.options?.[choice] : '');
@@ -126,9 +115,6 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   const left = Math.max(0, Math.round(clock.seg === seg ? clock.ms : remaining));
   const pct = (left / holdMs) * 100;
 
-  const [nod, setNod] = useState(0);
-  const prevAck = useRef(ack);
-  useEffect(() => { if (ack === 'confirmed' && prevAck.current !== 'confirmed') setNod(n => n + 1); prevAck.current = ack; }, [ack]);
 
   const note = ack === 'failed' ? t.bubble.failed(failure ?? t.bubble.lostDefault)
     : ack === 'pending' ? t.bubble.pending : ack === 'confirmed' ? t.bubble.confirmed : blocked;
@@ -153,15 +139,15 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
         <div data-actions style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {!rig ? (
             <>
-              <Button variant="ghost" size="sm" onClick={() => onLater?.()}>{t.bubble.point.later}</Button>
-              <Button variant="primary" size="sm" onClick={() => onSeePoint?.()}>{t.bubble.point.see}</Button>
+              <Button variant="ghost" size="sm" disabled={blocked !== null} title={blocked ?? undefined} onClick={() => onLater?.()}>{t.bubble.point.later}</Button>
+              <Button variant="primary" size="sm" disabled={blocked !== null} title={blocked ?? undefined} onClick={() => onSeePoint?.()}>{t.bubble.point.see}</Button>
             </>
           ) : options.length === 0 ? (
             <Button variant="primary" size="sm" onClick={() => onOpen()}>{t.bubble.rigAsk.open}</Button>
           ) : (
             // The first option is the rig's suggested answer: it is the primary button, at the right end where the eye lands.
             [...options.slice(1), options[0]!].map(o => (
-              <Button key={o.id} variant={o === options[0] ? 'primary' : 'outline'} size="sm" disabled={deciding || blocked !== null} onClick={() => onOption?.(o.id)}>{o.label}</Button>
+              <Button key={o.id} variant={o === options[0] ? 'primary' : 'outline'} size="sm" disabled={deciding || blocked !== null} title={blocked ?? undefined} onClick={() => onOption?.(o.id)}>{o.label}</Button>
             ))
           )}
         </div>
@@ -170,17 +156,19 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   }
   /** A request's heading is Ledge's sentence: the session named in bold, then what it wants. */
   const sentence = !notice && session ? ledgeSentence(session, t) : null;
+  /** Under the sentence: a diff's or a plan's own summary (its stat), which the sentence does not carry, then the project. */
+  const subLine = [review ? pending?.text : undefined, session?.project].filter(Boolean).join(' · ');
 
   return (
     <div ref={setRoot} data-layer="bubble" data-tall={tall || undefined} data-kind={kind} data-ack={ack ?? 'none'} inert={!visible} style={shell}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-        {sentence ? <span data-ledge-mark className="nt-mark" data-pending={pending?.kind === 'permission' ? 'permission' : 'question'} /> : ledge || kind === 'offline' ? <ResidentMascot size={40} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} /> : session && <Bot seed={session.id} readOnly={session.source === 'hook_only'} tool={session.tool} state={kind === 'error' ? 'error' : botState(session)} pose={poseFor(session.id, session.state)} size={40} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} askKey={String(askKey)} nodKey={nod} />}
+        {sentence ? <span data-ledge-mark className="nt-mark" data-pending={pending?.kind === 'permission' ? 'permission' : 'question'} /> : kind === 'offline' ? <ResidentMascot size={40} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} /> : null}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexGrow: 1, minWidth: 0 }}>
           {sentence
             ? <span data-ledge-sentence style={{ fontSize: 14, lineHeight: '20px', overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}><b style={{ fontWeight: 600 }}>{sentence.who}</b> {inline(sentence.rest)}</span>
             : <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{title}</span>}
-          {notice ? <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{kind === 'offline' ? (session ? finishedSub : t.bubble.offlineSub) : kind === 'error' ? (session?.lastError || t.bubble.errorSub) : finishedSub}</span>
-            : !tall && session?.project && <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.project}</span>}
+          {notice ? <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.bubble.offlineSub}</span>
+            : !tall && subLine && <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{subLine}</span>}
           {moreCount > 0 && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.bubble.more(moreCount)}</span>}
         </div>
       </div>
@@ -208,7 +196,7 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
       <div data-actions style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', flexShrink: 0 }}>
         {notice ? (
           <>
-            <Badge state={kind === 'finished' ? 'idle' : kind === 'error' ? 'error' : 'readonly'} label={kind === 'offline' ? t.bubble.offlineBadge : undefined} />
+            <Badge state="readonly" label={t.bubble.offlineBadge} />
             <span style={{ flexGrow: 1 }} />
             <Button variant="outline" size="sm" onClick={() => onDismiss?.()}>{t.bubble.ok}</Button>
             <Button variant="primary" size="sm" onClick={() => onOpen()}>{t.bubble.openSession}</Button>

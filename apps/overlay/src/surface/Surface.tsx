@@ -128,14 +128,10 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const osReduced = useOsReducedMotion();
   const reducedMotion = motionPrefs.reduced;
   const prefs = useSoundPrefs();
-  const finishedBubble = (prefs.finished === 'both' || prefs.finished === 'bubble') && shows.finished;
   const quick = shows.quick;
   const visibleRef = useRef(visible); visibleRef.current = visible;
   const [defaultTool, setDefaultTool] = useState(loadDefaultTool);
   const chooseDefaultTool = (tool: Tool) => { setDefaultTool(tool); saveDefaultTool(tool); };
-  // Work time of the last finish per session, so the finished bubble can say "2m 40s of work".
-  const [elapsed, setElapsed] = useState<Record<string, number>>({});
-  const [ledgePreview, setLedgePreview] = useState<string | undefined>();
   const [ledgeUnread, setLedgeUnread] = useState(false);
   const [ledgeSaySeed, setLedgeSaySeed] = useState('ledge');
   const [finishedUnread, setFinishedUnread] = useState<Record<string, string>>({});
@@ -261,20 +257,15 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   }), [ctl]);
   useEffect(() => onForegroundCovered(setCovered), []);
 
-  // Daemon changes drive the machine. DND keeps the bot growing in the handle but never asks for a bubble.
+  // Daemon changes drive the machine: requests unfold, a session's finish or error only plays its sound (the point says it).
   // A reply the daemon rejects comes back into its draft (unless something new was typed meanwhile).
   const player = useMemo(() => soundPlayer ?? createSilentPlayer(), [soundPlayer]);
   const sounds = useSounds({ player, dnd, status });
-  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, finishedBubble, onChange: (c, info) => {
+  const asks = useDaemonAsks({ sessions, status, lastError, dnd, dispatch, onChange: (c, info) => {
     sounds.onChange(c);
-    if (c.kind === 'finished' && info.elapsedMs !== undefined) setElapsed(x => ({ ...x, [c.id]: info.elapsedMs! }));
     if (c.kind === 'finished') {
       const looking = ctl.state().mode === 'session' && ctl.state().selectedId === c.id;
       if (!looking) setFinishedUnread(x => ({ ...x, [c.id]: `${c.id}:finished:${info.elapsedMs ?? 0}` }));
-    }
-    if (c.kind === 'failed' && !dnd) {
-      const crashed = sessions.find(s => s.id === c.id);
-      if (crashed && !crashed.pending) dispatch({ type: 'notice', id: c.id, kind: 'error' });
     }
     if (c.kind === 'asked' || c.kind === 'left' || c.kind === 'failed') setFinishedUnread(x => { if (!(c.id in x)) return x; const { [c.id]: _gone, ...rest } = x; return rest; });
   }, onReplyRejected: (id, text) => setDrafts(x => (x[id] ? x : { ...x, [id]: text })) });
@@ -370,9 +361,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     surfaceRef.current?.querySelector<HTMLTextAreaElement>('[data-layer="session"] [data-reply]')?.focus();
   }, [st.mode, st.selectedId]);
 
-  // The finishing bot is big from the moment its notice is due until the bubble folds.
-  const liftedId = st.queue.length === 0 && st.done.length > 0 && (st.unfoldDue || (st.mode === 'bubble' && st.bubbleKind === 'finished')) ? st.done[0] : null;
-  const bots = useMemo(() => sessions.map(s => ({ id: s.id, pending: isPending(s) || s.id === liftedId || !!finishedUnread[s.id], machine: s.machineId })), [sessions, liftedId, finishedUnread]);
+  const bots = useMemo(() => sessions.map(s => ({ id: s.id, pending: isPending(s) || !!finishedUnread[s.id], machine: s.machineId })), [sessions, finishedUnread]);
   // The resting Ledge mark keeps the colour of the most urgent request: red for a permission, amber for the rest.
   const pendingTone: PendingTone = sessions.some(s => isPending(s) && s.pending?.kind === 'permission') ? 'permission' : sessions.some(isPending) ? 'question' : null;
   const previousResident = useRef({ ids: new Set(sessions.map(s => s.id)), pending: new Set(sessions.filter(isPending).map(s => s.id)) });
@@ -394,15 +383,11 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     for (const turn of chat) {
       const was = before.find(t => t.qid === turn.qid);
       if (!was || was.answeredAt || was.error || !turn.answeredAt || turn.error) continue;
-      const elapsedMs = Date.parse(turn.answeredAt) - Date.parse(turn.askedAt);
-      if (Number.isFinite(elapsedMs) && elapsedMs >= 0) setElapsed(x => ({ ...x, [LEDGE_ID]: elapsedMs }));
-      setLedgePreview(turn.answer?.trim() || undefined);
       sounds.onChange({ kind: 'finished', id: LEDGE_ID });
-      if (finishedBubble && !dnd) dispatch({ type: 'finished', id: LEDGE_ID });
       if (ctl.state().mode !== 'chat') { setLedgeUnread(true); setLedgeSaySeed(turn.qid); }
       setResidentSignal({ key: ++signalCounter.current, kind: 'happy' });
     }
-  }, [chat]); // eslint-disable-line react-hooks/exhaustive-deps -- finishedBubble/dnd/sounds read the live values of this render
+  }, [chat]); // eslint-disable-line react-hooks/exhaustive-deps -- sounds reads the live values of this render
   useEffect(() => { if (st.mode === 'chat') setLedgeUnread(false); }, [st.mode]);
   useEffect(() => {
     if ((st.mode !== 'session' && st.mode !== 'peek') || !st.selectedId) return;
@@ -852,11 +837,11 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
             music={music} trackKey={notchLine.view.trackKey} musicOpen={musicOpen} onMusicOpen={setMusicOpen} onMedia={c => { void mediaCommand(c); }} onOpenHome={openHome} left={geo.left} scale={hs} pointer={st.mode === 'handle' ? residentPointer : null} residentSignal={residentSignal} unread={ledgeUnread} shortcut={shortcut} dnd={dnd} theme={theme} frozen={unreachable} reducedMotion={reducedMotion} />
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
-        <Bubble ref={bubbleRef} maxH={openMaxH(screenH / ps) - SURFACE_CHROME_Y} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : offlineMachine ? offlineMachine.label : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
+        <Bubble ref={bubbleRef} maxH={openMaxH(screenH / ps) - SURFACE_CHROME_Y} kind={st.bubbleKind} preview={offlineMachine?.label} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
           notice={bubbleNotice?.notice} failure={bubbleNotice ? (operatorFailure?.key === bubbleNotice.key ? operatorFailure.message : undefined) : st.bubbleId ? asks.failures[st.bubbleId] : undefined}
           onLater={() => { if (bubbleNotice) noticeLater(bubbleNotice); }} onSeePoint={() => { if (bubbleNotice) noticeOpen(bubbleNotice); }} onOption={id => { if (bubbleNotice) noticeAnswer(bubbleNotice, id); }}
           quick={quick} ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} blocked={bubbleSession ? blockedFor(bubbleSession) : bubbleNotice && client.fleet && !machines.find(m => m.id === bubbleNotice.machine)?.ready ? t.offline : null} frozen={unreachable} reducedMotion={reducedMotion}
-          onOpen={() => { if (bubbleNotice) noticeOpen(bubbleNotice); else if (st.bubbleId === LEDGE_ID) dispatch({ type: 'bubbleClick' }); else if (st.bubbleId?.startsWith('machine:')) openInLedge({ kind: 'machines' }); else if (st.bubbleId) openInLedge({ kind: 'session', id: st.bubbleId }); }}
+          onOpen={() => { if (bubbleNotice) noticeOpen(bubbleNotice); else if (st.bubbleId?.startsWith('machine:')) openInLedge({ kind: 'machines' }); else if (st.bubbleId) openInLedge({ kind: 'session', id: st.bubbleId }); }}
           onDismiss={() => dispatch({ type: st.bubbleKind === 'ask' ? 'defer' : 'close' })}
           onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
           onReply={text => {

@@ -40,6 +40,20 @@ describe('noticesOf', () => {
   });
 });
 
+describe('noticesOf rig asks', () => {
+  it('an ask held by a point carries that qid, one not held carries none', () => {
+    const points = [
+      { qid: 'q1', point: point('older', [item('rig.ask:r1')]) },
+      // The newest point holding the ask wins, even one set aside with later; a settled row does not hold it.
+      { qid: 'q2', point: point('newer', [item('rig.ask:r1')]), laterAt: T(5) },
+      { qid: 'q3', point: point('settled', [item('rig.ask:r1', { settled: { at: T(6), where: 'phone' } })]) }
+    ];
+    const n = noticesOf(points, [ask('r1', { priority: 'urgent' }), ask('r2', { priority: 'urgent' })], T(9));
+    expect(n.find(x => x.id === 'rig.ask:r1')).toMatchObject({ qid: 'q2' });
+    expect(n.find(x => x.id === 'rig.ask:r2')).not.toHaveProperty('qid');
+  });
+});
+
 describe('pointPush', () => {
   it('is a point titled Ledge, its body the lead cut to 120, opening the chat tab', () => {
     const p = pointPush('x'.repeat(300), 3);

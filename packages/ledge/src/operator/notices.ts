@@ -16,7 +16,7 @@ const settledAsk = (a: HumanAsk): boolean => a.questions.length > 0 && a.questio
 /**
  * What the notch and the phone are told (spec §7): the newest unfolded point that still has something waiting on the user, unless
  * the device set it aside with « Plus tard » (a newer point brings it back); and every urgent or critical rig ask not settled, with
- * its first open question's options. Session requests are not notices: the notch's request bubble stays fed by the sessions.
+ * its first open question's options, and the qid of the newest point holding it (none: the front answers it in « À toi »). Session requests are not notices: the notch's request bubble stays fed by the sessions.
  * `points` are oldest first; `at` stands in for the time of a point none of whose rows has one.
  */
 export function noticesOf(points: Array<{ qid: string; point: ChatPoint; laterAt?: string }>, asks: readonly HumanAsk[], at: string): OperatorNotice[] {
@@ -27,12 +27,16 @@ export function noticesOf(points: Array<{ qid: string; point: ChatPoint; laterAt
     const when = open.map(i => i.at).sort().at(-1) ?? at;
     out.push({ id: `point:${newest.qid}`, kind: 'point', qid: newest.qid, text: cut(newest.point.lead, TEXT_MAX), priority: 'routine', at: when });
   }
+  /** The newest point holding a rig ask's unsettled row, set aside or not: the notch answers the ask through that point. */
+  const holder = (askId: string): string | undefined =>
+    points.filter(({ point }) => point.items.some(i => i.id === `rig.ask:${askId}` && !i.settled)).at(-1)?.qid;
   for (const a of asks) {
     if ((a.priority !== 'urgent' && a.priority !== 'critical') || settledAsk(a)) continue;
+    const qid = holder(a.id);
     const q = a.questions.find(x => x.answer === null) ?? a.questions[0];
     const options = (q?.options ?? []).slice(0, OPTIONS_MAX).map(o => ({ id: o.id, label: cut(o.label, 60) }));
     out.push({
-      id: `rig.ask:${a.id}`, kind: 'rig.ask', text: cut(a.summary, TEXT_MAX), who: cut(a.from.seat, 100), ...(a.from.rig ? { rig: a.from.rig } : {}),
+      id: `rig.ask:${a.id}`, kind: 'rig.ask', ...(qid ? { qid } : {}), text: cut(a.summary, TEXT_MAX), who: cut(a.from.seat, 100), ...(a.from.rig ? { rig: a.from.rig } : {}),
       qitem: a.id, ...(options.length ? { options } : {}), priority: a.priority, at: [a.createdAt, a.updatedAt].find(validAt) ?? EPOCH
     });
   }

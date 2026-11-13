@@ -46,11 +46,10 @@ describe('the island applies the settings Desktop shares', () => {
     expect(screen.queryByText('Pim finished')).toBeNull();
   });
 
-  it('finished off still shows an error notice', async () => {
-    render(draw({ shows: prefs({}, { finished: false }).shows }));
+  it('an error unfolds no bubble either: the point says it', async () => {
+    render(draw({ shows: prefs({}, { finished: true }).shows }));
     await act(async () => { mock.upsert(pim({ state: 'error', lastError: 'boom' })); await sleep(50); vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveAttribute('data-mode', 'bubble');
-    expect(document.querySelector('[data-layer="bubble"]')).toHaveAttribute('data-kind', 'error');
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
   });
 
   it('say off: no speech bubble on the handle', async () => {

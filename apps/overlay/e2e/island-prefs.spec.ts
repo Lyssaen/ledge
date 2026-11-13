@@ -27,18 +27,14 @@ test('position and discreet follow Desktop; nothing is sent back', async ({ page
   expect(d.received.some(m => m.type === 'island.set')).toBe(false);
 });
 
-test('finished off: a finish unfolds no bubble; on again, it does', async ({ page }) => {
-  const d = await fakeDaemon(page, [session('a', { name: 'Pim' })], { island: prefs({}, { finished: false }) });
+test('a finish unfolds no bubble, whatever the setting: Ledge says it in its point', async ({ page }) => {
+  const d = await fakeDaemon(page, [session('a', { name: 'Pim' })], { island: prefs() });
   await ready(page, 1);
-  d.upsert(session('a', { name: 'Pim', state: 'idle' }));
-  await page.waitForTimeout(1200);
-  await expectMode(page, 'handle');
-  d.island(prefs());
   d.upsert(session('a', { name: 'Pim', state: 'working' }));
   await page.waitForTimeout(100);
   d.upsert(session('a', { name: 'Pim', state: 'idle' }));
-  await expectMode(page, 'bubble');
-  await expect(layer(page, 'bubble')).toHaveAttribute('data-kind', 'finished');
+  await page.waitForTimeout(1200);
+  await expectMode(page, 'handle');
 });
 
 test('quick off: the ask card only opens in Ledge or waits; Y decides nothing', async ({ page }) => {

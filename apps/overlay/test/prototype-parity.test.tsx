@@ -81,7 +81,7 @@ describe('prototype parity', () => {
     expect(mode()).toBe('handle');
   });
 
-  it('an ask has no clock; a notice keeps the time it had left while held', () => {
+  it('an ask has no clock; a bot finishing afterwards unfolds nothing', () => {
     snapshot([otto(), pim(asks('git push'))]);
     render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
     tick(540);
@@ -93,17 +93,8 @@ describe('prototype parity', () => {
     expect(mode()).toBe('handle');
     update(otto({ state: 'idle' }));
     tick(540);
-    expect(screen.getByText('Otto finished')).toBeInTheDocument();
-    tick(1000);
-    fireEvent.mouseEnter(surface());
-    tick(5000);
-    expect(mode()).toBe('bubble');
-    fireEvent.mouseLeave(surface());
-    expect(document.querySelector('[data-timer]')).toHaveAttribute('data-remaining', '5000');
-    tick(4999);
-    expect(mode()).toBe('bubble');
-    tick(1);
     expect(mode()).toBe('handle');
+    expect(screen.queryByText('Otto finished')).toBeNull();
   });
 
   it('a late confirmation cannot steal focus', () => {

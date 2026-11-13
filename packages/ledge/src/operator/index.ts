@@ -150,7 +150,14 @@ export function createOperator(deps: OperatorDeps): Operator {
       tellNotices();
     },
     // A cursor never passes the newest event: a bad id would hide the events to come.
-    read(device, eventId) { journal.setCursor(device, Math.min(eventId, journal.lastId()), now()); },
+    // Reading the chat also ends « Plus tard » for that device (spec §7): its point is a notice again until it is settled.
+    read(device, eventId) {
+      journal.setCursor(device, Math.min(eventId, journal.lastId()), now());
+      const chat = threads.all().find(([id]) => id === device)?.[1];
+      const later = chat?.points().filter(({ point }) => point.laterAt) ?? [];
+      for (const { qid } of later) chat!.updatePoint(qid, ({ laterAt: _gone, ...p }) => p, emitOf(device));
+      if (later.length > 0) tellNotices();
+    },
     later(device, qid) {
       const chat = threads.all().find(([id]) => id === device)?.[1];
       chat?.updatePoint(qid, p => ({ ...p, laterAt: now() }), emitOf(device));

@@ -91,31 +91,6 @@ describe('<Surface>', () => {
     expect(surface()).toHaveAttribute('data-mode', 'bubble');
   });
 
-  it('hover, focus within and a hidden document pause a notice', async () => {
-    render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });
-    const timer = () => document.querySelector('[data-timer]');
-    expect(timer()).toHaveAttribute('data-paused', 'false');
-    fireEvent.mouseEnter(surface());
-    expect(timer()).toHaveAttribute('data-paused', 'true');
-    await act(async () => { vi.advanceTimersByTime(5000); });
-    expect(surface()).toHaveStyle({ width: '440px' });
-    fireEvent.mouseLeave(surface());
-    expect(timer()).toHaveAttribute('data-paused', 'false');
-    act(() => { screen.getByRole('button', { name: 'OK' }).focus(); });
-    expect(timer()).toHaveAttribute('data-paused', 'true');
-    act(() => { (document.activeElement as HTMLElement).blur(); });
-    expect(timer()).toHaveAttribute('data-paused', 'false');
-    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
-    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
-    expect(timer()).toHaveAttribute('data-paused', 'true');
-    hidden.mockReturnValue(false);
-    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
-    expect(timer()).toHaveAttribute('data-paused', 'false');
-    hidden.mockRestore();
-    await act(async () => { vi.advanceTimersByTime(6000); });
-    expect(surface()).toHaveStyle({ width: `${filetWidth()}px` });
-  });
 
   it('hovering the filet wakes it with Ledge alone, no list and no robots; the resident opens the chat', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
@@ -152,13 +127,11 @@ describe('<Surface>', () => {
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'chat.ask', qid: expect.any(String), text: 'How are the others doing?', tool: 'codex' }));
   });
 
-  it('a session that stops on an error, with nothing left to decide, unfolds an error notice', async () => {
+  it('a session that stops on an error unfolds no bubble: Ledge says it in its point', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => { mock.upsert(pim({ state: 'error', pending: undefined, lastError: 'the pane died' })); await sleep(50); vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveAttribute('data-mode', 'bubble');
-    expect(screen.getByText('Pim stopped on an error')).toBeInTheDocument();
-    expect(screen.getByText('the pane died')).toBeInTheDocument();
-    expect(document.querySelector('[data-timer]')).toBeTruthy();
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(screen.queryByText('Pim stopped on an error')).toBeNull();
   });
 
   it('a chat draft survives a daemon disconnect', async () => {
@@ -220,9 +193,7 @@ describe('<Surface>', () => {
     fireEvent.click(line()!);
     expect(opened).toEqual([{ kind: 'session', id: 'b' }]);
     off();
-    // The error's card unfolds and folds as before; the notch is asleep again behind it.
-    await act(async () => { vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    // No card for the error any more (the point says it); the notch falls asleep after its 5 s.
     await act(async () => { vi.advanceTimersByTime(6100); });
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     expect(surface()).not.toHaveAttribute('data-awake');
@@ -308,7 +279,7 @@ describe('<Surface>', () => {
     expect(surface()).toHaveAttribute('data-mode', 'handle');
   });
 
-  it('Ledge finishing an answer unfolds a finished bubble; Open goes to the chat', async () => {
+  it('Ledge finishing an answer unfolds no bubble: its balloon opens the chat', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
     await act(async () => {
       daemonStore.beginTurn({ qid: 'q1', question: 'How are the others doing?', askedAt: '2026-10-11T10:00:00.000Z', steps: [] });
@@ -316,13 +287,10 @@ describe('<Surface>', () => {
       daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: '2026-10-11T10:01:20.000Z' });
       await sleep(50);
     });
-    expect(surface()).toHaveStyle({ width: `${filetWidth()}px` });
     await act(async () => { vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '440px' });
-    const bubble = document.querySelector('[data-layer="bubble"]') as HTMLElement;
-    expect(bubble).toHaveTextContent('Ledge finished');
-    expect(bubble).toHaveTextContent('Deux bots travaillent.');
-    fireEvent.click(screen.getByRole('button', { name: 'Open in Ledge' }));
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(surface()).toHaveStyle({ width: `${filetWidth()}px` });
+    fireEvent.click(document.querySelector('[data-unread-say]') as HTMLElement);
     expect(surface()).toHaveAttribute('data-mode', 'chat');
     expect(document.querySelector('[data-layer="chat"]')).toHaveTextContent('Deux bots travaillent.');
   });
@@ -340,9 +308,6 @@ describe('<Surface>', () => {
     expect(MESSAGES.en.say.ledge).toContain(say().textContent);
     expect(say()).toHaveStyle({ opacity: '1' });
     await act(async () => { vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveAttribute('data-mode', 'bubble');
-    expect(say()).toHaveStyle({ opacity: '0' });
-    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     expect(say()).toHaveStyle({ opacity: '1' });
     fireEvent.click(say());
@@ -366,20 +331,11 @@ describe('<Surface>', () => {
     expect(say()).not.toHaveStyle({ opacity: '1' });
   });
 
-  it('a bot that finishes its task (working → idle) unfolds a finished bubble that folds after 6 s', async () => {
-    // A frozen clock: with shouldAdvanceTime, the real time a loaded machine spends rendering would count toward the 6 s.
-    vi.useFakeTimers({ shouldAdvanceTime: false });
+  it('a bot that finishes its task (working → idle) unfolds no bubble: the point says it', async () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={() => {}} />);
-    // The socket is real: wait for the update itself, on real time, without moving the frozen clock.
-    await act(async () => { mock.upsert(pim({ state: 'idle' })); await vi.waitFor(() => expect(daemonStore.getState().byId.get('b')?.state).toBe('idle')); });
+    await act(async () => { mock.upsert(pim({ state: 'idle' })); await sleep(50); vi.advanceTimersByTime(540); });
     expect(surface()).toHaveAttribute('data-mode', 'handle');
-    await act(async () => { vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveStyle({ width: '440px' });
-    expect(screen.getByText('Pim finished')).toBeInTheDocument();
-    await act(async () => { vi.advanceTimersByTime(5900); });
-    expect(surface()).toHaveStyle({ width: '440px' });
-    await act(async () => { vi.advanceTimersByTime(200); });
-    expect(surface()).toHaveAttribute('data-mode', 'handle');
+    expect(screen.queryByText('Pim finished')).toBeNull();
   });
 
   it('an ask that folds back speaks no balloon; Ledge’s unread reply still does', async () => {
@@ -514,7 +470,6 @@ describe('<Surface> island', () => {
       daemonStore.apply({ type: 'chat.done', qid: 'q1', text: 'Deux bots travaillent.', at: '2026-10-11T10:01:20.000Z' });
       await sleep(50); vi.advanceTimersByTime(540);
     });
-    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
     expect(surface()).toHaveStyle({ width: `${filetWidth()}px` });
     const say = document.querySelector('[data-unread-say]') as HTMLElement;
     expect(say).toHaveAttribute('data-say-kind', 'ledge');

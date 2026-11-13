@@ -112,6 +112,20 @@ describe('createOperator', () => {
     operator.stop();
   });
 
+  it('a point set aside with later comes back once the device reads its chat', async () => {
+    const { operator, desktop } = setup();
+    operator.record(request);
+    await vi.advanceTimersByTimeAsync(0);
+    const qid = desktop.points()[0]!.qid;
+    operator.later('desktop', qid);
+    expect(pointsOf(desktop)[0]!.laterAt).toBeDefined();
+    expect(operator.notices().filter(n => n.kind === 'point')).toEqual([]);
+    operator.read('desktop', 1);
+    expect(pointsOf(desktop)[0]!.laterAt).toBeUndefined();
+    expect(operator.notices().map(n => n.id)).toEqual([`point:${qid}`]);
+    operator.stop();
+  });
+
   it('settle updates the posted item and folds the point', async () => {
     const { operator, desktop, phone, emitted } = setup();
     operator.record(request);

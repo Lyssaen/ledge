@@ -12,7 +12,7 @@ function fleetClient() {
   const sent: Array<{ machine: string; msg: ClientMessage }> = [];
   let notices: ReadonlyMap<string, OperatorNotice[]> = new Map();
   const listeners = new Set<() => void>();
-  const machines = [{ id: 'local', label: 'Local', status: 'open', ready: true }, { id: 'dev', label: 'Devbox', status: 'open', ready: true }];
+  let machines = [{ id: 'local', label: 'Local', status: 'open', ready: true }, { id: 'dev', label: 'Devbox', status: 'open', ready: true }];
   const fleet = {
     selected: () => 'local', select() {}, terminal: () => null, turnMachine: () => machines[0], configure() {}, probe: async () => ({}), retry() {},
     subscribe: (fn: () => void) => { listeners.add(fn); return () => listeners.delete(fn); },
@@ -21,7 +21,9 @@ function fleetClient() {
   };
   const client = { connect() {}, close() {}, send: (msg: ClientMessage) => { if (msg.type !== 'session.thread') sent.push({ machine: 'any', msg }); }, status: () => 'open', onMessage: () => () => {}, onStatus: () => () => {}, fleet } as unknown as DaemonClient;
   const set = (next: Record<string, OperatorNotice[]>) => act(() => { notices = new Map(Object.entries(next)); listeners.forEach(fn => fn()); });
-  return { client, sent, set };
+  /** A machine drops or comes back: a new list, as the fleet gives one. */
+  const ready = (id: string, on: boolean) => act(() => { machines = machines.map(m => (m.id === id ? { ...m, ready: on, status: on ? 'open' : 'closed' } : m)); listeners.forEach(fn => fn()); });
+  return { client, sent, set, ready };
 }
 
 const point = (qid: string, at: string): OperatorNotice => ({ id: `point:${qid}`, kind: 'point', qid, text: 'Deux choses pour toi : **pilot-lead** attend ta décision sur #309, et **Rex** a fini.', priority: 'routine', at });
@@ -99,5 +101,42 @@ describe('the notch speaks for the operator', () => {
     tick(540);
     expect(sentence()).toHaveTextContent('Nova wants to run pnpm -r test -u');
     expect(document.querySelector('[data-layer="bubble"]')).toHaveAttribute('data-kind', 'ask');
+  });
+
+  it('the notice\'s machine offline: Plus tard and Voir le point are disabled and say why', () => {
+    snapshot([]); mount();
+    f.set({ dev: [point('p1', '2026-11-13T14:32:00.000Z')] });
+    tick(540);
+    f.ready('dev', false);
+    for (const name of ['Later', 'See the point']) {
+      const b = screen.getByRole('button', { name });
+      expect(b).toBeDisabled();
+      expect(b).toHaveAttribute('title', 'Offline: reconnecting to the daemon');
+    }
+  });
+});
+
+describe('the one notice left in the bubble: a machine that dropped', () => {
+  it('hover, focus within and a hidden document pause its clock', () => {
+    snapshot([]); mount();
+    f.ready('dev', false);
+    tick(540);
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    const timer = () => document.querySelector('[data-timer]');
+    expect(timer()).toHaveAttribute('data-paused', 'false');
+    fireEvent.mouseEnter(surface());
+    expect(timer()).toHaveAttribute('data-paused', 'true');
+    tick(7000);
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    fireEvent.mouseLeave(surface());
+    expect(timer()).toHaveAttribute('data-paused', 'false');
+    act(() => { screen.getByRole('button', { name: 'OK' }).focus(); });
+    expect(timer()).toHaveAttribute('data-paused', 'true');
+    act(() => { (document.activeElement as HTMLElement).blur(); });
+    expect(timer()).toHaveAttribute('data-paused', 'false');
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(timer()).toHaveAttribute('data-paused', 'true');
+    hidden.mockRestore();
   });
 });

@@ -17,8 +17,8 @@ const tracked = (s: Session) => !!s.pending && (isPending(s) || s.state === 'err
  * decision. Every `error` reply that names a session is shown as that session's failure (the daemon only sends them in
  * answer to this client's commands), and a rejected free-text reply hands its text back through `onReplyRejected`.
  */
-export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; lastError: DaemonError | null; dnd: boolean; dispatch: (e: SurfaceEvent) => void; finishedBubble: boolean; onChange?: (c: SessionChange, info: { elapsedMs?: number }) => void; onReplyRejected?: (id: string, text: string) => void }) {
-  const { sessions, status, lastError, dnd, dispatch, finishedBubble } = o;
+export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; lastError: DaemonError | null; dnd: boolean; dispatch: (e: SurfaceEvent) => void; onChange?: (c: SessionChange, info: { elapsedMs?: number }) => void; onReplyRejected?: (id: string, text: string) => void }) {
+  const { sessions, status, lastError, dnd, dispatch } = o;
   const { t } = useI18n();
   const msg = useRef(t); msg.current = t;
   const prev = useRef<Map<string, Session>>(new Map());
@@ -61,7 +61,6 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
         const elapsedMs = change.kind === 'finished' && since !== undefined ? Date.now() - since : undefined;
         if (change.kind === 'finished') workingSince.current.delete(s.id);
         onChange.current?.(change, { elapsedMs });
-        if (change.kind === 'finished' && finishedBubble && !dnd) dispatch({ type: 'finished', id: s.id });
       }
       const wasTracked = !!was && tracked(was);
       // A fresh request: whatever failed before it (a rejected reply, say) no longer applies.
@@ -76,7 +75,7 @@ export function useDaemonAsks(o: { sessions: Session[]; status: DaemonStatus; la
         fail(s.id, s.lastError ?? msg.current.notTaken);
     }
     prev.current = now;
-  }, [sessions, dnd, finishedBubble, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps -- release/fail only touch refs and setters
+  }, [sessions, dnd, dispatch]); // eslint-disable-line react-hooks/exhaustive-deps -- release/fail only touch refs and setters
 
   // An `error` reply about a decision in flight fails it (the surface shows why and unlocks the actions); about any other
   // command for a session (a reply to an idle session, say) it is shown as that session's failure. A rejected reply
