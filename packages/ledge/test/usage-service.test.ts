@@ -107,6 +107,44 @@ describe('the usage service: Claude Code', () => {
     expect(refused.svc.state().harnesses[0]).toMatchObject({ status: 'expired', windows: [], cause: 'refused' });
   });
 
+  it('#301 review: an expired token keeps the last values only for the same account, confirmed; another one, or one not known, drops them and the refusal', async () => {
+    let t = T0, creds = { accessToken: 'tok-A', expiresAt: T0 + 8 * 3_600_000 }, acct: string | null = 'acc-A', status = 200;
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: creds });
+      if (p.endsWith('.claude.json')) { if (acct === null) throw new Error('ENOENT'); return JSON.stringify({ oauthAccount: { accountUuid: acct } }); }
+      throw new Error('ENOENT');
+    };
+    const make = () => createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async () => ({ status, body: status === 200 ? JSON.stringify(API) : '', headers: {} }) });
+    // A is read, then B signs in with a token already past its time: A's windows are not shown under B.
+    let svc = make();
+    await svc.tick();
+    expect(svc.state().harnesses[0]!.windows.length).toBeGreaterThan(0);
+    t += 60_000; creds = { accessToken: 'tok-B', expiresAt: t - 1 }; acct = 'acc-B';
+    await svc.tick();
+    expect(svc.state().harnesses).toEqual([]);
+    expect(svc.state().alerts).toEqual([]);
+    // The same account, its token past its time: its values stay.
+    t = T0; creds = { accessToken: 'tok-A', expiresAt: T0 + 8 * 3_600_000 }; acct = 'acc-A';
+    svc = make();
+    await svc.tick();
+    t += 60_000; creds = { accessToken: 'tok-A', expiresAt: t - 1 };
+    await svc.tick();
+    expect(svc.state().harnesses[0]).toMatchObject({ status: 'stale', cause: 'local_expired' });
+    // The account cannot be told: nothing is shown.
+    acct = null;
+    t += 11 * 60_000; await svc.tick();
+    expect(svc.state().harnesses).toEqual([]);
+    // A refused (401), then B with an expired token: A's refusal is not B's.
+    t = T0; creds = { accessToken: 'tok-A', expiresAt: T0 + 8 * 3_600_000 }; acct = 'acc-A'; status = 401;
+    svc = make();
+    await svc.tick();
+    expect(svc.state().harnesses[0]).toMatchObject({ status: 'expired', cause: 'refused' });
+    t += 60_000; creds = { accessToken: 'tok-B', expiresAt: t - 1 }; acct = 'acc-B';
+    await svc.tick();
+    expect(svc.state().harnesses).toEqual([]);
+  });
+
   it('#301: a token past its time after a read keeps the last values as stale, said local_expired, then the harness leaves the list past an hour', async () => {
     let t = T0, expiresAt = T0 + 60_000;
     const calls: string[] = [];

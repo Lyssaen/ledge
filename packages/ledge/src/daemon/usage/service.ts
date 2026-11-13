@@ -208,7 +208,14 @@ export function createUsage(deps: UsageDeps): UsageService {
       account = token !== 'expired' && token.from === 'env' ? null : await readClaudeAccount(home, deps.read);
       accountAt = now(); accountOf = which;
     }
-    if (token === 'expired') { localExpired = true; return; }
+    if (token === 'expired') {
+      localExpired = true;
+      // The last values stay only for the account they were read for, confirmed (#301 review): an expired token carries no hash to
+      // compare, so the account must be read and be the same. Another account, or one that cannot be told, drops them, and the
+      // previous account's refusal with them: never shown under someone else.
+      if (account === null || account !== identityOf) { windows = []; readAt = null; refused = false; identityOf = account; }
+      return;
+    }
     // A valid token again (Claude Code signed in again): its own expiry is over; a refusal of this account still stands.
     localExpired = false;
     // The windows belong to the account they were read for: Claude Code refreshing its token keeps them, another account signed
