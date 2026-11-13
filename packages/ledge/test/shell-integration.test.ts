@@ -116,6 +116,21 @@ describe('#299: the scripts, run', () => {
     expect(out).not.toMatch(/command not found|No such file/);
   });
 
+  it.runIf(has('bash'))('bash: a line history left out (HISTCONTROL=ignoreboth) has no E, never a wrong one; its run is still marked', () => {
+    const d = dir(); const home = dir();
+    writeFileSync(join(home, '.bash_profile'), 'HISTCONTROL=ignoreboth\nPROMPT_COMMAND="history -a;$PROMPT_COMMAND"\n');
+    const out = bash(home, d, 'echo a | cat\necho a | cat\n ls / | wc -l\nfalse\n');
+    const m = once(marks(out));
+    const from = m.indexOf(`E;echo a | cat;${NONCE}`);
+    expect(m.slice(from, from + 13)).toEqual([
+      `E;echo a | cat;${NONCE}`, 'C', 'D;0', expect.stringMatching(/^P;Cwd=/), 'A', 'B',
+      'C', 'D;0', expect.stringMatching(/^P;Cwd=/), 'A', 'B', // the same line again: not kept, no E
+      'C', 'D;0' // a leading space: not kept, no E
+    ]);
+    expect(m.some(x => x.startsWith('E;echo a;') || x.startsWith('E;ls;'))).toBe(false);
+    expect(m).toContain(`E;false;${NONCE}`);
+  });
+
   it.runIf(has('bash'))('bash: a DEBUG trap of the person\'s own still runs, and the commands are still marked', () => {
     const d = dir(); const home = dir();
     writeFileSync(join(home, '.bash_profile'), 'trap \'echo "MINE:$BASH_COMMAND" >> ~/trap.log\' DEBUG\n');

@@ -53,6 +53,8 @@ __ledge_nonce="$LEDGE_SHELL_NONCE"
 unset LEDGE_SHELL_NONCE
 __ledge_cmd=0
 __ledge_ready=0
+# Empty, never unset: its substring in PS1 is how the prompt arms the next command (an unset one would skip the arithmetic).
+__ledge_z=
 __ledge_esc() {
   local s="$1"
   s=\${s//\\\\/\\\\\\\\}; s=\${s//;/\\\\x3b}
@@ -64,33 +66,32 @@ __ledge_precmd() {
   [ "$__ledge_cmd" = 1 ] && printf '\\e]633;D;%s\\a' "$code"
   __ledge_cmd=0
   printf '\\e]633;P;Cwd=%s\\a' "$(__ledge_esc "$PWD")"
-  # The prompt the person's files set (some set it again before each prompt), wrapped in A and B.
+  # The prompt the person's files set (some set it again before each prompt), wrapped in A and B. Its expansion, the last thing bash
+  # does before reading the line, arms the next command (an arithmetic assignment, in this shell, printing nothing): whatever runs
+  # before it in PROMPT_COMMAND is never taken for the person's command.
   if [[ "$PS1" != *'633;B'* ]]; then
     __ledge_ps1="$PS1"
-    PS1='\\[\\e]633;A\\a\\]'"$__ledge_ps1"'\\[\\e]633;B\\a\\]'
+    PS1='\\[\\e]633;A\\a\\]'"$__ledge_ps1"'\\[\\e]633;B\\a\\]\${__ledge_z:0:\$((__ledge_ready=1,0))}'
   fi
   __ledge_hist="$(HISTTIMEFORMAT= builtin history 1)"
-  __ledge_boot=0
-  # Last: from here the next command is the person's.
-  __ledge_ready=1
 }
 __ledge_preexec() {
   local rc="\${1:-0}"
   [ "$__ledge_ready" = 1 ] || return "$rc"
   # A command of Ledge's own functions, or of this file while it is sourced, is not the person's.
   [[ "\${FUNCNAME[1]}" == __ledge_* || "\${BASH_SOURCE[1]}" == "$__ledge_file" ]] && return "$rc"
-  local line h
-  h="$(HISTTIMEFORMAT= builtin history 1)"
-  # Right after the boot, the rest of the first PROMPT_COMMAND still runs: only a line the person typed (a new history entry) counts.
-  if [ "$__ledge_boot" = 1 ]; then [ -n "$h" ] && [ "$h" != "$__ledge_hist" ] || return "$rc"; fi
   __ledge_ready=0
-  __ledge_boot=0
   # The prompt's own commands: an empty line ran nothing.
   [ "$BASH_COMMAND" = '__ledge_status=$?' ] && return "$rc"
   __ledge_cmd=1
-  # The line the person typed when history kept it; else the command bash is about to run.
-  if [ -n "$h" ] && [ "$h" != "$__ledge_hist" ]; then line="$(printf '%s' "$h" | sed -E '1s/^ *[0-9]+\\*? *//')"; else line="$BASH_COMMAND"; fi
-  printf '\\e]633;E;%s;%s\\a\\e]633;C\\a' "$(__ledge_esc "$line")" "$__ledge_nonce"
+  local h
+  h="$(HISTTIMEFORMAT= builtin history 1)"
+  # The line the person typed, only when history kept it (a new entry). A line it left out (HISTCONTROL: a leading space, the same
+  # line again; history off) has no E: no command line is better than a wrong one.
+  if [ -n "$h" ] && [ "$h" != "$__ledge_hist" ]; then
+    printf '\\e]633;E;%s;%s\\a' "$(__ledge_esc "$(printf '%s' "$h" | sed -E '1s/^ *[0-9]+\\*? *//')")" "$__ledge_nonce"
+  fi
+  printf '\\e]633;C\\a'
   return "$rc"
 }
 if [[ "$(declare -p PROMPT_COMMAND 2>/dev/null)" == "declare -a"* ]]; then
@@ -109,10 +110,9 @@ else
   trap '__ledge_preexec "$?"' DEBUG
 fi
 unset __ledge_ut
-# This first prompt is already under way: it gets its marks now; the rest of its PROMPT_COMMAND is not a command of the person's.
+# This first prompt is already under way: it gets its marks now (its PS1 arms the first command).
 __ledge_status=0
 __ledge_precmd
-__ledge_boot=1
 fi
 `;
 

@@ -1,8 +1,9 @@
 // #299: `ledge shell [--nonce <hex32>] <dir>` prints the POSIX line that starts the person's login shell in <dir> with Ledge's
 // integration (OSC 633 marks, E signed with the nonce). It starts nothing itself: Desktop's shell runs
-//   sh -c 'eval "$(<launcher> shell --nonce N <dir>)"; exec <login shell> -l'
+//   sh -c 'l=$(<launcher> shell --nonce N <dir> 2>/dev/null); case $l in ": ledge-shell; "*) eval $l;; esac; …; exec <login> -l'
 // so no Node process stays the shell's parent (Node cannot exec), and a failure here leaves the plain shell of the second half.
-// On failure nothing goes to stdout (the eval stays harmless): the reason on stderr, a code that is not 0.
+// The line starts with MARK (« : » does nothing): Desktop evals only a line that does, never noise or an older ledge's output.
+// On failure nothing goes to stdout: the reason on stderr, a code that is not 0.
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { paths } from '../paths.js';
@@ -10,6 +11,8 @@ import { withIntegration } from '../term/shellIntegration.js';
 
 const quote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** The head of every line printed: Desktop checks it before the eval. */
+export const MARK = ': ledge-shell; ';
 
 /** The person's login shell: theirs in passwd, else $SHELL, else /bin/sh. */
 function loginShell(env: NodeJS.ProcessEnv): string {
@@ -41,9 +44,9 @@ export function shellLine(args: string[], deps: { env?: NodeJS.ProcessEnv; shell
   const raw = rest[0]!;
   const dir = home && (raw === '~' || raw.startsWith('~/')) ? home + raw.slice(1) : raw;
   const go = `cd ${quote(dir)} 2>/dev/null || cd`;
-  if (!plan) return { line: `${go}; exec ${quote(shell)} -l` };
+  if (!plan) return { line: `${MARK}${go}; exec ${quote(shell)} -l` };
   const exports = Object.entries(plan.env).filter(([k, v]) => flat[k] !== v && NAME.test(k)).map(([k, v]) => `export ${k}=${quote(v)}`);
-  return { line: [go, ...exports, `exec ${plan.command.map(quote).join(' ')}`].join('; ') };
+  return { line: MARK + [go, ...exports, `exec ${plan.command.map(quote).join(' ')}`].join('; ') };
 }
 
 export function shell(args: string[]): number {
