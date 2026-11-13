@@ -79,3 +79,60 @@ test('on an iPad the list and the request sit side by side, either way up', asyn
   await expect.poll(() => h.daemon.typed.length).toBe(1);
   await expect(page.getByRole('heading', { name: copy.split.request.title })).toBeVisible({ timeout: 10_000 });
 });
+
+// The Ledge pane (m3-chat.html §7, Q36): the rail's button opens 400 px on the right over any tab; on its side the tablet makes
+// room for it (the list keeps 380 px), upright it goes over the detail; only its buttons close it, and the device keeps it.
+test('the Ledge pane opens from the rail, beside the panes on its side, over the detail upright', async ({ page, browserName }) => {
+  // Its own PC: the file's one is already paired with the first test's page.
+  const h = await startHarness();
+  h.daemon.chat = true;
+  try {
+    await page.goto(h.url);
+    await page.getByRole('link', { name: copy.login.github }).click();
+    await page.getByRole('button', { name: copy.recover.code }).click();
+    await h.pc.code();
+    await page.getByRole('button', { name: copy.compare.same }).click();
+    h.pc.ok();
+    await page.getByRole('link', { name: copy.compare.seePending }).click();
+    const rail = page.getByRole('navigation', { name: copy.nav.label });
+    await rail.getByRole('link', { name: copy.nav.sessions }).click();
+    const ledge = rail.getByRole('button', { name: copy.nav.chat });
+    await ledge.click();
+    await expect(ledge).toHaveAttribute('aria-pressed', 'true');
+    await expect(rail.getByRole('link', { name: copy.nav.sessions })).toHaveAttribute('aria-current', 'page');
+    const pane = page.getByRole('complementary', { name: copy.chat.title });
+    await expect(pane.getByLabel(copy.chat.field)).toBeVisible();
+    await expect(page).toHaveURL(/#\/sessions$/);
+
+    // On its side: the pane beside the two panes, the list still 380 px, the detail ending where the pane starts.
+    const width = page.viewportSize()!.width;
+    const box = (await pane.boundingBox())!;
+    expect.soft(box.width).toBe(400);
+    expect.soft(box.x + box.width).toBe(width);
+    const list = (await page.locator('.split-list').boundingBox())!;
+    expect.soft(list.width).toBe(380);
+    const split = (await page.locator('.split').boundingBox())!;
+    expect.soft(split.x + split.width).toBeLessThanOrEqual(box.x + 1);
+    await shot(page, 'ledge-pane', browserName);
+
+    // A tap outside does not close it; upright it goes over the detail, the list keeping its 330 px.
+    await page.locator('.split-detail').click({ position: { x: 20, y: 200 } });
+    await expect(pane).toBeVisible();
+    await page.setViewportSize({ width: 834, height: 1194 });
+    const upright = (await pane.boundingBox())!;
+    expect.soft(upright.x + upright.width).toBe(834);
+    const under = (await page.locator('.split').boundingBox())!;
+    expect.soft(under.x + under.width).toBeGreaterThan(upright.x + 300);
+    expect.soft((await page.locator('.split-list').boundingBox())!.width).toBe(330);
+    await shot(page, 'ledge-pane-portrait', browserName);
+
+    // Kept on the device; « Fermer le volet » closes it.
+    await page.reload();
+    await expect(pane).toBeVisible();
+    await pane.getByRole('button', { name: copy.chat.pane.close }).click();
+    await expect(pane).toBeHidden();
+    await expect(ledge).toHaveAttribute('aria-pressed', 'false');
+  } finally {
+    await h.close();
+  }
+});

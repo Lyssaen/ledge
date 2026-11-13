@@ -99,7 +99,9 @@ describe('the Atelier tab', () => {
     wide(true);
     const { unmount } = render(<App link={t.link} store={t.store} storage={t.storage} fetchImpl={meStub() as unknown as typeof fetch} />);
     const nav = () => screen.getByRole('navigation', { name: copy.nav.label });
-    expect(within(nav()).getAllByRole('link').map(a => a.textContent?.replace(/\d+$/, ''))).toEqual([copy.nav.atoi, copy.nav.sessions, copy.nav.prs, copy.nav.rigs, copy.nav.atelier, copy.nav.chat, copy.nav.settings]);
+    // Ledge is the pane's button there, not a link (m3-chat.html §7).
+    expect(within(nav()).getAllByRole('link').map(a => a.textContent?.replace(/\d+$/, ''))).toEqual([copy.nav.atoi, copy.nav.sessions, copy.nav.prs, copy.nav.rigs, copy.nav.atelier, copy.nav.settings]);
+    expect(within(nav()).getByRole('button', { name: copy.nav.chat })).toBeInTheDocument();
     expect(within(nav()).getByRole('link', { name: copy.nav.atelier })).toHaveAttribute('href', '#/atelier');
     unmount();
     wide(false);
