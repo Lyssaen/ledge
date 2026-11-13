@@ -182,6 +182,15 @@ A daemon-side **notification router** replaces per-session sources:
 - Phone: `mobile/push/triggers.ts` keeps immediate pushes but titles them from Ledge (title « Ledge », body the sentence);
   `finished` pushes are removed, replaced by one push per point (body = the point's first line, url = the Ledge tab at
   that turn). The one-minute spacing and the « app in front: no push » rule stay.
+  - The phone's setting `notify.finished` becomes « Le point de Ledge » (user decision 2026-11-13, mockup board 10).
+    The stored key may stay `finished`, with a renamed label and hint, or migrate to `point`; that is the builder's choice.
+    `quietUntil` (Pause) silences the point push too. Rig asks use the existing `request`/`question` kinds, and a
+    request settled elsewhere keeps today's `resolved` behaviour.
+- **Several machines** (user decision 2026-11-13): every daemon runs its own wakes and writes its own point. Desktop's
+  chat panel shows each point labelled with its machine name once more than one machine is linked. The notch shows the
+  most urgent sentence among the machines, by `SAY_PRIORITY` and then the newest. Each phone gets the point of the PC it
+  is paired with. A remote daemon whose chat harness is not signed in posts its point with the daemon-written lead
+  sentence.
 - A request settled elsewhere before the user sees the point: its line leaves the point and leaves a one-line receipt
   « réglé dans le terminal » (or « réglé sur le téléphone ») (user decision 2026-11-13).
 
@@ -204,6 +213,7 @@ A daemon-side **notification router** replaces per-session sources:
 
 - Operator on notch and phone; Ledge is the notch's only notifier (2026-11-13).
 - SQLite where useful (2026-11-13); the database holds the journal, cursors and wakes only (my proposal, accepted).
+- One point per machine; the phone setting becomes « Le point de Ledge » (2026-11-13, board 10 to validate).
 - Mockup boards 1-7, 9 validated; « Plus tard » and settled-elsewhere behaviours as above; level 3 deferred (2026-11-13).
 
 ## Left to the builder
