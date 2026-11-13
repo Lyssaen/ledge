@@ -62,6 +62,7 @@ import { BroadcastDialog } from './broadcast/BroadcastDialog';
 import { AgentTerminalPlace, ChangesPlace, FreeShellPlace, loadedWorkspace, loadWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs, viewShown, type SessionPrefs, type SessionView } from './session/prefs';
+import { getDefaultView, startViewOf, useDefaultView } from './session/defaultView';
 import { useStored } from './state/useStored';
 import { ptyBackend } from './term/backend';
 import { paintScreen } from './term/paint';
@@ -257,7 +258,11 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // The section the Settings tab was last left on (set below, as the place changes): where Ctrl+, and the tab bring it back.
   const lastSettings = useRef<SectionId>('general');
   const dispatch = useCallback((a: NavAction) => {
-    const r = routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: ideNow.current.nav.modal !== null, openSession: ideNow.current.openSession, lastSettings: lastSettings.current });
+    const r = routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: ideNow.current.nav.modal !== null, openSession: ideNow.current.openSession, lastSettings: lastSettings.current,
+      // A new session tab starts on « Vue par défaut d'une session » (#300) when that is the Terminal and the session has a live
+      // screen (startViewOf): the tab's view, OMP's rule and « no terminal → Fil » keep their priority, and changing the setting
+      // leaves open tabs alone.
+      startView: id => { const s = knownNow.current.find(x => x.id === id); return s && startViewOf(s, getDefaultView(), canShowScreen(s)) === 'terminal' ? 'terminal' : undefined; } });
     if (r.nav) navDispatch(r.nav);
     // The right panel is `layout.right`, never `nav.chat`: asking for the chat only bumps `chatFocus` (its field takes the
     // focus), and `nav.chat` goes straight back to false, or the single keys, Alt + 1…9 and the screen's Escape would stay off.
@@ -314,6 +319,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const [sessionPrefs, setSessionPrefs] = useStored(loadSessionPrefs, saveSessionPrefs);
   // The sessions as last rendered: whether a « Terminal » asked by id is an OMP seat's.
   const knownNow = useRef<readonly Session[]>([]);
+  /** A terminal backend for `s`'s machine (AgentView's useHasBackend, read when a tab opens): a pseudo-terminal here, or its daemon
+   *  streams panes. Without one « Vue par défaut : Terminal » opens on the Fil (#300 review). */
+  const canShowScreen = (s: Pick<Session, 'machineId'>) => ptyBackend() !== null || machinesNow.current.find(m => m.id === (s.machineId ?? 'local'))?.daemon?.terminalStream === true;
   // The view an OMP seat's visit chose (viewShown): « Fil » holds while its page stays open, the preference left alone.
   const [seatView, setSeatView] = useState<{ id: string; view: SessionView } | null>(null);
   // Every « Terminal » (the session menu, a chat card, the island) opens the session's page on its Terminal view, the agent's screen.
@@ -505,21 +513,22 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // In the IDE, the front tab of the focused group on its own view, never the stored preference.
   watching.current = () => watchedTab({ focused: document.hasFocus(), front, session: front && known.find(s => s.id === front.ref), helper: place.kind === 'session' && place.id === front?.ref ? place.helper : undefined });
   useEffect(preloadPlaces, []);
-  // An OMP seat of OpenRig (design-ux, 2026-11-03 12:23Z): running, always on its Terminal view, « Fil » for the visit only;
-  // stopped, on « Fil ». Its view changes never touch the preference.
-  const ompSeat = session !== null && isOmpSeat(session);
-  const sessionView = viewShown(session, sessionPrefs.view, seatView);
+  // The view a session's page opens on (#300): « Vue par défaut d'une session » (Settings › General), which replaces the memory
+  // of the last view. A view changed on the page lasts for that visit (`seatView`), for every session now. An OMP seat of OpenRig
+  // (design-ux, 2026-11-03 12:23Z) keeps its rule: running, its Terminal view, « Fil » for the visit only; stopped, « Fil ».
+  const defaultView = useDefaultView();
+  const sessionView = seatView && session && seatView.id === session.id ? viewShown(session, seatView.view, seatView) : session ? startViewOf(session, defaultView, canShowScreen(session)) : defaultView;
   const placeId = place.kind === 'session' ? place.id : null;
   useEffect(() => { setSeatView(v => (v && v.id !== placeId ? null : v)); }, [placeId]);
-  // Any other session gets the preference itself, and both stay stable across renders: the page renders only for what it shows.
+  // Stable across renders: the page renders only for what it shows.
   const shownPrefs = useMemo(() => (sessionView === sessionPrefs.view ? sessionPrefs : { ...sessionPrefs, view: sessionView }), [sessionPrefs, sessionView]);
   const shown = useRef({ prefs: shownPrefs, seat: null as string | null });
-  shown.current = { prefs: shownPrefs, seat: ompSeat ? session.id : null };
+  shown.current = { prefs: shownPrefs, seat: session?.id ?? null };
   const setShownPrefs = useCallback((fn: (p: SessionPrefs) => SessionPrefs) => {
     const { prefs, seat } = shown.current;
-    if (seat === null) { setSessionPrefs(fn); return; }
     const { view, ...rest } = fn(prefs);
-    if (view !== prefs.view) setSeatView({ id: seat, view });
+    // The view is this visit's, never stored (#300: the setting replaces the memory of the last view).
+    if (view !== prefs.view && seat !== null) setSeatView({ id: seat, view });
     if ((Object.keys(rest) as (keyof typeof rest)[]).some(k => rest[k] !== prefs[k])) setSessionPrefs(x => ({ ...x, ...rest }));
   }, [setSessionPrefs]);
   // An IDE session tab's prefs (R6): its own view, from the model (a change goes there, never to desktop.session), no right

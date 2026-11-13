@@ -28,13 +28,15 @@ export function loadSessionPrefs(): SessionPrefs {
   const r = isRecord(raw) ? raw : {};
   const { split, termWidth } = r;
   return {
-    view: r.view === 'terminal' ? 'terminal' : 'thread',
+    // The page's view comes from « Vue par défaut d'une session » now; a view stored by an older Ledge is ignored.
+    view: 'thread',
     terminal: r.terminal === true,
     split: typeof split === 'number' && split >= SPLIT_MIN && split <= SPLIT_MAX ? split : 0.5,
     termWidth: typeof termWidth === 'number' && termWidth >= TERM_MIN && termWidth <= TERM_MAX ? termWidth : TERM_WIDTH
   };
 }
-export function saveSessionPrefs(p: SessionPrefs): void { writeJson(SESSION_KEY, p); }
+/** The view is not kept (#300): a session opens on « Vue par défaut d'une session » (session/defaultView.ts). */
+export function saveSessionPrefs(p: SessionPrefs): void { const { view: _view, ...kept } = p; writeJson(SESSION_KEY, kept); }
 
 /** The view `s`'s page shows: the preference, but for an OMP seat of OpenRig, which has no thread (design-ux, 2026-11-03 12:23Z):
  *  running, its Terminal view, unless this visit chose « Fil » (`visit`); stopped, « Fil », where its page says its terminal is gone. */

@@ -39,8 +39,9 @@ describe('the session place, the subagent page, the terminal', () => {
     expect(loadSessionPrefs()).toEqual({ view: 'thread', terminal: false, split: 0.5, termWidth: 0.46 });
     localStorage.setItem(SESSION_KEY, JSON.stringify({ view: 'changes', terminal: 'yes', split: 0.9, termWidth: 0.9 }));
     expect(loadSessionPrefs()).toEqual({ view: 'thread', terminal: false, split: 0.5, termWidth: 0.46 });
+    // #300: a view stored by an older Ledge is ignored; the page opens on « Vue par défaut d'une session ».
     localStorage.setItem(SESSION_KEY, JSON.stringify({ view: 'terminal', terminal: true, split: 0.65, termWidth: 0.6 }));
-    expect(loadSessionPrefs()).toEqual({ view: 'terminal', terminal: true, split: 0.65, termWidth: 0.6 });
+    expect(loadSessionPrefs()).toEqual({ view: 'thread', terminal: true, split: 0.65, termWidth: 0.6 });
     expect(OBSOLETE_KEYS).not.toContain(SESSION_KEY);
   });
 

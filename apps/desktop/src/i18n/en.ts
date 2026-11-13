@@ -345,6 +345,8 @@ export const en: Messages = {
       autostartMissing: 'Not offered here: only the installed app can start with Windows.',
       autostartFailed: 'Windows did not take this setting.', autostartOff: 'No start with Windows',
       tool: 'Default agent', toolHint: 'For Ledge’s chat and its cards.', toolSaved: (name) => `Default agent: ${name}`,
+      view: 'Default session view', viewHint: 'The view a new session opens on. A running OMP seat always opens on the Terminal; a machine without a terminal, on the Thread.',
+      viewSaved: (v) => `Default view: ${v}`,
       context: 'Max context', contextHint: 'Past it, a session is near its limit: « Your turn » offers to hand it over, and Ledge relieves on its own a session that works without asking.',
       usageAlert: 'Usage limit alert', usageAlertHint: 'Past it, Ledge Desktop tells you once that a harness usage window (5 h, week, per model) is nearing its limit. Limits are the account’s, read on each machine.',
       usageAlertSaved: (pct) => `Usage limit alert: ${pct} %`, usageAlertUnknown: 'No machine gives its harnesses’ limits yet: update Ledge, or sign in to Claude Code.',
