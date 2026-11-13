@@ -187,9 +187,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @media (min-width: 768px) and (min-height: 501px) and (orientation: portrait) {
   .split { grid-template-columns: 330px minmax(0, 1fr); }
   .split[data-split="prs"] { grid-template-columns: 290px minmax(0, 1fr); }
+  /* Sessions upright (t-tablette.html §2): the detail, 414 px wide, keeps 18 px on each side, as the phone does. */
+  .split[data-split="sessions"] > .split-detail { padding: 0 max(18px, env(safe-area-inset-right)) 0 18px; }
   .lpane { box-shadow: -12px 0 32px #0006; }
   /* Upright, the pane goes over the Atelier's session panel too, as over any tab (§7). */
   .app:has(> .lpane:not([hidden])) > .atelier-panel { z-index: 14; }
+  /* The terminal upright (t-tablette.html §3, Q93): the list folds, the terminal takes the whole width, and its « Retour »
+     comes back to reopen the list. */
+  .split[data-fold] { grid-template-columns: minmax(0, 1fr); }
+  .split[data-fold] > .split-list { display: none; }
+  .split[data-fold] > .split-detail > * { max-width: none; }
+  .split[data-fold] .split-detail [data-back="sessions"] { display: inline-flex; }
 }
 
 /* « Réduire les animations » in Réglages (src/motion.ts): unlayered and important, it wins over every layer's animation. */

@@ -19,7 +19,7 @@ import { useNow } from '../useNow';
 import { useDeviceCheck } from './SessionClose';
 import { SessionHead } from './SessionHead';
 import { SessionFoot } from './Thread';
-import { useWide } from '../ui/layout';
+import { useWide, useWideSide } from '../ui/layout';
 import { CONTEXT_NEAR } from '@ledge/protocol';
 import { isApple } from './device';
 
@@ -65,6 +65,8 @@ export function TerminalLive({ store, link, session, storage, makeScreen, forge 
   const [rowsChoice, setRowsChoice] = useState<ReturnType<typeof contextKeys>>([]);
   const [model, setModel] = useState(false);
   const wide = useWide();
+  // Upright, the phone's foot (t-tablette.html §3, Q93); the keys of a hardware keyboard stay.
+  const side = useWideSide();
   const following = useRef(true);
   const modsRef = useRef(mods);
   modsRef.current = mods;
@@ -286,7 +288,7 @@ export function TerminalLive({ store, link, session, storage, makeScreen, forge 
             ) : !offline && state.daemon?.terminal && !view?.readOnly && session.readOnly !== true && <p className="text-center text-meta text-muted">{L.inputOff}</p>}
             {offline && <p className="text-center text-meta text-muted">{L.offlineHint}</p>}
           </footer>
-          <SessionFoot store={store} forge={forge} session={session} wide={wide} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
+          <SessionFoot store={store} forge={forge} session={session} wide={side} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
         </>
       )}
       {sheet && ctl && <HoldSheet store={store} session={session} onClose={() => setSheet(false)} hold={a => { setSheet(false); void ctl.hold(a); return 'sent'; }} />}

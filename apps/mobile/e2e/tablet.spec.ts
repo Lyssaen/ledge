@@ -136,3 +136,41 @@ test('the Ledge pane opens from the rail, beside the panes on its side, over the
     await h.close();
   }
 });
+
+// Sessions upright (t-tablette.html §2, §3; Q92 A, Q93 A): the thread keeps the list beside it with the phone's foot; the terminal
+// folds the list and takes the whole width, and « Retour » reopens it.
+test('upright, the thread keeps the list beside it and the terminal folds it', async ({ page, browserName }) => {
+  // Its own PC: the file's one is already paired with the first test's page.
+  const h = await startHarness();
+  try {
+    await page.setViewportSize({ width: 834, height: 1194 });
+    await page.goto(h.url);
+    await page.getByRole('link', { name: copy.login.github }).click();
+    await page.getByRole('button', { name: copy.recover.code }).click();
+    await h.pc.code();
+    await page.getByRole('button', { name: copy.compare.same }).click();
+    h.pc.ok();
+    await page.getByRole('link', { name: copy.compare.seePending }).click();
+    await page.getByRole('navigation', { name: copy.nav.label }).getByRole('link', { name: copy.nav.sessions }).click();
+    await page.locator('.split-list main a[href^="#/thread/"]').first().click();
+    const list = page.locator('.split-list');
+    await expect(list).toBeVisible();
+    expect.soft((await list.boundingBox())!.width).toBe(330);
+    // The thread's pane keeps 18 px on each side, as §2 draws it (review-qa 6873dfab).
+    const pad = await page.locator('.split-detail').evaluate(e => [getComputedStyle(e).paddingLeft, getComputedStyle(e).paddingRight]);
+    expect.soft(pad).toEqual(['18px', '18px']);
+    await shot(page, 'thread-portrait', browserName);
+
+    await page.locator('.split-detail').getByRole('link', { name: copy.sessions.view.terminal }).click();
+    await expect(list).toBeHidden();
+    const detail = (await page.locator('.split-detail').boundingBox())!;
+    expect.soft(detail.x).toBe(76);
+    expect.soft(detail.width).toBe(834 - 76);
+    await shot(page, 'terminal-portrait', browserName);
+
+    await page.locator('.split-detail [data-back]').first().click();
+    await expect(list).toBeVisible();
+  } finally {
+    await h.close();
+  }
+});
