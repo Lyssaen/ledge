@@ -225,7 +225,7 @@ export function ChatView(p: ChatViewProps) {
           )}
           {turns.map(turn => turn.point && p.onPointAnswer && t.chat.point ? (
             <div key={turn.qid} data-turn data-point-turn ref={turn.qid === newest?.qid ? seen : undefined}>
-              <PointTurn turn={turn as ChatTurn & { point: ChatPoint }} machineName={p.pointMachine?.(turn)} now={p.now ?? Date.now()} mascot={mascot(18)}
+              <PointTurn turn={turn as ChatTurn & { point: ChatPoint }} machineName={p.pointMachine?.(turn)} mascot={mascot(18)}
                 disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false}
                 busy={p.pointBusy?.qid === turn.qid ? p.pointBusy.item : p.pointBusy ? '' : null}
                 confirming={p.pointConfirm?.qid === turn.qid ? p.pointConfirm : null} onConfirm={() => p.onPointConfirm?.(true)} onCancelConfirm={() => p.onPointConfirm?.(false)}

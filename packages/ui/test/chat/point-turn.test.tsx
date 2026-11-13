@@ -28,7 +28,7 @@ const point = (o: Partial<ChatPoint> = {}): ChatPoint => ({ since: '2026-11-13T1
 const turn = (p: ChatPoint = point()): ChatTurn & { point: ChatPoint } => ({ qid: 'p1', question: '', askedAt: AT, steps: [], answeredAt: AT, by: 'ledge', point: p });
 const ui = (p: Partial<Parameters<typeof PointTurn>[0]> = {}) => (
   <ChatCopyProvider value={fr}>
-    <PointTurn turn={turn()} onAnswer={noop} onNav={noop} onSuggestion={noop} now={Date.parse(AT)} {...p} />
+    <PointTurn turn={turn()} onAnswer={noop} onNav={noop} onSuggestion={noop} {...p} />
   </ChatCopyProvider>
 );
 
@@ -45,6 +45,9 @@ describe('the operator point (board 1)', () => {
     expect(groups[0]).toHaveTextContent('veut lancer pnpm -r test -u');
     expect(groups[0]).toHaveTextContent('« Fusionner #309 maintenant, ou attendre la revue de qa ? »');
     expect(groups[0]).toHaveTextContent('· ledge-dev');
+    // A rig's ask with options wears the « décision » pill; a permission does not.
+    expect(within(groups[0]!).getAllByText('décision')).toHaveLength(1);
+    expect(screen.getByText('pilot-lead').closest('[data-point-item]')!.querySelector('[data-point-pill]')).toHaveTextContent('décision');
     expect(within(groups[0]!).getByRole('button', { name: 'Répondre…' })).toBeInTheDocument();
     // Done rows show their time; the PR's button comes before the suggestion.
     const done = within(groups[1]!).getAllByRole('button').map(b => b.textContent);

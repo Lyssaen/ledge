@@ -17,7 +17,6 @@ export interface PointTurnProps {
   onAnswer: (item: string, a: Answer) => void;
   onNav: (n: Nav) => void;
   onSuggestion: (item: string) => void;
-  now: number;
   /** The mascot of the header (the chat's resident, 18 px); none in a test. */
   mascot?: ReactNode;
   /** The row whose answer or suggestion is on its way (an empty string: a row of another turn): every button waits. */
@@ -164,6 +163,8 @@ function Row(p: PointTurnProps & { item: PointItem; first: boolean; clock: (iso:
       <div style={{ minWidth: 0, overflowWrap: 'anywhere', ...(item.settled ? muted : {}) }}>
         <b style={{ fontWeight: 600 }}>{item.who}</b>
         {item.rig && <span style={muted}> · {item.rig}</span>}
+        {/* A rig's ask that offers options is a decision to take (board 1's pill). */}
+        {item.ref?.kind === 'rig.ask' && !!item.answers?.length && !item.settled && <> <span data-point-pill style={{ fontSize: 10.5, lineHeight: '15px', border: '1px solid color-mix(in srgb, var(--sidebar-primary) 50%, transparent)', color: 'var(--sidebar-primary)', borderRadius: 8, padding: '0 6px', whiteSpace: 'nowrap', display: 'inline-block' }}>{c.decision}</span></>}
         {permission ? <>{' '}{c.wantsToRun} <code style={{ fontFamily: mono, fontSize: 11 }}>{item.text}</code></>
           : quoted ? <><br />{c.quote(item.text)}</>
             : <> {item.text}</>}

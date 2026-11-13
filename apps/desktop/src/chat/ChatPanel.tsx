@@ -72,10 +72,10 @@ export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onO
   // A point says its machine once more than one machine is linked (spec §4).
   const pointMachine = (turn: { qid: string }) => (view.machines.length > 1 ? view.fleet.turnMachine(turn.qid)?.label : undefined);
   // The newest point read once seen (spec §5). `operator.read` names no conversation, so the fleet sends it to the local daemon:
-  // only a point of the local machine moves a cursor.
+  // only a point of the local machine moves a cursor. A lower event than the last sent (a new conversation, a reset journal) is sent too.
   const read = useRef(-1);
   const onPointSeen = (qid: string, eventId: number) => {
-    if (turnMachine(qid) !== 'local' || eventId <= read.current) return;
+    if (turnMachine(qid) !== 'local' || eventId === read.current) return;
     read.current = eventId;
     send({ type: 'operator.read', eventId });
   };

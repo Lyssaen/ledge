@@ -74,7 +74,7 @@ export interface ActionCopy {
  *  when it says more than the action's verb (from its `vars`), `settled` a receipt by where the row was settled. */
 export interface PointCopy {
   by: string; groups: Record<'atoi' | 'done' | 'ongoing' | 'rigs', string>; reply: string;
-  nav: Record<'session' | 'pr' | 'rig' | 'task', string>; wantsToRun: string; quote: Say;
+  nav: Record<'session' | 'pr' | 'rig' | 'task', string>; wantsToRun: string; /** The pill of a rig's decision ask (one with options). */ decision: string; quote: Say;
   suggest: Record<string, (vars: Record<string, string>) => string | undefined>;
   folded: Say; settled: Record<'terminal' | 'phone' | 'desktop' | 'chat' | 'elsewhere', string>;
   answer: { label: string; placeholder: string; send: string; cancel: string };
