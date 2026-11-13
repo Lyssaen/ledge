@@ -38,6 +38,10 @@ const isOctal = (c: number) => c >= 0x30 && c <= 0x37;
 
 export type ControlEvent =
   | { kind: 'output'; pane: string; data: Buffer }
+  /** tmux stopped sending a pane's output to this client (`pause-after`, or asked with `refresh-client -A %N:pause`): what the
+   *  pane writes meanwhile is never sent; `continue` says it sends again (#297). */
+  | { kind: 'pause'; pane: string }
+  | { kind: 'continue'; pane: string }
   | { kind: 'layout'; cols: number; rows: number }
   | { kind: 'reply'; ok: boolean; lines: string[] }
   | { kind: 'exit' };
@@ -81,6 +85,16 @@ export class ControlParser {
       events.push({ kind: 'output', pane: line.toString('latin1', 8, sp), data: unescapeOutput(line.subarray(sp + 1)) });
       return;
     }
+    // With `pause-after` set, output comes as `%extended-output %N <age> … : <data>`: what follows the first « : » is the payload.
+    if (startsWith(line, '%extended-output ')) {
+      const sp = line.indexOf(0x20, 17);
+      const colon = line.indexOf(' : ', 17);
+      if (sp < 0 || colon < 0) return;
+      events.push({ kind: 'output', pane: line.toString('latin1', 17, sp), data: unescapeOutput(line.subarray(colon + 3)) });
+      return;
+    }
+    if (startsWith(line, '%pause ')) { events.push({ kind: 'pause', pane: line.toString('latin1', 7).trim() }); return; }
+    if (startsWith(line, '%continue ')) { events.push({ kind: 'continue', pane: line.toString('latin1', 10).trim() }); return; }
     if (startsWith(line, '%layout-change ')) {
       const m = /^%layout-change \S+ [0-9a-f]{4},(\d+)x(\d+),/.exec(line.toString('latin1'));
       if (m) events.push({ kind: 'layout', cols: Number(m[1]), rows: Number(m[2]) });
@@ -348,6 +362,8 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
         t.cols = e.cols; t.rows = e.rows;
         if (t.state === 'live') send(t, { type: 'term.size', tid: t.tid, cols: e.cols, rows: e.rows }, `term.size:${t.tid}`);
         return;
+      // The phone sets no `pause-after` (#297 is Desktop's): tmux never pauses its panes.
+      case 'pause': case 'continue': return;
       case 'exit': return end(t, deps.exitWhy?.(t.sessionId) ?? 'gone');
     }
   };
