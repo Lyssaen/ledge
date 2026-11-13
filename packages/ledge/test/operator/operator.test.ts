@@ -18,6 +18,8 @@ const key = pendingKey(pending);
 const session: Session = { id: 's1', name: 'Nova', tool: 'claude', cwd: '/w', project: 'w', title: 't', tmuxSession: 'l-s1', state: 'idle', helpers: [], startedAt: AT, lastActivityAt: AT, source: 'launcher', pending };
 const finished = (sid: string): Draft => ({ kind: 'session.finished', subjectKind: 'session', subjectId: sid, subjectName: `Bot ${sid}`, urgency: 'grouped', payload: { text: `${sid} is done.` } });
 const request: Draft = { kind: 'session.request', subjectKind: 'session.request', subjectId: `s1#${key}`, subjectName: 'Nova', urgency: 'immediate', payload: { session: 's1', key, kind: 'permission', text: 'Run ls', command: 'ls' } };
+/** The sessions the operator sees now: a test empties a request to answer it where the daemon did not see it. */
+let liveSessions: Session[] = [session];
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r; }); return { promise, resolve }; };
 
 function setup(lead: (o: { events: readonly unknown[] }) => Promise<LeadResult> = async () => ({ lead: 'Agent lead.', suggestions: [], actions: [] }), devices: string[] = []) {
@@ -36,7 +38,7 @@ function setup(lead: (o: { events: readonly unknown[] }) => Promise<LeadResult> 
   const operator = createOperator({
     journal, machine: 'm',
     threads: { all, device, emitterOf: id => (m: ChatMessage) => { emitted[id]!.push(m); } }, devices: () => devices,
-    live: () => ({ sessions: [session], asks: [], tasks: [], lang: 'fr' }),
+    live: () => ({ sessions: liveSessions, asks: [], tasks: [], lang: 'fr' }),
     tool: () => 'claude', chatDeps,
     onNotices: () => {}, onPointPush: (l, qids) => { pushes.push({ lead: l, qids }); },
     runLead: async o => { leadCalls.push(o); return lead(o); }
@@ -48,7 +50,7 @@ function setup(lead: (o: { events: readonly unknown[] }) => Promise<LeadResult> 
 const pointsOf = (c: Chat) => c.points().map(p => p.point);
 
 describe('createOperator', () => {
-  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(AT)); });
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(AT)); liveSessions = [session]; });
   afterEach(() => { vi.useRealTimers(); });
 
   it("posts one point per thread with items from each thread's own cursor", async () => {
@@ -140,6 +142,46 @@ describe('createOperator', () => {
     }
     expect(emitted.desktop!.length).toBe(before + 1);
     expect(emitted.desktop!.at(-1)!.type).toBe('chat.history');
+    operator.stop();
+  });
+
+  it('a wake settles a request answered unseen, in the journal and in the point already posted', async () => {
+    const { operator, desktop, journal } = setup();
+    operator.record(request);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pointsOf(desktop)[0]!.items[0]!.settled).toBeUndefined();
+    liveSessions = [{ ...session, pending: undefined }];
+    operator.record(finished('a'));
+    await vi.advanceTimersByTimeAsync(60_000);
+    const [first, second] = pointsOf(desktop);
+    expect(first!.items[0]).toMatchObject({ settled: { where: 'elsewhere' } });
+    expect(first!.foldedAt).toBeDefined();
+    expect(journal.open().filter(e => e.kind === 'session.request')).toEqual([]);
+    // The new point holds the finish; the request it shows is settled, so nothing waits on the user and no notice stays.
+    expect(second!.items.filter(i => i.group === 'atoi' && !i.settled)).toEqual([]);
+    expect(operator.notices().filter(n => n.kind === 'point')).toEqual([]);
+    operator.stop();
+  });
+
+  it('reconcile settles the waiting events whose target left, the skipped kinds kept', async () => {
+    const { operator, journal } = setup();
+    operator.record(request);
+    liveSessions = [{ ...session, pending: undefined }];
+    operator.reconcile(new Set(['session.request']));
+    expect(journal.open()).toHaveLength(1);
+    operator.reconcile();
+    expect(journal.open()).toHaveLength(0);
+    operator.stop();
+  });
+
+  it('an expected answer says where the settle that knew only elsewhere came from', async () => {
+    const { operator, journal } = setup();
+    operator.record(request);
+    const release = operator.expect('session.request', `s1#${key}`, 'chat', 'Autoriser');
+    expect(operator.expect('session.request', `s1#${key}`, 'desktop')).toBeTypeOf('function');
+    operator.settle('session.request', `s1#${key}`, 'elsewhere');
+    release();
+    expect(journal.since(0)[0]!.payload).toMatchObject({ where: 'chat', answer: 'Autoriser' });
     operator.stop();
   });
 

@@ -139,6 +139,9 @@ export function fromForge(before: ForgeStateMessage | undefined, after: ForgeSta
   return out;
 }
 
+/** The rig of a seat address (`max@kernel` → `kernel`), or null for a bare name. */
+const rigOf = (seat: string): string | null => { const at = seat.lastIndexOf('@'); return at > 0 && at < seat.length - 1 ? seat.slice(at + 1) : null; };
+
 /** What Max did with a goal the user gave him: a new team proposal, a new question, or a new state; one event per goal and read. */
 export function fromGoals(before: readonly Goal[], after: readonly Goal[]): Draft[] {
   const was = new Map(before.map(g => [g.goalId, g]));
@@ -151,7 +154,7 @@ export function fromGoals(before: readonly Goal[], after: readonly Goal[]): Draf
       : g.state !== prev.state ? `${prev.state} → ${g.state}` : null;
     if (text === null) continue;
     out.push({ kind: 'rig.goal_update', subjectKind: 'rig.goal', subjectId: g.goalId, subjectName: g.to, urgency: 'grouped',
-      payload: { goalId: g.goalId, goal: clip(g.text), state: g.state, text: clip(text) } });
+      payload: { goalId: g.goalId, goal: clip(g.text), state: g.state, text: clip(text), ...(rigOf(g.to) ? { rig: rigOf(g.to) } : {}) } });
   }
   return out;
 }

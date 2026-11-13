@@ -1,12 +1,14 @@
-import type { ChatAction, ChatPoint, DecidedBy, ForgeStateMessage, Goal, HumanAsk, OpenRigAction, OpenRigState, OperatorNotice, PointItem, Task, Tool } from '@ledge/protocol';
+import { openDecision, taskClosed, type ChatAction, type ChatPoint, type DecidedBy, type ForgeStateMessage, type Goal, type HumanAsk, type OpenRigAction, type OpenRigState, type OperatorNotice, type PointItem, type Task, type Tool } from '@ledge/protocol';
 import type { Chat, ChatDeps, ChatMessage } from '../chat/service.js';
 import type { Store } from '../daemon/store.js';
 import { log } from '../log.js';
 import { fromAsks, fromForge, fromGoals, fromRigs, fromSession, fromTasks, settledSession, type Draft } from './detect.js';
 import { openJournal, type DeviceId, type Journal, type JournalEvent } from './journal.js';
+
+export { requireSqlite } from './journal.js';
 import { runLead as defaultRunLead } from './lead.js';
 import { noticesOf } from './notices.js';
-import { buildPoint, daemonLead, foldIfDone, isWaiting, settleItem, type LiveState } from './point.js';
+import { buildPoint, daemonLead, foldIfDone, goneOf, isWaiting, settleItem, type LiveState } from './point.js';
 import { createWakes } from './wakes.js';
 
 export type SettledWhere = NonNullable<PointItem['settled']>['where'];
@@ -36,6 +38,13 @@ export interface OperatorDeps {
 export interface Operator {
   record(d: Draft): void;
   settle(subjectKind: string, subjectId: string, where: SettledWhere, answer?: string): void;
+  /**
+   * Says where an answer about to go through one of Ledge's own handlers comes from: a settle of that subject that only knows
+   * `elsewhere` (a task seen closed) takes this place instead. The first hint of a subject wins; the returned function drops it.
+   */
+  expect(subjectKind: string, subjectId: string, where: SettledWhere, answer?: string): () => void;
+  /** Settles the waiting events whose target the live state no longer holds; `skip` leaves out kinds the live state cannot tell yet. */
+  reconcile(skip?: ReadonlySet<string>): void;
   read(device: DeviceId, eventId: number): void;
   later(device: DeviceId, qid: string): void;
   notices(): OperatorNotice[];
@@ -63,12 +72,37 @@ export function createOperator(deps: OperatorDeps): Operator {
   const now = deps.now ?? (() => new Date().toISOString());
   const runLead = deps.runLead ?? defaultRunLead;
   const emitOf = (id: DeviceId) => threads.emitterOf(id) ?? (() => {});
-  /** The notch's notices: the desktop thread's newest open point and the urgent rig asks, as the daemon sees them now. */
+  /** The notch's notices: the desktop thread's newest open point, the urgent rig asks and the open decisions, as the daemon sees them now. */
   const notices = (): OperatorNotice[] => {
     const desktop = threads.all().find(([id]) => id === 'desktop')?.[1];
-    return noticesOf(desktop?.points() ?? [], deps.live().asks, now());
+    const live = deps.live();
+    return noticesOf(desktop?.points() ?? [], live.asks, now(), live.tasks);
   };
   const tellNotices = () => { try { deps.onNotices(notices()); } catch (e) { log(`operator notices: ${(e as Error).message}`); } };
+  /** Where the answers under way through Ledge's own handlers come from, by `${subjectKind}:${subjectId}`. */
+  const hints = new Map<string, { where: SettledWhere; answer?: string }>();
+
+  /** Settles a subject in the journal and in every posted point (folded once nothing waits), without telling the notices. */
+  function settleSubject(subjectKind: string, subjectId: string, where0: SettledWhere, answer0?: string): void {
+    const hint = where0 === 'elsewhere' ? hints.get(`${subjectKind}:${subjectId}`) : undefined;
+    const where = hint?.where ?? where0; const answer = hint?.answer ?? answer0;
+    const at = now();
+    const settled = { at, where, ...(answer ? { answer: clip(answer, ANSWER_MAX) } : {}) };
+    journal.settle(subjectKind, subjectId, at, { where, ...(answer ? { answer: settled.answer } : {}) });
+    for (const [device, chat] of threads.all()) {
+      for (const { qid } of chat.points()) {
+        chat.updatePoint(qid, p => { const s = settleItem(p, { subjectKind, subjectId }, settled); return s ? foldIfDone(s, at) : p; }, emitOf(device));
+      }
+    }
+  }
+
+  /** Settles `elsewhere` every waiting event whose target is gone (answered, closed, left while nobody watched); true if any was. */
+  function settleGone(events: readonly JournalEvent[], skip?: ReadonlySet<string>): boolean {
+    const gone = goneOf(events, deps.live()).filter(e => !skip?.has(e.kind));
+    const subjects = new Map(gone.map(e => [`${e.subjectKind}:${e.subjectId}`, e]));
+    for (const e of subjects.values()) settleSubject(e.subjectKind, e.subjectId, 'elsewhere');
+    return subjects.size > 0;
+  }
 
   /** What still waits on the user, up to the last event a wake covers. */
   const waiting = (last: number): JournalEvent[] => journal.open().filter(e => isWaiting(e) && e.id <= last);
@@ -84,12 +118,18 @@ export function createOperator(deps: OperatorDeps): Operator {
     return threads.all();
   }
 
-  async function run(events: JournalEvent[]): Promise<void> {
+  async function run(covered: JournalEvent[]): Promise<void> {
+    let events = covered;
     const first = events[0]!.id; const last = events.at(-1)!.id;
     const wake = journal.startWake(first, last, now());
     const qids: string[] = []; const qidByDevice = new Map<DeviceId, string>();
     let outcome: 'posted' | 'empty' | 'failed' = 'empty';
     try {
+      // What was answered while nobody watched is settled first, in the journal and in the points already posted.
+      if (settleGone(union(events, waiting(last)))) {
+        const byId = new Map(journal.since(first - 1, last - first + 1).map(e => [e.id, e]));
+        events = events.map(e => byId.get(e.id) ?? e);
+      }
       // A wake whose events were all settled before it ran says nothing (spec §2): no run, no point.
       if (union(events, waiting(last)).every(e => e.settledAt !== null || e.kind === 'request.settled')) return;
       const live = deps.live();
@@ -139,15 +179,18 @@ export function createOperator(deps: OperatorDeps): Operator {
       wakes.onEvent(e);
     },
     settle(subjectKind, subjectId, where, answer) {
-      const at = now();
-      const settled = { at, where, ...(answer ? { answer: clip(answer, ANSWER_MAX) } : {}) };
-      journal.settle(subjectKind, subjectId, at, { where, ...(answer ? { answer: settled.answer } : {}) });
-      for (const [device, chat] of threads.all()) {
-        for (const { qid } of chat.points()) {
-          chat.updatePoint(qid, p => { const s = settleItem(p, { subjectKind, subjectId }, settled); return s ? foldIfDone(s, at) : p; }, emitOf(device));
-        }
-      }
+      settleSubject(subjectKind, subjectId, where, answer);
       tellNotices();
+    },
+    expect(subjectKind, subjectId, where, answer) {
+      const key = `${subjectKind}:${subjectId}`;
+      if (hints.has(key)) return () => {};
+      const hint = { where, ...(answer ? { answer } : {}) };
+      hints.set(key, hint);
+      return () => { if (hints.get(key) === hint) hints.delete(key); };
+    },
+    reconcile(skip) {
+      if (settleGone(journal.open(), skip)) tellNotices();
     },
     // A cursor never passes the newest event: a bad id would hide the events to come.
     // Reading the chat also ends « Plus tard » for that device (spec §7): its point is a notice again until it is settled.
@@ -184,8 +227,17 @@ export interface OperatorWiring {
   tool: OperatorDeps['tool']; chatDeps: ChatDeps;
   devices?: OperatorDeps['devices'];
   onNotices?: OperatorDeps['onNotices']; onPointPush?: OperatorDeps['onPointPush'];
+  /** New urgent or critical rig asks, told at once (the phone's push): they do not wait for a wake. */
+  onUrgentAsks?: (asks: HumanAsk[]) => void;
   lang?: LiveState['lang'];
 }
+
+/** A task that waits on the user: a decision put to Ledge, or a proposal about the notes not answered yet. */
+const waitsOnUser = (t: Task | undefined): boolean => !!t && (openDecision(t) || (t.brain !== undefined && !taskClosed(t)));
+/** Rig asks are not known at start: OpenRig's first list is their baseline, so the start's reconcile leaves them alone. */
+const ASK_KINDS: ReadonlySet<string> = new Set(['rig.ask']);
+/** Every waiting kind but the rig asks: the asks' own reconcile leaves them to the start's. */
+const SESSION_AND_TASK_KINDS: ReadonlySet<string> = new Set(['session.request', 'session.question', 'decision.asked', 'brain.proposed']);
 
 /**
  * The operator as the daemon runs it: the journal opened, the detectors fed from what the daemon already sees, each source's first read
@@ -229,8 +281,16 @@ export function wireOperator(w: OperatorWiring) {
     for (const id of reported) if (after.find(t => t.id === id)?.state !== 'taken') reported.delete(id);
     const drafts = fromTasks(tasksBefore, after, Date.now(), lastActivity, reported);
     for (const d of drafts) if (d.kind === 'task.stale') reported.add(d.subjectId);
+    // A decision or a proposal answered anywhere (« À toi », the CLI, a card) is settled before its closing is recorded: where
+    // comes from the handler that answered it when Ledge's own did, else it is `elsewhere`.
+    for (const t of tasksBefore) {
+      const now = after.find(x => x.id === t.id);
+      if (waitsOnUser(t) && !waitsOnUser(now)) settle('task', t.id, 'elsewhere', now?.result);
+    }
     tasksBefore = after;
     record(drafts);
+    // A decision that came or left changes the notch's notices now (told only when they change).
+    if (!stopped) operator.refreshNotices();
   }
 
   const ownAct = (rig: string) => {
@@ -261,8 +321,18 @@ export function wireOperator(w: OperatorWiring) {
       const before = asks;
       // A partial list says nothing of the rows it misses: they are kept until a whole list leaves them out.
       asks = before && (l.partial || l.truncated) ? [...l.asks, ...before.filter(a => !l.asks.some(x => x.id === a.id))] : l.asks;
-      if (!before) { if (!stopped) operator.refreshNotices(); return; }
-      record(fromAsks(before, l.asks));
+      if (!before) {
+        // The first whole list after a start settles the asks the journal still holds open that left while the daemon was down.
+        if (!stopped && !l.partial && !l.truncated) {
+          try { operator.reconcile(new Set([...SESSION_AND_TASK_KINDS])); } catch (e) { log(`operator: asks not reconciled: ${(e as Error).message}`); }
+        }
+        if (!stopped) operator.refreshNotices();
+        return;
+      }
+      const fresh = fromAsks(before, l.asks);
+      record(fresh);
+      const urgent = l.asks.filter(a => fresh.some(d => d.subjectId === a.id && d.urgency === 'immediate'));
+      if (urgent.length > 0 && !stopped) { try { w.onUrgentAsks?.(urgent); } catch (e) { log(`operator: urgent asks not told: ${(e as Error).message}`); } }
       for (const a of before) if (!asks.some(x => x.id === a.id)) settle('rig.ask', a.id, 'elsewhere');
       if (!stopped) operator.refreshNotices();
     },
@@ -302,6 +372,8 @@ export function wireOperator(w: OperatorWiring) {
         if (before?.pending && !after.pending) answeredBy.delete(after.id);
         if (settled) settle('session.request', settled.subjectId, settled.where);
       }));
+      // What was answered or closed while the daemon was down is settled now, before the first wake looks.
+      try { operator.reconcile(ASK_KINDS); } catch (e) { log(`operator: journal not reconciled: ${(e as Error).message}`); }
       prune();
       const daily = setInterval(prune, DAY_MS); daily.unref?.();
       const stale = setInterval(tasksChanged, STALE_EVERY_MS); stale.unref?.();

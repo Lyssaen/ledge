@@ -1,4 +1,4 @@
-import { pendingKey, type ChatErrorCode, type DecidedBy, type PushPayload, type Session, type Task } from '@ledge/protocol';
+import { pendingKey, type ChatErrorCode, type DecidedBy, type HumanAsk, type PushPayload, type Session, type Task } from '@ledge/protocol';
 
 const TAG_MAX = 32;
 const TITLE_MAX = 80;
@@ -77,5 +77,17 @@ export function decisionPayload(t: Task, badge: number): PushPayload {
   return {
     v: 1, kind: 'decision', title: cut(`${t.giverName} attend votre décision`, TITLE_MAX), name: cut(t.giverName, NAME_MAX), body: cut(t.title.trim(), BODY_MAX),
     url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: safeTag(t.id)
+  };
+}
+
+/**
+ * An urgent or critical question of a rig, pushed at once (it does not wait for the operator's point): titled « Ledge », the body
+ * names the seat, and it opens « À toi », where the ask waits. A question with options asks; one without is still a request to read.
+ */
+export function rigAskPayload(a: HumanAsk, badge: number): PushPayload {
+  const kind = a.questions.some(q => q.answer === null) ? 'question' : 'request';
+  return {
+    v: 1, kind, title: 'Ledge', name: cut(a.from.seat, NAME_MAX), body: cut(`${a.from.seat} · ${a.summary.trim()}`, BODY_MAX),
+    url: '/#/', badge: Math.max(0, Math.min(999, badge)), tag: safeTag(`ask-${a.id}`)
   };
 }

@@ -51,7 +51,8 @@ export async function runLead(o: { deps: ChatDeps; tool: Tool; events: readonly 
     }, deps.spawn);
     let timedOut = false;
     const timer = setTimeout(() => { log('operator lead: timed out'); timedOut = true; handle.kill(); }, o.timeoutMs ?? deps.timeoutMs ?? 180_000);
-    const r = await handle.done; clearTimeout(timer);
+    let r: Awaited<typeof handle.done>;
+    try { r = await handle.done; } finally { clearTimeout(timer); }
     if (timedOut) return failed('the lead run timed out');
     if (r.code !== 0) return failed(r.code === null ? `could not start: ${r.stderr.trim() || 'not found in PATH'}` : r.stderr.trim() || `exited with code ${r.code}`);
     if (resultError) return failed(resultError);

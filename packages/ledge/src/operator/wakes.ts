@@ -28,7 +28,7 @@ export function createWakes(d: WakeDeps): { onEvent(e: JournalEvent): void; star
   const due = (at: number) => { dueAfter = dueAfter === null ? at : Math.min(dueAfter, at); };
   let lastStart = -Infinity;
   let stopped = false;
-  /** Set at start when requests still wait: the first wake covers them even with nothing new. */
+  /** Set at start when requests the last wake did not cover still wait: the first wake covers them even with nothing new. */
   let coverOpen = false;
 
   function arm(delay: number): void {
@@ -80,7 +80,10 @@ export function createWakes(d: WakeDeps): { onEvent(e: JournalEvent): void; star
       // A wake the daemon left unfinished is covered again; otherwise the next wake starts after the last one.
       floor = recovered.length > 0 ? Math.min(...recovered.map(w => w.firstEvent)) - 1 : before?.lastEvent ?? 0;
       if (recovered.length > 0) log(`operator: ${recovered.length} unfinished wake(s) marked failed, their events covered again`);
-      coverOpen = d.journal.open().some(isWaiting);
+      // Waiting events are covered again only when a wake was left unfinished or they came after the last wake: a plain
+      // restart with nothing new posts no second point and sends no second push.
+      const covered = recovered.length > 0 ? -1 : before?.lastEvent ?? 0;
+      coverOpen = d.journal.open().some(e => isWaiting(e) && e.id > covered);
       if (coverOpen || d.journal.since(floor, 1).length > 0) arm(0);
     },
     stop() { stopped = true; cancel?.(); cancel = null; armedAt = Infinity; }

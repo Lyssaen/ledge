@@ -8,7 +8,7 @@ import { createChat, type Chat, type ChatDeps, type ChatMessage } from '../../sr
 import { openJournal, type DeviceId } from '../../src/operator/journal.js';
 import { createOperator } from '../../src/operator/index.js';
 import { actFromChat } from '../../src/chat/act.js';
-import { applySuggestionRow, createPointActor, type Fail, type PointActDeps } from '../../src/operator/act.js';
+import { applySuggestionRow, createPointActor, rowWhere, type Fail, type PointActDeps } from '../../src/operator/act.js';
 import { pointHandlers } from '../../src/operator/point-handlers.js';
 
 vi.mock('../../src/log.js', () => ({ log: () => {} }));
@@ -100,6 +100,28 @@ describe('point.act', () => {
     const b = setup([{ ...decision, answers: [{ id: 'accept', label: 'Ajouter', style: 'primary' }] }], { isBrain: () => true });
     await b.actor.act('desktop', { qid: b.qid, item: 'task:t1', answer: { id: 'accept' } });
     expect(b.calls).toEqual(['brain t1 true']);
+  });
+});
+
+describe('rowWhere', () => {
+  it('an ask answered from a phone\'s card is the phone\'s, from any other card the PC\'s', () => {
+    expect(rowWhere({ kind: 'device', id: 'dev1', name: 'Pixel' } as never)).toBe('phone');
+    expect(rowWhere({ kind: 'pc' } as never)).toBe('desktop');
+    expect(rowWhere(undefined)).toBe('desktop');
+  });
+});
+
+describe('point.act on a task', () => {
+  it('holds the chat hint while the task handler runs, so the settle the tasks make is the chat\'s', async () => {
+    const decision: PointItem = { id: 'task:t1', event: 3, group: 'atoi', tone: 'ask', who: 'Nova', text: 'Merge?', at: AT, ref: { kind: 'task', task: 't1' }, freeText: true, answers: [{ id: 'Oui', label: 'Oui', style: 'plain' }] };
+    const hints: string[] = []; let held: string | null = null;
+    const a = setup([decision], {
+      answerTask: async () => { hints.push(`during ${held}`); return undefined; },
+      operator: { settle: () => {}, expect: (k, id, where, answer) => { held = `${k}:${id} ${where} ${answer}`; return () => { held = null; }; } }
+    });
+    await a.actor.act('desktop', { qid: a.qid, item: 'task:t1', answer: { id: 'Oui' }, confirmed: true });
+    expect(hints).toEqual(['during task:t1 chat Oui']);
+    expect(held).toBeNull();
   });
 });
 

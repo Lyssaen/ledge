@@ -29,10 +29,13 @@ export interface PointActDeps {
   answerBrain(task: string, yes: boolean): Fail;
   /** Whether the task is a proposal about the notes rather than a decision. */
   isBrain(task: string): boolean;
-  operator: Pick<Operator, 'settle'>;
+  operator: Pick<Operator, 'settle'> & Partial<Pick<Operator, 'expect'>>;
 }
 
 const STALE = 'already settled';
+
+/** Where an ask answered through a card's row was answered: a device's card (its gateway's `by`) is the phone, any other the PC. */
+export const rowWhere = (by?: DecidedBy): 'phone' | 'desktop' => (by?.kind === 'device' ? 'phone' : 'desktop');
 
 /** An ask's answer as OpenRig takes it: an option answers the first question still open, words are words. */
 export function humanAnswerOf(ask: HumanAsk, answer: PointAnswer): HumanAnswer | undefined {
@@ -113,12 +116,15 @@ export function createPointActor(deps: PointActDeps) {
         if (r.outcome === 'recorded') return { ok: true };
         return done(undefined);
       }
-      // A decision (the answer is its option's label, or words) or a proposal about the notes (accept / deny).
+      // A decision (the answer is its option's label, or words) or a proposal about the notes (accept / deny). The tasks settle it
+      // as soon as it closes, before `done` runs: the hint makes that settle the chat's, with the row's answer.
       const brain = (id === 'accept' || id === 'deny') && deps.isBrain(ref.task);
-      if (brain) return done(deps.answerBrain(ref.task, id === 'accept'));
       const words = text ?? id;
-      if (words === undefined) return refuse('unknown answer', 'invalid');
-      return done(await deps.answerTask(ref.task, words, confirmed));
+      if (!brain && words === undefined) return refuse('unknown answer', 'invalid');
+      const release = deps.operator.expect?.('task', ref.task, 'chat', labelOf()) ?? (() => {});
+      try {
+        return done(brain ? deps.answerBrain(ref.task, id === 'accept') : await deps.answerTask(ref.task, words!, confirmed));
+      } finally { release(); }
     }
   };
 }

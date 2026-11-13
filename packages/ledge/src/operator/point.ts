@@ -146,7 +146,8 @@ function build(e: JournalEvent, live: LiveState, t: (typeof L)[Lang]): Built | u
       item.nav = [{ kind: 'rig', id: e.subjectId }];
       break;
     case 'rig.goal_update':
-      item.tone = 'ask'; item.text = t.goalUpdate; item.rig = str(p.rig) ? clip(str(p.rig), 100) : undefined;
+      // Max's proposal or question (or the goal's new state), as the detector kept it.
+      item.tone = 'ask'; item.text = clip(str(p.text), 400) || t.goalUpdate; item.rig = str(p.rig) ? clip(str(p.rig), 100) : undefined;
       if (item.rig) item.nav = [{ kind: 'rig', id: item.rig }];
       break;
     default: return undefined;
@@ -154,6 +155,12 @@ function build(e: JournalEvent, live: LiveState, t: (typeof L)[Lang]): Built | u
   if (item.rig === undefined) delete item.rig;
   const actionable = group === 'atoi';
   return { item, actionable, settledNow: actionable && (gone || e.settledAt !== null) };
+}
+
+/** The open events that wait on the user whose target the live state no longer holds: answered or gone while nobody watched. */
+export function goneOf(events: readonly JournalEvent[], live: LiveState): JournalEvent[] {
+  const t = L[live.lang];
+  return events.filter(e => e.settledAt === null && isWaiting(e) && build(e, live, t)?.settledNow === true);
 }
 
 /** An open task the live state holds, as an `ongoing` row. */

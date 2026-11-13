@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { pendingKey, type HumanAsk, type Session, type Task } from '@ledge/protocol';
 import type { JournalEvent } from '../../src/operator/journal.js';
-import { buildPoint, daemonLead, foldIfDone, settleItem, type LiveState } from '../../src/operator/point.js';
+import { buildPoint, daemonLead, foldIfDone, goneOf, settleItem, type LiveState } from '../../src/operator/point.js';
 
 const T = (m: number): string => new Date(Date.UTC(2026, 10, 13, 10, m)).toISOString();
 let n = 0;
@@ -61,6 +61,23 @@ describe('buildPoint', () => {
     expect(atoi.every(i => i.settled?.where === 'elsewhere')).toBe(true);
     expect(atoi.every(i => !i.answers)).toBe(true);
   });
+  it("a goal update says Max's proposal and leads to its rig", () => {
+    const e = ev({ kind: 'rig.goal_update', subjectKind: 'rig.goal', subjectId: 'g1', subjectName: 'max@kernel', payload: { goalId: 'g1', goal: 'Port the TUI', state: 'proposed', text: 'Two developers', rig: 'kernel' } });
+    const [item] = buildPoint([e], live({ asks: [] }), T(0), lead).items;
+    expect(item).toMatchObject({ id: 'rig.goal:g1', group: 'rigs', text: 'Two developers', rig: 'kernel', nav: [{ kind: 'rig', id: 'kernel' }] });
+  });
+
+  it('goneOf gives the waiting events whose target left, never a settled or a done one', () => {
+    const request = ev({ kind: 'session.request', subjectKind: 'session.request', subjectId: `s1#${key}`, urgency: 'immediate', payload: { session: 's1', key, kind: 'permission', text: 'Run ls', command: 'ls' } });
+    const decision = ev({ kind: 'decision.asked', subjectKind: 'task', subjectId: 't9', subjectName: 'Merge?', urgency: 'immediate', payload: { giver: 'Nova', text: 'oui / non' } });
+    const askGone = ev({ kind: 'rig.ask', subjectKind: 'rig.ask', subjectId: 'q-gone', subjectName: 'max', payload: { summary: 'Old?' } });
+    const settled = { ...ev({ kind: 'rig.ask', subjectKind: 'rig.ask', subjectId: 'q-old', subjectName: 'max', payload: {} }), settledAt: T(1) };
+    const done = ev({ subjectId: 's2' });
+    const gone = goneOf([request, decision, askGone, settled, done], live({ sessions: [session('s1')] }));
+    expect(gone.map(e => e.subjectId)).toEqual([`s1#${key}`, 't9', 'q-gone']);
+    expect(goneOf([request], live())).toEqual([]);
+  });
+
   it('caps items at 40 dropping oldest done first', () => {
     const many = Array.from({ length: 45 }, (_, i) => ev({ subjectId: `d${i}` }));
     const p = buildPoint([...many, ...six().slice(0, 2)], live(), T(0), lead);

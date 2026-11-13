@@ -1,4 +1,4 @@
-import type { ChatPoint, HumanAsk, OperatorNotice, PushPayload } from '@ledge/protocol';
+import { openDecision, type ChatPoint, type HumanAsk, type OperatorNotice, type PushPayload, type Task } from '@ledge/protocol';
 import { cut, safeTag } from '../mobile/push/triggers.js';
 
 const TEXT_MAX = 300;
@@ -16,10 +16,11 @@ const settledAsk = (a: HumanAsk): boolean => a.questions.length > 0 && a.questio
 /**
  * What the notch and the phone are told (spec §7): the newest unfolded point that still has something waiting on the user, unless
  * the device set it aside with « Plus tard » (a newer point brings it back); and every urgent or critical rig ask not settled, with
- * its first open question's options, and the qid of the newest point holding it (none: the front answers it in « À toi »). Session requests are not notices: the notch's request bubble stays fed by the sessions.
+ * its first open question's options, and the qid of the newest point holding it (none: the front answers it in « À toi »); and every open
+ * decision put to the user (`tasks`). Session requests are not notices: the notch's request bubble stays fed by the sessions.
  * `points` are oldest first; `at` stands in for the time of a point none of whose rows has one.
  */
-export function noticesOf(points: Array<{ qid: string; point: ChatPoint; laterAt?: string }>, asks: readonly HumanAsk[], at: string): OperatorNotice[] {
+export function noticesOf(points: Array<{ qid: string; point: ChatPoint; laterAt?: string }>, asks: readonly HumanAsk[], at: string, tasks: readonly Task[] = []): OperatorNotice[] {
   const out: OperatorNotice[] = [];
   const newest = points.filter(({ point }) => !point.foldedAt && openAtoi(point).length > 0).at(-1);
   if (newest && !(newest.laterAt ?? newest.point.laterAt)) {
@@ -39,6 +40,11 @@ export function noticesOf(points: Array<{ qid: string; point: ChatPoint; laterAt
       id: `rig.ask:${a.id}`, kind: 'rig.ask', ...(qid ? { qid } : {}), text: cut(a.summary, TEXT_MAX), who: cut(a.from.seat, 100), ...(a.from.rig ? { rig: a.from.rig } : {}),
       qitem: a.id, ...(options.length ? { options } : {}), priority: a.priority, at: [a.createdAt, a.updatedAt].find(validAt) ?? EPOCH
     });
+  }
+  // A decision put to the user is immediate (spec §2): the notch says it as soon as the task exists, not at the next point.
+  for (const t of tasks) {
+    if (!openDecision(t) || t.brain) continue;
+    out.push({ id: `decision:${t.id}`, kind: 'decision', text: cut(t.title, TEXT_MAX), who: cut(t.giverName, 100), priority: 'routine', at: [t.at, t.updatedAt].find(validAt) ?? EPOCH });
   }
   return out;
 }

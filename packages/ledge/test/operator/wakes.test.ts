@@ -123,6 +123,31 @@ describe('createWakes', () => {
     wakes.stop();
   });
 
+  it('a restart with nothing new posts nothing, though a request still waits', async () => {
+    const { journal, runs, rec, wakes } = setup();
+    const waiting = journal.record({ at: iso(), machine: 'm', kind: 'session.request', subjectKind: 'session.request', subjectId: 's#k', subjectName: 'S', urgency: 'immediate', payload: {} });
+    const w = journal.startWake(waiting.id, waiting.id, iso()); journal.endWake(w.id, 'posted', ['q'], iso());
+    wakes.start();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(runs).toHaveLength(0);
+    // Something new after the restart: the next wake covers it, and the waiting request with it (the run reads what waits).
+    const e = rec('immediate'); wakes.onEvent(e);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runs.map(r => r.map(x => x.id))).toEqual([[e.id]]);
+    wakes.stop();
+  });
+
+  it('a request newer than the last wake is covered at start', async () => {
+    const { journal, runs, rec, wakes } = setup();
+    const a = rec(); const w = journal.startWake(a.id, a.id, iso()); journal.endWake(w.id, 'posted', [], iso());
+    vi.advanceTimersByTime(120_000);
+    journal.record({ at: iso(), machine: 'm', kind: 'session.request', subjectKind: 'session.request', subjectId: 's#k', subjectName: 'S', urgency: 'immediate', payload: {} });
+    wakes.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runs).toHaveLength(1);
+    wakes.stop();
+  });
+
   it('start recovers an unfinished wake and re-covers its events', async () => {
     const { journal, runs, rec, wakes } = setup();
     const done1 = rec(); const w0 = journal.startWake(done1.id, done1.id, iso()); journal.endWake(w0.id, 'posted', ['q'], iso());

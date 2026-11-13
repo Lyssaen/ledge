@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { createRequire } from 'node:module';
 import type { OperatorEventKind } from '@ledge/protocol';
 import { RETENTION_DAYS } from './constants.js';
 
@@ -40,6 +40,17 @@ export interface Journal {
 
 const SCHEMA_VERSION = 1;
 
+type Sqlite = typeof import('node:sqlite');
+let sqlite: Sqlite | undefined;
+/**
+ * `node:sqlite`, loaded when a journal is first opened rather than when this module is: the bundle has no splitting, so a static
+ * import would make every daemon on Node < 22.13 fail at load, the operator's users or not. Throws where Node has no such module.
+ */
+export function requireSqlite(): Sqlite {
+  sqlite ??= createRequire(import.meta.url)('node:sqlite') as Sqlite;
+  return sqlite;
+}
+
 interface EventRow {
   id: number; at: string; machine: string; kind: string; subject_kind: string; subject_id: string; subject_name: string;
   urgency: string; payload: string; settled_at: string | null;
@@ -64,7 +75,7 @@ function toWake(r: WakeDbRow): WakeRow {
 }
 
 export function openJournal(path: string | ':memory:'): Journal {
-  const db = new DatabaseSync(path);
+  const db = new (requireSqlite().DatabaseSync)(path);
   db.exec('PRAGMA journal_mode=WAL');
   const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
   if (version < SCHEMA_VERSION) {

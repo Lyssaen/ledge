@@ -150,7 +150,7 @@ describe('fromGoals', () => {
     expect(fromGoals([goal()], [goal()])).toEqual([]);
     const proposed = fromGoals([goal()], [goal({ state: 'proposed', proposal: proposal('a1', 'Two developers') })]);
     expect(proposed).toEqual([{ kind: 'rig.goal_update', subjectKind: 'rig.goal', subjectId: 'g-12345678', subjectName: 'max@kernel', urgency: 'grouped',
-      payload: { goalId: 'g-12345678', goal: 'Port the TUI', state: 'proposed', text: 'Two developers' } }]);
+      payload: { goalId: 'g-12345678', goal: 'Port the TUI', state: 'proposed', text: 'Two developers', rig: 'kernel' } }]);
     expect(fromGoals([goal()], [goal({ state: 'asking', question: { askId: 'k1', text: 'Which folder?' } })])[0]!.payload.text).toBe('Which folder?');
     expect(fromGoals([goal({ state: 'running' })], [goal({ state: 'done' })])[0]!.payload.text).toBe('running → done');
     // A goal the user just sent is no news, nor one that left the list.

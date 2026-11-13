@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PushPayloadSchema, type ChatPoint, type HumanAsk, type PointItem } from '@ledge/protocol';
+import { PushPayloadSchema, type ChatPoint, type HumanAsk, type PointItem, type Task } from '@ledge/protocol';
 import { createNoticeFeed, noticesOf, pointPush } from '../../src/operator/notices.js';
 
 const T = (m: number): string => new Date(Date.UTC(2026, 10, 13, 10, m)).toISOString();
@@ -12,6 +12,12 @@ const ask = (id: string, over: Partial<HumanAsk> = {}): HumanAsk => ({
 });
 
 describe('noticesOf', () => {
+  it('an open decision put to Ledge is a notice at once, a proposal or a closed one is not', () => {
+    const task = (id: string, over: Partial<Task> = {}): Task => ({ id, title: 'Fusionner #309 ?', giver: 's1', giverName: 'Nova', owner: 'ledge', ownerName: 'Ledge', state: 'given', at: T(4), updatedAt: T(4), log: [], ...over } as Task);
+    const n = noticesOf([], [], T(9), [task('t1'), task('t2', { state: 'done' }), task('t3', { brain: { note: 'n' } } as Partial<Task>), task('t4', { owner: 'other' })]);
+    expect(n).toEqual([{ id: 'decision:t1', kind: 'decision', text: 'Fusionner #309 ?', who: 'Nova', priority: 'routine', at: T(4) }]);
+  });
+
   it('noticesOf returns the newest open point and urgent rig asks only', () => {
     const points = [
       { qid: 'q1', point: point('old', [item('a')]) },

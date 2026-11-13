@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { PushPayloadSchema, pendingKey, type Session } from '@ledge/protocol';
-import { chatEndPayload, decisionPayload, pushFor, resolvedFor, safeTag } from '../src/mobile/push/triggers.js';
+import { PushPayloadSchema, pendingKey, type HumanAsk, type Session } from '@ledge/protocol';
+import { chatEndPayload, decisionPayload, pushFor, resolvedFor, rigAskPayload, safeTag } from '../src/mobile/push/triggers.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const mk = (over: Partial<Session> = {}): Session => ({
@@ -90,5 +90,19 @@ describe('pushFor', () => {
   it('counts the sessions with a request as the badge', () => {
     const a = mk({ pending: req('x') }), b = mk({ id: 's2', pending: req('y') });
     expect(pushFor(mk(), a, [a, b, mk({ id: 's3' })])!.badge).toBe(2);
+  });
+});
+
+describe('an urgent rig ask', () => {
+  const ask = (over: Partial<HumanAsk> = {}): HumanAsk => ({
+    id: 'qitem-9', kind: 'decision', alert: false, priority: 'urgent', from: { seat: 'pilot-lead@ledge-dev', rig: 'ledge-dev', role: null }, summary: 'Fusionner #309 maintenant ?',
+    body: '', bodyTruncated: false, detail: null, evidenceRef: null, createdAt: T0, updatedAt: T0,
+    questions: [{ id: 'k', question: '?', options: [{ id: 'merge', label: 'Fusionner', recommended: true }], answer: null }], ...over
+  });
+  it('is pushed as Ledge\'s question naming the seat, opening « À toi »; one with nothing to answer is a request', () => {
+    const p = rigAskPayload(ask(), 3);
+    expect(p).toEqual({ v: 1, kind: 'question', title: 'Ledge', name: 'pilot-lead@ledge-dev', body: 'pilot-lead@ledge-dev · Fusionner #309 maintenant ?', url: '/#/', badge: 3, tag: 'ask-qitem-9' });
+    expect(PushPayloadSchema.safeParse(p).success).toBe(true);
+    expect(rigAskPayload(ask({ questions: [] }), 0).kind).toBe('request');
   });
 });
