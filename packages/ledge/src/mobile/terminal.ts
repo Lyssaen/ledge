@@ -102,7 +102,12 @@ export type SpawnControl = (argv: string[]) => ControlProcess;
 
 /** One tmux control process: the reply queue and the parser. The phone and the desktop each batch and policy on top. */
 export interface ControlClient {
-  command(line: string): Promise<{ ok: boolean; lines: string[] }>;
+  /**
+   * Sends a command; resolves with its reply. `onReply` runs synchronously when the parser hands the reply out, before the events that
+   * follow it in the same block of stdout: what comes after it (a pane's `%output`) is after the command in tmux's order, which an
+   * awaited promise, resolved only once the whole block is handled, cannot tell (#296).
+   */
+  command(line: string, onReply?: (r: { ok: boolean; lines: string[] }) => void): Promise<{ ok: boolean; lines: string[] }>;
   write(text: string): void;
   kill(): void;
 }
@@ -111,13 +116,19 @@ export function openControl(argv: string[], spawn: SpawnControl, onEvent: (e: Ex
   const proc = spawn(argv);
   const parser = new ControlParser();
   let closed = false;
+  type Reply = { ok: boolean; lines: string[] };
   // The attach command's own reply comes first and belongs to nobody.
-  const replies: Array<(r: { ok: boolean; lines: string[] }) => void> = [() => {}];
-  const fail = () => { for (const r of replies.splice(0)) r({ ok: false, lines: [] }); };
+  const replies: Array<{ done: (r: Reply) => void; onReply?: (r: Reply) => void }> = [{ done: () => {} }];
+  const fail = () => { for (const r of replies.splice(0)) r.done({ ok: false, lines: [] }); };
   proc.onData(chunk => {
     for (const e of parser.push(chunk)) {
       if (closed) return;
-      if (e.kind === 'reply') { replies.shift()?.(e); continue; }
+      if (e.kind === 'reply') {
+        const r = replies.shift();
+        r?.onReply?.(e);
+        r?.done(e);
+        continue;
+      }
       onEvent(e);
     }
   });
@@ -128,10 +139,10 @@ export function openControl(argv: string[], spawn: SpawnControl, onEvent: (e: Ex
     onEvent({ kind: 'exit' });
   });
   return {
-    command(line) {
+    command(line, onReply) {
       return new Promise(done => {
         if (closed) return done({ ok: false, lines: [] });
-        replies.push(done);
+        replies.push({ done, ...(onReply ? { onReply } : {}) });
         proc.write(`${line}\n`);
       });
     },
@@ -234,8 +245,9 @@ export interface TerminalDeps {
 interface Term {
   tid: string; deviceId: string; sessionId: string; tmuxName: string; readOnly: boolean;
   client: ControlClient;
-  /** `capturing`: output is dropped until the screen is taken; `live`: kept and sent. */
-  state: 'capturing' | 'live' | 'closed';
+  /** `capturing`: output is dropped until the screen is taken (it is in the screen); `pending`: the capture's reply is in, so what
+   *  follows is after the screen: kept, sent once `term.opened` is; `live`: kept and sent. */
+  state: 'capturing' | 'pending' | 'live' | 'closed';
   pane: string | null; cols: number; rows: number;
   decoder: StringDecoder; buffer: string; since: number | null;
   seq: number; nextN: number;
@@ -291,8 +303,12 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
     t.since = null;
     t.decoder = new StringDecoder('utf8');
     const target = `'=${t.tmuxName}:'`;
-    const info = await command(t, `display-message -p -t ${target} '#{pane_id} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y}'`);
-    const cap = await command(t, `capture-pane -p -e -t ${target}`);
+    // Written together, the capture first, so tmux runs both before reading the pane again: the cursor is the captured screen's. The
+    // capture's reply is the boundary (#296): from it, output is after the screen and kept, not dropped.
+    const [cap, info] = await Promise.all([
+      t.client.command(`capture-pane -p -e -t ${target}`, () => { if (t.state === 'capturing') t.state = 'pending'; }),
+      command(t, `display-message -p -t ${target} '#{pane_id} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y}'`)
+    ]);
     // Ended while it waited: the awaits above widen nothing for TypeScript.
     if ((t.state as Term['state']) === 'closed') return;
     const m = info.ok ? /^(%\d+) (\d+) (\d+) (\d+) (\d+)$/.exec(info.lines[0] ?? '') : null;
@@ -309,7 +325,7 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
   const onEvent = (t: Term, e: Exclude<ControlEvent, { kind: 'reply' }>) => {
     switch (e.kind) {
       case 'output': {
-        if (t.state !== 'live' || (t.pane !== null && e.pane !== t.pane)) return;
+        if ((t.state !== 'live' && t.state !== 'pending') || (t.pane !== null && e.pane !== t.pane)) return;
         const text = t.decoder.write(e.data);
         if (!text) return;
         t.buffer += text;

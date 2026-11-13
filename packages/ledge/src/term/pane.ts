@@ -66,7 +66,9 @@ const targetOf = (name: string) => `'=${name}:'`;
 interface Watch {
   reply: PaneReply; id: string; shell: string; tmuxName: string; sizing: boolean; owned: boolean; lock: boolean;
   client: ControlClient;
-  state: 'capturing' | 'live' | 'closed';
+  /** `capturing`: output is dropped (it is in the screen being taken); `pending`: the capture's reply is in, so what follows is after
+   *  the screen: kept, sent once `term.opened` is; `live`: kept and sent. */
+  state: 'capturing' | 'pending' | 'live' | 'closed';
   pane: string | null; cols: number; rows: number;
   /** The grid the watcher asked for. `cols`/`rows` are what the pane last reported. */
   want: { cols: number; rows: number } | null;
@@ -195,9 +197,10 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
       if (set.ok) await w.client.command(`resize-window -x ${sized.cols} -y ${sized.rows} -t ${target}`);
       if ((w.state as Watch['state']) === 'closed') return;
     }
-    // Written together, so tmux runs both before reading the pane again: the cursor is the one of the captured screen.
+    // Written together, so tmux runs both before reading the pane again: the cursor is the one of the captured screen. The capture's
+    // reply is the boundary (#296): from it, output is after the screen and kept, not dropped.
     const [cap, info] = await Promise.all([
-      w.client.command(`capture-pane -p -e -t ${target}`),
+      w.client.command(`capture-pane -p -e -t ${target}`, () => { if (w.state === 'capturing') w.state = 'pending'; }),
       w.client.command(`display-message -p -t ${target} '${INFO_FORMAT}'`)
     ]);
     if ((w.state as Watch['state']) === 'closed') return;
@@ -212,6 +215,8 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     w.openTimer?.stop(); w.openTimer = null;
     const modes = modesOf(m[6], !w.owned);
     send(w, { type: 'term.opened', id: w.id, cols: w.cols, rows: w.rows, screen: text, cursor: { x: Number(m[4]), y: Number(m[5]) }, ...(modes ? { modes } : {}) });
+    // What tmux sent after the capture, kept while the screen was answered, follows the screen at once.
+    flush(w);
     // A resize that arrived while the screen was taken: the capture shows the old grid, so the window follows now.
     if (w.want && sized && (w.want.cols !== sized.cols || w.want.rows !== sized.rows)) void w.client.command(`resize-window -x ${w.want.cols} -y ${w.want.rows} -t ${target}`);
     void drain(w);
@@ -239,7 +244,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
   const onEvent = (w: Watch, e: Exclude<ControlEvent, { kind: 'reply' }>) => {
     switch (e.kind) {
       case 'output': {
-        if (w.state !== 'live' || (w.pane !== null && e.pane !== w.pane)) return;
+        if ((w.state !== 'live' && w.state !== 'pending') || (w.pane !== null && e.pane !== w.pane)) return;
         w.buffer = w.buffer.length ? Buffer.concat([w.buffer, e.data]) : e.data;
         w.since ??= now();
         return;
