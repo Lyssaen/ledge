@@ -18,7 +18,7 @@ import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.j
 import { verifyGone } from '../adapters/verify.js';
 import { claudeGutter } from '../adapters/claude.js';
 import { DETECT_LINES } from './poller.js';
-import { answeredBy, isCodexAsk, pendingTool } from './state.js';
+import { answeredBy, endsCodexAsk, isCodexAsk, pendingTool } from './state.js';
 import { claudeOpenCall, claudeToolAnswered, claudeVersion, labelTranscript, resumeLabel } from './transcript.js';
 import { pickName } from '../names.js';
 import { readPeers, type ClaudePeer } from './peers.js';
@@ -499,11 +499,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (shown) history.record(id, ev); else codexAsks.set(id, ev);
         return;
       }
-      if (s?.tool === 'codex' && ev.source === 'pane' && ev.name === 'PanePrompt' && (ev.kind === 'permission' || ev.kind === 'diff')) {
-        const asked = codexAsks.get(id);
-        if (asked) { codexAsks.delete(id); history.record(id, { ...asked, at: ev.at }); }
-      }
-      if (ev.name === 'PostToolUse' || ev.name === 'PostToolUseFailure' || ev.name === 'Stop' || ev.name === 'SessionEnd') codexAsks.delete(id);
+      // As the reducer does with Session.codexAsk (`s` is the state before this event): that request's dialog writes its row; a
+      // dialog of another kind, the run of that very tool (never a helper's or another call's) or the turn's end forgets it.
+      const asked = codexAsks.get(id);
+      if (asked && !s?.codexAsk) codexAsks.delete(id);
+      else if (asked && s?.codexAsk && ev.name === 'PanePrompt' && ev.source === 'pane') {
+        codexAsks.delete(id);
+        if (!s.pending && s.codexAsk.kind === (ev.kind ?? 'permission')) history.record(id, { ...asked, at: ev.at });
+      } else if (asked && s?.codexAsk && endsCodexAsk(s.codexAsk, ev)) codexAsks.delete(id);
       history.record(id, ev);
     }),
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })

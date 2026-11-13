@@ -12,9 +12,24 @@ export const HOOK_PRIORITY_MS = 2000;
  */
 const hooksReportPrompts = (s: Session) => s.tool === 'claude';
 
-/** Codex's main agent asking a permission through its hook (#302): not proof that it waits, the terminal's dialog is. */
-export function isCodexAsk(s: Pick<Session, 'tool'> | undefined, ev: SessionEvent): boolean {
-  return s?.tool === 'codex' && ev.name === 'PermissionRequest' && ev.source === 'hook' && !ev.helperId;
+/** Codex's main agent asking a permission through its hook (#302): not proof that it waits, the terminal's dialog is. Only where
+ *  Ledge reads a terminal: a session it only hears through hooks (hook_only, no tmux) keeps the hook's request, as before. */
+export function isCodexAsk(s: Pick<Session, 'tool' | 'tmuxSession'> | undefined, ev: SessionEvent): boolean {
+  return s?.tool === 'codex' && !!s.tmuxSession && ev.name === 'PermissionRequest' && ev.source === 'hook' && !ev.helperId;
+}
+
+const TURN_ENDS: ReadonlySet<SessionEvent['name']> = new Set(['Stop', 'StopFailure', 'SessionEnd', 'PaneGone']);
+/** Whether `ev` settles a held Codex request (Session.codexAsk) no dialog showed: the main agent's run of that very tool (a helper's
+ *  or another parallel call's never does), or the end of the turn (a refusal by the automatic review sends only Stop). */
+export function endsCodexAsk(ask: Pending, ev: SessionEvent): boolean {
+  if (TURN_ENDS.has(ev.name)) return true;
+  if (ev.helperId || (ev.name !== 'PostToolUse' && ev.name !== 'PostToolUseFailure')) return false;
+  return !ask.tool || !ev.tool || ask.tool === ev.tool;
+}
+
+function withoutCodexAsk(s: Session): Session {
+  const { codexAsk: _held, ...rest } = s;
+  return rest;
 }
 
 export function isPending(s: Session): boolean {
@@ -315,8 +330,18 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
   // #302: Codex sends its main agent's PermissionRequest before it knows whether it will ask: with « Approve for me » (its
   // approvals_reviewer auto_review) the automatic review settles it alone, and the same payload means no question at all. Only its
   // dialog in the terminal (PanePrompt) says it waits on the person: the hook is activity, nothing more. Claude Code, OMP and Codex's
-  // helpers are unchanged.
-  if (isCodexAsk(s, ev)) return { ...s, lastHookAt: at, lastActivityAt: at };
+  // helpers are unchanged. Its exact request (tool, files) is held until the dialog shows, then it is the request, as before: the
+  // phone judges it from the same files (an edit inside the folder needs no passkey).
+  if (isCodexAsk(s, ev)) {
+    const ask = pendingFor(ev)!;
+    // The dialog was read before its hook: the hook's request replaces the screen's, as a hook's always did.
+    if (s.pending?.source === 'pane' && !s.pending.helperId && s.pending.kind === ask.kind) {
+      return { ...withoutCodexAsk(s), pending: ask, lastHookAt: at, lastActivityAt: at };
+    }
+    return { ...s, codexAsk: ask, lastHookAt: at, lastActivityAt: at };
+  }
+  // The held request was settled without a dialog (the automatic review: the tool ran, or the turn ended on a refusal).
+  if (s.codexAsk && endsCodexAsk(s.codexAsk, ev)) s = withoutCodexAsk(s);
 
   switch (ev.name) {
     case 'SessionEnd':
@@ -379,6 +404,12 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     }
     case 'PanePrompt': {
       const incoming = pendingFor(ev)!;
+      // #302: Codex's dialog proves its held request waits: the hook's exact request is the one shown and answered.
+      if (s.codexAsk) {
+        const ask = s.codexAsk;
+        s = withoutCodexAsk(s);
+        if (!s.pending && ask.kind === incoming.kind) return { ...s, state: 'waiting_permission', pending: ask, lastActivityAt: at };
+      }
       // A hook question the pane has moved past (the next question of an AskUserQuestion, its review: the last one
       // answered in the terminal) gives way to what the pane asks. No hook reports the next one: only the end of all.
       const moved = s.pending?.source === 'hook' && s.pending.kind === 'question' && incoming.kind === 'question'

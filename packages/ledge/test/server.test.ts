@@ -558,6 +558,19 @@ describe('server', () => {
     store.upsert(mk('d', { state: 'working' }));
     store.apply('d', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'ls' });
     expect(perms('d')).toHaveLength(1);
+    // A helper's tool, or another parallel call, ending before the dialog shows does not settle the main agent's request.
+    store.upsert(mk('e', { tool: 'codex', state: 'working' }));
+    store.apply('e', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /main' });
+    store.apply('e', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Read', helperId: 'h1' });
+    store.apply('e', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Read' });
+    store.apply('e', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /main', options: ['Yes, proceed (y)', 'No (esc)'] });
+    expect(store.get('e')).toMatchObject({ state: 'waiting_permission', pending: { source: 'hook', tool: 'Bash', text: 'touch /main' } });
+    expect(perms('e')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /main' })]);
+    // A session Ledge only hears through hooks (no terminal to read): its request waits at once, as before.
+    store.upsert(mk('f', { tool: 'codex', state: 'working', tmuxSession: null, source: 'hook_only' }));
+    store.apply('f', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /f' });
+    expect(store.get('f')!.state).toBe('waiting_permission');
+    expect(perms('f')).toHaveLength(1);
   });
   it('a sent message becomes the session\'s last message, once, when it lands', async () => {
     await srv.close();
