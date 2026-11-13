@@ -74,8 +74,9 @@ interface Watch {
    *  the screen: kept, sent once `term.opened` is; `live`: kept and sent; `paused` (#297): tmux sends nothing of the pane (it fell
    *  behind, or Ledge did); after RESUME_MS it continues and a fresh screen is taken, so nothing written meanwhile is lost. */
   state: 'capturing' | 'pending' | 'live' | 'paused' | 'closed';
-  /** tmux paused the pane while its screen was being taken: once the screen is sent, the pane is resumed through a new one. */
-  pauseSeen: boolean;
+  /** Panes tmux paused that no screen resumed yet (a pause during a capture, or of another pane of the window): once a screen says
+   *  which pane is watched, a paused one is resumed through a new screen. `%continue` takes a pane out. */
+  paused: Set<string>;
   resume: { stop(): void } | null;
   pane: string | null; cols: number; rows: number;
   /** The grid the watcher asked for. `cols`/`rows` are what the pane last reported. */
@@ -197,12 +198,12 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
   const pause = (w: Watch) => {
     if (w.state === 'closed' || w.state === 'paused') return;
     w.state = 'paused';
-    w.buffer = Buffer.alloc(0); w.since = null; w.early = []; w.pauseSeen = false;
+    w.buffer = Buffer.alloc(0); w.since = null; w.early = [];
     w.resume?.stop();
     w.resume = later(() => {
       w.resume = null;
       if (w.state !== 'paused') return;
-      if (w.pane) void w.client.command(`refresh-client -A '${w.pane}:continue'`);
+      if (w.pane) { w.paused.delete(w.pane); void w.client.command(`refresh-client -A '${w.pane}:continue'`); }
       void screen(w);
     }, RESUME_MS);
   };
@@ -210,7 +211,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
   const screen = async (w: Watch) => {
     if (w.state === 'closed') return;
     w.state = 'capturing';
-    w.buffer = Buffer.alloc(0); w.since = null; w.early = []; w.pauseSeen = false;
+    w.buffer = Buffer.alloc(0); w.since = null; w.early = [];
     const target = targetOf(w.tmuxName);
     let sized: { cols: number; rows: number } | null = null;
     if (w.sizing && w.want) {
@@ -248,8 +249,9 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     send(w, { type: 'term.opened', id: w.id, cols: w.cols, rows: w.rows, screen: text, cursor: { x: Number(m[4]), y: Number(m[5]) }, ...(modes ? { modes } : {}) });
     // What tmux sent after the capture, kept while the screen was answered, follows the screen at once.
     flush(w);
-    // Paused while the screen was taken: what follows the capture is not coming, so the pane is resumed with a new screen.
-    if (w.pauseSeen && (w.state as Watch['state']) === 'live') pause(w);
+    // Paused while the screen was taken (this pane, which may be a new one): what follows the capture is not coming, so the pane is
+    // resumed with a new screen. Keys still go: a pause holds the pane's output, not its input.
+    if (w.paused.has(w.pane) && (w.state as Watch['state']) === 'live') pause(w);
     // A resize that arrived while the screen was taken: the capture shows the old grid, so the window follows now.
     if (w.want && sized && (w.want.cols !== sized.cols || w.want.rows !== sized.rows)) void w.client.command(`resize-window -x ${w.want.cols} -y ${w.want.rows} -t ${target}`);
     void drain(w);
@@ -258,8 +260,11 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
   const typeKeys = async (w: Watch, data: string) => {
     const lock = w.lock ? deps.typing : undefined;
     const deadline = now() + 5_000;
-    while (lock?.has(w.id) && now() < deadline && w.state !== 'closed') await new Promise(r => setTimeout(r, 20));
-    if (w.state !== 'live' || !w.pane || lock?.has(w.id)) return;
+    // A screen being taken (a resume, a resync) is a moment: the keys wait for it, as for the lock.
+    const busy = () => lock?.has(w.id) || w.state === 'capturing' || w.state === 'pending';
+    while (busy() && now() < deadline && w.state !== 'closed') await new Promise(r => setTimeout(r, 20));
+    // Paused (#297), tmux holds the pane's output only: the keys still reach it.
+    if ((w.state !== 'live' && w.state !== 'paused') || !w.pane || busy()) return;
     lock?.add(w.id);
     try {
       for (const line of keyCommands(w.pane, data)) {
@@ -288,10 +293,13 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
       }
       case 'pause':
         // Another pane of the window, once the watched one is known, is not this screen's business.
-        if (w.pane && e.pane !== w.pane) return;
-        if (w.state === 'live') pause(w); else if (w.state === 'capturing' || w.state === 'pending') w.pauseSeen = true;
+        if (w.state === 'live' && e.pane === w.pane) return pause(w);
+        // Its own pause, asked or answered while it is already paused: the resume is on its way.
+        if (w.state === 'paused' && e.pane === w.pane) return;
+        // During a capture the watched pane is not known yet; another pane may become the watched one: kept for the next screen.
+        w.paused.add(e.pane);
         return;
-      case 'continue': return; // Ledge resumes the pane itself, with a screen.
+      case 'continue': w.paused.delete(e.pane); return; // Ledge resumes the watched pane itself, with a screen.
       case 'layout':
         if (w.state === 'closed' || (e.cols === w.cols && e.rows === w.rows)) return;
         w.cols = e.cols; w.rows = e.rows;
@@ -318,7 +326,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
       const client = openControl(argv, spawnIt, e => { if (w.state === 'closed') return; onEvent(w, e); });
       w = {
         reply, id: session.id, shell: tag, tmuxName: session.tmuxName, sizing: size !== null, owned: !!session.owned, lock: !session.owned,
-        client, state: 'capturing', pauseSeen: false, resume: null, pane: null, cols: size?.cols ?? 0, rows: size?.rows ?? 0,
+        client, state: 'capturing', paused: new Set(), resume: null, pane: null, cols: size?.cols ?? 0, rows: size?.rows ?? 0,
         want: size ? { ...size } : null,
         buffer: Buffer.alloc(0), since: null, early: [], queued: [], typing: Promise.resolve(),
         timer: timer(() => flush(w), TICK_MS), openTimer: null
@@ -336,7 +344,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
       const w = find(reply, id, shell ?? '');
       if (!w || !w.sizing) return;
       w.queued.push(data);
-      if (w.state === 'live') drain(w);
+      if (w.state === 'live' || w.state === 'paused') drain(w);
     },
     resize(reply, id, cols, rows, shell) {
       const w = find(reply, id, shell ?? '');

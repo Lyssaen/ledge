@@ -22,13 +22,13 @@ describe('#297: the control parser', () => {
 
 /** A tmux control client: each capture answers the current `screen`; `emit` sends what tmux would on its own. */
 function fakeTmux() {
-  const state = { screen: 'one', procs: [] as Array<ControlProcess & { written: string[]; emit(s: string): void }> };
+  const state = { screen: 'one', pane: '%0', pauseNext: false, procs: [] as Array<ControlProcess & { written: string[]; emit(s: string): void }> };
   const spawn = vi.fn((_argv: string[]) => {
     let onData: (b: Buffer) => void = () => {};
     let n = 0;
-    const reply = (lines: string[]) => {
+    const reply = (lines: string[], trailer = '') => {
       n++;
-      const block = `%begin 1 ${n} 1\n${lines.map(l => `${l}\n`).join('')}%end 1 ${n} 1\n`;
+      const block = `%begin 1 ${n} 1\n${lines.map(l => `${l}\n`).join('')}%end 1 ${n} 1\n${trailer}`;
       setTimeout(() => onData(Buffer.from(block)), 0);
     };
     const p = {
@@ -36,8 +36,8 @@ function fakeTmux() {
       write(text: string) {
         const line = text.trim();
         p.written.push(line);
-        if (line.startsWith('capture-pane')) reply([state.screen]);
-        else if (line.startsWith('display-message')) reply(['%0 80 24 0 0 0010000010']);
+        if (line.startsWith('capture-pane')) { const trailer = state.pauseNext ? `%pause ${state.pane}\n` : ''; state.pauseNext = false; reply([state.screen], trailer); }
+        else if (line.startsWith('display-message')) reply([`${state.pane} 80 24 0 0 0010000010`]);
         else reply([]);
       },
       kill() {},
@@ -67,6 +67,61 @@ function open() {
 describe('#297: Desktop pauses a pane that falls behind', () => {
   afterEach(() => { vi.useRealTimers(); });
 
+  // Review of fe6eb349: the pane switched since the last screen pauses while the new one is captured.
+  it('resumes the new pane if it pauses while its new screen is captured', async () => {
+    const { proc, h, tmux } = open();
+    await settle();
+    proc().emit(`%extended-output %0 0 : ${'x'.repeat(300_000)}\n`);
+    await settle(16);
+    tmux.state.pane = '%1';
+    tmux.state.pauseNext = true;
+    await settle(700);
+    expect(proc().written).toContain("refresh-client -A '%1:continue'");
+    h.stop();
+  });
+  // Review of fe6eb349: keys typed around a pause reach the pane (a pause holds output, not input).
+  it('keeps keystrokes queued while a captured screen immediately pauses again', async () => {
+    vi.useFakeTimers();
+    const tmux = fakeTmux();
+    const sent: ServerMessage[] = [];
+    const h = createPaneHost({ controlArgs: () => ['-C', 'attach-session'], spawn: tmux.spawn, log: () => {} });
+    const reply = (m: unknown) => { sent.push(m as ServerMessage); };
+    h.watch(reply, { id: 'a', tmuxName: 'ledge-a', owned: true }, { cols: 80, rows: 24 });
+    h.input(reply, 'a', 'hello');
+    tmux.state.procs[0]!.emit('%pause %0\n');
+    await settle(700);
+    expect(tmux.state.procs[0]!.written.some(l => l.includes('send-keys'))).toBe(true);
+    h.stop();
+  });
+
+  it('a key typed while the pane is paused reaches it at once, and nothing is typed twice', async () => {
+    vi.useFakeTimers();
+    const tmux = fakeTmux();
+    const h = createPaneHost({ controlArgs: () => ['-C', 'attach-session'], spawn: tmux.spawn, log: () => {} });
+    const reply = () => {};
+    h.watch(reply, { id: 'a', tmuxName: 'ledge-a', owned: true }, { cols: 80, rows: 24 });
+    await settle();
+    tmux.state.procs[0]!.emit('%pause %0\n');
+    await settle(20);
+    h.input(reply, 'a', 'x');
+    await settle(50); // the resume is 200 ms away
+    const keys = () => tmux.state.procs[0]!.written.filter(l => l.includes('send-keys'));
+    expect(keys()).toHaveLength(1);
+    await settle(700);
+    expect(keys()).toHaveLength(1);
+    h.stop();
+  });
+  it('another pane paused before it is watched is resumed once a screen shows it is the one', async () => {
+    const { proc, h, tmux } = open();
+    await settle();
+    proc().emit('%pause %1\n');
+    // A resync (behind) whose screen is now of %1.
+    tmux.state.pane = '%1';
+    proc().emit(`%extended-output %0 0 : ${'x'.repeat(300_000)}\n`);
+    await settle(700);
+    expect(proc().written).toContain("refresh-client -A '%1:continue'");
+    h.stop();
+  });
   it('asks tmux to pause the pane once it is two seconds behind', async () => {
     const { proc, h } = open();
     await settle();
