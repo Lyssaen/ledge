@@ -83,6 +83,8 @@ test('on an iPad the list and the request sit side by side, either way up', asyn
 // The Ledge pane (m3-chat.html §7, Q36): the rail's button opens 400 px on the right over any tab; on its side the tablet makes
 // room for it (the list keeps 380 px), upright it goes over the detail; only its buttons close it, and the device keeps it.
 test('the Ledge pane opens from the rail, beside the panes on its side, over the detail upright', async ({ page, browserName }) => {
+  // Its own PC: the file's one is already paired with the first test's page.
+  const h = await startHarness();
   h.daemon.chat = true;
   try {
     await page.goto(h.url);
@@ -131,6 +133,6 @@ test('the Ledge pane opens from the rail, beside the panes on its side, over the
     await expect(pane).toBeHidden();
     await expect(ledge).toHaveAttribute('aria-pressed', 'false');
   } finally {
-    h.daemon.chat = false;
+    await h.close();
   }
 });
