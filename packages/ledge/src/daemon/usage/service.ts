@@ -204,7 +204,9 @@ export function createUsage(deps: UsageDeps): UsageService {
     // The account is told only for the token Claude Code keeps in its file, the one `~/.claude.json` goes with; an environment
     // token may be another account's: none then. A token that changed (another sign-in) has its account read again.
     const which = token === 'expired' ? 'file:expired' : `${token.from}:${createHash('sha256').update(token.token).digest('hex')}`;
-    if (which !== accountOf || now() - accountAt > REREAD_MS) {
+    // An expired token has no hash to tell one sign-in from another: its account is read on every tick (a local file), so a switch
+    // between two expired tokens is seen at once (#301 review).
+    if (token === 'expired' || which !== accountOf || now() - accountAt > REREAD_MS) {
       account = token !== 'expired' && token.from === 'env' ? null : await readClaudeAccount(home, deps.read);
       accountAt = now(); accountOf = which;
     }
