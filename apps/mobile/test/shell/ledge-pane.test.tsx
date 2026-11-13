@@ -4,7 +4,6 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { App } from '../../src/App';
 import { copy } from '../../src/copy';
-import { forgetPaneScroll } from '../../src/shell/LedgePane';
 import { forgetTabs } from '../../src/shell/tabs';
 import { LEDGE_PANE_KEY, forgetLedgePane } from '../../src/state/ledgePane';
 import { session } from '../model/fixtures';
@@ -15,7 +14,7 @@ import { setup } from '../screens/setup';
 const ON = { confirm: true, chat: true as const };
 const wide = (on: boolean) => { globalThis.matchMedia = ((q: string) => ({ matches: on && !q.includes('pointer'), media: q, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia; };
 
-afterEach(() => { wide(false); forgetLedgePane(); forgetPaneScroll(); forgetTabs(); });
+afterEach(() => { wide(false); forgetLedgePane(); forgetTabs(); });
 
 function tablet(hash: string, device: { confirm: boolean; chat?: true } = ON, t = setup()) {
   globalThis.history.replaceState(null, '', `/${hash}`);
@@ -97,6 +96,16 @@ describe('the Ledge pane on a tablet', () => {
     expect(within(p).queryByLabelText(copy.chat.field)).toBeNull();
     fireEvent.click(within(p).getByRole('button', { name: copy.chat.pane.close }));
     expect(pane()).toBeNull();
+  });
+
+  it('keeps the question being written when closed and opened again (review-qa e0065182)', () => {
+    tablet('#/');
+    fireEvent.click(ledge());
+    fireEvent.change(within(pane()!).getByLabelText(copy.chat.field), { target: { value: 'Brouillon à conserver' } });
+    fireEvent.click(within(pane()!).getByRole('button', { name: copy.chat.pane.close }));
+    expect(pane()).toBeNull();
+    fireEvent.click(ledge());
+    expect(within(pane()!).getByLabelText(copy.chat.field)).toHaveValue('Brouillon à conserver');
   });
 
   it('keeps its scroll when closed and opened again', () => {

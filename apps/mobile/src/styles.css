@@ -172,13 +172,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     padding: env(safe-area-inset-top) calc(14px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 6px) 14px;
     background: var(--color-bg); border-left: 1px solid var(--color-line);
   }
+  .lpane[hidden] { display: none; }
 }
 @media (min-width: 768px) and (min-height: 501px) and (orientation: landscape) {
-  .app:has(> .lpane) { padding-right: calc(400px + max(18px, env(safe-area-inset-right))); }
+  .app:has(> .lpane:not([hidden])) { padding-right: calc(400px + max(18px, env(safe-area-inset-right))); }
+  /* The Atelier's session panel moves beside the pane (review-qa e0065182). */
+  .app:has(> .lpane:not([hidden])) > .atelier-panel { right: calc(400px + 10px); }
 }
 @media (min-width: 768px) and (min-height: 501px) and (orientation: portrait) {
   .split { grid-template-columns: 330px minmax(0, 1fr); }
   .lpane { box-shadow: -12px 0 32px #0006; }
+  /* Upright, the pane goes over the Atelier's session panel too, as over any tab (§7). */
+  .app:has(> .lpane:not([hidden])) > .atelier-panel { z-index: 14; }
 }
 
 /* « Réduire les animations » in Réglages (src/motion.ts): unlayered and important, it wins over every layer's animation. */

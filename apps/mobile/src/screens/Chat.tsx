@@ -47,9 +47,14 @@ export function PaneHead({ frozen, onClose, children }: { frozen: boolean; onClo
       <h2 className="text-base font-semibold">{copy.chat.title}</h2>
       <span className="flex-1" />
       {children}
-      <button type="button" onClick={onClose} aria-label={copy.chat.pane.close} title={copy.chat.pane.close} className={HEAD_BUTTON}><Icon name="close" /></button>
+      <CloseButton onClose={onClose} />
     </header>
   );
+}
+
+/** « Fermer le volet », the pane's ✕. */
+function CloseButton({ onClose }: { onClose: () => void }) {
+  return <button type="button" onClick={onClose} aria-label={copy.chat.pane.close} title={copy.chat.pane.close} className={HEAD_BUTTON}><Icon name="close" /></button>;
 }
 
 /**
@@ -151,7 +156,9 @@ export function Chat({ store, onClose }: { store: MobileStore; onReconnect?: () 
     return (
       <>
         <DetailHeader name={titleOf(past, new Date())}
-          back={<button type="button" aria-label={copy.nav.backTo.chat} title={copy.nav.backTo.chat} onClick={() => setPast(null)} className={iconButtonClass({ className: 'text-muted' })}><Icon name="back" /></button>} />
+          back={<button type="button" aria-label={copy.nav.backTo.chat} title={copy.nav.backTo.chat} onClick={() => setPast(null)} className={iconButtonClass({ className: 'text-muted' })}><Icon name="back" /></button>}
+          // In the tablet's pane, the pane's own « Fermer » on the right too (Q96 A, the user 2026-11-13).
+          {...(onClose ? { more: <CloseButton onClose={onClose} /> } : {})} />
         <p className="bleed flex flex-none items-center gap-2 border-b border-line bg-raised px-3.5 py-2 text-small text-muted"><Icon name="clock" className="size-4 flex-none" />{copy.chat.history.pastBanner}</p>
         <main data-tab-scroll={onClose ? undefined : ''} className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain py-3 text-[14px]">
           {shown && 'gone' in shown && <p className="px-1 text-body text-muted">{copy.chat.history.gone}</p>}

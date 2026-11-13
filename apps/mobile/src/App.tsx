@@ -195,6 +195,10 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   // names the chat (a notification, a link) opens the pane over the last tab instead.
   const paneOpen = useLedgePane(storage);
   const setPane = (open: boolean) => setLedgePane(open, storage);
+  // Once opened, the pane stays mounted, hidden while closed: a question being written, a past conversation and the thread's
+  // place are there again when it opens (review-qa e0065182).
+  const paneShown = useRef(false);
+  if (paneOpen && wide) paneShown.current = true;
   const lastPage = useRef<Tab>('atoi');
   if (tab && tab !== 'chat') lastPage.current = tab;
   const chatPage = wide && kind === 'route' && route.name === 'chat';
@@ -361,8 +365,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           case 'connection': return connection;
         }
       })();
-      const pane = paneOpen && (
-        <LedgePane onClose={() => setPane(false)}>
+      const pane = paneShown.current && (
+        <LedgePane open={paneOpen} onClose={() => setPane(false)}>
           {chatOn ? <Chat store={store} onReconnect={retry} onClose={() => setPane(false)} /> : <ChatUnavailable onClose={() => setPane(false)} />}
         </LedgePane>
       );

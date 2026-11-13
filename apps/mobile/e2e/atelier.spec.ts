@@ -213,6 +213,29 @@ test('no Atelier tab with an older PC, and `#/atelier` leads to the sessions', a
   await expect(page).toHaveURL(/#\/sessions$/);
 });
 
+// The Ledge pane over the Atelier (m3-chat.html §7, review-qa e0065182): on its side the session panel moves beside the pane;
+// upright the pane goes over it.
+test('the Ledge pane stays in sight with a session panel open', async ({ page, browserName }) => {
+  await pair(page);
+  await atelierTab(page).click();
+  await seat(page, 'otto').click();
+  await expect(panel(page)).toBeVisible();
+  await nav(page).getByRole('button', { name: copy.nav.chat }).click();
+  const pane = page.getByRole('complementary', { name: copy.chat.title });
+  await expect(pane.getByLabel(copy.chat.field)).toBeVisible();
+  const p = (await pane.boundingBox())!;
+  expect.soft(p.x + p.width).toBe(LAND.width);
+  const s = (await panel(page).boundingBox())!;
+  expect.soft(s.x + s.width).toBeLessThanOrEqual(p.x);
+  await shot(page, 'ledge-pane-land', browserName);
+  await page.setViewportSize(PORT);
+  const q = (await pane.boundingBox())!;
+  // The topmost element at the pane's foot, where the session panel also is: the pane's.
+  const top = await page.evaluate(([x, y]) => !!document.elementFromPoint(x!, y!)?.closest('.lpane'), [q.x + q.width / 2, q.y + q.height - 120]);
+  expect(top).toBe(true);
+  await shot(page, 'ledge-pane-port', browserName);
+});
+
 test.describe('on a phone', () => {
   const { defaultBrowserType: _w, ...iPhone } = devices['iPhone 13'];
   test.use(iPhone);
