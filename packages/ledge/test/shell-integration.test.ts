@@ -19,7 +19,7 @@ describe('#299: which shell gets the integration', () => {
   it('bash: a login shell whose first prompt sources the script (its PROMPT_COMMAND kept after it), with a fresh nonce', () => {
     const d = dir();
     const s = withIntegration('/bin/bash', { PATH: '/bin', PROMPT_COMMAND: 'mine' }, d, NONCE)!;
-    const boot = `builtin trap -p DEBUG > "\${TMPDIR:-/tmp}/.ledge-trap-$$"; . '${join(d, 'bash.sh')}'`;
+    const boot = `__ledge_ut=$(builtin trap -p DEBUG); . '${join(d, 'bash.sh')}'`;
     expect(s.command).toEqual(['/bin/bash', '-l']);
     expect(s.env).toEqual({ PATH: '/bin', PROMPT_COMMAND: `${boot};mine`, LEDGE_SHELL_BOOT: boot, LEDGE_SHELL_NONCE: NONCE });
     expect(s.nonce).toBe(NONCE);
