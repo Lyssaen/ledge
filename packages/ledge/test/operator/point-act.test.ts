@@ -2,14 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pendingKey, type ChatPoint, type HumanAsk, type PointItem, type Session } from '@ledge/protocol';
-import { Store } from '../src/daemon/store.js';
-import { createChat, type Chat, type ChatDeps, type ChatMessage } from '../src/chat/service.js';
-import { openJournal, type DeviceId } from '../src/operator/journal.js';
-import { createOperator } from '../src/operator/index.js';
-import { createPointActor, type Fail, type PointActDeps } from '../src/operator/act.js';
+import { pendingKey, type ChatAction, type ChatPoint, type HumanAsk, type PointItem, type Session } from '@ledge/protocol';
+import { Store } from '../../src/daemon/store.js';
+import { createChat, type Chat, type ChatDeps, type ChatMessage } from '../../src/chat/service.js';
+import { openJournal, type DeviceId } from '../../src/operator/journal.js';
+import { createOperator } from '../../src/operator/index.js';
+import { actFromChat } from '../../src/chat/act.js';
+import { applySuggestionRow, createPointActor, type Fail, type PointActDeps } from '../../src/operator/act.js';
+import { pointHandlers } from '../../src/operator/point-handlers.js';
 
-vi.mock('../src/log.js', () => ({ log: () => {} }));
+vi.mock('../../src/log.js', () => ({ log: () => {} }));
 
 const AT = '2026-11-13T10:00:00.000Z';
 const pending: NonNullable<Session['pending']> = { kind: 'permission', text: 'Run ls', source: 'hook' };
@@ -36,6 +38,7 @@ function setup(items: PointItem[], over: Partial<PointActDeps> = {}) {
     reply: async (s, t) => { calls.push(`reply ${s} ${t}`); return ok(); },
     answerAsk: async (q, a) => { calls.push(`ask ${q} ${JSON.stringify(a)}`); return { ok: true }; },
     answerTask: async (t, a, c) => { calls.push(`task ${t} ${a} ${c}`); return ok(); },
+    applySuggestion: async (q, i) => { calls.push(`suggest ${q}:${i}`); return undefined; },
     answerBrain: (t, y) => { calls.push(`brain ${t} ${y}`); return undefined; }, isBrain: () => false,
     operator: { settle: (...a) => { settled.push(a); } }, ...over
   });
@@ -100,6 +103,65 @@ describe('point.act', () => {
   });
 });
 
+describe('point.act with a suggestion', () => {
+  const suggestion: ChatAction = { action: 'session.decide', args: { session: 's1', decision: 'accept', expect: { kind: 'permission', text: 'Run ls', key } }, summary: 'Accepter', risk: 'destructive' };
+  const withSuggestion: PointItem = { ...requestItem, suggestion: suggestion };
+  /** The real card path (`actFromChat`) with a resolve that gives the row back, or refuses it, and an apply that records. */
+  const real = (resolve: (row: ChatAction) => unknown, applied: string[]) => (card: Parameters<Parameters<typeof applySuggestionRow>[4]>[0], qid: string, confirmed?: true) =>
+    actFromChat({ chat: card.chat, emit: card.emit, inFlight: new Set(), resolve: row => resolve(row) as never, apply: async row => { applied.push(row.action); } }, qid, [0], confirmed);
+
+  it('applies the row through the card path and clears an earlier error', async () => {
+    const applied: string[] = [];
+    const t = setup([{ ...withSuggestion, error: 'changed' }], { applySuggestion: (q, i, row, c) => applySuggestionRow(q, i, row, c, real(r => r, applied)) });
+    expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true, confirmed: true })).toEqual({ ok: true });
+    expect(applied).toEqual(['session.decide']);
+    expect(t.item(requestItem.id).error).toBeUndefined();
+  });
+  it('is refused, and shown on the item, when the target changed', async () => {
+    const applied: string[] = [];
+    const t = setup([withSuggestion], { applySuggestion: (q, i, row, c) => applySuggestionRow(q, i, row, c, real(() => ({ refused: 'the request has changed', code: 'changed' }), applied)) });
+    expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true, confirmed: true })).toMatchObject({ ok: false, error: 'the request has changed', code: 'changed' });
+    expect(applied).toEqual([]);
+    expect(t.item(requestItem.id).error).toBe('the request has changed');
+  });
+  it('asks for the confirmation of a destructive row and sends nothing without it', async () => {
+    const applied: string[] = [];
+    const t = setup([withSuggestion], { applySuggestion: (q, i, row, c) => applySuggestionRow(q, i, row, c, real(r => r, applied)) });
+    expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true })).toMatchObject({ ok: false, code: 'confirm_required' });
+    expect(applied).toEqual([]);
+    expect(t.item(requestItem.id).error).toBeUndefined();
+  });
+  it('needs a suggestion, and exactly one of answer and suggest', async () => {
+    const t = setup([requestItem]);
+    expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true })).toMatchObject({ ok: false, error: 'no suggestion' });
+    expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id })).toMatchObject({ ok: false, code: 'invalid' });
+    expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true, answer: { id: 'deny' } })).toMatchObject({ ok: false, code: 'invalid' });
+  });
+});
+
+describe('point.act input and dispatch', () => {
+  it('sends the answer a gateway verified, not one it maps again', async () => {
+    const t = setup([askItem]);
+    await t.actor.act('desktop', { qid: t.qid, item: askItem.id, answer: { id: 'blue' }, human: { kind: 'choice', questionId: 'verified', optionId: 'blue' } });
+    expect(t.calls).toEqual(['ask q1 {"kind":"choice","questionId":"verified","optionId":"blue"}']);
+  });
+  it('dispatches the PC to the desktop thread and a phone to its own device thread', async () => {
+    const seen: string[] = [];
+    const h = pointHandlers({ act: async (d, m) => { seen.push(`act ${d} ${m.item}`); return d === 'desktop' ? { ok: true } : { ok: false, error: 'nope', code: 'changed' }; } },
+      () => ({ later: (d, q) => { seen.push(`later ${d} ${q}`); }, read: (d, id) => { seen.push(`read ${d} ${id}`); } }));
+    expect(await h.pc.act({ qid: 'q', item: 'i', answer: { id: 'x' } })).toBeUndefined();
+    h.pc.later('q'); h.pc.read(3);
+    expect(await h.phone.act('abc', { qid: 'q', item: 'i', answer: { id: 'x' } }, { kind: 'pc' })).toMatchObject({ ok: false });
+    h.phone.later('abc', 'q'); h.phone.read('abc', 4);
+    expect(seen).toEqual(['act desktop i', 'later desktop q', 'read desktop 3', 'act device:abc i', 'later device:abc q', 'read device:abc 4']);
+  });
+  it('turns a failed answer into the error message the PC gets, and does nothing without an operator', async () => {
+    const h = pointHandlers({ act: async () => ({ ok: false, error: 'changed', code: 'changed' }) }, () => undefined);
+    expect(await h.pc.act({ qid: 'q', item: 'i', suggest: true })).toEqual({ type: 'error', message: 'changed', request: 'point.act', code: 'changed' });
+    expect(() => { h.pc.later('q'); h.pc.read(1); h.phone.later('d', 'q'); }).not.toThrow();
+  });
+});
+
 describe('point.later and operator.read', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(AT)); });
   afterEach(() => { vi.useRealTimers(); });
@@ -131,8 +193,12 @@ describe('point.later and operator.read', () => {
 
   it('operator.read moves only the sender device cursor', () => {
     const { operator, journal } = operatorSetup();
-    operator.read('device:abc', 7);
-    expect(journal.cursor('device:abc')).toBe(7);
+    for (const n of [1, 2, 3]) journal.record({ kind: 'session.finished', subjectKind: 'session', subjectId: `s${n}`, subjectName: 'x', urgency: 'grouped', payload: {}, machine: 'm', at: AT });
+    operator.read('device:abc', 2);
+    expect(journal.cursor('device:abc')).toBe(2);
     expect(journal.cursor('desktop')).toBe(0);
+    // Never past the newest event: a wrong id would hide what comes next.
+    operator.read('device:abc', 999);
+    expect(journal.cursor('device:abc')).toBe(3);
   });
 });

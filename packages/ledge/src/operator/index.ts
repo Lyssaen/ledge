@@ -149,7 +149,8 @@ export function createOperator(deps: OperatorDeps): Operator {
       }
       tellNotices();
     },
-    read(device, eventId) { journal.setCursor(device, eventId, now()); },
+    // A cursor never passes the newest event: a bad id would hide the events to come.
+    read(device, eventId) { journal.setCursor(device, Math.min(eventId, journal.lastId()), now()); },
     later(device, qid) {
       const chat = threads.all().find(([id]) => id === device)?.[1];
       chat?.updatePoint(qid, p => ({ ...p, laterAt: now() }), emitOf(device));

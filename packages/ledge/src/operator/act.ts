@@ -1,5 +1,6 @@
-import type { HumanAnswer, HumanAsk, PointAnswer, PointItem, Session, DecidedBy } from '@ledge/protocol';
+import type { ChatAction, HumanAnswer, HumanAsk, PointAnswer, PointItem, Session, DecidedBy } from '@ledge/protocol';
 import { pendingKey } from '@ledge/protocol';
+import { ActRefused } from '../chat/act.js';
 import type { Chat, ChatMessage } from '../chat/service.js';
 import type { DeviceId } from './journal.js';
 import type { Operator } from './index.js';
@@ -22,6 +23,8 @@ export interface PointActDeps {
   answerAsk(qitem: string, answer: HumanAnswer): Promise<{ ok: boolean; message?: string; error?: string; outcome?: string }>;
   /** The decision a session put to the user (`task.answer`, destructive: refused unless `confirmed`). */
   answerTask(task: string, text: string, confirmed: boolean): Promise<Fail>;
+  /** An item's suggestion applied as a one-row card, through the same resolve, confirmation and apply as `chat.act`. */
+  applySuggestion(qid: string, item: string, row: ChatAction, confirmed: boolean, by?: DecidedBy): Promise<Fail>;
   /** A proposal about the notes: written when `yes`. */
   answerBrain(task: string, yes: boolean): Fail;
   /** Whether the task is a proposal about the notes rather than a decision. */
@@ -49,16 +52,31 @@ export function createPointActor(deps: PointActDeps) {
     c.chat.updatePoint(qid, p => ({ ...p, items: p.items.map(i => (i.id === id ? { ...i, error: clip(error, 200) } : i)) }), c.emit);
   };
 
+  const clearError = (device: DeviceId, qid: string, id: string) => {
+    const c = deps.chatOf(device); if (!c) return;
+    c.chat.updatePoint(qid, p => (p.items.some(i => i.id === id && i.error !== undefined) ? { ...p, items: p.items.map(i => { if (i.id !== id) return i; const { error: _e, ...rest } = i; return rest; }) } : p), c.emit);
+  };
+
   return {
-    async act(device: DeviceId, msg: { qid: string; item: string; answer: PointAnswer; confirmed?: true }, by?: DecidedBy): Promise<PointResult> {
+    /** `human`: the answer a gateway already verified for a rig ask, sent as it is so the signed subject and the sent answer cannot differ. */
+    async act(device: DeviceId, msg: { qid: string; item: string; answer?: PointAnswer; suggest?: true; confirmed?: true; human?: HumanAnswer }, by?: DecidedBy): Promise<PointResult> {
       const c = deps.chatOf(device);
       const item: PointItem | undefined = c?.chat.points().find(p => p.qid === msg.qid)?.point.items.find(i => i.id === msg.item);
       if (!c || !item) return { ok: false, error: 'unknown item', code: 'unknown_item' };
       const refuse = (error: string, code?: string): PointRefusal => { markError(device, msg.qid, item.id, error); return { ok: false, error, ...(code ? { code } : {}) }; };
-      if (item.settled || !item.ref) return refuse(STALE, 'settled');
       const confirmed = msg.confirmed === true;
-      const text = 'text' in msg.answer ? msg.answer.text : undefined;
-      const id = 'id' in msg.answer ? msg.answer.id : undefined;
+      if ((msg.answer === undefined) === (msg.suggest !== true)) return refuse('answer or suggest, not both', 'invalid');
+      if (msg.suggest) {
+        if (item.settled) return refuse(STALE, 'settled');
+        if (!item.suggestion) return refuse('no suggestion', 'invalid');
+        const fail = await deps.applySuggestion(msg.qid, item.id, item.suggestion, confirmed, by);
+        if (!fail) { clearError(device, msg.qid, item.id); return { ok: true }; }
+        return fail.code === 'confirm_required' ? { ok: false, error: fail.message, code: fail.code } : refuse(fail.message, fail.code);
+      }
+      const answer = msg.answer!;
+      if (item.settled || !item.ref) return refuse(STALE, 'settled');
+      const text = 'text' in answer ? answer.text : undefined;
+      const id = 'id' in answer ? answer.id : undefined;
       const labelOf = (): string => text ?? item.answers?.find(a => a.id === id)?.label ?? id ?? '';
       const done = (fail: Fail): PointResult => {
         if (fail) return fail.code === 'confirm_required' ? { ok: false, error: fail.message, code: fail.code } : refuse(fail.message, fail.code);
@@ -83,9 +101,9 @@ export function createPointActor(deps: PointActDeps) {
       if (ref.kind === 'rig.ask') {
         const ask = deps.asks().find(a => a.id === ref.qitem);
         if (!ask) return refuse('changed', 'changed');
-        const answer = humanAnswerOf(ask, msg.answer);
-        if (!answer) return refuse('unknown answer', 'invalid');
-        const r = await deps.answerAsk(ref.qitem, answer);
+        const human = msg.human ?? humanAnswerOf(ask, answer);
+        if (!human) return refuse('unknown answer', 'invalid');
+        const r = await deps.answerAsk(ref.qitem, human);
         if (!r.ok) return refuse(r.message ?? r.error ?? 'failed');
         // Questions that still wait leave the row open: it is settled by the last answer.
         if (r.outcome === 'recorded') return { ok: true };
@@ -99,4 +117,25 @@ export function createPointActor(deps: PointActDeps) {
       return done(await deps.answerTask(ref.task, words, confirmed));
     }
   };
+}
+
+/** The one-row card a suggestion is applied through, and the call that applies it (`actOnCard`, or `actFromChat` in a test). */
+type SuggestionCard = { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void };
+type RunCard = (card: SuggestionCard, qid: string, confirmed?: true) => Promise<{ failed: Array<{ message: string; refused?: true }> }>;
+
+/**
+ * Applies a suggestion as a card of one row, so it goes through the card's own resolve (against the state now), destructive confirmation and
+ * apply, and nothing else. The card is private to this call: its qid carries the item, so two rows of a point never share an in-flight key.
+ */
+export async function applySuggestionRow(qid: string, itemId: string, row: ChatAction, confirmed: boolean, run: RunCard): Promise<Fail> {
+  const { state: _s, ...fresh } = row;
+  let current: ChatAction = fresh;
+  const card: SuggestionCard = { chat: { action: (_q, r) => (r === 0 ? current : undefined), markAction: (_q, _r, patch) => { current = { ...current, ...patch }; } }, emit: () => {} };
+  try {
+    const failed = (await run(card, `${qid}:${itemId}`, confirmed ? true : undefined)).failed[0];
+    return failed ? { message: failed.message, ...(failed.refused ? { code: 'changed' } : {}) } : undefined;
+  } catch (e) {
+    if (e instanceof ActRefused) return { message: e.message, ...(e.code ? { code: e.code } : {}) };
+    throw e;
+  }
 }

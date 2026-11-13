@@ -22,6 +22,8 @@ export interface Journal {
   since(afterId: number, limit?: number): JournalEvent[];
   /** Unsettled events whose urgency is not `none`. */
   open(): JournalEvent[];
+  /** The id of the newest event, 0 when none. */
+  lastId(): number;
   cursor(device: DeviceId): number;
   /** A cursor never moves back. */
   setCursor(device: DeviceId, id: number, at: string): void;
@@ -85,6 +87,7 @@ export function openJournal(path: string | ':memory:'): Journal {
     'INSERT INTO events (at, machine, kind, subject_kind, subject_id, subject_name, urgency, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
   const openOfSubject = db.prepare('SELECT * FROM events WHERE subject_kind = ? AND subject_id = ? AND settled_at IS NULL ORDER BY id');
   const settleOne = db.prepare('UPDATE events SET settled_at = ?, payload = ? WHERE id = ?');
+  const newest = db.prepare('SELECT MAX(id) AS id FROM events');
   const eventsSince = db.prepare('SELECT * FROM events WHERE id > ? ORDER BY id LIMIT ?');
   const openEvents = db.prepare("SELECT * FROM events WHERE settled_at IS NULL AND urgency != 'none' ORDER BY id");
   const getCursor = db.prepare('SELECT last_event_id FROM reads WHERE device = ?');
@@ -112,6 +115,7 @@ export function openJournal(path: string | ':memory:'): Journal {
     },
     since: (afterId, limit = 1000) => (eventsSince.all(afterId, limit) as unknown as EventRow[]).map(toEvent),
     open: () => (openEvents.all() as unknown as EventRow[]).map(toEvent),
+    lastId: () => (newest.get() as { id: number | null }).id ?? 0,
     cursor: (device) => (getCursor.get(device) as { last_event_id: number } | undefined)?.last_event_id ?? 0,
     setCursor(device, id, at) { putCursor.run(device, id, at); },
     lastWake() {

@@ -82,7 +82,8 @@ import type { ForgeService } from './forge/service.js';
 import { ForgeError, ForgeRefusal } from './forge/types.js';
 import { redact } from './forge/run.js';
 import { wireOperator, type OperatorWired } from '../operator/index.js';
-import { createPointActor, type Fail } from '../operator/act.js';
+import { applySuggestionRow, createPointActor, type Fail } from '../operator/act.js';
+import { pointHandlers } from '../operator/point-handlers.js';
 import type { DeviceId } from '../operator/journal.js';
 
 /** A seat's session without what belonged to the harness it ran before: its request, its reply, its conversation, its model. */
@@ -1164,7 +1165,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * row is about, so the guards are the cards' own. A destructive one (an accepted request, a decision) is refused unless `confirmed`.
    */
   const rowFail = async (id: 'session.decide' | 'task.answer', args: Record<string, unknown>, confirmed: boolean, by?: DecidedBy): Promise<Fail> => {
-    const r = resolveAction(id, actionById(id)!.args.parse(args), liveCtx());
+    // A row the registry's own schema turns down (an answer too long, say) is the row's error, not an exception of the daemon.
+    const parsed = actionById(id)!.args.safeParse(args);
+    if (!parsed.success) return { message: parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; '), code: 'invalid' };
+    const r = resolveAction(id, parsed.data, liveCtx());
     if ('refused' in r) return { message: r.refused, code: r.code };
     const cut = id === 'session.decide' && args.decision === 'accept' ? cardRefusal(r) : null;
     if (cut) return { message: cut.refused, code: cut.code };
@@ -1181,9 +1185,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     answerAsk: (qitem, answer) => human.answer(qitem, answer),
     answerTask: (task, answer, confirmed) => rowFail('task.answer', { task, answer }, confirmed),
     answerBrain: (task, yes) => { const r = answerProposal(task, { yes }, randomUUID()); return r.reason !== undefined ? { message: r.reason } : undefined; },
+    applySuggestion: (qid, itemId, row, confirmed, by) => applySuggestionRow(qid, itemId, row, confirmed, (card, cardQid, ok) => actOnCard(card, cardQid, randomUUID(), [0], ok, undefined, by)),
     isBrain: task => tasks.all().find(t => t.id === task)?.brain !== undefined,
     operator: { settle: (...a) => { try { operator?.operator.settle(...a); } catch (e) { log(`operator: point not settled: ${(e as Error).message}`); } } }
   });
+  const points = pointHandlers(pointActor, () => operator?.operator);
   async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string, by?: DecidedBy, card?: string): Promise<{ failure?: string }> {
     const made = actionMessage(row, rid, card);
     // A request answered from a device's card is that device's decision (`by`, the gateway's); from the PC's, none: the PC.
@@ -1399,12 +1405,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // The operator's point (Task 10): a row answered, the point set aside, the events read by this front's device (the PC's: `desktop`).
       case 'point.act': {
-        const r = await pointActor.act('desktop', msg);
-        if (!r.ok) reply({ type: 'error', message: r.error, request: msg.type, ...(r.code ? { code: r.code } : {}) });
+        const failed = await points.pc.act(msg);
+        if (failed) reply(failed);
         return;
       }
-      case 'point.later': operator?.operator.later('desktop', msg.qid); return;
-      case 'operator.read': operator?.operator.read('desktop', msg.eventId); return;
+      case 'point.later': return points.pc.later(msg.qid);
+      case 'operator.read': return points.pc.read(msg.eventId);
       case 'snapshot.request': return sendSnapshot(reply);
       case 'browser.watch': return browserLive.watch(msg.id, reply);
       case 'browser.unwatch': return browserLive.unwatch(msg.id, reply);
@@ -1876,9 +1882,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       return actOnCard(card, qid, rid, rows, confirmed, deny, by);
     },
     point: {
-      act: (device, msg, by) => pointActor.act(`device:${device}`, msg, by),
-      later: (device, qid) => operator?.operator.later(`device:${device}`, qid),
-      read: (device, eventId) => operator?.operator.read(`device:${device}`, eventId)
+      ...points.phone
     },
     onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',
