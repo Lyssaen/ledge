@@ -5,8 +5,6 @@ import type { TermSurface } from '../term/surface';
 import { commandRows, commandText, outputText, statusOf, type CommandStatus, type ShellCommand } from '../term/shellMarks';
 import { fmtDur } from './exchanges';
 
-/** `.terminal-screen`'s top padding: the xterm's first row starts there. */
-const PAD_TOP = 8;
 
 interface Drawn { c: ShellCommand; status: CommandStatus; from: number; to: number }
 
@@ -24,7 +22,8 @@ export function ShellMarksLayer({ surface, area }: { surface: TermSurface; area:
   const [hover, setHover] = useState<number | null>(null);
   const [focus, setFocus] = useState<number | null>(null);
   const [menu, setMenu] = useState<{ id: number; at: { x: number; y: number } } | null>(null);
-  const handle = useRef<HTMLButtonElement | null>(null);
+  /** The command Ctrl ↑ / Ctrl ↓ just moved to: its handle takes the keyboard as soon as it is drawn (a scroll redraws a frame later). */
+  const toFocus = useRef<number | null>(null);
   const [, tick] = useReducer((n: number) => n + 1, 0);
 
   // Marks, scroll, render, resize: drawn again, once a frame at most.
@@ -53,8 +52,7 @@ export function ShellMarksLayer({ surface, area }: { surface: TermSurface; area:
     if (!el || !on) return;
     const move = (e: MouseEvent) => {
       const view = sh!.view();
-      const box = el.getBoundingClientRect();
-      const row = Math.floor((e.clientY - box.top - PAD_TOP) / view.rowPx) + view.top;
+      const row = Math.floor((e.clientY - view.y) / view.rowPx) + view.top;
       const list = sh!.marks.commands();
       const hit = list.map((c, i) => ({ c, status: statusOf(c, i === list.length - 1), ...commandRows(c, view.cursor) }))
         .find(d => d.status !== 'typing' && row >= d.from && row <= d.to);
@@ -79,7 +77,9 @@ export function ShellMarksLayer({ surface, area }: { surface: TermSurface; area:
     else next = list[at + dir];
     if (!next) { setFocus(null); if (dir > 0) { sh.scrollTo(view.length); surface.focus(); } return true; }
     sh.scrollTo(next.prompt.line);
+    toFocus.current = next.id;
     setFocus(next.id);
+    redraw();
     return true;
   };
   const stepRef = useRef(step);
@@ -89,20 +89,20 @@ export function ShellMarksLayer({ surface, area }: { surface: TermSurface; area:
     sh.onMarkKey(dir => stepRef.current(dir));
     return () => sh.onMarkKey(null);
   }, [sh]);
-  // The handle focused by Ctrl ↑ / Ctrl ↓ takes the keyboard: Entrée opens its menu.
-  useEffect(() => { if (focus !== null) handle.current?.focus(); }, [focus]);
 
   if (!on || !v) return null;
   const now = Date.now();
   const dur = (c: ShellCommand) => fmtDur(Math.max(0, (c.endedAt ?? now) - (c.startedAt ?? now)), lang);
   /** « Code de sortie 1 · 3,2 s », « En cours · 12 s »; a command ended with no code: its duration alone. */
   const head = (d: Drawn) => d.status === 'running' ? m.running(dur(d.c)) : d.c.code != null ? m.exitCode(d.c.code, dur(d.c)) : dur(d.c);
-  const y = (line: number) => PAD_TOP + (line - v.top) * v.rowPx;
+  // The xterm's first row, from the layer's top (the screen's padding, a banner above).
+  const origin = v.y - (area.current?.getBoundingClientRect().top ?? v.y);
+  const y = (line: number) => origin + (line - v.top) * v.rowPx;
   const bottom = v.top + v.rows - 1;
   const shown = ran.filter(d => d.to >= v.top && d.from <= bottom);
   const active = shown.find(d => d.c.id === (menu?.id ?? focus ?? hover));
   const running = !!sh!.marks.running();
-  const area_h = (area.current?.getBoundingClientRect().height ?? 0) - PAD_TOP;
+  const area_h = v.rows * v.rowPx;
   const failed = ran.filter(d => d.status === 'failed');
 
   const copy = (text: string) => { void navigator.clipboard.writeText(text).catch(() => undefined); };
@@ -113,7 +113,7 @@ export function ShellMarksLayer({ surface, area }: { surface: TermSurface; area:
   };
 
   return (
-    <div className="shell-marks" aria-hidden={false}>
+    <div className="shell-marks">
       {shown.map(d => {
         if (d.status !== 'failed' && d.status !== 'running') return null;
         const top = Math.max(d.from, v.top), end = Math.min(d.to, bottom);
@@ -126,9 +126,10 @@ export function ShellMarksLayer({ surface, area }: { surface: TermSurface; area:
       {active && active.from >= v.top && (
         <Menu open={menu?.id === active.c.id} onOpenChange={o => { if (!o) setMenu(null); }} label={head(active)} className="shell-mark-handle-wrap" menuClassName="session-menu shell-mark-menu"
           at={menu?.at} trigger={tr => (
-            <button type="button" ref={el => { tr.ref.current = el; handle.current = el; }} aria-haspopup={tr['aria-haspopup']} aria-expanded={tr['aria-expanded']}
+            <button type="button" ref={el => { tr.ref.current = el; if (el && toFocus.current === active.c.id) { toFocus.current = null; el.focus(); } }} aria-haspopup={tr['aria-haspopup']} aria-expanded={tr['aria-expanded']}
               className="shell-mark-handle" style={{ top: y(active.from) + (v.rowPx - 16) / 2 }} title={head(active)} aria-label={head(active)}
-              onBlur={() => { if (!menu) setFocus(f => (f === active.c.id ? null : f)); }}
+              // Leaving for its own menu keeps it; leaving elsewhere (the terminal clicked) drops the keyboard's command.
+              onBlur={e => { if (!(e.relatedTarget instanceof Node && e.currentTarget.parentElement?.contains(e.relatedTarget))) setFocus(f => (f === active.c.id ? null : f)); }}
               onKeyDown={onHandleKey}
               onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setMenu(x => (x ? null : { id: active.c.id, at: { x: r.right - 248, y: r.bottom + 4 } })); }}>⋯</button>
           )}>
@@ -141,7 +142,7 @@ export function ShellMarksLayer({ surface, area }: { surface: TermSurface; area:
       )}
       {area_h > 0 && failed.map(d => (
         <button key={`f${d.c.id}`} type="button" className="shell-mark-fail" tabIndex={-1} aria-label={head(d)} title={head(d)}
-          style={{ top: PAD_TOP + Math.min(area_h - 3, (d.from / Math.max(1, v.length)) * area_h) }} onClick={() => sh!.scrollTo(d.from)} />
+          style={{ top: origin + Math.min(area_h - 3, (d.from / Math.max(1, v.length)) * area_h) }} onClick={() => sh!.scrollTo(d.from)} />
       ))}
     </div>
   );

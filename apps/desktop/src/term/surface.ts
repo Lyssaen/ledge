@@ -32,9 +32,9 @@ export interface TermSurface {
 /** What a free shell's view reads of its xterm to draw the command marks (#299). */
 export interface ShellSurface {
   marks: ShellMarks;
-  /** Where the screen is: the first line shown, the rows, the buffer's length, the cursor's line, a row's height in px; `normal`
+  /** Where the screen is: the first line shown, the rows, the buffer's length, the cursor's line, a row's height in px, its top; `normal`
    *  false while a full-screen program holds the alternate screen (no marks there). */
-  view(): { top: number; rows: number; length: number; cursor: number; rowPx: number; normal: boolean };
+  view(): { top: number; rows: number; length: number; cursor: number; rowPx: number; /** The first row's top, in the window. */ y: number; normal: boolean };
   /** Scroll, render, resize, buffer switch: the view to draw again. */
   onView(fn: () => void): () => void;
   line(n: number): string | undefined;
@@ -266,8 +266,11 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
       view: () => {
         const b = term.buffer.active;
         const screen = host.querySelector<HTMLElement>('.xterm-screen');
-        const h = screen?.getBoundingClientRect().height ?? 0;
-        return { top: b.viewportY, rows: term.rows, length: b.length, cursor: b.baseY + b.cursorY, rowPx: term.rows ? h / term.rows : 0, normal: b.type === 'normal' };
+        const box = screen?.getBoundingClientRect();
+        // The cell's height as xterm lays the rows out (no public API); else the screen's height shared by the rows.
+        const cell = (term as unknown as { _core?: { _renderService?: { dimensions?: { css?: { cell?: { height?: number } } } } } })._core?._renderService?.dimensions?.css?.cell?.height;
+        const rowPx = cell && cell > 0 ? cell : term.rows && box ? box.height / term.rows : 0;
+        return { top: b.viewportY, rows: term.rows, length: b.length, cursor: b.baseY + b.cursorY, rowPx, y: box?.top ?? 0, normal: b.type === 'normal' };
       },
       onView: fn => { views.add(fn); return () => { views.delete(fn); }; },
       line: n => term.buffer.active.getLine(n)?.translateToString(true),

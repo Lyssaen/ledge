@@ -29,6 +29,12 @@ const xt = vi.hoisted(() => {
     onResize(fn: (e: { cols: number; rows: number }) => void) { this.resized.push(fn); return { dispose() {} }; }
     hasSelection() { return this.selection !== ''; }
     getSelection() { return this.selection; }
+    // #299: what the command marks read and listen to.
+    onScroll() { return { dispose() {} }; }
+    onRender() { return { dispose() {} }; }
+    buffer = { active: { type: 'normal', viewportY: 0, baseY: 0, cursorY: 0, cursorX: 0, length: 24, getLine: () => undefined }, onBufferChange: () => ({ dispose() {} }) };
+    registerMarker() { return { line: this.buffer.active.baseY + this.buffer.active.cursorY, isDisposed: false, dispose() {} }; }
+    scrollToLine = vi.fn();
   }
   return { terms, links: [] as unknown[], FakeTerminal, webglThrows: false, contextLost: [] as (() => void)[], webgl: [] as { dispose: ReturnType<typeof vi.fn> }[] };
 });
@@ -300,4 +306,27 @@ it('placeSurface puts the element alone in its place and lets it adopt that docu
   placeSurface(s, el);
   expect([...el.children]).toEqual([s.host]);
   expect(adopt).toHaveBeenCalledWith(document);
+});
+
+it('#299: OSC 633 marks the commands; Ctrl ↑ / Ctrl ↓ reach the marks only when a view takes them', () => {
+  const { s, t } = surface();
+  const sh = s.shell!;
+  expect(sh.marks.active).toBe(false);
+  t.osc.get(633)!('A');
+  t.osc.get(633)!('P;Cwd=/home/u/ledge');
+  expect(sh.marks.active).toBe(true);
+  expect(sh.marks.cwd).toBe('/home/u/ledge');
+  expect(sh.marks.commands()).toHaveLength(1);
+  // No view took the keys: they go to the shell.
+  const up = key({ code: 'ArrowUp', key: 'ArrowUp', ctrlKey: true });
+  expect(t.keys(up)).toBe(true);
+  const took = vi.fn(() => true);
+  sh.onMarkKey(took);
+  const up2 = key({ code: 'ArrowUp', key: 'ArrowUp', ctrlKey: true });
+  expect(t.keys(up2)).toBe(false);
+  expect(took).toHaveBeenCalledWith(-1);
+  expect(up2.preventDefault).toHaveBeenCalled();
+  // A view that declines (no integration, a full-screen program): the shell has it.
+  sh.onMarkKey(() => false);
+  expect(t.keys(key({ code: 'ArrowDown', key: 'ArrowDown', ctrlKey: true }))).toBe(true);
 });
