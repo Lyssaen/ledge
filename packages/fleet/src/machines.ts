@@ -167,13 +167,39 @@ export function terminalCommand(machine: MachineState, rawId: string, opts: { re
   const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, command.map(quote).join(' ')] : command;
   return argv.every(wslArg) ? argv : null;
 }
-/** A login shell in `dir` (home when it is gone): the user's own shell, read from passwd here and from `$SHELL` over ssh. */
-export function shellCommand(machine: MachineState, dir: string): string[] | null {
+/** A free shell's nonce (#299): 32 hexadecimal characters, drawn by the front for each shell. */
+export const SHELL_NONCE = /^[0-9a-f]{32}$/;
+/** What `<launcher> shell` prints first (#299, agreed with dev-back): any other output (an older ledge, noise, an error) is never
+ *  evaluated. `:` is POSIX's no-op. */
+export const SHELL_LINE_MARK = ': ledge-shell; ';
+/** UTF-8 base64, browser and Node alike. */
+const base64 = (s: string): string => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+/** A login shell in `dir` (home when it is gone): the user's own shell, read from passwd here and from `$SHELL` over ssh. With
+ *  `nonce`, and a machine whose daemon says `freeShell`, its launcher prints the line that starts the shell with the integration
+ *  (OSC 633, E signed with `nonce`), evaluated only when it starts with SHELL_LINE_MARK; else the plain login shell as before. */
+export function shellCommand(machine: MachineState, dir: string, nonce?: string): string[] | null {
   if (!wslArg(dir)) return null; // empty, or one wsl.exe would mangle: no shell
-  const go = `cd ${quote(dir)} 2>/dev/null || cd; exec`;
-  const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, `${go} $SHELL -l`] : ['sh', '-c', `${go} $(getent passwd $(id -un) | cut -d: -f7) -l`];
+  const plain = `cd ${quote(dir)} 2>/dev/null || cd; exec`;
+  const login = machine.ssh ? '$SHELL' : '$(getent passwd $(id -un) | cut -d: -f7)';
+  if (!integrated(machine, nonce)) {
+    const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, `${plain} ${login} -l`] : ['sh', '-c', `${plain} ${login} -l`];
+    return argv.every(wslArg) ? argv : null;
+  }
+  // No double quote (wsl.exe would split the argument on it): IFS empty and globbing off keep the printed line one word, as is.
+  // Its errors stay out of it (2>/dev/null): a launcher gone prints nothing here, and the plain shell starts.
+  const ask = [...machine.launcher!, 'shell', '--nonce', nonce!, dir].map(quote).join(' ');
+  const line = `set -f; IFS=; l=$(${ask} 2>/dev/null); case $l in ${quote(SHELL_LINE_MARK)}*) eval $l;; esac; unset IFS; set +f; ${plain} ${login} -l`;
+  // Over ssh the string is read by the remote login shell, which may not be sh: fish refuses `IFS=`, and reads a quote nested in
+  // single quotes (`'\\''`) its own way. So sh runs it, and it travels in base64: the quoted part holds no quote nor backslash,
+  // and base64's alphabet means the same to sh and fish (review #299, point 1).
+  // A remote that cannot decode it (no base64; an old macOS spells it -D) evaluates nothing: the plain login shell then, at home.
+  const decode = ' (printf %s $0 | base64 -d || printf %s $0 | base64 -D) 2>/dev/null'; // a space first: `$((` would be arithmetic
+  const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, `sh -c 'IFS=; set -f; eval $(${decode}); unset IFS; set +f; exec $SHELL -l' ${base64(line)}`] : ['sh', '-c', line];
   return argv.every(wslArg) ? argv : null;
 }
+/** Whether a free shell on `machine` starts with the integration: its daemon says so, its launcher is known, the nonce is one. */
+export const integrated = (machine: MachineState, nonce: string | undefined): boolean =>
+  !!nonce && SHELL_NONCE.test(nonce) && machine.daemon?.freeShell === true && !!machine.launcher?.length;
 const EMPTY: MachineState[] = [];
 const noopSubscribe = () => () => {};
 const emptySnapshot = () => EMPTY;

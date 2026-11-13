@@ -52,7 +52,10 @@ export const TermOpenedSchema = z.object({
   screen: z.string().max(TERM_PANE_SCREEN_MAX),
   cursor: z.object({ x: z.number().int().nonnegative().max(1000), y: z.number().int().nonnegative().max(1000) }),
   /** Absent from an older daemon: the screen is painted with xterm's own modes, as before. */
-  modes: TermModesSchema.optional()
+  modes: TermModesSchema.optional(),
+  /** #299: a free shell with Ledge's integration signs its command lines (OSC 633;E;<line>;<nonce>) with this: an E without it, or
+   *  with another, comes from what a program wrote, not from the shell, and is never run again. Absent: no integration. */
+  nonce: z.string().regex(/^[0-9a-f]{32}$/).optional()
 });
 export const TermOutputSchema = z.object({ type: z.literal('term.output'), id, shell: shell.optional(), data: z.string().min(1).max(TERM_CHUNK_B64) });
 export const TermSizeSchema = z.object({ type: z.literal('term.size'), id, shell: shell.optional(), cols, rows });

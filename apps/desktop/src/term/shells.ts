@@ -1,4 +1,4 @@
-import { shellCommand, type MachineState } from '@ledge/fleet';
+import { integrated, shellCommand, type MachineState } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import type { Messages } from '../i18n/messages';
 import type { NativeShell } from './backend';
@@ -31,18 +31,14 @@ export function defaultShell(rows: readonly ShellRow[], last: ShellKind): ShellK
   return rows.some(r => r.kind === 'wsl') ? 'wsl' : rows[0]?.kind ?? 'wsl';
 }
 
-/** What the pseudo-terminal runs: argv in WSL (starting in `dir`), or a native shell; null when it cannot (wsl.exe would refuse the folder, unknown machine). */
-export function shellLaunch(kind: ShellKind, ctx: { dir: string; machines: readonly MachineState[] }): { argv: string[] } | { native: NativeShell } | null {
+/** What the pseudo-terminal runs: argv in WSL (starting in `dir`), or a native shell; null when it cannot (wsl.exe would refuse the folder, unknown machine).
+ *  `nonce` (#299): the shell's key; `integrated` says whether it started with the integration (its E then signed with the key). */
+export function shellLaunch(kind: ShellKind, ctx: { dir: string; machines: readonly MachineState[]; nonce?: string }): { argv: string[]; integrated?: boolean } | { native: NativeShell } | null {
   if (kind === 'powershell' || kind === 'cmd' || kind === 'gitbash') return { native: kind };
   if (kind === 'ledge') return { argv: LEDGE_ARGV };
-  if (kind === 'wsl') {
-    const local = ctx.machines.find(m => m.id === 'local');
-    const argv = local ? shellCommand(local, ctx.dir || '~') : null;
-    return argv ? { argv } : null;
-  }
-  const machine = ctx.machines.find(m => m.id && m.id !== 'local' && m.ssh && `ssh:${m.id}` === kind);
-  const argv = machine ? shellCommand(machine, ctx.dir || '~') : null;
-  return argv ? { argv } : null;
+  const machine = kind === 'wsl' ? ctx.machines.find(m => m.id === 'local') : ctx.machines.find(m => m.id && m.id !== 'local' && m.ssh && `ssh:${m.id}` === kind);
+  const argv = machine ? shellCommand(machine, ctx.dir || '~', ctx.nonce) : null;
+  return argv ? { argv, ...(machine && integrated(machine, ctx.nonce) ? { integrated: true } : {}) } : null;
 }
 
 /** A session's own shell (OMP's « Ouvrir un shell »): on its machine, over SSH when that machine is reached that way, else WSL;

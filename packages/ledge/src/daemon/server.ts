@@ -75,6 +75,7 @@ import { createBrowserLive, type BrowserLiveService } from './browser/live.js';
 import { enableLive } from './browser/enable.js';
 import { createPaneHost, type PaneHost } from '../term/pane.js';
 import { bornShell } from '../term/shell.js';
+import { withIntegration } from '../term/shellIntegration.js';
 import type { UsageService } from './usage/service.js';
 import type { ForgeService } from './forge/service.js';
 import { ForgeError, ForgeRefusal } from './forge/types.js';
@@ -626,7 +627,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     broadcast(c.type === 'updated' ? { type: 'session.updated', session: c.session } : { type: 'session.removed', id: c.id });
   });
   const sendSnapshot = (reply: Reply) => {
-    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRig: true, openrigPolicy: true, openrigFresh: true, ping: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(forge ? { forge: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
+    reply({ type: 'snapshot', sessions: store.all(), recents: store.recents(), launcher, ...(opts.daemon ? { daemon: { ...opts.daemon, routing: true, archive: true, freeShell: true, models: true, modelSwitch: true, commands: true, omp: true, ompApproval: true, openrig: true, openrigRoles: true, openrigRig: true, openrigPolicy: true, openrigFresh: true, ping: true, openrigRows: true, broadcast: true, openrigAsks: true, openrigGoals: true, browserLive: true, ...(panes ? { terminalStream: true, terminalStreamSeats: true } : {}), ...(usage ? { usage: true } : {}), ...(forge ? { forge: true } : {}), ...(mobile || unavailable ? { mobile: true } : {}) } } : {}) });
     reply(machinesMsg()); // spec §5.2: after each snapshot, the shared machines list
     reply(projectsMsg()); // then the shared projects (build spec §5)
     reply(islandMsg()); // then the island's settings
@@ -1352,6 +1353,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           watch: (session, size) => panes.watch(reply, session, size), reply,
           alive: () => shellReplies.has(reply), gone: () => store.get(s.id) === undefined,
           killSession: name => { void opts.tmux.killSession(name).catch(() => log('shell kill failed')); },
+          // A session's shell tab gets the marks too (its `term.opened` carries the nonce); today only Desktop's free shells draw them.
+          integration: (shell, env) => withIntegration(shell, env, join(paths().dir, 'shell-integration')),
           log
         });
         return;

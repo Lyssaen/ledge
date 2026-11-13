@@ -5,6 +5,7 @@ import { useI18n } from '../i18n/lang';
 import { TermStoreContext, useFreeShell } from '../term/useTerms';
 import { useTabPlace } from '../workspace/tabPlace';
 import { Banner } from './AgentView';
+import { ShellMarksLayer } from './ShellMarksLayer';
 
 /** A bottom-panel shell (`shell:<n>`), in a panel tile or a dock tab: its xterm, moved in, never re-made (its screen and
  *  scrollback stay); ended, the right panel's banner and « Rouvrir »; unavailable, its banner. */
@@ -23,6 +24,7 @@ export function FreeShellView({ id, claimFocus }: FreeShellViewProps): JSX.Eleme
   const subscribe = useCallback((fn: () => void) => store.subscribe(fn), [store]);
   const surface = useSyncExternalStore(subscribe, () => store.surface(id));
   const body = useRef<HTMLDivElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
   const claim = useRef(claimFocus);
   claim.current = claimFocus;
 
@@ -54,7 +56,10 @@ export function FreeShellView({ id, claimFocus }: FreeShellViewProps): JSX.Eleme
   return (
     <div className="ide-free-shell">
       {banner}
-      {surface ? <div key="screen" ref={body} className="terminal-screen" /> : <div key="blank" className="terminal-screen" />}
+      {/* #299: the command marks over the xterm, a sibling of its place (placeSurface keeps that place to the xterm alone). */}
+      {surface
+        ? <div key="screen" ref={wrap} className="shell-marks-wrap"><div ref={body} className="terminal-screen" /><ShellMarksLayer surface={surface} area={wrap} /></div>
+        : <div key="blank" className="terminal-screen" />}
     </div>
   );
 }

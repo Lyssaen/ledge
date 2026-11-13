@@ -1,5 +1,6 @@
 const USAGE = `ledge <claude|codex|cursor> [--name <bot>] [-- agent args]   start an agent in a tracked session
 ledge attach [--read-only] <id>                              put this terminal on a running session
+ledge shell [--nonce <hex32>] <dir>                          print the line that starts your login shell in <dir> with Ledge's marks
 ledge daemon                                                 run the daemon in the foreground
 ledge hook [codex|cursor] <Event>                            receive a hook (reads JSON on stdin)
 ledge setup                                                  install hooks and ~/.ledge
@@ -46,6 +47,7 @@ async function main(argv: string[]): Promise<number> {
     case 'tui': { const { runTui } = await import('../tui/index.js'); return runTui(rest); }
     case 'bridge': { const { bridge } = await import('./bridge.js'); await bridge(); return 0; }
     case 'claude': case 'codex': case 'cursor': { const { launch } = await import('./launch.js'); return launch(cmd, rest); }
+    case 'shell': { const { shell } = await import('./shell.js'); return shell(rest); }
     case 'attach': { const { attach } = await import('./attach.js'); return attach(rest.find(a => !a.startsWith('--')) ?? '', { readOnly: rest.includes('--read-only') }); }
     default: console.log(USAGE); return cmd ? 1 : 0;
   }
