@@ -30,7 +30,7 @@ export const rigsEn: RigsCopy = {
   launchNote: 'A new rig is composed with Max or launched from Ledge Desktop.',
   loading: 'Reading OpenRig…',
   empty: { title: 'No rig yet.', body: 'A rig is a team of agents. Max, the kernel\'s operator, can help you put one together.', talk: 'Talk to Max' },
-  stopped: { title: 'OpenRig is stopped.', body: 'The rigs and the kernel start again with the daemon.', start: 'Start OpenRig', note: 'These two choices are kept on this phone, like Desktop keeps its own.' },
+  stopped: { title: 'OpenRig is stopped.', body: 'The rigs and the kernel start again with the daemon.', start: 'Start OpenRig', note: 'These two choices are kept on this device, like Desktop keeps its own.' },
   notInstalled: { title: 'OpenRig is not installed', body: (pc: string) => `The rig command cannot be found on ${pc}. Ledge installs nothing by itself.` },
   unavailable: { title: 'OpenRig did not answer in time.', body: (t: string) => `The list below is the one read at ${t}.`, retry: 'Retry' },
   offlineBody: (t: string) => `Last known state · ${t}. Nothing can be started or stopped until the PC answers.`,
@@ -231,7 +231,7 @@ export const rigsEn: RigsCopy = {
     stoppedTitle: 'The kernel is stopped.', stoppedBody: 'Max cannot help you compose a rig.', startKernel: 'Start the kernel',
     skippedTitle: 'The daemon started without the kernel.', skippedBody: 'Turn off “Start without the kernel”, then restart the daemon, or start the kernel alone.',
     menu: { refresh: 'Refresh', restart: 'Restart the kernel', stop: 'Stop the kernel' },
-    daemonNote: 'Stopping the daemon stops every rig and the kernel. These two choices live on this phone; Desktop keeps its own.'
+    daemonNote: 'Stopping the daemon stops every rig and the kernel. These two choices live on this device; Desktop keeps its own.'
   },
   max: {
     title: 'Max', role: 'kernel\'s operator',

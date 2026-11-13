@@ -59,6 +59,13 @@ describe('the languages (m0-langue.html: Français · English, French by default
     expect(copyFor('en').prs.pane).toEqual({ title: 'Nothing to show', body: 'An MR or PR and its pipeline open here.' });
   });
 
+  it('says Rigs\' start choices are kept on this device, a tablet too (Q98 A)', () => {
+    expect(copyFor('fr').rigs.stopped.note).toBe('Ces deux choix sont gardés sur cet appareil, comme Desktop garde les siens.');
+    expect(copyFor('fr').rigs.kernelView.daemonNote).toBe('Arrêter le daemon arrête tous les rigs et le kernel. Ces deux choix vivent sur cet appareil ; Desktop garde les siens.');
+    expect(copyFor('en').rigs.stopped.note).toBe('These two choices are kept on this device, like Desktop keeps its own.');
+    expect(copyFor('en').rigs.kernelView.daemonNote).toBe('Stopping the daemon stops every rig and the kernel. These two choices live on this device; Desktop keeps its own.');
+  });
+
   it('leaves no French in the English table, but the languages\' own names', () => {
     const french = strings(copyFor('en')).filter(([k]) => !k.startsWith('settings.langs.')).filter(([, s]) => /[éèêàùçôîœ«»]|\b(le|la|les|des|une|est|pas|sur|avec)\b/i.test(s));
     expect(french).toEqual([]);
