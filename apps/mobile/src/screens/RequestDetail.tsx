@@ -14,6 +14,8 @@ import { Command } from '../ui/Command';
 import { BackHeader, linkView } from '../ui/Header';
 import { MobileBot } from '../ui/MobileBot';
 import { Notice } from '../ui/Notice';
+import { useShell } from '../shell/Shell';
+import { useBannerSlot } from '../ui/layout';
 import { usePlatform } from './device';
 import { DecisionFooter } from './DecisionFooter';
 import { Gone } from './Gone';
@@ -78,6 +80,11 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
   const state = useMobile(store);
   const now = useNow();
   const { fresh, ops, capabilities } = state;
+  // In two panes, the banner over both says the PC or the relay does not answer (t-tablette.html §6, Q95 A): the request keeps
+  // its disabled buttons and the line under them, without a card of its own.
+  const slot = useBannerSlot();
+  const { look } = useShell();
+  const across = slot !== undefined && look === 'offline';
   const [key, setKey] = useState(requestKey);
   const [changed, setChanged] = useState(false);
   const [choice, setChoice] = useState<number | null>(null);
@@ -313,7 +320,7 @@ export function RequestDetail({ store, sessionId, requestKey, onReconnect, panel
             )}
           </>
         )}
-        {!fresh && outcome.kind !== 'uncertain' && <div className="mt-4"><Lost onReconnect={onReconnect} /></div>}
+        {!fresh && !across && outcome.kind !== 'uncertain' && <div className="mt-4"><Lost onReconnect={onReconnect} /></div>}
       </main>
       <DecisionFooter
         item={req} outcome={outcome} fresh={fresh} changed={changed} stillPending={item !== undefined} threadHref={threadHref} withThread={!paneHead}

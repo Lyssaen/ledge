@@ -4,7 +4,7 @@ import { act, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PhoneServerMessage } from '@ledge/protocol';
 import { copy } from '../../src/copy';
-import { session } from '../model/fixtures';
+import { pending, session } from '../model/fixtures';
 import { forgeState } from '../model/forge-fixtures';
 import { openrig } from '../model/openrig-fixtures';
 import { snapshot } from '../state/helpers';
@@ -96,6 +96,18 @@ describe('a PC that does not answer, in two panes (Q95 A)', () => {
     expect(within(strips[0] as HTMLElement).getByText(copy.offline.title('WSL'))).toBeTruthy();
     expect(within(head()).getByText(/^Dernier état connu · \d\d:\d\d$/)).toBeTruthy();
     expect(head().querySelector('[data-host="offline"]')).toBeTruthy();
+  });
+
+  it('on À toi, a request beside its list: the head without the host pill, the request without a lost-link card (§6)', () => {
+    const t = open('#/request/a/ka', [session('a', { name: 'Pim', state: 'waiting_permission', pending: pending({ key: 'ka', text: 'pnpm test' }) })]);
+    t.ready();
+    act(() => t.set('pc_offline'));
+    expect(within(head()).getByRole('heading', { level: 1 }).textContent).toBe(copy.inbox.title);
+    expect(within(head()).getByText(/^Dernier état connu · \d\d:\d\d$/)).toBeTruthy();
+    expect(head().querySelector('[data-host]')).toBeNull();
+    expect(document.querySelectorAll('[data-strip]')).toHaveLength(1);
+    expect(screen.queryByText(copy.link.lostTitle)).toBeNull();
+    expect(screen.getByRole('button', { name: copy.decide.allow })).toHaveProperty('disabled', true);
   });
 
   it('keeps the phone\'s banner in its tab', () => {

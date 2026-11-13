@@ -187,7 +187,7 @@ export function Inbox({ store, onReconnect, forge }: { store: MobileStore; onRec
   if (wide) return <WideList update={update} state={state} items={shownItems} asks={showRigs ? shownAsks : []} working={working} showRigs={showRigs} chipBar={chipBar} empty={empty || filteredEmpty} subtitle={subtitle} threshold={threshold} now={now} machine={machine} />;
 
   return (
-    <TabPage title={copy.inbox.title} subtitle={subtitle}>
+    <TabPage title={copy.inbox.title} subtitle={subtitle} offlinePill={false}>
       {update}
       {chipBar}
       {empty}
@@ -239,7 +239,7 @@ function WideList({ update, state, items, asks, working, showRigs, chipBar, empt
   const route = useRoute();
   const offline = !state.fresh;
   return (
-    <TabPage title={copy.inbox.title} subtitle={subtitle} wideSubtitle={subtitle}>
+    <TabPage title={copy.inbox.title} subtitle={subtitle} wideSubtitle={subtitle} offlinePill={false}>
       {update}
       {chipBar}
       {empty}

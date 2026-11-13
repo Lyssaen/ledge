@@ -94,7 +94,11 @@ for (const theme of ['dark', 'light'] as const) {
       const box = (await strip.boundingBox())!;
       expect.soft(Math.round(box.x)).toBeGreaterThanOrEqual(RAIL);
       expect.soft(Math.round(box.x + box.width)).toBeGreaterThan(1100);
-      await expect(page.locator('.split-list .pane-head')).toContainText(/Dernier état connu/);
+      await expect(page.locator('.split-list .pane-head')).toContainText(/Dernier état connu · \d\d:\d\d/);
+      // À toi's head has no host pill (§6), its title on one line; the request keeps no card of its own under the banner.
+      await expect(page.locator('.split-list .pane-head [data-host]')).toHaveCount(0);
+      expect.soft(Math.round((await page.locator('.split-list .pane-head h1').boundingBox())!.height)).toBeLessThan(32);
+      await expect(page.getByText(copy.link.lostTitle)).toHaveCount(0);
       await expect(row).toBeVisible();
       await shot(page, 'relay', theme);
       await h.startRelay();

@@ -238,7 +238,7 @@ function Loading() {
  * A tab's page. On a phone: the banner, then the tab's title and what it says, then its content. On a wide screen, the list's
  * head carries the title, the host pill beside it. Before the PC's first state, its outline instead of the content.
  */
-export function TabPage({ title, subtitle, wideSubtitle, actions, wideActions, children, bodyClassName = 'flex flex-col gap-3', offlineBody, heading = true }: {
+export function TabPage({ title, subtitle, wideSubtitle, actions, wideActions, children, bodyClassName = 'flex flex-col gap-3', offlineBody, heading = true, offlinePill = true }: {
   title: string; subtitle?: string | undefined;
   /** On a phone, what the title's line carries on its right (Sessions: Liste · Atelier, m2-sessions.html §1, §7). */
   actions?: ReactNode;
@@ -251,6 +251,8 @@ export function TabPage({ title, subtitle, wideSubtitle, actions, wideActions, c
   offlineBody?: (since: string) => string;
   /** False: on a phone the title is already in the top bar (M4 « Rigs »). */
   heading?: boolean;
+  /** False: offline, the list's head on a wide screen says its last known state without the host pill (À toi, t-tablette.html §6). */
+  offlinePill?: boolean;
 }) {
   const wide = useWide();
   const { pc, look, since } = useShell();
@@ -262,9 +264,9 @@ export function TabPage({ title, subtitle, wideSubtitle, actions, wideActions, c
     <>
       {wide && (
         <div className="pane-head flex h-[58px] flex-none items-center gap-2 border-b border-line pr-1.5 pl-4">
-          <h1 className="text-lg font-semibold">{title}</h1>
+          <h1 className="flex-none text-lg font-semibold whitespace-nowrap">{title}</h1>
           {headWords && <span className="min-w-0 truncate text-small text-muted">{headWords}</span>}
-          {!loading && <HostPill />}
+          {!loading && (offlinePill || look !== 'offline') && <HostPill />}
           {wideActions && <span className="ml-auto flex flex-none items-center gap-2">{wideActions}</span>}
         </div>
       )}
