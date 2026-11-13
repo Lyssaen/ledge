@@ -350,12 +350,12 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           case 'atoi': return <Split list={inbox} detail={<SplitEmpty {...copy.split.request} />} />;
           case 'ask': return <Split list={inbox} detail={<AskDetail key={route.id} store={store} id={route.id} onDone={moveOn({ name: 'ask', id: route.id })} />} />;
           case 'request': return <Split list={inbox} detail={<RequestDetail key={route.sessionId} store={store} sessionId={route.sessionId} requestKey={route.key} onReconnect={retry} onSettled={moveOn({ name: 'request', sessionId: route.sessionId, key: route.key })} keys />} />;
-          case 'sessions': return <Split list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
-          case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} forge={forge} />} />;
+          case 'sessions': return <Split tab="sessions" list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
+          case 'thread': return <Split tab="sessions" list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} forge={forge} />} />;
           // « Nouvelle session » opens beside the list, like a session (Q82, validated by the user 2026-11-11).
-          case 'launch': return <Split list={sessions} detail={<NewSession store={store} storage={storage} />} />;
+          case 'launch': return <Split tab="sessions" list={sessions} detail={<NewSession store={store} storage={storage} />} />;
           // Upright, the terminal folds the list and takes the whole width (t-tablette.html §3, Q93).
-          case 'terminal': return <Split fold list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} forge={forge} />} />;
+          case 'terminal': return <Split tab="sessions" fold list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} forge={forge} />} />;
           case 'prs': case 'pr': return <Split tab="prs" list={prsList} detail={prView ?? <EmptyPane icon="pr" {...copy.prs.pane} />} />;
           case 'rigs': case 'rig': case 'kernel': case 'max': return <Split list={rigsList} detail={rigsDetail ?? <EmptyPane icon="rigs" {...copy.rigs.pane} />} />;
           case 'atelier': return mobile.daemon?.atelier

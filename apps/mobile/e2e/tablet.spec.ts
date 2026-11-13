@@ -156,6 +156,9 @@ test('upright, the thread keeps the list beside it and the terminal folds it', a
     const list = page.locator('.split-list');
     await expect(list).toBeVisible();
     expect.soft((await list.boundingBox())!.width).toBe(330);
+    // The thread's pane keeps 18 px on each side, as §2 draws it (review-qa 6873dfab).
+    const pad = await page.locator('.split-detail').evaluate(e => [getComputedStyle(e).paddingLeft, getComputedStyle(e).paddingRight]);
+    expect.soft(pad).toEqual(['18px', '18px']);
     await shot(page, 'thread-portrait', browserName);
 
     await page.locator('.split-detail').getByRole('link', { name: copy.sessions.view.terminal }).click();

@@ -37,11 +37,12 @@ export function useAtelierTab(daemon: { atelier?: true } | null): boolean {
 
 /**
  * Two panes: `list` (the inbox or the agents, with the tabs) and `detail` (what it opened, or `empty`). `tab` names the tab whose
- * panes differ from the others' (`data-split`, read by styles.css): the MR/PR tab's list is narrower and its detail edge to edge.
+ * panes differ from the others' (`data-split`, read by styles.css): the MR/PR tab's list is narrower and its detail edge to edge;
+ * upright, Sessions' detail keeps 18 px on each side (t-tablette.html §2).
  * `fold`: upright, the list folds and the detail takes the whole width, its « Retour » reopening the list (the terminal,
  * t-tablette.html §3, Q93).
  */
-export function Split({ list, detail, tab, fold = false }: { list: ReactNode; detail: ReactNode; tab?: 'prs'; fold?: boolean }) {
+export function Split({ list, detail, tab, fold = false }: { list: ReactNode; detail: ReactNode; tab?: 'prs' | 'sessions'; fold?: boolean }) {
   return (
     <div className="split" data-split={tab} data-fold={fold ? '' : undefined}>
       <section className="split-list">{list}</section>
