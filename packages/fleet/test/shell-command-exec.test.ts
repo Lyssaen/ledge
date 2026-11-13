@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -56,6 +56,15 @@ describe('the integrated start line, run', () => {
       noNoise();
     });
   }
+  it('over ssh, a remote without base64: the plain login shell, not a dead session', () => {
+    // Only sh in PATH: no base64 there.
+    const bin = join(root, 'bin');
+    mkdirSync(bin, { recursive: true });
+    if (!existsSync(join(bin, 'sh'))) symlinkSync('/bin/sh', join(bin, 'sh'));
+    const r = spawnSync('/bin/sh', ['-c', shellCommand(at(good, 'host'), dir, N)!.at(-1)!], { env: { ...env, PATH: bin }, cwd: root, encoding: 'utf8' });
+    expect(r.stdout.trim()).toBe(`FALLBACK:${root}`);
+    expect(r.status).toBe(0);
+  });
   it.runIf(!fish)('fish is not installed here: the remote fish case is not run', () => { expect(fish).toBeUndefined(); });
 });
 

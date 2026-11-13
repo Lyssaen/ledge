@@ -126,7 +126,7 @@ describe('multi-machine connections', () => {
       `set -f; IFS=; l=$('node' '/opt/ledge/cli.js' 'shell' '--nonce' '${N}' '/home/u/w t' 2>/dev/null); case $l in ': ledge-shell; '*) eval $l;; esac; unset IFS; set +f; cd '/home/u/w t' 2>/dev/null || cd; exec $(getent passwd $(id -un) | cut -d: -f7) -l`]);
     const ssh = shellCommand(at('build-01', true), '/srv', N)!;
     expect(ssh.slice(0, 4)).toEqual(['ssh', '-t', '--', 'build-01']);
-    expect(ssh[4]).toMatch(/^sh -c 'IFS=; set -f; eval \$\(printf %s \$0 \| base64 -d\)' [A-Za-z0-9+/=]+$/);
+    expect(ssh[4]).toMatch(/^sh -c 'IFS=; set -f; eval \$\( \(printf %s \$0 \| base64 -d \|\| printf %s \$0 \| base64 -D\) 2>\/dev\/null\); unset IFS; set \+f; exec \$SHELL -l' [A-Za-z0-9+/=]+$/);
     // An older daemon, no nonce, or not a nonce: the shell as before, no marks.
     for (const [m, n] of [[at(undefined, undefined), N], [at(undefined, false), N], [at(undefined, true), undefined], [at(undefined, true), "x'; rm -rf ~"]] as const)
       expect(shellCommand(m, '/w', n)).toEqual(['sh', '-c', "cd '/w' 2>/dev/null || cd; exec $(getent passwd $(id -un) | cut -d: -f7) -l"]);

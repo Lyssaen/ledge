@@ -192,7 +192,9 @@ export function shellCommand(machine: MachineState, dir: string, nonce?: string)
   // Over ssh the string is read by the remote login shell, which may not be sh: fish refuses `IFS=`, and reads a quote nested in
   // single quotes (`'\\''`) its own way. So sh runs it, and it travels in base64: the quoted part holds no quote nor backslash,
   // and base64's alphabet means the same to sh and fish (review #299, point 1).
-  const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, `sh -c 'IFS=; set -f; eval $(printf %s $0 | base64 -d)' ${base64(line)}`] : ['sh', '-c', line];
+  // A remote that cannot decode it (no base64; an old macOS spells it -D) evaluates nothing: the plain login shell then, at home.
+  const decode = ' (printf %s $0 | base64 -d || printf %s $0 | base64 -D) 2>/dev/null'; // a space first: `$((` would be arithmetic
+  const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, `sh -c 'IFS=; set -f; eval $(${decode}); unset IFS; set +f; exec $SHELL -l' ${base64(line)}`] : ['sh', '-c', line];
   return argv.every(wslArg) ? argv : null;
 }
 /** Whether a free shell on `machine` starts with the integration: its daemon says so, its launcher is known, the nonce is one. */
