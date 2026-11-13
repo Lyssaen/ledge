@@ -209,4 +209,71 @@ describe('writeContext: what the actions need', () => {
     const md = readFileSync(join(dir, 'folders.md'), 'utf8');
     expect(md).toContain('- ledge: /w/ledge'); expect(md).not.toContain('test-multi'); expect(md).not.toContain('/tmp/x');
   });
+
+  describe('what the operator adds', () => {
+    const base = { now: T0, capture: async () => null, git: async () => null };
+    const ask = { id: 'qitem-1', kind: 'decision' as const, alert: false, priority: 'urgent' as const, from: { seat: 'dev.back', rig: 'ledge-dev', role: 'dev.back' }, summary: 'Merge the lot?', body: 'Lot 3 is green.', bodyTruncated: false, detail: null, evidenceRef: null,
+      questions: [{ id: 'q1', question: 'Go?', options: [{ id: 'yes', label: 'Yes', recommended: true }, { id: 'no', label: 'No', recommended: false }], answer: null }], createdAt: T0, updatedAt: T0 };
+    const event = (id: number, extra: Record<string, unknown> = {}) => ({ id, at: `2026-10-11T0${id}:05:00.000Z`, machine: 'local', kind: 'session.finished' as const, subjectKind: 'session', subjectId: 's1', subjectName: 'Otto', urgency: 'grouped' as const, payload: { text: 'Finished the lot' }, settledAt: null, ...extra });
+
+    it('attentes.md lists a rig ask with its qitem id and options', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+      const pending = { kind: 'permission' as const, text: 'Run rm -rf build?', source: 'hook' as const, options: ['Allow', 'Deny'] };
+      await writeContext(dir, { ...base, sessions: [mk('s1', { pending })], asks: [ask] });
+      const md = readFileSync(join(dir, 'attentes.md'), 'utf8');
+      expect(md).toContain('- s1 — Otto, pending permission: Run rm -rf build?');
+      expect(md).toContain('options: Allow; Deny');
+      expect(md).toContain('- qitem-1 — decision from dev.back (rig ledge-dev), urgent: Merge the lot?');
+      expect(md).toContain('Lot 3 is green.');
+      expect(md).toContain('q1 « Go? »: yes = Yes (recommended); no = No');
+    });
+
+    it('attentes.md lists the open tasks Ledge owns and a brain proposal', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+      const task = { id: 't1', title: 'Note stack ?', text: 'oui — add\nnon — skip', giver: 's1', giverName: 'Otto', owner: 'ledge', ownerName: 'ledge', state: 'open' as const, at: T0, updatedAt: T0, log: [], brain: { kind: 'add' as const, note: 'stack', fact: 'Uses pnpm' } };
+      const other = { ...task, id: 't2', owner: 's2', ownerName: 'Nova', brain: undefined };
+      await writeContext(dir, { ...base, sessions: [], tasks: [task, other] });
+      const md = readFileSync(join(dir, 'attentes.md'), 'utf8');
+      expect(md).toContain('- t1 « Note stack ? » — from Otto');
+      expect(md).toContain('oui — add non — skip');
+      expect(md).toContain('brain proposal: add to note stack: Uses pnpm');
+      expect(md).not.toContain('t2');
+    });
+
+    it('attentes.md says nothing waits when empty', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+      await writeContext(dir, { ...base, sessions: [mk('s1')] });
+      expect(readFileSync(join(dir, 'attentes.md'), 'utf8')).toContain('Nothing waits for the user.');
+    });
+
+    it('journal.md lists events in order with the reply file of a finished session', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+      const s = mk('s1', { lastReply: { text: 'All done.', at: T0 } });
+      await writeContext(dir, { ...base, sessions: [s], journal: [event(1), event(2, { kind: 'session.error', subjectId: 'gone', subjectName: 'Nova', payload: { text: 'Crashed' } })] });
+      const md = readFileSync(join(dir, 'journal.md'), 'utf8');
+      expect(md).toContain('01:05 session.finished Otto — Finished the lot reply: reply-s1.md');
+      expect(md).toContain('02:05 session.error Nova — Crashed');
+      expect(md.indexOf('Otto')).toBeLessThan(md.indexOf('Nova'));
+      expect(md).not.toMatch(/Crashed.*reply:/);
+      const none = mkdtempSync(join(tmpdir(), 'ctx-'));
+      await writeContext(none, { ...base, sessions: [] });
+      expect(existsSync(join(none, 'journal.md'))).toBe(false);
+    });
+
+    it('rigs.md lists an unreachable seat, the queue rows, what a seat does and an open goal', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+      const seat = (logicalId: string, sessionStatus = 'running') => ({ logicalId, session: `${logicalId}@r`, runtime: 'claude-code', model: null, sessionStatus, lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 });
+      const goal = { goalId: 'g1', qitemId: 'qi-9', text: 'Ship the lot', folder: null, sentAt: T0, to: 'max', state: 'running' as const, proposal: null, question: null, trail: [], current: null };
+      await writeContext(dir, { ...base, sessions: [mk('s1', { name: 'dev.front', topic: 'Fixing the header' })], goals: [goal, { ...goal, goalId: 'g2', state: 'done' as const }],
+        queue: new Map([['ledge-dev', [{ id: 'qi-3', from: 'dev.back', to: 'dev.front', summary: 'Review please', state: 'pending' }]]]),
+        rigs: { installed: true, version: '0.7.10', daemon: { state: 'running' }, kernel: { state: 'ready' }, at: T0,
+          rigs: [{ id: 'r1', name: 'ledge-dev', status: 'running', lifecycleState: 'running', seats: 2, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [seat('dev.front'), seat('dev.back', 'detached')] }] } });
+      const md = readFileSync(join(dir, 'rigs.md'), 'utf8');
+      expect(md).toContain('- unreachable: dev.back (detached)');
+      expect(md).toContain('- dev.front: working, Fixing the header');
+      expect(md).toContain('- qi-3 dev.back → dev.front (pending): Review please');
+      expect(md).toContain('- g1 (running): Ship the lot');
+      expect(md).not.toContain('g2');
+    });
+  });
 });

@@ -27,7 +27,7 @@ export function createSlots(max = 3): { take(): boolean; give(): void } {
 export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number }) {
   const { max, ...rest } = deps;
   const slots = createSlots(max);
-  const desktop = createChat({ ...rest, slots });
+  const desktop = createChat({ ...rest, slots, thread: 'desktop' });
   const devices = new Map<string, Chat>();
   const emitters = new Map<ChatThreadId, Emit>();
   const dropping = new Map<string, Promise<void>>();
@@ -53,7 +53,7 @@ export function createChatThreads(deps: Omit<ChatDeps, 'slots'> & { max?: number
     if (dropping.has(id)) throw new Error('device thread is being dropped');
     if (held.has(id)) throw new Error('device thread is held');
     let c = devices.get(id);
-    if (!c) { c = createChat({ ...rest, home: deviceHome(id), slots, conversations: keptOf(id) }); devices.set(id, c); }
+    if (!c) { c = createChat({ ...rest, thread: `device:${id}`, home: deviceHome(id), slots, conversations: keptOf(id) }); devices.set(id, c); }
     return c;
   };
   const all = (): Array<[ChatThreadId, Chat]> => [['desktop', desktop], ...[...devices].map(([id, c]): [ChatThreadId, Chat] => [`device:${id}`, c])];
