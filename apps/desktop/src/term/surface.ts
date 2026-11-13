@@ -4,6 +4,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { termKey } from './keys';
+import { ShellMarks, type Mark } from './shellMarks';
 import type { TermTheme } from './theme';
 
 /** One xterm and the element it lives in; the element is moved between containers, never re-created. */
@@ -23,7 +24,26 @@ export interface TermSurface {
   onWebglLost(fn: () => void): void;
   /** Its element now in `doc` (another window): the xterm is made again there. Absent on fakes. */
   adopt?(doc: Document): void;
+  /** Shell integration (#299): the commands OSC 633 cut the screen into; only a free shell's view shows them. Absent on fakes. */
+  shell?: ShellSurface;
   dispose(): void;
+}
+
+/** What a free shell's view reads of its xterm to draw the command marks (#299). */
+export interface ShellSurface {
+  marks: ShellMarks;
+  /** Where the screen is: the first line shown, the rows, the buffer's length, the cursor's line, a row's height in px; `normal`
+   *  false while a full-screen program holds the alternate screen (no marks there). */
+  view(): { top: number; rows: number; length: number; cursor: number; rowPx: number; normal: boolean };
+  /** Scroll, render, resize, buffer switch: the view to draw again. */
+  onView(fn: () => void): () => void;
+  line(n: number): string | undefined;
+  /** Puts `line` near the top of the screen. */
+  scrollTo(line: number): void;
+  /** Types into the shell, as the keyboard would. */
+  type(text: string): void;
+  /** Ctrl ↑ / Ctrl ↓ typed in the terminal: `fn` answers whether it took the key (then the shell never sees it). One at a time. */
+  onMarkKey(fn: ((dir: -1 | 1) => boolean) | null): void;
 }
 
 /** Ctrl V with nothing to paste: the raw byte, so Claude Code can read an image from the clipboard itself. */
@@ -72,6 +92,12 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     while (replayBytes > REPLAY_MAX && replay.length > 1) { const x = replay.shift()!; replayBytes -= typeof x === 'string' ? x.length : x.byteLength; }
   };
 
+  // #299: the marks outlive an xterm made again (adopt): the replay prints the same OSC 633 and they come back.
+  let markKey: ((dir: -1 | 1) => boolean) | null = null;
+  const views = new Set<() => void>();
+  const viewChanged = () => { for (const fn of views) fn(); };
+  let marks: ShellMarks;
+
   // Capped scrollback: an agent redrawing its screen emits megabytes, memory must not follow.
   // Every link the screen prints (plain URLs, OSC 8) goes to the system browser: `window.open` opens nothing useful in the webview.
   const make = () => {
@@ -91,7 +117,15 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
       if (text) void navigator.clipboard.writeText(text).catch(() => undefined);
       return true;
     });
+    t.parser.registerOscHandler(633, data => marks.handle(data));
+    t.onScroll(viewChanged);
+    t.onRender(viewChanged);
+    t.onResize(viewChanged);
+    t.buffer.onBufferChange(viewChanged);
     t.attachCustomKeyEventHandler(e => {
+      // Ctrl ↑ / Ctrl ↓: from one command to the next when the free shell's view takes them (shells bind neither by default).
+      if (markKey && e.type === 'keydown' && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && (e.code === 'ArrowUp' || e.code === 'ArrowDown')
+        && markKey(e.code === 'ArrowUp' ? -1 : 1)) { e.preventDefault(); e.stopPropagation(); return false; }
       const action = termKey(e, t.hasSelection(), opts.panelKey?.() ?? false);
       if (action === 'pass') return true;
       e.preventDefault();
@@ -124,6 +158,8 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     return { t, f };
   };
 
+  const markHost = { mark: (): Mark | null => term.registerMarker(0) ?? null, cursorX: () => term.buffer.active.cursorX, now: () => Date.now() };
+  marks = new ShellMarks(markHost);
   let { t: term, f: fitter } = make();
   // The document the xterm was opened in. An xterm keeps it for good: its host adopted by another window's document (a
   // popout), it stays blank there (lot 0, point 1). `element.ownerDocument` follows the adoption, so it is kept here.
@@ -190,6 +226,7 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     setWebgl(false);
     term.dispose();
     host.replaceChildren();
+    marks.reset();
     ({ t: term, f: fitter } = make());
     openedIn = doc;
     for (const b of replay) term.write(b);
@@ -224,6 +261,20 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     setWebgl,
     onWebglLost: fn => { lost.push(fn); },
     adopt,
-    dispose: () => term.dispose()
+    shell: {
+      marks,
+      view: () => {
+        const b = term.buffer.active;
+        const screen = host.querySelector<HTMLElement>('.xterm-screen');
+        const h = screen?.getBoundingClientRect().height ?? 0;
+        return { top: b.viewportY, rows: term.rows, length: b.length, cursor: b.baseY + b.cursorY, rowPx: term.rows ? h / term.rows : 0, normal: b.type === 'normal' };
+      },
+      onView: fn => { views.add(fn); return () => { views.delete(fn); }; },
+      line: n => term.buffer.active.getLine(n)?.translateToString(true),
+      scrollTo: line => term.scrollToLine(Math.max(0, line - 2)),
+      type: text => send(text),
+      onMarkKey: fn => { markKey = fn; }
+    },
+    dispose: () => { marks.dispose(); term.dispose(); }
   };
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { canBroadcast, daemonStore, prOfSession, prsFailing, prsWaitingForYou, sessionForge, projectOf, splitId, type BroadcastTo, type FleetPullRequest, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
@@ -71,6 +71,7 @@ import { focusAgentView } from './session/agentFocus';
 import { termTheme } from './term/theme';
 import { TermStoreContext } from './term/useTerms';
 import { defaultShell, loadLastShell, menuDir, saveLastShell, sessionShell, shellLaunch, shellMenu, type ShellKind, type ShellsAvailable } from './term/shells';
+import { dirLabel } from './term/shellMarks';
 import { ProjectDialog } from './projects/ProjectDialog';
 import { PairingDialog, usePairingDialogState } from './settings/PairingDialog';
 import { requestDeviceView, useRecoveryToast } from './settings/recovery';
@@ -794,7 +795,17 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const machineLabel = (id: string) => machines.find(m => m.id === id)?.label ?? id;
   /** A request's agent: the session or seat on its branch (the most recently active). */
   const prAgentOf = (p: FleetPullRequest) => p.sessions.map(id => known.find(s => s.id === id)).find((s): s is Session => !!s);
-  const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: id => termStore.free(id)?.title, pr: id => prOf(id)?.ref });
+  // #299: a free shell's tab follows its folder (P;Cwd, design-ux qitem-20261113103231): « WSL · Ubuntu 1 · ledge ».
+  useSyncExternalStore(useCallback((fn: () => void) => termStore.subscribe(fn), [termStore]), () => termStore.freeIds().map(id => termStore.free(id)?.cwd ?? '').join('\n'));
+  const shellName = (id: string) => {
+    const f = termStore.free(id);
+    if (!f?.cwd) return f?.title;
+    const m = f.kind === 'wsl' || f.kind === 'ledge' ? machines.find(x => x.id === 'local') : f.kind.startsWith('ssh:') ? machines.find(x => x.id === f.kind.slice(4)) : undefined;
+    return `${f.title} · ${dirLabel(f.cwd, f.startCwd ?? null, m?.daemon?.home)}`;
+  };
+  const title = (tab: Tab) => tabTitle(tab, { session: id => known.find(s => s.id === id), t, machine: id => machines.find(m => m.id === id)?.label, shell: shellName, pr: id => prOf(id)?.ref });
+  /** The whole title and the whole path, a free shell's tab's tooltip (#299). */
+  const shellTip = (tab: Tab) => { const f = tab.kind === 'terminal' && tab.ref.startsWith('shell:') ? termStore.free(tab.ref) : undefined; return f?.cwd ? `${f.title} — ${f.cwd}` : undefined; };
   // The main window's active group, kept while the focus is in a detached window: where « Ramener » gives the atelier back.
   const mainFocus = useRef<string | null>(null);
   if (ws.groups.some(g => g.id === ws.focus && g.window === MAIN)) mainFocus.current = ws.focus;
@@ -819,7 +830,8 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
       : tab.kind === 'changes' || (tab.kind === 'terminal' && sessionOf(tab) !== null) ? <ChangesTabLabel session={known.find(s => s.id === sessionOf(tab))} title={title(tab)} />
       : tab.kind === 'pr' ? <IdePrTabLabel pr={prOf(tab.ref)} title={title(tab)} />
       // « À toi 2 » (mockup v27): the requests waiting, the tab's name staying its title.
-      : tab.kind === 'atoi' ? <AtoiTabLabel title={title(tab)} waiting={waitingSessions(sessions, waits).length} /> : title(tab));
+      : tab.kind === 'atoi' ? <AtoiTabLabel title={title(tab)} waiting={waitingSessions(sessions, waits).length} />
+      : shellTip(tab) ? <span title={shellTip(tab)}>{title(tab)}</span> : title(tab));
     const alert = (tab: Tab) => (tab.kind === 'session' || tab.kind === 'seat' ? tabAlert(known.find(s => s.id === tab.ref)) : null);
     const body: TabBody = tab => {
       const tnav = tabNav(nav, tab, lastSettings.current);

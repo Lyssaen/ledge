@@ -1477,6 +1477,8 @@ export const en: Messages = {
       shells: { title: 'New terminal', local: 'Local', ledge: 'Ledge', machines: 'Machines', wsl: 'WSL', powershell: 'PowerShell', cmd: 'Command Prompt', gitBash: 'Git Bash', ledgeHint: 'ledge, rig', ssh: 'SSH', isDefault: 'default' },
       newTerminal: 'New terminal', newTerminalTip: 'New terminal: choose the shell',
       drag: 'Drag to a group', close: 'Close',
+      // #299 (docs/mockups/ledge-shell-marks.html): a free shell's command marks.
+      marks: { exitCode: (n, d) => `Exit code ${n} · ${d}`, running: (d) => `Running · ${d}`, copyCommand: 'Copy command', copyOutput: 'Copy output', runAgain: 'Run again' },
       shellKind: 'shell', shellTitle: (title) => `>_ ${title}`, noTerms: 'No terminal. “+” opens one.',
       lastClosed: 'Last terminal closed: the bottom panel hides. Ctrl+J opens it again with a shell.',
       broughtBack: 'Terminal brought back to the bottom panel.', onlyTerms: 'Only terminals go in the bottom panel.'

@@ -15,7 +15,9 @@ export const agentTabId = (sessionId: string): string => `${sessionId}#agent`;
 /** The right panel's first tab, « ± Modifications »: fixed, never closed, and where the panel opens while it has no shell. */
 export const changesTabId = (sessionId: string): string => `${sessionId}#changes`;
 /** A shell of the bottom panel: it belongs to no session. */
-export interface FreeShell { id: string; kind: ShellKind; n: number; title: string; dir: string; status: 'running' | 'ended' | 'unavailable'; end?: { code: number | null; lost: boolean } }
+export interface FreeShell { id: string; kind: ShellKind; n: number; title: string; dir: string; status: 'running' | 'ended' | 'unavailable'; end?: { code: number | null; lost: boolean };
+  /** Shell integration (#299): the folder P;Cwd last reported and the first one (where it started); absent without integration. */
+  cwd?: string; startCwd?: string }
 export interface TermDeps { backend: PtyBackend | null; /** What a free shell runs, null when it cannot (absent: it cannot). */ freeLaunch?(kind: ShellKind, dir: string): { argv: string[] } | { native: 'powershell' | 'cmd' | 'gitbash' } | null; freeTitle?(kind: ShellKind, n: number): string; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout; /** Absent: the agent screen is always the pseudo-terminal, as before the control stream. */ agentRoute?: (sessionId: string) => AgentRoute; stream?: AgentStream; /** Shells born beside the daemon, when `agentRoute` says `stream`. Absent: a shell is the local pseudo-terminal. */ shellStream?: ShellStream }
 
 const OFF: AgentLink = { state: 'off', attempt: 0 };
@@ -243,6 +245,7 @@ export class TermStore {
     this.frees.delete(id);
     this.surfaces.get(id)?.dispose();
     this.surfaces.delete(id);
+    this.cwdWatched.delete(id);
     this.forget(id);
     this.emit();
   }
@@ -428,6 +431,20 @@ export class TermStore {
     }).then(adopt, () => adopt(null));
   }
 
+  private readonly cwdWatched = new Set<string>();
+  /** A free shell's tab follows its folder (#299): the store tells its views when P;Cwd changes it. */
+  private watchCwd(id: string, surface: TermSurface): void {
+    const marks = surface.shell?.marks;
+    if (!marks || this.cwdWatched.has(id)) return;
+    this.cwdWatched.add(id);
+    marks.subscribe(() => {
+      const f = this.frees.get(id);
+      if (!f || !marks.cwd || (f.shell.cwd === marks.cwd && f.shell.startCwd === (marks.startCwd ?? undefined))) return;
+      this.setFree(id, { cwd: marks.cwd, startCwd: marks.startCwd ?? marks.cwd });
+      this.emit();
+    });
+  }
+
   private setFree(id: string, patch: Partial<FreeShell>): void {
     const f = this.frees.get(id);
     if (f) f.shell = { ...f.shell, ...patch };
@@ -445,6 +462,7 @@ export class TermStore {
     const launch = backend ? this.deps.freeLaunch?.(f.shell.kind, f.shell.dir) ?? null : null;
     if (!backend || !launch) { f.run = null; this.setFree(id, { status: 'unavailable', end: undefined }); return; }
     const surface = this.surfaceFor(id, () => this.frees.get(id)?.run ?? null);
+    this.watchCwd(id, surface);
     const run: Run = { handle: null, typed: [] };
     const current = () => this.frees.get(id)?.run === run;
     f.run = run;
