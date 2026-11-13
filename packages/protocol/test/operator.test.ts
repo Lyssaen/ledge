@@ -20,6 +20,13 @@ describe('operator protocol', () => {
     expect(PointItemSchema.safeParse({ ...item, answers: answers(4) }).success).toBe(true);
     expect(PointItemSchema.safeParse({ ...item, answers: answers(5) }).success).toBe(false);
   });
+  it('PointItem parses a real ChatAction suggestion and rejects an unknown settled.where', () => {
+    const suggestion = { action: 'task.cancel', args: { task: 't1' }, summary: 'Annuler **t1**', risk: 'destructive' };
+    expect(PointItemSchema.parse({ ...item, suggestion }).suggestion).toMatchObject({ action: 'task.cancel' });
+    expect(PointItemSchema.safeParse({ ...item, suggestion: { action: '' } }).success).toBe(false);
+    expect(PointItemSchema.safeParse({ ...item, settled: { at: AT, where: 'phone' } }).success).toBe(true);
+    expect(PointItemSchema.safeParse({ ...item, settled: { at: AT, where: 'nowhere' } }).success).toBe(false);
+  });
   it('OperatorNotice requires a priority', () => {
     const notice = { id: 'n1', kind: 'point', text: 'Un point', at: AT };
     expect(OperatorNoticeSchema.safeParse(notice).success).toBe(false);
