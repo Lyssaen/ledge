@@ -1108,19 +1108,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * A generic card's rows (spec 2026-10-26 action registry §2.1), applied through the daemon's own handlers so their rules stay in
    * one place: a row fails on the handler's `error`, or on the reason its `task.result` carries.
    */
-  /** What the resolver needs beyond the live state: the asks and goals are read from OpenRig only for the rows that name them. */
-  async function resolveCtx(actions: Array<string | undefined>): Promise<ResolveCtx> {
-    const base: ResolveCtx = { sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.(), ...(forge ? { prs: forge.state().prs } : {}) };
-    if (!actions.some(a => a === 'rig.answer' || a === 'rig.goal.reply')) return base;
-    const [asked, given] = await Promise.all([human.list(), goals.list()]);
-    return { ...base, asks: asked.asks, goals: given.goals };
+  /** The live state a row resolves against, read again for each row: an earlier row of the plan may have changed it. */
+  const liveCtx = (): ResolveCtx => ({ sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.(), ...(forge ? { prs: forge.state().prs } : {}) });
+  /** The asks and goals, read from OpenRig only for the rows that name them; a read that fails leaves them out, so those rows are refused. */
+  async function rigCtx(actions: Array<string | undefined>): Promise<Pick<ResolveCtx, 'asks' | 'goals'>> {
+    if (!actions.some(a => a === 'rig.answer' || a === 'rig.goal.reply')) return {};
+    try {
+      const [asked, given] = await Promise.all([human.list(), goals.list()]);
+      return { asks: asked.asks, goals: given.goals };
+    } catch (e) { log(`action: asks and goals not read: ${(e as Error).message}`); return {}; }
   }
   async function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) {
-    const ctx = await resolveCtx((rows ?? [...Array(MAX_PROPOSALS).keys()]).map(r => card.chat.action(qid, r)?.action));
+    const rig = await rigCtx((rows ?? [...Array(MAX_PROPOSALS).keys()]).map(r => card.chat.action(qid, r)?.action));
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
-      resolve: row => resolveAction(row.action, row.args, ctx),
-      apply: async row => { const r = await applyRow(row, rid, by); if (r.failure !== undefined) throw new Error(r.failure); }
+      resolve: row => resolveAction(row.action, row.args, { ...liveCtx(), ...rig }),
+      apply: async (row, index) => { const r = await applyRow(row, rid, by, `${qid}#${index}`); if (r.failure !== undefined) throw new Error(r.failure); }
     }, qid, rows, confirmed, deny);
   }
   /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
@@ -1137,8 +1140,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const r = tasks.run({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'done', task, text: choice.yes ? 'oui' : 'non', choice });
     return r.reason !== undefined ? { reason: r.reason } : { ...(r.task?.result ? { result: r.task.result } : {}) };
   }
-  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string, by?: DecidedBy): Promise<{ failure?: string }> {
-    const made = actionMessage(row, rid);
+  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string, by?: DecidedBy, card?: string): Promise<{ failure?: string }> {
+    const made = actionMessage(row, rid, card);
     // A request answered from a device's card is that device's decision (`by`, the gateway's); from the PC's, none: the PC.
     const out = by && made.type === 'session.decide' ? { ...made, by } : made;
     if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
@@ -1175,7 +1178,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
     const wrong = msg.by === undefined ? undefined : notItsKey(msg.by, msg.key);
     if (wrong) return answer({ reason: wrong, code: 'identity' });
-    const r: Resolved = resolveRun(msg.action, parsed.data, await resolveCtx([msg.action]));
+    const r: Resolved = resolveRun(msg.action, parsed.data, { ...liveCtx(), ...await rigCtx([msg.action]) });
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
     const guard = runGuard(r, msg.by);
     if (guard) return answer({ row: r, reason: guard, code: 'agent' });

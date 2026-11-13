@@ -82,9 +82,9 @@ export function cutVars(rig: string, sessions: readonly string[]): Record<string
 /** Each kind's words up to its object, article included: French contracts « de le » into « du » (« Prendre un snapshot du rig »). */
 const RIG_VERB: Record<string, string> = { start: 'Démarrer le', stop: 'Arrêter le', restart: 'Redémarrer le', snapshot: 'Prendre un snapshot du' };
 
-/** An answer that starts a rig: the person's own yes to a team Max proposes (`confirm`, or `launch-rig`). */
-const launches = (ask: HumanAsk, option: string): boolean => !!ask.team && (option === 'confirm' || option === 'launch-rig');
-/** An id of the form OpenRig's goals take (8 to 64 letters, digits and dashes), the same for the same request: a retry sends the same row. */
+/** An answer that starts a rig: the person's own yes to a team Max proposes to launch (`confirm`, or `launch-rig`); a team that exists is only joined. */
+const launches = (ask: HumanAsk, option: string): boolean => ask.team?.kind === 'launch' && (option === 'confirm' || option === 'launch-rig');
+/** An id of the form OpenRig's goals take (8 to 64 letters, digits and dashes), the same for the same parts: a retry of a card's row (its qid and row index) sends the same row. */
 const idFrom = (...parts: string[]): string => createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 32);
 
 const IMPLS: Partial<Record<ActionId, Impl>> = {
@@ -308,8 +308,10 @@ export function resolveAction(id: string, args: unknown, ctx: ResolveCtx): Resol
 }
 
 /** A resolved row as the message the daemon already handles; `rid` names the request where the message takes one. */
-export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: string): ClientMessage {
+export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: string, card?: string): ClientMessage {
   const a = r.args as Args;
+  // A card's row keeps its goal ids across retries, whatever request id each retry carries; outside a card the request's own is all there is.
+  const key = card ?? rid;
   const s = String(a.session ?? '');
   switch (r.action) {
     case 'session.model': return { type: 'session.model', id: s, model: a.model as string | null, effort: a.effort as string | null };
@@ -333,10 +335,10 @@ export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: strin
         : { kind: 'choice' as const, questionId: String(ans.question), optionId: String(ans.option) };
       return { type: 'openrig.answer', requestId: rid, qitemId: String(a.qitem), answer };
     }
-    case 'rig.goal': return { type: 'openrig.goal.send', requestId: rid, goalId: idFrom(rid, String(a.text), String(a.folder ?? '')), text: String(a.text), ...(a.folder ? { folder: String(a.folder) } : {}) };
+    case 'rig.goal': return { type: 'openrig.goal.send', requestId: rid, goalId: idFrom(key, String(a.text), String(a.folder ?? '')), text: String(a.text), ...(a.folder ? { folder: String(a.folder) } : {}) };
     case 'rig.goal.reply': return a.answer === 'confirm'
       ? { type: 'openrig.answer', requestId: rid, qitemId: String(a.qitem), answer: { kind: 'choice', questionId: String(a.question), optionId: 'confirm' } }
-      : { type: 'openrig.goal.reply', requestId: rid, goalId: String(a.goal), replyId: idFrom(rid, String(a.goal), String((a.answer as { text: string }).text)), text: String((a.answer as { text: string }).text) };
+      : { type: 'openrig.goal.reply', requestId: rid, goalId: String(a.goal), replyId: idFrom(key, String(a.goal), String((a.answer as { text: string }).text)), text: String((a.answer as { text: string }).text) };
     case 'rig.send': return { type: 'session.reply', id: String(a.session), text: String(a.text) };
     case 'brain.answer': {
       const c = a.choice as 'add' | 'refuse' | { edit: string };

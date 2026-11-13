@@ -333,6 +333,10 @@ describe('the operator actions', () => {
     expect(r.risk).toBe('destructive');
     expect(actionMessage(r, 'rid')).toMatchObject({ type: 'openrig.answer', qitemId: 'q-1', answer: { kind: 'choice', questionId: 'team', optionId: 'confirm' } });
     expect(ok('rig.answer', { qitem: 'q-1', answer: { option: 'confirm' } }, ctx({ asks: [ask()] })).risk).toBe('reversible');
+    // A team that already exists is joined, not launched.
+    const existing = { ...team, kind: 'existing' as const };
+    expect(ok('rig.answer', { qitem: 'q-1', answer: { option: 'confirm' } }, ctx({ asks: [ask({ team: existing })] })).risk).toBe('reversible');
+    expect(ok('rig.goal.reply', { goal: 'goal-0001', answer: 'confirm' }, ctx({ goals: [goal()], asks: [ask({ goalId: 'goal-0001', team: existing })] })).risk).toBe('reversible');
   });
   it('rig.answer sends words, a parked row\'s resolution, and « Vu » only on news', () => {
     expect(actionMessage(ok('rig.answer', { qitem: 'q-1', answer: { text: 'Oui' } }, ctx({ asks: [ask()] })), 'r')).toMatchObject({ answer: { kind: 'words', text: 'Oui' } });
@@ -342,9 +346,10 @@ describe('the operator actions', () => {
   });
   it('rig.goal sends the goal to Max with a goal id stable for a retry', () => {
     const r = ok('rig.goal', { text: 'Ajouter la pagination', folder: '/w/api' });
-    const m1 = actionMessage(r, 'rid-1'), m2 = actionMessage(r, 'rid-1');
+    const m1 = actionMessage(r, 'rid-1', 'qid-1#0'), m2 = actionMessage(r, 'rid-2', 'qid-1#0');
+    expect((m1 as { goalId: string }).goalId).toBe((m2 as { goalId: string }).goalId);
+    expect((actionMessage(r, 'rid-1', 'qid-1#1') as { goalId: string }).goalId).not.toBe((m1 as { goalId: string }).goalId);
     expect(m1).toMatchObject({ type: 'openrig.goal.send', text: 'Ajouter la pagination', folder: '/w/api' });
-    expect(m1).toEqual(m2);
     expect((m1 as { goalId: string }).goalId).toMatch(/^[A-Za-z0-9-]{8,64}$/);
   });
   it('rig.goal.reply writes to Max, or confirms the team he proposes', () => {
@@ -352,6 +357,7 @@ describe('the operator actions', () => {
     const text = ok('rig.goal.reply', { goal: 'goal-0001', answer: { text: 'Plutôt ledge-dev' } }, ctx({ goals: [goal()] }));
     expect(text.risk).toBe('reversible');
     expect(actionMessage(text, 'r')).toMatchObject({ type: 'openrig.goal.reply', goalId: 'goal-0001', text: 'Plutôt ledge-dev' });
+    expect((actionMessage(text, 'r1', 'q#0') as { replyId: string }).replyId).toBe((actionMessage(text, 'r2', 'q#0') as { replyId: string }).replyId);
     expect(code('rig.goal.reply', { goal: 'goal-0001', answer: 'confirm' }, ctx({ goals: [goal()], asks: [] }))).toBe('no_request');
     const c = ok('rig.goal.reply', { goal: 'goal-0001', answer: 'confirm' }, ctx({ goals: [goal()], asks: [ask({ goalId: 'goal-0001', team })] }));
     expect(c.risk).toBe('destructive');
