@@ -375,6 +375,9 @@ export const fr = {
       autostartMissing: 'Pas proposé ici : seule l’application installée peut se lancer avec Windows.',
       autostartFailed: 'Windows n’a pas pris ce réglage.', autostartOff: 'Pas de lancement au démarrage',
       tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`,
+      // « Vue par défaut d'une session » (docs/mockups/ledge-session-view-default.html, #300, validated 2026-11-13).
+      view: 'Vue par défaut d’une session', viewHint: 'La vue qu’ouvre une session neuve. Un siège OMP en marche s’ouvre toujours sur le Terminal ; une machine sans terminal, sur le Fil.',
+      viewSaved: (v: string) => `Vue par défaut : ${v}`,
       context: 'Contexte max', contextHint: 'Au-delà, une session est proche de sa limite : « À toi » propose de passer le relais, et Ledge relève de lui-même une session qui travaille sans demander.',
       usageAlert: 'Alerte de limite d’usage', usageAlertHint: 'Au-delà, Ledge Desktop vous prévient une seule fois qu’une fenêtre d’usage d’un harnais (5 h, semaine, par modèle) approche de sa limite. Les limites sont celles du compte, lues sur chaque machine.',
       usageAlertSaved: (pct: number) => `Alerte de limite d’usage : ${pct} %`, usageAlertUnknown: 'Aucune machine ne donne encore les limites de ses harnais : mettez à jour Ledge, ou connectez Claude Code.',

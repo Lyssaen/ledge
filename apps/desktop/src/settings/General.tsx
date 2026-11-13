@@ -17,6 +17,12 @@ import { useContextNear, useUsage } from '@ledge/fleet';
 import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN, USAGE_ALERT_MAX, USAGE_ALERT_MIN } from '@ledge/protocol';
 import { usageThreshold } from '../usage/model';
 import { useResumeOnStart } from '../workspace/prefs';
+import { setDefaultView, useDefaultView } from '../session/defaultView';
+import type { SessionView } from '../session/prefs';
+import { SHELL_ICONS } from '../shell/icons';
+
+/** The two views, with the icons of a tab's view switcher (session/SessionPage.tsx VIEWS). */
+const SESSION_VIEWS: ReadonlyArray<{ view: SessionView; icon: readonly string[] }> = [{ view: 'thread', icon: SHELL_ICONS.thread }, { view: 'terminal', icon: SHELL_ICONS.terminal }];
 
 /** « Contexte max »: 50 % to 95 %, by 5. */
 const ALERTS = Array.from({ length: Math.round((USAGE_ALERT_MAX - USAGE_ALERT_MIN) * 20) + 1 }, (_, i) => Math.round((USAGE_ALERT_MIN + i * 0.05) * 100));
@@ -26,6 +32,7 @@ const NEARS = Array.from({ length: Math.round((CONTEXT_NEAR_MAX - CONTEXT_NEAR_M
 export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   const g = t.settings.general;
+  const view = useDefaultView();
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const [tool, setTool] = useDefaultTool();
@@ -92,6 +99,12 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
               value: id,
               label: <><span aria-hidden="true" style={{ display: 'inline-flex' }}><LogoBot tool={id} state={tool === id ? 'working' : 'idle'} size={20} theme={theme} seed={'set-' + id} paused={ctx.paused} reducedMotion={reduced} /></span>{t.launch.tools[id][0]}</>
             }))} />
+        </Row>
+        <Row label={g.view} hint={g.viewHint}>
+          {describedBy => (
+            <Segmented label={g.view} value={view} describedBy={describedBy} onChange={v => { setDefaultView(v); ctx.saved(g.viewSaved(t.session.views[v])); }}
+              options={SESSION_VIEWS.map(v => ({ value: v.view, label: <><Icon d={v.icon} size={13} />{t.session.views[v.view]}</> }))} />
+          )}
         </Row>
         <Row label={g.context} hint={known ? g.contextHint : g.contextUnknown}>
           {describedBy => (
