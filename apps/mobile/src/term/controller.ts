@@ -53,9 +53,10 @@ export function inputChunk(s: string): string {
   return s.slice(0, n);
 }
 
-/** What paints a first screen: home, clear, the lines, then the cursor where the pane has it. */
+/** What paints a first screen: home, clear (the scrollback too: a fresh screen replaces the history it carries, #298), the lines,
+ *  then the cursor where the pane has it, from the top of the grid: the lines past it (the history) scroll into the scrollback. */
 export function paintScreen(screen: string, cursor: { x: number; y: number }): string {
-  return `\x1b[H\x1b[2J${screen.replace(/\n/g, '\r\n')}\x1b[${cursor.y + 1};${cursor.x + 1}H`;
+  return `\x1b[H\x1b[2J\x1b[3J${screen.replace(/\n/g, '\r\n')}\x1b[${cursor.y + 1};${cursor.x + 1}H`;
 }
 
 export class TermController {

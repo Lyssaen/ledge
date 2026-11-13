@@ -62,7 +62,7 @@ describe('the terminal controller', () => {
     x.deliver(opened(op));
     expect(sc.sizes).toEqual([[200, 50]]);
     expect(sc.written).toEqual([paintScreen('$ ls\na b', { x: 3, y: 1 })]);
-    expect(paintScreen('a\nb', { x: 3, y: 1 })).toBe('\x1b[H\x1b[2Ja\r\nb\x1b[2;4H');
+    expect(paintScreen('a\nb', { x: 3, y: 1 })).toBe('\x1b[H\x1b[2J\x1b[3Ja\r\nb\x1b[2;4H');
     x.deliver({ type: 'term.output', tid: TID, seq: 0, data: 'one' });
     x.deliver({ type: 'term.output', tid: TID, seq: 1, data: 'two' });
     expect(sc.written.slice(1)).toEqual(['one', 'two']);

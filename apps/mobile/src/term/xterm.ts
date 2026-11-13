@@ -35,8 +35,9 @@ export function createXterm(host: HTMLElement): XtermScreen {
   const theme = termTheme(getComputedStyle(document.documentElement));
   const term = new Terminal({
     cols: 80, rows: 24, fontSize: READABLE_PX, fontFamily: '"Geist Mono Variable", "Geist Mono", ui-monospace, monospace',
-    // The first screen is the pane as it is: no history of the phone's own, and no scrollback to keep in memory.
-    scrollback: 0, theme, cursorBlink: false, allowProposedApi: false,
+    // The first screen carries the pane's history (#298, PHONE_HISTORY_LINES), and what the pane writes after it scrolls on: a
+    // short scrollback, a phone's memory.
+    scrollback: 1_000, theme, cursorBlink: false, allowProposedApi: false,
     // The screen reader mode reads the rows as text (the mockup's accessibility notes).
     screenReaderMode: true
   });
