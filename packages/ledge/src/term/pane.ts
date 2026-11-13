@@ -13,14 +13,15 @@ const OPEN_TIMEOUT_MS = 5_000;
 const RESTORE_MS = 20;
 
 type PaneMsg =
-  | { type: 'term.opened'; id: string; shell?: string; cols: number; rows: number; screen: string; cursor: { x: number; y: number }; modes?: TermModes }
+  | { type: 'term.opened'; id: string; shell?: string; cols: number; rows: number; screen: string; cursor: { x: number; y: number }; modes?: TermModes; nonce?: string }
   | { type: 'term.output'; id: string; shell?: string; data: string }
   | { type: 'term.size'; id: string; shell?: string; cols: number; rows: number }
   | { type: 'term.exit'; id: string; shell?: string; why: PaneExitWhy };
 
 export interface PaneReply { (msg: PaneMsg): void }
 
-export interface PaneSession { id: string; tmuxName: string; shell?: string; owned?: boolean }
+/** `nonce`: a free shell's integration key (#299), sent with each screen so the front can tell the shell's own marks. */
+export interface PaneSession { id: string; tmuxName: string; shell?: string; owned?: boolean; nonce?: string }
 
 export interface PaneHost {
   /** `size` null: read-only, the pane's size stays whatever it is. A new watch replaces only the same shell of the same session. */
@@ -64,7 +65,7 @@ export function modesOf(flags: string | undefined, paste: boolean): TermModes | 
 const targetOf = (name: string) => `'=${name}:'`;
 
 interface Watch {
-  reply: PaneReply; id: string; shell: string; tmuxName: string; sizing: boolean; owned: boolean; lock: boolean;
+  reply: PaneReply; id: string; shell: string; tmuxName: string; sizing: boolean; owned: boolean; lock: boolean; nonce?: string;
   client: ControlClient;
   /** `capturing`: output is dropped (it is in the screen being taken); `pending`: the capture's reply is in, so what follows is after
    *  the screen: kept, sent once `term.opened` is; `live`: kept and sent. */
@@ -220,7 +221,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     w.state = 'live';
     w.openTimer?.stop(); w.openTimer = null;
     const modes = modesOf(m[6], !w.owned);
-    send(w, { type: 'term.opened', id: w.id, cols: w.cols, rows: w.rows, screen: text, cursor: { x: Number(m[4]), y: Number(m[5]) }, ...(modes ? { modes } : {}) });
+    send(w, { type: 'term.opened', id: w.id, cols: w.cols, rows: w.rows, screen: text, cursor: { x: Number(m[4]), y: Number(m[5]) }, ...(modes ? { modes } : {}), ...(w.nonce ? { nonce: w.nonce } : {}) });
     // What tmux sent after the capture, kept while the screen was answered, follows the screen at once.
     flush(w);
     // A resize that arrived while the screen was taken: the capture shows the old grid, so the window follows now.
@@ -285,6 +286,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
       const client = openControl(argv, spawnIt, e => { if (w.state === 'closed') return; onEvent(w, e); });
       w = {
         reply, id: session.id, shell: tag, tmuxName: session.tmuxName, sizing: size !== null, owned: !!session.owned, lock: !session.owned,
+        ...(session.nonce ? { nonce: session.nonce } : {}),
         client, state: 'capturing', pane: null, cols: size?.cols ?? 0, rows: size?.rows ?? 0,
         want: size ? { ...size } : null,
         buffer: Buffer.alloc(0), since: null, early: [], queued: [], typing: Promise.resolve(),
