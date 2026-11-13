@@ -57,14 +57,20 @@ describe('a list with nothing to choose, in two panes (Q94 B)', () => {
     expect(emptyDetail()).toBeTruthy();
   });
 
-  it('marks the Rigs list while OpenRig is read and when it has no rig', () => {
+  it('marks the Rigs list while OpenRig is read and when it is stopped, not when it has no rig but its kernel row', () => {
     const t = open('#/rigs');
     t.ready();
     expect(listState()).toBeTruthy();
     act(() => t.deliver({ type: 'rigs.state', state: openrig() }));
     expect(listState()).toBeNull();
+    // No rig: the kernel's row can still be chosen, so both panes stay, « Rien à afficher » on the right (§5, e243d073).
     act(() => t.deliver({ type: 'rigs.state', state: { ...openrig(), rigs: [] } }));
     expect(screen.getByText(copy.rigs.empty.title)).toBeTruthy();
+    expect(screen.getByRole('link', { name: new RegExp(copy.rigs.kernel) })).toBeTruthy();
+    expect(listState()).toBeNull();
+    expect(emptyDetail()).toBeTruthy();
+    act(() => t.deliver({ type: 'rigs.state', state: { ...openrig(), rigs: [], daemon: { state: 'stopped' }, kernel: { state: 'stopped' } } }));
+    expect(screen.getByText(copy.rigs.stopped.title)).toBeTruthy();
     expect(listState()).toBeTruthy();
   });
 

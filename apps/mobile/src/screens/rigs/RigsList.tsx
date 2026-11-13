@@ -48,10 +48,13 @@ export function DaemonChoices({ disabled, next = false }: { disabled: boolean; n
   );
 }
 
-/** A framed empty state of the list: its glyph, title and line, then what it offers. In two panes, both join around it (Q94 B). */
-function Empty({ glyph, title, body, children }: { glyph?: ReactNode; title: string; body: string; children?: ReactNode }) {
+/**
+ * A framed empty state of the list: its glyph, title and line, then what it offers. In two panes, both join around it when the
+ * list has nothing else to choose (Q94 B); `list={false}` under OpenRig's rows, which stay choosable (t-tablette.html §5).
+ */
+function Empty({ glyph, title, body, list = true, children }: { glyph?: ReactNode; title: string; body: string; list?: boolean; children?: ReactNode }) {
   return (
-    <div data-list-state="" className="flex flex-col items-center gap-1.5 px-4 pt-[26px] pb-[22px] text-center">
+    <div data-list-state={list ? '' : undefined} className="flex flex-col items-center gap-1.5 px-4 pt-[26px] pb-[22px] text-center">
       {glyph && <div aria-hidden="true" className="grid size-12 place-items-center rounded-[10px] border border-line text-muted">{glyph}</div>}
       <h2 className="mt-1.5 text-[17px] leading-6 font-semibold">{title}</h2>
       <p className="max-w-[300px] text-[13.5px] text-muted">{body}</p>
@@ -123,7 +126,7 @@ function Listing({ state, at, store, offline }: { state: PhoneOpenRigState; at: 
       </Frame>
       {daemonUp && listed.length === 0 ? (
         <Frame>
-          <Empty title={C.empty.title} body={C.empty.body}>
+          <Empty title={C.empty.title} body={C.empty.body} list={false}>
             <a href={href({ name: 'max' })} className={rigButtonClass({ size: 'sm', className: 'mt-1.5' })}>{C.empty.talk}</a>
           </Empty>
         </Frame>
