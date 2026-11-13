@@ -21,7 +21,9 @@ import { Login, signinError } from './screens/Login';
 import { Replaced } from './screens/Offline';
 import { ChatUnavailable, EmptyPane, Prs, Rigs } from './screens/NotSent';
 import { Rail, ShellProvider, TabBar, TopBar, lookOf, type ShellLink } from './shell/Shell';
-import { atoiBadge, remember, tabOf, type Tab } from './shell/tabs';
+import { atoiBadge, remember, tabHref, tabOf, type Tab } from './shell/tabs';
+import { LedgePane } from './shell/LedgePane';
+import { setLedgePane, useLedgePane } from './state/ledgePane';
 import { requestsOf } from './model/requests';
 import { atoiOrder, nextAfter, stepFrom, type AtoiTarget } from './model/atoi';
 import { RequestDetail } from './screens/RequestDetail';
@@ -189,6 +191,18 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
   useEffect(() => { remember(route); }, [route]);
 
   const wide = useWide();
+  // The tablet has no Ledge page (m3-chat.html §7, Q36): its rail's button opens the Ledge pane over the tab. An address that
+  // names the chat (a notification, a link) opens the pane over the last tab instead.
+  const paneOpen = useLedgePane(storage);
+  const setPane = (open: boolean) => setLedgePane(open, storage);
+  const lastPage = useRef<Tab>('atoi');
+  if (tab && tab !== 'chat') lastPage.current = tab;
+  const chatPage = wide && kind === 'route' && route.name === 'chat';
+  useEffect(() => {
+    if (!chatPage) return;
+    setLedgePane(true, storage);
+    replaceRoute(parseRoute(tabHref(lastPage.current)));
+  }, [chatPage, storage]);
   // OpenRig on the PC (the Rigs tab): its reads and actions live with the link, and end with it.
   const [rigs, setRigs] = useState<RigsStore | null>(null);
   useEffect(() => {
@@ -342,11 +356,23 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           case 'atelier': return mobile.daemon?.atelier
             ? <AtelierScreen store={store} {...(route.sessionId ? { sessionId: route.sessionId } : {})} {...(route.requestKey ? { requestKey: route.requestKey } : {})} storage={storage} onReconnect={retry} />
             : <Split list={sessions} detail={<SplitEmpty {...copy.split.agent} />} />;
-          case 'chat': return chat;
+          // Left at once for the last tab, the pane open over it.
+          case 'chat': return null;
           case 'connection': return connection;
         }
       })();
-      return <ShellProvider value={shell}>{content}<Rail route={route} active={tab ?? 'settings'} badges={badges} atelier={!!mobile.daemon?.atelier} /></ShellProvider>;
+      const pane = paneOpen && (
+        <LedgePane onClose={() => setPane(false)}>
+          {chatOn ? <Chat store={store} onReconnect={retry} onClose={() => setPane(false)} /> : <ChatUnavailable onClose={() => setPane(false)} />}
+        </LedgePane>
+      );
+      return (
+        <ShellProvider value={shell}>
+          {content}
+          {pane}
+          <Rail route={route} active={tab ?? 'settings'} badges={badges} atelier={!!mobile.daemon?.atelier} ledge={{ open: paneOpen, onToggle: () => setPane(!paneOpen) }} />
+        </ShellProvider>
+      );
     }
     // A phone: the five tabs, always there (m0-socle.html, §1); the header above a tab's screen, a thread, a terminal, a request
     // and Réglages bring their own.

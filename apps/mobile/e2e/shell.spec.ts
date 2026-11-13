@@ -90,7 +90,9 @@ for (const theme of ['dark', 'light'] as const) {
     test('the rail, the list and its pane', async ({ page }) => {
       await pair(page, theme);
       const rail = nav(page);
-      await expect(rail.getByRole('link')).toHaveText([/^À toi/, 'Sessions', 'MR/PR', 'Rigs', 'Ledge', 'Réglages']);
+      // Ledge is the pane's button, not a link (m3-chat.html §7).
+      await expect(rail.getByRole('link')).toHaveText([/^À toi/, 'Sessions', 'MR/PR', 'Rigs', 'Réglages']);
+      await expect(rail.getByRole('button', { name: copy.nav.chat })).toHaveAttribute('aria-pressed', 'false');
       const box = (await rail.boundingBox())!;
       expect.soft(box.x).toBe(0);
       expect.soft(box.width).toBe(76);

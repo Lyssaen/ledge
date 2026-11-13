@@ -139,9 +139,13 @@ export function TabBar({ route, active, badges }: { route: Route; active: Tab | 
 
 /**
  * The tablet's rail, 76 px on the left: the mark, the tabs and the Atelier (when the PC sends its projects), then, apart at the
- * bottom, Ledge and Réglages.
+ * bottom, Ledge and Réglages. Ledge is not a page there: its button opens and closes the Ledge pane, outlined while the pane is
+ * open (m3-chat.html §7, Q36).
  */
-export function Rail({ route, active, badges, atelier }: { route: Route; active: Tab | 'settings' | null; badges: Partial<Record<Tab, TabBadge>>; atelier: boolean }) {
+export function Rail({ route, active, badges, atelier, ledge }: {
+  route: Route; active: Tab | 'settings' | null; badges: Partial<Record<Tab, TabBadge>>; atelier: boolean;
+  ledge: { open: boolean; onToggle: () => void };
+}) {
   const tap = useTabTap(route);
   const item = (t: Tab) => (
     <a key={t} href={tabHref(t)} onClick={tap(t, active === t)} aria-current={active === t ? 'page' : undefined} className="rb">
@@ -156,7 +160,10 @@ export function Rail({ route, active, badges, atelier }: { route: Route; active:
       {(['atoi', 'sessions', 'prs', 'rigs'] as const).map(item)}
       {atelier && item('atelier')}
       <span className="flex-1" />
-      {item('chat')}
+      <button type="button" aria-pressed={ledge.open} onClick={ledge.onToggle} className="rb">
+        <Icon name={ICON.chat} />
+        {copy.nav.chat}
+      </button>
       <span aria-hidden="true" className="my-1.5 h-px w-[34px] bg-line" />
       <a href={href({ name: 'connection' })} aria-current={active === 'settings' ? 'page' : undefined} className="rb">
         <Icon name="gear" />

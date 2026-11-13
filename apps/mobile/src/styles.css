@@ -151,6 +151,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
   .rail .rb[aria-current="page"] { background: var(--muted); color: var(--foreground); font-weight: 500; }
   .rail .rb:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--ring); }
+  /* Ledge's button while its pane is open (m3-chat.html §7): outlined, the current tab still lit. */
+  .rail .rb[aria-pressed="true"] { color: var(--foreground); box-shadow: inset 0 0 0 1px var(--ring); }
   .split { display: grid; grid-template-columns: 380px minmax(0, 1fr); flex: 1; min-height: 0; margin-right: calc(-1 * max(18px, env(safe-area-inset-right))); }
   .split-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-right: 1px solid var(--color-line); }
   .split-list .tab-main { padding-inline: 12px; }
@@ -160,10 +162,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .split-detail [data-back="atoi"], .split-detail [data-back="sessions"] { display: none; }
   /* A rig and the kernel open beside the Rigs list: their « Retour » has nowhere to go. */
   .split-detail [data-back="rigs"] { display: none; }
-  .app:not(:has(.split)) > :not(.rail) { width: 100%; max-width: 720px; margin-inline: auto; }
+  .app:not(:has(.split)) > :not(.rail, .lpane) { width: 100%; max-width: 720px; margin-inline: auto; }
+  /* The Ledge pane (m3-chat.html §7, Q36): 400 px on the right, over any tab. On its side, the tablet makes room for it, the
+     list keeping its width and the detail giving way; upright, it goes over the detail, with a shadow. */
+  .lpane {
+    position: fixed; inset: 0 0 0 auto; z-index: 15; box-sizing: border-box; width: 400px;
+    display: flex; flex-direction: column; min-height: 0;
+    --bleed-l: 14px; --bleed-r: calc(14px + env(safe-area-inset-right));
+    padding: env(safe-area-inset-top) calc(14px + env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 6px) 14px;
+    background: var(--color-bg); border-left: 1px solid var(--color-line);
+  }
+}
+@media (min-width: 768px) and (min-height: 501px) and (orientation: landscape) {
+  .app:has(> .lpane) { padding-right: calc(400px + max(18px, env(safe-area-inset-right))); }
 }
 @media (min-width: 768px) and (min-height: 501px) and (orientation: portrait) {
   .split { grid-template-columns: 330px minmax(0, 1fr); }
+  .lpane { box-shadow: -12px 0 32px #0006; }
 }
 
 /* « Réduire les animations » in Réglages (src/motion.ts): unlayered and important, it wins over every layer's animation. */

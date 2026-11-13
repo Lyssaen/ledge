@@ -55,12 +55,27 @@ describe('the shell (m0-socle.html)', () => {
   });
 
   it('puts the Atelier in the rail only when the PC sends its projects, Ledge and Réglages at the bottom', () => {
-    const { rerender } = render(<Rail route={{ name: 'rigs' }} active="rigs" badges={{}} atelier={false} />);
-    const names = () => within(screen.getByRole('navigation')).getAllByRole('link').map(a => a.textContent);
+    const closed = { open: false, onToggle: () => {} };
+    const { rerender } = render(<Rail route={{ name: 'rigs' }} active="rigs" badges={{}} atelier={false} ledge={closed} />);
+    const names = () => [...within(screen.getByRole('navigation')).getAllByRole('link'), screen.getByRole('button', { name: copy.nav.chat })]
+      .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)).map(a => a.textContent);
     expect(names()).toEqual([copy.nav.atoi, copy.nav.sessions, copy.nav.prs, copy.nav.rigs, copy.nav.chat, copy.nav.settings]);
-    rerender(<Rail route={{ name: 'rigs' }} active="rigs" badges={{}} atelier />);
+    rerender(<Rail route={{ name: 'rigs' }} active="rigs" badges={{}} atelier ledge={closed} />);
     expect(names()).toEqual([copy.nav.atoi, copy.nav.sessions, copy.nav.prs, copy.nav.rigs, copy.nav.atelier, copy.nav.chat, copy.nav.settings]);
     expect(screen.getByRole('link', { name: copy.nav.rigs })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('makes Ledge a button in the rail that opens and closes its pane, pressed while open, the tab still lit (m3-chat.html §7)', () => {
+    let toggled = 0;
+    const { rerender } = render(<Rail route={{ name: 'sessions' }} active="sessions" badges={{}} atelier={false} ledge={{ open: false, onToggle: () => { toggled++; } }} />);
+    const ledge = screen.getByRole('button', { name: copy.nav.chat });
+    expect(ledge).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.queryByRole('link', { name: copy.nav.chat })).toBeNull();
+    fireEvent.click(ledge);
+    expect(toggled).toBe(1);
+    rerender(<Rail route={{ name: 'sessions' }} active="sessions" badges={{}} atelier={false} ledge={{ open: true, onToggle: () => {} }} />);
+    expect(ledge).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('link', { name: copy.nav.sessions })).toHaveAttribute('aria-current', 'page');
   });
 
   it('shows no banner while the PC answers', () => {
