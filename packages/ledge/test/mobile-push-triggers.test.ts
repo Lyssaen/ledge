@@ -15,13 +15,12 @@ describe('the name the phone writes its title with (Q29)', () => {
     expect(pushFor(mk(), asking, [asking])).toMatchObject({ kind: 'request', name: 'Otto' });
     const q = mk({ state: 'idle', pending: req('Which db?', 'question') });
     expect(pushFor(mk(), q, [q])).toMatchObject({ kind: 'question', name: 'Otto' });
-    expect(pushFor(mk(), mk({ state: 'idle' }), [])).toMatchObject({ kind: 'finished', name: 'Otto' });
     expect(resolvedFor(asking, mk({ state: 'idle' }), [])).toMatchObject({ kind: 'resolved', name: 'Otto' });
     const decision = decisionPayload({ id: 't1', giverName: 'Pim', title: 'Ship it?' } as never, 1);
     expect(decision).toMatchObject({ kind: 'decision', name: 'Pim' });
     expect(PushPayloadSchema.parse(decision)).toEqual(decision);
     expect(chatEndPayload(undefined, 0)).not.toHaveProperty('name');
-    expect(pushFor(mk(), mk({ state: 'idle', name: 'N'.repeat(150) }), [])!.name).toHaveLength(100);
+    expect(pushFor(mk(), mk({ name: 'N'.repeat(150), pending: req('x') }), [])!.name).toHaveLength(100);
     // A payload from an older daemon, without the name, is still valid.
     const { name: _n, ...old } = pushFor(mk(), asking, [asking])!;
     expect(PushPayloadSchema.safeParse(old).success).toBe(true);
@@ -32,7 +31,7 @@ describe('pushFor', () => {
   it('announces a new request once, with the key the phone routes on', () => {
     const a = mk({ state: 'idle', pending: req('Run ls') });
     const first = pushFor(mk(), a, [a])!;
-    expect(first).toMatchObject({ v: 1, kind: 'request', title: 'Otto attend votre accord', body: 'Run ls', badge: 1, tag: 's1' });
+    expect(first).toMatchObject({ v: 1, kind: 'request', title: 'Ledge', body: 'Otto · Run ls', badge: 1, tag: 's1' });
     expect(first.url).toBe(`/#/request/s1/${pendingKey(a.pending!)}`);
     expect(PushPayloadSchema.parse(first)).toEqual(first);
     expect(pushFor(a, { ...a, lastActivityAt: '2026-10-09T18:05:00.000Z' }, [a])).toBeNull();
@@ -44,17 +43,21 @@ describe('pushFor', () => {
   });
   it('announces a question', () => {
     const a = mk({ pending: req('Which db?', 'question') });
-    expect(pushFor(mk(), a, [a])).toMatchObject({ kind: 'question', title: 'Otto a une question', body: 'Which db?' });
+    expect(pushFor(mk(), a, [a])).toMatchObject({ kind: 'question', title: 'Ledge', body: 'Otto · Which db?' });
+  });
+  it('request push title says Ledge and body names the session', () => {
+    const a = mk({ pending: req('Run ls') });
+    const p = pushFor(mk(), a, [a])!;
+    expect(p.title).toBe('Ledge');
+    expect(p.body.startsWith('Otto')).toBe(true);
   });
   it('uses the command for the generic Codex request', () => {
     const a = mk({ pending: { ...req('Allow the requested shell command?'), body: 'rm -rf build' } });
-    expect(pushFor(mk(), a, [a])!.body).toBe('rm -rf build');
+    expect(pushFor(mk(), a, [a])!.body).toBe('Otto · rm -rf build');
   });
-  it('announces the end of a turn, with the reply', () => {
+  it('pushFor no longer returns finished', () => {
     const b = mk({ state: 'idle', lastReply: { text: 'Done.', at: T0 } });
-    const p = pushFor(mk(), b, [b])!;
-    expect(p).toMatchObject({ kind: 'finished', title: 'Otto a terminé', body: 'Done.', url: '/#/thread/s1', badge: 0 });
-    PushPayloadSchema.parse(p);
+    expect(pushFor(mk(), b, [b])).toBeNull();
   });
   it('does not announce an end of turn with a request waiting, nor idle to idle', () => {
     const a = mk({ state: 'idle', pending: req('x') });
@@ -72,7 +75,8 @@ describe('pushFor', () => {
     expect(p.title).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
     PushPayloadSchema.parse(p);
     const long = pushFor(mk(), mk({ name: 'n'.repeat(200), pending: req('x') }), [])!;
-    expect(long.title.length).toBe(80);
+    expect(long.body.length).toBe(120);
+    expect(long.name).toHaveLength(100);
     PushPayloadSchema.parse(long);
   });
   it('makes a safe tag and an encoded url from an odd session id', () => {

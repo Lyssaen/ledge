@@ -215,7 +215,7 @@ sw.addEventListener('push', (e) => {
     if (!payload) return sw.registration.showNotification(NOTIFY[l].fallbackTitle, { body: NOTIFY[l].fallbackBody, tag: 'ledge', renotify: true });
     const { title, body } = notifyText(payload, l);
     // `resolved` replaces the request's notification under its tag, silently; `kind` lets the app close a stale one.
-    await sw.registration.showNotification(title, { body, tag: payload.tag, data: { url: payload.url, kind: payload.kind }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' && payload.kind !== 'resolved' });
+    await sw.registration.showNotification(title, { body, tag: payload.tag, data: { url: payload.url, kind: payload.kind }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' && payload.kind !== 'resolved' && payload.kind !== 'point' });
     // The badge is a courtesy: neither a throw nor a rejection of it may fail the notification.
     try { await sw.registration.setAppBadge?.(payload.badge); } catch { /* ignored */ }
   })());

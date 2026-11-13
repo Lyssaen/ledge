@@ -1,5 +1,5 @@
 import type { FleetFollowedSession, FleetForgeStatus, FleetPullRequest } from './forge';
-import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState, type UsageStateMessage, type ForgeAction, type PrDetail } from '@ledge/protocol';
+import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState, type UsageStateMessage, type OperatorNotice, type ForgeAction, type PrDetail } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage, type Task } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
@@ -62,6 +62,8 @@ export interface Fleet {
   tasks(): Task[];
   /** Each machine's harness limits as it last sent them (`usage.state`), by machine id; empty until one does. */
   usage(): ReadonlyMap<string, UsageStateMessage>;
+  /** Each machine's operator notices as it last sent them (`operator.state`), by machine id; empty until one does. */
+  operator(): ReadonlyMap<string, OperatorNotice[]>;
   /** Sets the usage alert threshold (0.5–0.95) on every machine that speaks of usage; the effect arrives on their broadcasts. */
   setUsageAlert(alert: number): void;
   /** « Compris » on an alert: sent to each machine that holds it. */

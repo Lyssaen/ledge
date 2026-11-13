@@ -1,4 +1,4 @@
-import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, UsagePrefsSchema, type UsagePrefs, type UsageStateMessage, type ForgeAction, type ForgeStateMessage, type PrDetail, type RefusalCode, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload, type BrowserLive } from '@ledge/protocol';
+import { broadcastLabel, broadcastRecipient, BROADCAST_LABEL_MAX, BROADCAST_SESSIONS_MAX, ClientMessageSchema, MESSAGE_MAX, ChatTurnSchema, ContextPrefsSchema, isArchived, projectOf, IslandPrefsSchema, UsagePrefsSchema, type UsagePrefs, type UsageStateMessage, type OperatorNotice, type ForgeAction, type ForgeStateMessage, type PrDetail, type RefusalCode, LEDGE_GIVER, ProjectsSchema, type Task, type IslandPrefs, type MobileState, type ChatTurn, type ChatProposal, type Projects, type ClientMessage, type Machine, type RoutingContext, type ServerMessage, type Session, type Tool, type ImageUpload, type BrowserLive } from '@ledge/protocol';
 import { createDaemonClient, type DaemonClient, type DaemonStatus } from './client';
 import { LOCAL_MACHINE, loadMachines, machineUrl, parseMachines, probeMachine, qualify, shellCommand, splitId, terminalCommand, type BroadcastResult, type MachineConfig, type MobileError, type MachineState } from './machines';
 import type { TokenSource } from './token';
@@ -164,6 +164,8 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   let contextNear: number | undefined;
   /** Each machine's last `usage.state` (harness limits, alerts, threshold), by machine id; a machine that goes away takes its own. */
   let usage: ReadonlyMap<string, UsageStateMessage> = new Map();
+  /** Each machine's last `operator.state` notices, by machine id; a machine that goes away takes its own. */
+  let operatorNotices: ReadonlyMap<string, OperatorNotice[]> = new Map();
   /** Each machine's last `forge.state` (lot 8a), sessions qualified; a machine that falls takes its own out. */
   let forgeStates: ReadonlyMap<string, ForgeStateMessage> = new Map();
   const forgeListeners = new Set<() => void>();
@@ -302,7 +304,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
   /** Applies a confirmed list to the peers: no storage write, nothing for the overlay until `publish`. */
   function apply(next: MachineConfig[]) {
     configuring = true;
-    for (const [id, p] of peers) if (!next.some(c => !c.disabled && c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); answerFailedForge(id, 'offline'); dropForge(id); if (usage.has(id)) { const next = new Map(usage); next.delete(id); usage = next; } if (owedPrefs.delete(id)) keepOwed(); }
+    for (const [id, p] of peers) if (!next.some(c => !c.disabled && c.id === id && c.url === p.config.url && c.ssh === p.config.ssh)) { p.client.close(); p.off.forEach(off => off()); peers.delete(id); answerFailedForge(id, 'offline'); dropForge(id); if (usage.has(id)) { const next = new Map(usage); next.delete(id); usage = next; } if (operatorNotices.has(id)) { const next = new Map(operatorNotices); next.delete(id); operatorNotices = next; } if (owedPrefs.delete(id)) keepOwed(); }
     configs = next;
     for (const c of active()) { const p = peers.get(c.id); if (p) p.config = c; else add(c); }
     if (!peers.has(selected)) selected = 'local';
@@ -422,6 +424,11 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       const tagged = { ...m, machineId: machine };
       usage = new Map(usage).set(machine, tagged); listeners.forEach(fn => fn());
       emit(tagged); return;
+    }
+    // The notch's notices from each machine's operator, kept per machine like the usage.
+    if (m.type === 'operator.state') {
+      // Not emitted: the message names no machine, so a front reads `operator()` instead of a mix of machines' notices.
+      operatorNotices = new Map(operatorNotices).set(machine, m.notices); listeners.forEach(fn => fn()); return;
     }
     // The pull and merge requests (lot 8a): kept per machine, sessions qualified; an answer goes out once, from the machine asked.
     if (m.type === 'forge.state') {
@@ -850,6 +857,7 @@ export function createFleetClient(config: MachineConfig[], makeClient = createDa
       },
       tasks: () => taskList,
       usage: () => usage,
+      operator: () => operatorNotices,
       prs: () => [...forgeStates].flatMap(([machine, st]) => st.prs.map(p => ({ ...p, machineId: machine }) as FleetPullRequest)),
       forges: () => [...forgeStates].flatMap(([machine, st]) => st.forges.map(f => ({ ...f, machineId: machine }) as FleetForgeStatus)),
       followed: () => [...forgeStates].flatMap(([machine, st]) => (st.followed ?? []).map(f => ({ ...f, machineId: machine }) as FleetFollowedSession)),

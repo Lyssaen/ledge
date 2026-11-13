@@ -5,6 +5,7 @@ import { log } from '../log.js';
 import { fromAsks, fromForge, fromGoals, fromRigs, fromSession, fromTasks, settledSession, type Draft } from './detect.js';
 import { openJournal, type DeviceId, type Journal, type JournalEvent } from './journal.js';
 import { runLead as defaultRunLead } from './lead.js';
+import { noticesOf } from './notices.js';
 import { buildPoint, daemonLead, foldIfDone, isWaiting, settleItem, type LiveState } from './point.js';
 import { createWakes } from './wakes.js';
 
@@ -38,6 +39,8 @@ export interface Operator {
   read(device: DeviceId, eventId: number): void;
   later(device: DeviceId, qid: string): void;
   notices(): OperatorNotice[];
+  /** Tells the notices again: an urgent rig ask that just arrived should not wait for a wake. */
+  refreshNotices(): void;
   start(): void; stop(): void;
 }
 
@@ -60,8 +63,11 @@ export function createOperator(deps: OperatorDeps): Operator {
   const now = deps.now ?? (() => new Date().toISOString());
   const runLead = deps.runLead ?? defaultRunLead;
   const emitOf = (id: DeviceId) => threads.emitterOf(id) ?? (() => {});
-  /** Task 9 computes the notch's and the phone's notices from the points and the rig asks; none until then. */
-  const notices = (): OperatorNotice[] => [];
+  /** The notch's notices: the desktop thread's newest open point and the urgent rig asks, as the daemon sees them now. */
+  const notices = (): OperatorNotice[] => {
+    const desktop = threads.all().find(([id]) => id === 'desktop')?.[1];
+    return noticesOf(desktop?.points() ?? [], deps.live().asks, now());
+  };
   const tellNotices = () => { try { deps.onNotices(notices()); } catch (e) { log(`operator notices: ${(e as Error).message}`); } };
 
   /** What still waits on the user, up to the last event a wake covers. */
@@ -150,6 +156,7 @@ export function createOperator(deps: OperatorDeps): Operator {
       tellNotices();
     },
     notices,
+    refreshNotices: tellNotices,
     start() { wakes.start(); },
     stop() { wakes.stop(); }
   };
@@ -168,6 +175,7 @@ export interface OperatorWiring {
   contextNear: () => number;
   tool: OperatorDeps['tool']; chatDeps: ChatDeps;
   devices?: OperatorDeps['devices'];
+  onNotices?: OperatorDeps['onNotices']; onPointPush?: OperatorDeps['onPointPush'];
   lang?: LiveState['lang'];
 }
 
@@ -194,8 +202,7 @@ export function wireOperator(w: OperatorWiring) {
   const operator = createOperator({
     journal, machine: w.machine, threads: w.threads, tool: w.tool, chatDeps: w.chatDeps, ...(w.devices ? { devices: w.devices } : {}),
     live: () => ({ sessions: w.store.all(), asks: asks ?? [], tasks: w.tasks(), lang: w.lang ?? 'fr' }),
-    // Task 9 broadcasts the notices and pushes the point to the phones.
-    onNotices: () => {}, onPointPush: () => {}
+    onNotices: w.onNotices ?? (() => {}), onPointPush: w.onPointPush ?? (() => {})
   });
   let stopped = false;
   /** The daemon's listeners call it: a journal that fails (or is closed at shutdown) never breaks them. */
@@ -246,9 +253,10 @@ export function wireOperator(w: OperatorWiring) {
       const before = asks;
       // A partial list says nothing of the rows it misses: they are kept until a whole list leaves them out.
       asks = before && (l.partial || l.truncated) ? [...l.asks, ...before.filter(a => !l.asks.some(x => x.id === a.id))] : l.asks;
-      if (!before) return;
+      if (!before) { if (!stopped) operator.refreshNotices(); return; }
       record(fromAsks(before, l.asks));
       for (const a of before) if (!asks.some(x => x.id === a.id)) settle('rig.ask', a.id, 'elsewhere');
+      if (!stopped) operator.refreshNotices();
     },
     /** An ask answered through Ledge (`desktop`: a PC front, `phone`: the gateway): settled there, unless questions still wait. */
     askAnswered(qitemId: string, where: SettledWhere, r: { ok: boolean; outcome?: string }): void {

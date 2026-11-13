@@ -46,6 +46,7 @@ export const PushPayloadSchema = z.object({
   v: z.literal(1),
   /** `resolved`: a request or question answered (anywhere), replacing its notification under the same tag; only sent to a
    *  device whose subscription says its service worker knows it (`push.subscribe` `resolved`). */
+  /** `point`: the operator's point, one per paired device (the body is its lead); replaces `finished`, which a daemon no longer sends. */
   kind: z.enum(['request', 'question', 'finished', 'chat', 'decision', 'resolved', 'point']),
   title: z.string().max(80),
   /**

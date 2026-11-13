@@ -31,13 +31,13 @@ function fit(p: PushPayload): Uint8Array | null {
 
 /**
  * Whether the device's own settings let `p` through at `at` (ms): a pause holds every kind but `resolved` (it only replaces a
- * notification already shown); « Agent terminé », « Réponse de Ledge » and « Décision » can each be turned off; requests and
+ * notification already shown); « Agent terminé » (which now gates the point), « Réponse de Ledge » and « Décision » can each be turned off; requests and
  * questions cannot.
  */
 export function wanted(p: Pick<PushPayload, 'kind'>, prefs: DevicePrefs | undefined, at: number): boolean {
   if (!prefs || p.kind === 'resolved') return true;
   if (prefs.quietUntil !== null && Date.parse(prefs.quietUntil) > at) return false;
-  return p.kind === 'finished' || p.kind === 'chat' || p.kind === 'decision' ? prefs.notify[p.kind] : true;
+  return p.kind === 'point' ? prefs.notify.finished : p.kind === 'finished' || p.kind === 'chat' || p.kind === 'decision' ? prefs.notify[p.kind] : true;
 }
 
 export function createNotifier(deps: {
@@ -86,7 +86,7 @@ export function createNotifier(deps: {
             endpoint: sub.endpoint,
             body: Buffer.from(encryptPush(plain, { p256dh: sub.p256dh, auth: sub.auth }, { padTo: PAD_TO })).toString('base64url'),
             ttl: TTL_S,
-            urgency: p.kind === 'finished' || p.kind === 'chat' || p.kind === 'resolved' ? 'normal' : 'high',
+            urgency: p.kind === 'finished' || p.kind === 'chat' || p.kind === 'resolved' || p.kind === 'point' ? 'normal' : 'high',
             topic: p.tag
           };
           const r = await mobile.sendPush(msg);
