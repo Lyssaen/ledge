@@ -33,7 +33,7 @@ export const PROTOCOL_PORT = 47831;
 export { RefusalCodeSchema, type RefusalCode } from './refusal.js';
 
 export const SessionEventSchema = z.object({
-  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed', 'NativeRequest', 'AgentMessage', 'QueueUpdate']),
+  name: z.enum(['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop', 'SessionEnd', 'PaneChanged', 'PaneGone', 'PanePrompt', 'PaneIdle', 'InjectFailed', 'Decided', 'PostToolUse', 'PostToolUseFailure', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PaneTitle', 'Renamed', 'NativeRequest', 'AgentMessage', 'QueueUpdate', 'PaneUnreadable', 'PaneReadable']),
   at: z.string().datetime(),
   source: z.enum(['hook', 'pane', 'daemon']),
   tool: z.string().optional(),

@@ -78,6 +78,9 @@ export function classify(input: RiskInput): RiskVerdict {
   if (kind === 'question') return low('question');
   if (kind === 'plan') return high('plan');
   if (kind === 'diff') {
+    // A file change read on screen (Codex's edit dialog, #302): its text is drawn (« Edit <path> », wrapped), never a list of paths,
+    // so it is judged like any pane request.
+    if (input.source === 'pane') return high('unknown');
     const t = text.trim();
     const paths = t === '' || t === 'patch' ? [] : t.split(', ').map(p => p.trim()).filter(Boolean);
     if (paths.length === 0 || paths.some(p => /[,\n\r]/.test(p))) return high('unknown');

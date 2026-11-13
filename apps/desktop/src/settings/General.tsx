@@ -15,8 +15,17 @@ import type { SettingsContext } from './SettingsPage';
 import { TOOLS, useDefaultTool } from './tool';
 import { useContextNear, useUsage } from '@ledge/fleet';
 import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN, USAGE_ALERT_MAX, USAGE_ALERT_MIN } from '@ledge/protocol';
-import { usageThreshold } from '../usage/model';
+import { span, usageThreshold } from '../usage/model';
+import { accountRows } from '../usage/accounts';
+import { HarnessLogo } from '../usage/UsageFooter';
+import { useNow } from '../usage/useUsageView';
 import { useResumeOnStart } from '../workspace/prefs';
+import { setDefaultView, useDefaultView } from '../session/defaultView';
+import type { SessionView } from '../session/prefs';
+import { SHELL_ICONS } from '../shell/icons';
+
+/** The two views, with the icons of a tab's view switcher (session/SessionPage.tsx VIEWS). */
+const SESSION_VIEWS: ReadonlyArray<{ view: SessionView; icon: readonly string[] }> = [{ view: 'thread', icon: SHELL_ICONS.thread }, { view: 'terminal', icon: SHELL_ICONS.terminal }];
 
 /** « Contexte max »: 50 % to 95 %, by 5. */
 const ALERTS = Array.from({ length: Math.round((USAGE_ALERT_MAX - USAGE_ALERT_MIN) * 20) + 1 }, (_, i) => Math.round((USAGE_ALERT_MIN + i * 0.05) * 100));
@@ -26,6 +35,7 @@ const NEARS = Array.from({ length: Math.round((CONTEXT_NEAR_MAX - CONTEXT_NEAR_M
 export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
   const { t } = useI18n();
   const g = t.settings.general;
+  const view = useDefaultView();
   const theme = useTheme();
   const { reduced } = useMotionPreferences();
   const [tool, setTool] = useDefaultTool();
@@ -93,6 +103,12 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
               label: <><span aria-hidden="true" style={{ display: 'inline-flex' }}><LogoBot tool={id} state={tool === id ? 'working' : 'idle'} size={20} theme={theme} seed={'set-' + id} paused={ctx.paused} reducedMotion={reduced} /></span>{t.launch.tools[id][0]}</>
             }))} />
         </Row>
+        <Row label={g.view} hint={g.viewHint}>
+          {describedBy => (
+            <Segmented label={g.view} value={view} describedBy={describedBy} onChange={v => { setDefaultView(v); ctx.saved(g.viewSaved(t.session.views[v])); }}
+              options={SESSION_VIEWS.map(v => ({ value: v.view, label: <><Icon d={v.icon} size={13} />{t.session.views[v.view]}</> }))} />
+          )}
+        </Row>
         <Row label={g.context} hint={known ? g.contextHint : g.contextUnknown}>
           {describedBy => (
             <select className="set-input" aria-label={g.context} aria-describedby={describedBy} disabled={!known} value={Math.round(near * 100)} onChange={e => chooseNear(Number(e.target.value))}>
@@ -107,6 +123,7 @@ export function General({ ctx }: { ctx: SettingsContext }): JSX.Element {
             </select>
           )}
         </Row>
+        <AccountsRead ctx={ctx} />
       </Card>
       <UpdatesCard saved={ctx.saved} />
     </>
@@ -151,5 +168,39 @@ export function UpdatesCard({ saved }: { saved(what: string): void }): JSX.Eleme
         </Button>
       </Row>
     </Card>
+  );
+}
+
+/** « Comptes lus » (docs/mockups/ledge-usage-sign-in.html, #301): each account whose limits Ledge reads, its machine and its state.
+ *  The one place a refused sign-in stays written (the bar hides it). Read only: signing in again happens in the harness. Nothing
+ *  when no machine gives its limits. */
+function AccountsRead({ ctx }: { ctx: SettingsContext }): JSX.Element | null {
+  const { t, lang } = useI18n();
+  const g = t.settings.general;
+  const u = t.usage;
+  const usage = useUsage(ctx.client);
+  const now = useNow();
+  const rows = accountRows(usage, ctx.machines.map(m => m.id), id => ctx.machines.find(m => m.id === id)?.status === 'open');
+  if (!rows.length) return null;
+  const label = (id: string) => ctx.machines.find(m => m.id === id)?.label ?? id;
+  const ago = (at: string) => span(now - Date.parse(at), lang);
+  return (
+    <Row label={g.accounts} hint={g.accountsHint} stack>
+      <ul className="set-accounts" aria-label={g.accounts}>
+        {rows.map(r => {
+          const name = u.harness[r.harness] ?? r.harness;
+          const s = r.state;
+          return (
+            <li key={`${r.harness}|${r.machine}`} className="set-account">
+              <span className="set-account-name"><HarnessLogo harness={r.harness} size={16} />{name}</span>
+              <span className="set-account-machine">{label(r.machine)}</span>
+              {s.kind === 'signIn'
+                ? <span className="set-account-state warn"><span>{g.signInNeeded}</span><small>{g.signInAgain(name, label(r.machine))}</small></span>
+                : <span className="set-account-state">{s.kind === 'read' ? u.read(ago(s.at)) : s.kind === 'last' ? u.lastRead(ago(s.at)) : s.kind === 'never' ? u.neverRead : u.unreachable}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </Row>
   );
 }

@@ -116,8 +116,11 @@ export function createUsage(deps: UsageDeps): UsageService {
     return envCache.env;
   };
 
+  // #301: only a refusal (401) is `expired`; a token past its time on this machine is not a sign-out (the harness renews it at its
+  // next use): its last values stay `stale`, and the harness leaves the list once they are an hour old (`entry`).
   const statusOf = (s: { localExpired: boolean; refused: boolean; attempted: boolean; failed: boolean; readAt: number | null } = { localExpired, refused, attempted, failed, readAt }, staleMs = STALE_MS): HarnessUsage['status'] => {
-    if (s.localExpired || s.refused) return 'expired';
+    if (s.refused) return 'expired';
+    if (s.localExpired) return 'stale';
     if (!s.attempted && s.readAt === null) return 'loading';
     if (s.failed) return 'unreachable';
     if (s.readAt === null || now() - s.readAt > staleMs) return s.readAt === null ? 'loading' : 'stale';
@@ -125,21 +128,32 @@ export function createUsage(deps: UsageDeps): UsageService {
   };
   const shown = (w: UsageWindow[], at: number | null): UsageWindow[] => (at === null || now() - at > HIDE_MS ? [] : w);
 
+  /** A signed-in harness as sent: refused, no window; its local token expired, its last values while under an hour old, else not
+   *  listed at all (null); otherwise as read. */
+  const entry = (harness: 'claude' | 'cursor', acct: string | null, s: { localExpired: boolean; refused: boolean; attempted: boolean; failed: boolean; readAt: number | null }, w: UsageWindow[], staleMs: number): HarnessUsage | null => {
+    const status = statusOf(s, staleMs);
+    const at = s.readAt === null ? null : new Date(s.readAt).toISOString();
+    if (s.refused) return { harness, account: acct, status, readAt: at, windows: [], cause: 'refused' };
+    if (s.localExpired) {
+      const kept = shown(w, s.readAt);
+      return kept.length ? { harness, account: acct, status, readAt: at, windows: kept, cause: 'local_expired' } : null;
+    }
+    return { harness, account: acct, status, readAt: at, windows: status === 'loading' ? [] : shown(w, s.readAt) };
+  };
+
   function harnesses(): HarnessUsage[] {
     const out: HarnessUsage[] = [];
     if (signedIn) {
-      const status = statusOf();
-      out.push({ harness: 'claude', account, status, readAt: readAt === null ? null : new Date(readAt).toISOString(),
-        windows: status === 'expired' || status === 'loading' ? [] : shown(windows, readAt) });
+      const e = entry('claude', account, { localExpired, refused, attempted, failed, readAt }, windows, STALE_MS);
+      if (e) out.push(e);
     }
     if (codex && codex.windows.length) {
       const w = shown(codex.windows, codex.at);
       if (w.length) out.push({ harness: 'codex', account: null, status: now() - codex.at > STALE_MS ? 'stale' : 'ok', readAt: new Date(codex.at).toISOString(), windows: w });
     }
     if (cur.listed) {
-      const status = statusOf(cur, CURSOR_STALE_MS);
-      out.push({ harness: 'cursor', account: cur.account, status, readAt: cur.readAt === null ? null : new Date(cur.readAt).toISOString(),
-        windows: status === 'expired' || status === 'loading' ? [] : shown(cur.windows, cur.readAt) });
+      const e = entry('cursor', cur.account, cur, cur.windows, CURSOR_STALE_MS);
+      if (e) out.push(e);
     }
     return out;
   }
@@ -190,11 +204,20 @@ export function createUsage(deps: UsageDeps): UsageService {
     // The account is told only for the token Claude Code keeps in its file, the one `~/.claude.json` goes with; an environment
     // token may be another account's: none then. A token that changed (another sign-in) has its account read again.
     const which = token === 'expired' ? 'file:expired' : `${token.from}:${createHash('sha256').update(token.token).digest('hex')}`;
-    if (which !== accountOf || now() - accountAt > REREAD_MS) {
+    // An expired token has no hash to tell one sign-in from another: its account is read on every tick (a local file), so a switch
+    // between two expired tokens is seen at once (#301 review).
+    if (token === 'expired' || which !== accountOf || now() - accountAt > REREAD_MS) {
       account = token !== 'expired' && token.from === 'env' ? null : await readClaudeAccount(home, deps.read);
       accountAt = now(); accountOf = which;
     }
-    if (token === 'expired') { localExpired = true; return; }
+    if (token === 'expired') {
+      localExpired = true;
+      // The last values stay only for the account they were read for, confirmed (#301 review): an expired token carries no hash to
+      // compare, so the account must be read and be the same. Another account, or one that cannot be told, drops them, and the
+      // previous account's refusal with them: never shown under someone else.
+      if (account === null || account !== identityOf) { windows = []; readAt = null; refused = false; identityOf = account; }
+      return;
+    }
     // A valid token again (Claude Code signed in again): its own expiry is over; a refusal of this account still stands.
     localExpired = false;
     // The windows belong to the account they were read for: Claude Code refreshing its token keeps them, another account signed

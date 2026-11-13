@@ -311,7 +311,6 @@ export const fr = {
     resetAt: (t: string, date = false) => `remise ${date ? 'le' : 'à'} ${t}`, resetIn: (t: string, d: string, date = false) => `remise ${date ? 'le' : 'à'} ${t} · dans ${d}`,
     resumes: (t: string, date = false) => `reprend ${date ? 'le' : 'à'} ${t}`, resumesOn: (t: string, date = false) => `atteinte · reprend ${date ? 'le' : 'à'} ${t}`,
     ago: (a: string) => `il y a ${a}`, unreachable: 'injoignable',
-    expired: (h: string) => `session expirée : reconnectez-vous dans ${h}`, expiredShort: (_h: string) => 'reconnectez-vous',
     unread: 'limite non lue', unreadMsg: 'Cursor ne donne pas à Ledge le détail de cette offre. Son usage reste lisible sur cursor.com.', dashboard: 'cursor.com/dashboard ↗',
     title: (h: string) => `Limites · ${h}`,
     signedIn: (m: string) => `Compte connecté sur ${m}`, read: (a: string) => `lu il y a ${a}`, lastRead: (a: string) => `dernière lecture il y a ${a}`,
@@ -375,9 +374,15 @@ export const fr = {
       autostartMissing: 'Pas proposé ici : seule l’application installée peut se lancer avec Windows.',
       autostartFailed: 'Windows n’a pas pris ce réglage.', autostartOff: 'Pas de lancement au démarrage',
       tool: 'Agent par défaut', toolHint: 'Pour le chat de Ledge et ses cartes.', toolSaved: (name: string) => `Agent par défaut : ${name}`,
+      // « Vue par défaut d'une session » (docs/mockups/ledge-session-view-default.html, #300, validated 2026-11-13).
+      view: 'Vue par défaut d’une session', viewHint: 'La vue qu’ouvre une session neuve. Un siège OMP en marche s’ouvre toujours sur le Terminal ; une machine sans terminal, sur le Fil.',
+      viewSaved: (v: string) => `Vue par défaut : ${v}`,
       context: 'Contexte max', contextHint: 'Au-delà, une session est proche de sa limite : « À toi » propose de passer le relais, et Ledge relève de lui-même une session qui travaille sans demander.',
       usageAlert: 'Alerte de limite d’usage', usageAlertHint: 'Au-delà, Ledge Desktop vous prévient une seule fois qu’une fenêtre d’usage d’un harnais (5 h, semaine, par modèle) approche de sa limite. Les limites sont celles du compte, lues sur chaque machine.',
       usageAlertSaved: (pct: number) => `Alerte de limite d’usage : ${pct} %`, usageAlertUnknown: 'Aucune machine ne donne encore les limites de ses harnais : mettez à jour Ledge, ou connectez Claude Code.',
+      // « Comptes lus » (docs/mockups/ledge-usage-sign-in.html, #301, validated 2026-11-13).
+      accounts: 'Comptes lus', accountsHint: 'Les comptes dont Ledge lit les limites, par machine.', signInNeeded: 'reconnexion nécessaire',
+      signInAgain: (harness: string, machine: string) => `Reconnectez-vous dans ${harness} sur ${machine}.`,
       contextSaved: (pct: number) => `Contexte max : ${pct} %`, contextUnknown: 'Mettez à jour le daemon Ledge local pour régler ce seuil.'
     },
     updates: {

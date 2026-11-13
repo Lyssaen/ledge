@@ -39,8 +39,10 @@ export function usageGroups(states: ReadonlyMap<string, UsageStateMessage>, onli
       const had = groups.get(key);
       if (!had) { groups.set(key, mine); continue; }
       had.machines.push(machine);
-      // Two machines, one account: the most recent read speaks for it.
-      if (newer(mine.readAt, had.readAt)) Object.assign(had, { status: mine.status, readAt: mine.readAt, windows: mine.windows });
+      // Two machines, one account: the most recent read speaks for it, but a machine still able to read it beats one refused
+      // (#301): the refusal hides the group, and the other machine's limits still hold. « Comptes lus » keeps each machine's state.
+      const usable = (g: UsageGroup) => g.status !== 'expired';
+      if (usable(mine) !== usable(had) ? usable(mine) : newer(mine.readAt, had.readAt)) Object.assign(had, { status: mine.status, readAt: mine.readAt, windows: mine.windows });
     }
   }
   return [...groups.values()].sort((a, b) => HARNESS_ORDER[a.harness] - HARNESS_ORDER[b.harness]);

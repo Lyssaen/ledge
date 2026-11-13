@@ -36,13 +36,18 @@ const STATES: Record<string, HarnessUsage[]> = {
   cursorOver: [cursor({ windows: cursorMonth(81, 41, 100) })],
   cursorWeek: [cursor({ windows: [{ kind: 'seven_day', pct: 30, resetsAt: thursday() }] })],
   cursorUnread: [cursor({ readAt: at(-1) })],
-  cursorExpired: [cursor({ status: 'expired' })],
+  cursorExpired: [cursor({ status: 'expired', cause: 'refused' })],
   cursorStale: [cursor({ status: 'stale', readAt: at(-22) })],
   cursorUnreachable: [cursor({ status: 'unreachable', readAt: at(-25) })],
   claudeCursor: [claude(), cursor({ windows: cursorMonth(12, 8, 56) })],
   threeHarnesses: [claude(), codex, cursor({ windows: cursorMonth(81, 41, 100) })],
   ok: [claude()], over: [over], codex: [claude(), codex],
-  loading: [claude({ status: 'loading', readAt: null, windows: [] })], expired: [claude({ status: 'expired', windows: [] })],
+  loading: [claude({ status: 'loading', readAt: null, windows: [] })], expired: [claude({ status: 'expired', cause: 'refused', windows: [] })],
+  // #301: a refused Claude next to Codex (only Codex shows); a Claude token past its time on this machine, values kept stale.
+  refusedCodex: [claude({ status: 'expired', cause: 'refused', windows: [] }), codex],
+  localExpired: [claude({ status: 'stale', cause: 'local_expired', readAt: at(-12) })],
+  // « Comptes lus »: one row per state worth seeing.
+  accounts: [claude({ status: 'expired', cause: 'refused', windows: [] }), codex, cursor({ status: 'stale', readAt: at(-22), windows: cursorMonth(12, 8, 56) })],
   stale: [claude({ status: 'stale', readAt: at(-12) })], unreachable: [claude({ status: 'unreachable', readAt: at(-25) })]
 };
 const ALERTS: UsageStateMessage['alerts'] = [
@@ -56,13 +61,13 @@ const usage = (harnesses: HarnessUsage[]): Omit<UsageStateMessage, 'type' | 'mac
 const sessions = fleet.map(s => (s.name === 'Nova' ? { ...s, model: 'claude-opus-5-5', effort: 'high', context: { used: 92_000, window: 200_000, at: at(0) }, startedAt: at(-72) }
   : s.name === 'Pim' ? { ...s, context: { used: 176_000, window: 200_000, at: at(0) } } : s));
 
-async function boot(page: Page, theme: 'dark' | 'light', lang: 'fr' | 'en', harnesses: HarnessUsage[]) {
+async function boot(page: Page, theme: 'dark' | 'light', lang: 'fr' | 'en', harnesses: HarnessUsage[], shown = true) {
   await page.addInitScript(([t, l]) => { try { localStorage.setItem('desktop.lang', l!); localStorage.setItem('desktop.theme', t!); } catch { /* ignore */ } }, [theme, lang]);
   await fakeDaemon(page, sessions, { launcher: ['ledge'], projects: twoProjects, usage: usage(harnesses) });
   await page.goto('/');
   // The IDE's chunk compiles on Vite's first visit: under load it takes a while.
   await expect(page.locator('.ide')).toBeVisible({ timeout: 45_000 });
-  await limits(page).locator('.ugroup').first().waitFor();
+  if (shown) await limits(page).locator('.ugroup').first().waitFor();
 }
 /** The status bar's usage limits (IdeStatusBar's `usage`). */
 const limits = (page: Page) => page.locator('.ide-status .usage-foot');
@@ -90,7 +95,7 @@ for (const theme of ['dark', 'light'] as const) {
     await page.screenshot({ path: info.outputPath(`usage-session-${theme}.png`) });
   });
 
-  for (const st of ['over', 'codex', 'loading', 'expired', 'stale', 'unreachable', 'cursorMonth', 'cursorOver', 'claudeCursor', 'threeHarnesses'] as const) {
+  for (const st of ['over', 'codex', 'loading', 'refusedCodex', 'localExpired', 'stale', 'unreachable', 'cursorMonth', 'cursorOver', 'claudeCursor', 'threeHarnesses'] as const) {
     test(`usage in the status bar, ${st}, ${theme}`, async ({ page }, info) => {
       await boot(page, theme, 'fr', STATES[st]!);
       if (st === 'over') await chip(page, /Claude Code/).click();
@@ -120,6 +125,30 @@ for (const theme of ['dark', 'light'] as const) {
       await page.screenshot({ path: info.outputPath(`usage-alert-setting-${theme}.png`) });
     } finally { alerts = []; }
   });
+}
+
+// #301 (docs/mockups/ledge-usage-sign-in.html): a refused account leaves the bar (nothing left: no limits at all); « Comptes lus » in
+// Settings › General says which account to sign in again.
+for (const theme of ['dark', 'light'] as const) {
+  for (const lang of ['fr', 'en'] as const) {
+    test(`#301: a refused account alone leaves no limits, ${theme}, ${lang}`, async ({ page }, info) => {
+      await boot(page, theme, lang, STATES.expired!, false);
+      await page.waitForTimeout(500);
+      await expect(limits(page)).toHaveCount(0);
+      await zoom(page, info.outputPath(`usage-301-refused-alone-${theme}-${lang}.png`));
+    });
+
+    test(`#301: refused hidden in the bar, « Comptes lus », ${theme}, ${lang}`, async ({ page }, info) => {
+      await boot(page, theme, lang, STATES.accounts!);
+      await zoom(page, info.outputPath(`usage-301-bar-${theme}-${lang}.png`));
+      await page.keyboard.press('Control+Comma');
+      const row = page.locator('.set-row').filter({ hasText: lang === 'fr' ? 'Comptes lus' : 'Accounts read' });
+      await row.scrollIntoViewIfNeeded();
+      await page.evaluate(() => document.fonts.ready);
+      await row.screenshot({ path: info.outputPath(`usage-301-accounts-${theme}-${lang}.png`) });
+      await page.locator('.set-card').first().screenshot({ path: info.outputPath(`usage-301-card-${theme}-${lang}.png`) });
+    });
+  }
 }
 
 test('usage in the status bar, English', async ({ page }, info) => {

@@ -21,10 +21,12 @@ describe('phone: usage', () => {
     const [first] = usages(g, 'dev1');
     expect(PhoneServerMessageSchema.parse(first)).toEqual({ type: 'usage.state', harnesses: [{ harness: 'claude', status: 'ok', readAt: CLAUDE.readAt, windows: CLAUDE.windows }], prefs: { alert: 0.8 } });
     expect(JSON.stringify(first)).not.toContain(CLAUDE.account!);
-    current = [{ ...CLAUDE, status: 'expired', windows: [] }];
+    // #301: the daemon says why (`cause`); a phone's strict schema would refuse it, so it never goes there.
+    current = [{ ...CLAUDE, status: 'expired', windows: [], cause: 'refused' }];
     g.gw.forward({ type: 'usage.state', harnesses: current, alerts: [], prefs: { alert: 0.9 } });
     await flush();
     expect(usages(g, 'dev1').at(-1)).toEqual({ type: 'usage.state', harnesses: [{ harness: 'claude', status: 'expired', readAt: CLAUDE.readAt, windows: [] }], prefs: { alert: 0.9 } });
+    expect(PhoneServerMessageSchema.safeParse(usages(g, 'dev1').at(-1)).success).toBe(true);
     // A device that did not ask for the sessions gets nothing.
     expect(usages(g, 'dev2')).toEqual([]);
   });

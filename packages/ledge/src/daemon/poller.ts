@@ -41,7 +41,9 @@ export function startPoller(opts: {
   /** Sessions whose repository has been read once; later refreshes ride the dead check. */
   /** Per session, the folder its repository fields were last read in. */
   const gitSeen = new Map<string, string>();
-  const forget = (id: string) => { hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); titles.delete(id); gitSeen.delete(id); };
+  /** Codex sessions whose last capture failed (#302): their hook's requests wait at once until a capture works again. */
+  const unreadable = new Set<string>();
+  const forget = (id: string) => { unreadable.delete(id); hashes.delete(id); matches.delete(id); previews.delete(id); restSince.delete(id); titles.delete(id); gitSeen.delete(id); };
   let lastDeadCheck = 0;
   let running = false;
 
@@ -102,7 +104,11 @@ export function startPoller(opts: {
     // One capture serves both: the preview reads the whole screen and some scrollback, prompt
     // detection reads only its last DETECT_LINES (what a DETECT_LINES capture would have returned).
     const full = await tmux.capture(s.tmuxSession, PREVIEW_CAPTURE_LINES);
-    if (full === null) return; // capture failed: not a content change
+    if (full === null) { // capture failed: not a content change
+      if (s.tool === 'codex' && !unreadable.has(s.id)) { unreadable.add(s.id); store.apply(s.id, { name: 'PaneUnreadable', at: now(), source: 'daemon' }); }
+      return;
+    }
+    if (unreadable.delete(s.id)) store.apply(s.id, { name: 'PaneReadable', at: now(), source: 'daemon' });
     const pane = full.split('\n').slice(-DETECT_LINES).join('\n');
     const h = createHash('sha1').update(full).digest('hex');
     const prev = hashes.get(s.id);

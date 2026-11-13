@@ -12,9 +12,14 @@ const right = (on: boolean): LayoutAction => ({ type: 'show', panel: 'right', on
 
 /** `lastSettings`: the section the Settings tab was last left on; a `settings` action without a section (Ctrl+,, the gear) brings
  *  the tab back there, as the activity bar does, rather than on General. */
-export function routeNav(a: NavAction, ctx: { isSeat(id: string): boolean; modalOpen: boolean; openSession: OpenSession; lastSettings?: SectionId }): Routed {
+export function routeNav(a: NavAction, ctx: { isSeat(id: string): boolean; modalOpen: boolean; openSession: OpenSession; lastSettings?: SectionId;
+  /** The view a session's new tab starts on (#300), when it is not the thread; an open tab keeps its own. */
+  startView?(id: string): 'terminal' | undefined }): Routed {
   switch (a.type) {
-    case 'open': return { nav: a, ws: w => open(w, { kind: ctx.isSeat(a.id) ? 'seat' : 'session', ref: a.id }, a.where ?? ctx.openSession) };
+    case 'open': {
+      const view = ctx.startView?.(a.id);
+      return { nav: a, ws: w => open(w, { kind: ctx.isSeat(a.id) ? 'seat' : 'session', ref: a.id, ...(view ? { view } : {}) }, a.where ?? ctx.openSession) };
+    }
     case 'home': return { ...(a.project !== undefined ? { nav: { type: 'filter', project: a.project } as NavAction } : {}), ws: w => open(w, ATELIER_TAB) };
     // Ledge's views are the right panel's tabs: shown, on that tab (Conversation by default, its field asked for), a « Voir » on
     // the task's detail.
