@@ -112,24 +112,39 @@ describe('point.act with a suggestion', () => {
 
   it('applies the row through the card path and clears an earlier error', async () => {
     const applied: string[] = [];
-    const t = setup([{ ...withSuggestion, error: 'changed' }], { applySuggestion: (q, i, row, c) => applySuggestionRow(q, i, row, c, real(r => r, applied)) });
+    const t = setup([{ ...withSuggestion, error: 'changed' }], { applySuggestion: (q, i, row, c, _by, m) => applySuggestionRow(q, i, row, c, real(r => r, applied), m) });
     expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true, confirmed: true })).toEqual({ ok: true });
     expect(applied).toEqual(['session.decide']);
     expect(t.item(requestItem.id).error).toBeUndefined();
   });
   it('is refused, and shown on the item, when the target changed', async () => {
     const applied: string[] = [];
-    const t = setup([withSuggestion], { applySuggestion: (q, i, row, c) => applySuggestionRow(q, i, row, c, real(() => ({ refused: 'the request has changed', code: 'changed' }), applied)) });
+    const t = setup([withSuggestion], { applySuggestion: (q, i, row, c, _by, m) => applySuggestionRow(q, i, row, c, real(() => ({ refused: 'the request has changed', code: 'changed' }), applied), m) });
     expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true, confirmed: true })).toMatchObject({ ok: false, error: 'the request has changed', code: 'changed' });
     expect(applied).toEqual([]);
     expect(t.item(requestItem.id).error).toBe('the request has changed');
   });
   it('asks for the confirmation of a destructive row and sends nothing without it', async () => {
     const applied: string[] = [];
-    const t = setup([withSuggestion], { applySuggestion: (q, i, row, c) => applySuggestionRow(q, i, row, c, real(r => r, applied)) });
+    const t = setup([withSuggestion], { applySuggestion: (q, i, row, c, _by, m) => applySuggestionRow(q, i, row, c, real(r => r, applied), m) });
     expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true })).toMatchObject({ ok: false, code: 'confirm_required' });
     expect(applied).toEqual([]);
     expect(t.item(requestItem.id).error).toBeUndefined();
+  });
+  it('marks the suggestion done, so a second click sends nothing', async () => {
+    const applied: string[] = [];
+    const t = setup([withSuggestion], { applySuggestion: (q, i, row, c, _by, m) => applySuggestionRow(q, i, row, c, real(r => r, applied), m) });
+    const go = () => t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true, confirmed: true });
+    expect(await go()).toEqual({ ok: true });
+    expect(t.item(requestItem.id).suggestion).toMatchObject({ state: 'done' });
+    expect(t.item(requestItem.id).suggestion?.doneAt).toBeDefined();
+    expect(await go()).toMatchObject({ ok: false, error: 'already settled' });
+    expect(applied).toEqual(['session.decide']);
+  });
+  it('keeps the card\'s own refusal code and shows the refused state on the suggestion', async () => {
+    const t = setup([withSuggestion], { applySuggestion: (q, i, row, c, _by, m) => applySuggestionRow(q, i, row, c, real(() => ({ refused: 'gone', code: 'closed' }), []), m) });
+    expect(await t.actor.act('desktop', { qid: t.qid, item: requestItem.id, suggest: true, confirmed: true })).toMatchObject({ ok: false, code: 'closed' });
+    expect(t.item(requestItem.id).suggestion).toMatchObject({ state: 'refused', code: 'closed' });
   });
   it('needs a suggestion, and exactly one of answer and suggest', async () => {
     const t = setup([requestItem]);

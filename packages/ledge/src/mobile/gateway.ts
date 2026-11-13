@@ -959,6 +959,10 @@ export function createPhoneGateway(deps: {
     if (item && !item.settled && msg.suggest) {
       const row = item.suggestion;
       if (row) {
+        // As the phone's own card: a set-aside turn applies nothing, a request the phone could only show cut is never accepted from it.
+        if (turn.ignoredAt) return SET_ASIDE;
+        if (row.state === 'done' || row.state === 'running') return { status: 'rejected', reason: 'stale' };
+        if (phoneCut(row) && row.args.decision !== 'deny') return { status: 'rejected', reason: 'not_offered' };
         destructive = row.risk === 'destructive';
         if (destructive || actionById(row.action)?.phone) check = { purpose: 'act', subject: pointActSubject(msg.qid, item) };
       }
@@ -974,6 +978,8 @@ export function createPhoneGateway(deps: {
         else { check = { purpose: 'act', subject: pointActSubject(msg.qid, item, answer) }; destructive = true; }
       } else {
         const s = deps.session(ref.session);
+        // A request the phone could only show cut is refused from it, as on the card: the rest is read on the PC.
+        if (s?.pending && s.pending.kind !== 'question' && picked === 'accept' && phoneCut({ action: 'session.decide', args: {}, summary: '', risk: 'destructive', detail: s.pending.body ? `${s.pending.text}\n\n${s.pending.body}` : s.pending.text })) return { status: 'rejected', reason: 'not_offered' };
         if (s?.pending?.kind !== 'question' && picked === 'accept') { destructive = true; if (!s || riskOf(s)?.risk !== 'low') check = { purpose: 'decide', subject: subjectOf(ref.session, ref.key, s) }; }
         else if (s?.pending?.kind === 'question' && s.pending.source === 'rpc' && riskOf(s)?.risk !== 'low') check = { purpose: 'decide', subject: subjectOf(ref.session, ref.key, s) };
       }

@@ -19,17 +19,21 @@ const POINT: ChatPoint = { since: AT, lead: 'lead', leadBy: 'daemon', items: [
   { id: 'task:t1', event: 3, group: 'atoi', tone: 'ask', who: 'Nova', text: 'Merge?', at: AT, ref: { kind: 'task', task: 't1' }, freeText: true, answers: [{ id: 'Oui', label: 'Oui', style: 'plain' }, { id: 'Non', label: 'Non', style: 'plain' }] },
   { id: 'task:t2', event: 4, group: 'atoi', tone: 'ask', who: 'Nova', text: 'Other?', at: AT, ref: { kind: 'task', task: 't2' }, freeText: true },
   { id: 'session:s9', event: 5, group: 'done', tone: 'idle', who: 'Bix', text: 'done', at: AT, suggestion: { action: 'session.decide', args: { session: 's9', decision: 'accept' }, summary: 'Accepter', risk: 'destructive' } },
+  { id: 'session:cut', event: 6, group: 'done', tone: 'idle', who: 'Bix', text: 'done', at: AT, suggestion: { action: 'session.decide', args: { session: 'cut', decision: 'accept' }, summary: 'Accepter', risk: 'destructive', detailCut: true } },
+  { id: 'session:done', event: 7, group: 'done', tone: 'idle', who: 'Bix', text: 'done', at: AT, suggestion: { action: 'session.decide', args: { session: 'x', decision: 'deny' }, summary: 'Refuser', risk: 'reversible', state: 'done' } },
+  { id: 'session.request:big', event: 8, group: 'atoi', tone: 'perm', who: 'Nova', text: 'big', at: AT, ref: { kind: 'session.request', session: 'big', key: 'k' }, answers: [{ id: 'accept', label: 'Accepter', style: 'primary' }] },
   { id: 'rig.ask:old', event: 2, group: 'atoi', tone: 'ask', who: 'x', text: 'done', at: AT, ref: { kind: 'rig.ask', qitem: 'old' }, settled: { at: AT, where: 'terminal' } }] };
 
-function make() {
+function make(o: { ignored?: boolean } = {}) {
   const acted: string[] = []; const later: string[] = []; const read: string[] = [];
-  const turn = { qid: QP, question: '', askedAt: AT, steps: [], by: 'ledge', point: POINT };
+  const turn = { qid: QP, question: '', askedAt: AT, steps: [], by: 'ledge', point: POINT, ...(o.ignored ? { ignoredAt: AT } : {}) };
   const chats = {
     device: () => ({ history: () => [turn] }) as never, async deviceTool() { return 'codex' as const; },
     owner: (qid: string) => (qid === QP ? ('device:dev1' as const) : undefined), peek: () => undefined, async drop() {}, setEmitter() {}
   };
   const decision = (id: string) => ({ id, title: 'Merge?', giver: 'nova', giverName: 'Nova', owner: 'ledge', ownerName: 'Ledge', state: 'open', at: AT, updatedAt: AT, log: [] }) as unknown as Task;
   const g = setup({ chats: chats as never, tasks: () => [decision('t1'), decision('t2')], deps: {
+    session: (id: string) => (id === 'big' ? ({ id, name: 'Nova', pending: { kind: 'permission', text: 'x'.repeat(5000), source: 'hook' } } as never) : undefined),
     openrig: { async list() { return { channel: CHANNEL, asks: [ASK] }; }, async answer(q) { return { qitemId: q, ok: true }; }, follow() {} },
     point: {
       async act(device, m) { acted.push(`${device} ${m.item} ${JSON.stringify(m.answer)}`); return { ok: true as const }; },
@@ -146,5 +150,24 @@ describe('phone gateway: a decision and a suggestion of the point', () => {
     expect(await sug({ confirmed: true, assertion: auth.get(rp, ok, { counter: 2 }) })).toMatchObject({ status: 'applied' });
     expect(acted).toEqual(['dev1 session:s9 undefined']);
     expect(await sug({ answer: { id: 'x' } })).toMatchObject({ status: 'rejected', reason: 'invalid' });
+  });
+});
+
+describe('phone gateway: the refusals of the phone\'s own cards', () => {
+  it('a suggestion on a set-aside turn, a cut request, or a row already done is refused, and sends nothing', async () => {
+    const aside = make({ ignored: true });
+    expect(await pointAct(aside.g, { item: 'session:s9', suggest: true, confirmed: true })).toMatchObject({ status: 'rejected', reason: 'stale' });
+    expect(aside.acted).toEqual([]);
+    const { g, acted } = make();
+    expect(await pointAct(g, { item: 'session:cut', suggest: true, confirmed: true })).toMatchObject({ status: 'rejected', reason: 'not_offered' });
+    expect(await pointAct(g, { item: 'session:done', suggest: true })).toMatchObject({ status: 'rejected', reason: 'stale' });
+    expect(acted).toEqual([]);
+  });
+
+  it('accepting a request the phone could only show cut is refused; denying it is not', async () => {
+    const { g, acted } = make();
+    expect(await pointAct(g, { item: 'session.request:big', answer: { id: 'accept' }, confirmed: true })).toMatchObject({ status: 'rejected', reason: 'not_offered' });
+    expect(acted).toEqual([]);
+    expect(await pointAct(g, { item: 'session.request:big', answer: { id: 'deny' } })).toMatchObject({ status: 'applied' });
   });
 });

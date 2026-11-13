@@ -1185,7 +1185,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     answerAsk: (qitem, answer) => human.answer(qitem, answer),
     answerTask: (task, answer, confirmed) => rowFail('task.answer', { task, answer }, confirmed),
     answerBrain: (task, yes) => { const r = answerProposal(task, { yes }, randomUUID()); return r.reason !== undefined ? { message: r.reason } : undefined; },
-    applySuggestion: (qid, itemId, row, confirmed, by) => applySuggestionRow(qid, itemId, row, confirmed, (card, cardQid, ok) => actOnCard(card, cardQid, randomUUID(), [0], ok, undefined, by)),
+    applySuggestion: (qid, itemId, row, confirmed, by, onMark) => applySuggestionRow(qid, itemId, row, confirmed, (card, cardQid, ok) => actOnCard(card, cardQid, randomUUID(), [0], ok, undefined, by), onMark),
     isBrain: task => tasks.all().find(t => t.id === task)?.brain !== undefined,
     operator: { settle: (...a) => { try { operator?.operator.settle(...a); } catch (e) { log(`operator: point not settled: ${(e as Error).message}`); } } }
   });

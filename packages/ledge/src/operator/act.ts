@@ -24,7 +24,7 @@ export interface PointActDeps {
   /** The decision a session put to the user (`task.answer`, destructive: refused unless `confirmed`). */
   answerTask(task: string, text: string, confirmed: boolean): Promise<Fail>;
   /** An item's suggestion applied as a one-row card, through the same resolve, confirmation and apply as `chat.act`. */
-  applySuggestion(qid: string, item: string, row: ChatAction, confirmed: boolean, by?: DecidedBy): Promise<Fail>;
+  applySuggestion(qid: string, item: string, row: ChatAction, confirmed: boolean, by: DecidedBy | undefined, onMark: (row: ChatAction) => void): Promise<Fail>;
   /** A proposal about the notes: written when `yes`. */
   answerBrain(task: string, yes: boolean): Fail;
   /** Whether the task is a proposal about the notes rather than a decision. */
@@ -69,7 +69,11 @@ export function createPointActor(deps: PointActDeps) {
       if (msg.suggest) {
         if (item.settled) return refuse(STALE, 'settled');
         if (!item.suggestion) return refuse('no suggestion', 'invalid');
-        const fail = await deps.applySuggestion(msg.qid, item.id, item.suggestion, confirmed, by);
+        // Applied once: a second click on a row that is done (or being applied) sends nothing.
+        if (item.suggestion.state === 'done' || item.suggestion.state === 'running') return refuse(STALE, 'settled');
+        // The row's states (running, failed, refused, done) show on the item's suggestion as the private card goes through them.
+        const mark = (row: ChatAction) => c.chat.updatePoint(msg.qid, p => ({ ...p, items: p.items.map(i => (i.id === item.id ? { ...i, suggestion: row } : i)) }), c.emit);
+        const fail = await deps.applySuggestion(msg.qid, item.id, item.suggestion, confirmed, by, mark);
         if (!fail) { clearError(device, msg.qid, item.id); return { ok: true }; }
         return fail.code === 'confirm_required' ? { ok: false, error: fail.message, code: fail.code } : refuse(fail.message, fail.code);
       }
@@ -127,13 +131,13 @@ type RunCard = (card: SuggestionCard, qid: string, confirmed?: true) => Promise<
  * Applies a suggestion as a card of one row, so it goes through the card's own resolve (against the state now), destructive confirmation and
  * apply, and nothing else. The card is private to this call: its qid carries the item, so two rows of a point never share an in-flight key.
  */
-export async function applySuggestionRow(qid: string, itemId: string, row: ChatAction, confirmed: boolean, run: RunCard): Promise<Fail> {
+export async function applySuggestionRow(qid: string, itemId: string, row: ChatAction, confirmed: boolean, run: RunCard, onMark: (row: ChatAction) => void = () => {}): Promise<Fail> {
   const { state: _s, ...fresh } = row;
   let current: ChatAction = fresh;
-  const card: SuggestionCard = { chat: { action: (_q, r) => (r === 0 ? current : undefined), markAction: (_q, _r, patch) => { current = { ...current, ...patch }; } }, emit: () => {} };
+  const card: SuggestionCard = { chat: { action: (_q, r) => (r === 0 ? current : undefined), markAction: (_q, _r, patch) => { current = { ...current, ...patch }; onMark(current); } }, emit: () => {} };
   try {
     const failed = (await run(card, `${qid}:${itemId}`, confirmed ? true : undefined)).failed[0];
-    return failed ? { message: failed.message, ...(failed.refused ? { code: 'changed' } : {}) } : undefined;
+    return failed ? { message: failed.message, ...(failed.refused ? { code: current.code ?? 'changed' } : {}) } : undefined;
   } catch (e) {
     if (e instanceof ActRefused) return { message: e.message, ...(e.code ? { code: e.code } : {}) };
     throw e;
