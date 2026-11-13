@@ -249,6 +249,8 @@ export function wireOperator(w: OperatorWiring) {
   let rigs: OpenRigState | undefined;
   let forge: ForgeStateMessage | undefined;
   let goals: readonly Goal[] | undefined;
+  /** Set at OpenRig's first whole, ready list of asks: until then no wake or build may take an ask missing from `asks` as gone. */
+  let asksKnown = false;
   let tasksBefore: readonly Task[] = [];
   /** The tasks already said stale: said once, until the task leaves `taken`. */
   const reported = new Set<string>();
@@ -261,7 +263,7 @@ export function wireOperator(w: OperatorWiring) {
 
   const operator = createOperator({
     journal, machine: w.machine, threads: w.threads, tool: w.tool, chatDeps: w.chatDeps, ...(w.devices ? { devices: w.devices } : {}),
-    live: () => ({ sessions: w.store.all(), asks: asks ?? [], tasks: w.tasks(), lang: w.lang ?? 'fr' }),
+    live: () => ({ sessions: w.store.all(), asks: asks ?? [], tasks: w.tasks(), lang: w.lang ?? 'fr', asksKnown }),
     onNotices: w.onNotices ?? (() => {}), onPointPush: w.onPointPush ?? (() => {})
   });
   let stopped = false;
@@ -321,14 +323,13 @@ export function wireOperator(w: OperatorWiring) {
       const before = asks;
       // A partial list says nothing of the rows it misses: they are kept until a whole list leaves them out.
       asks = before && (l.partial || l.truncated) ? [...l.asks, ...before.filter(a => !l.asks.some(x => x.id === a.id))] : l.asks;
-      if (!before) {
-        // The first whole list after a start settles the asks the journal still holds open that left while the daemon was down.
-        if (!stopped && !l.partial && !l.truncated) {
-          try { operator.reconcile(new Set([...SESSION_AND_TASK_KINDS])); } catch (e) { log(`operator: asks not reconciled: ${(e as Error).message}`); }
-        }
-        if (!stopped) operator.refreshNotices();
-        return;
+      const firstWhole = !asksKnown && !l.partial && !l.truncated;
+      if (firstWhole) asksKnown = true;
+      // The first whole list after a start settles the asks the journal still holds open that left while the daemon was down.
+      if (firstWhole && !stopped) {
+        try { operator.reconcile(SESSION_AND_TASK_KINDS); } catch (e) { log(`operator: asks not reconciled: ${(e as Error).message}`); }
       }
+      if (!before) { if (!stopped) operator.refreshNotices(); return; }
       const fresh = fromAsks(before, l.asks);
       record(fresh);
       const urgent = l.asks.filter(a => fresh.some(d => d.subjectId === a.id && d.urgency === 'immediate'));

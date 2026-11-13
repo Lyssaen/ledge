@@ -3,7 +3,11 @@ import { POINT_ITEMS_MAX } from './constants.js';
 import type { JournalEvent } from './journal.js';
 
 /** What the daemon knows now: it drops the items already settled and fills the answers. */
-export interface LiveState { sessions: readonly Session[]; asks: readonly HumanAsk[]; tasks: readonly Task[]; lang: 'fr' | 'en' }
+export interface LiveState {
+  sessions: readonly Session[]; asks: readonly HumanAsk[]; tasks: readonly Task[]; lang: 'fr' | 'en';
+  /** False until OpenRig's first whole list of asks is read: an ask missing from `asks` then says nothing of its fate. */
+  asksKnown?: boolean;
+}
 
 type Lang = 'fr' | 'en';
 
@@ -84,12 +88,13 @@ function build(e: JournalEvent, live: LiveState, t: (typeof L)[Lang]): Built | u
     }
     case 'rig.ask': {
       const ask = live.asks.find(a => a.id === e.subjectId);
-      gone = !ask;
+      // Before the first whole list an ask cannot be known gone: its row stays open, answerable in words.
+      gone = !ask && live.asksKnown !== false;
       item.tone = 'ask'; item.text = clip(str(p.summary), 400); item.ref = { kind: 'rig.ask', qitem: e.subjectId };
       if (str(p.rig)) { item.rig = clip(str(p.rig), 100); item.nav = [{ kind: 'rig', id: str(p.rig) }]; }
-      if (ask) {
+      if (!gone) {
         item.freeText = true;
-        const options = ask.questions.find(q => !q.answer)?.options ?? [];
+        const options = ask?.questions.find(q => !q.answer)?.options ?? [];
         if (options.length) item.answers = optionAnswers(options);
       }
       break;

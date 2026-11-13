@@ -20,6 +20,8 @@ const finished = (sid: string): Draft => ({ kind: 'session.finished', subjectKin
 const request: Draft = { kind: 'session.request', subjectKind: 'session.request', subjectId: `s1#${key}`, subjectName: 'Nova', urgency: 'immediate', payload: { session: 's1', key, kind: 'permission', text: 'Run ls', command: 'ls' } };
 /** The sessions the operator sees now: a test empties a request to answer it where the daemon did not see it. */
 let liveSessions: Session[] = [session];
+/** Whether OpenRig's first whole list of asks was read (none is live in these tests). */
+let liveAsksKnown = true;
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r; }); return { promise, resolve }; };
 
 function setup(lead: (o: { events: readonly unknown[] }) => Promise<LeadResult> = async () => ({ lead: 'Agent lead.', suggestions: [], actions: [] }), devices: string[] = []) {
@@ -38,7 +40,7 @@ function setup(lead: (o: { events: readonly unknown[] }) => Promise<LeadResult> 
   const operator = createOperator({
     journal, machine: 'm',
     threads: { all, device, emitterOf: id => (m: ChatMessage) => { emitted[id]!.push(m); } }, devices: () => devices,
-    live: () => ({ sessions: liveSessions, asks: [], tasks: [], lang: 'fr' }),
+    live: () => ({ sessions: liveSessions, asks: [], tasks: [], lang: 'fr', asksKnown: liveAsksKnown }),
     tool: () => 'claude', chatDeps,
     onNotices: () => {}, onPointPush: (l, qids) => { pushes.push({ lead: l, qids }); },
     runLead: async o => { leadCalls.push(o); return lead(o); }
@@ -50,7 +52,7 @@ function setup(lead: (o: { events: readonly unknown[] }) => Promise<LeadResult> 
 const pointsOf = (c: Chat) => c.points().map(p => p.point);
 
 describe('createOperator', () => {
-  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(AT)); liveSessions = [session]; });
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(AT)); liveSessions = [session]; liveAsksKnown = true; });
   afterEach(() => { vi.useRealTimers(); });
 
   it("posts one point per thread with items from each thread's own cursor", async () => {
@@ -160,6 +162,23 @@ describe('createOperator', () => {
     // The new point holds the finish; the request it shows is settled, so nothing waits on the user and no notice stays.
     expect(second!.items.filter(i => i.group === 'atoi' && !i.settled)).toEqual([]);
     expect(operator.notices().filter(n => n.kind === 'point')).toEqual([]);
+    operator.stop();
+  });
+
+  it('before the first asks list a wake leaves an open rig ask unsettled and answerable; after it, the gone ask settles', async () => {
+    liveAsksKnown = false;
+    const { operator, desktop, journal } = setup();
+    operator.record({ kind: 'rig.ask', subjectKind: 'rig.ask', subjectId: 'q1', subjectName: 'max', urgency: 'immediate', payload: { kind: 'decision', priority: 'urgent', summary: 'Merge?', rig: 'kernel' } });
+    await vi.advanceTimersByTimeAsync(0);
+    const row = () => pointsOf(desktop)[0]!.items.find(i => i.id === 'rig.ask:q1')!;
+    expect(row().settled).toBeUndefined();
+    expect(row().freeText).toBe(true);
+    expect(journal.open().map(e => e.subjectId)).toEqual(['q1']);
+    liveAsksKnown = true;
+    operator.record(finished('a'));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(journal.open().filter(e => e.kind === 'rig.ask')).toEqual([]);
+    expect(row().settled).toMatchObject({ where: 'elsewhere' });
     operator.stop();
   });
 

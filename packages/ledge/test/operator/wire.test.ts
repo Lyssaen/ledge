@@ -167,6 +167,11 @@ describe('wireOperator settles what was answered outside a point', () => {
     first.w.asksChanged({ asks: [] }); first.w.asksChanged({ asks: [ask('q1'), ask('q2')] });
     first.w.stop(); wired = undefined;
     const { w } = setup([], undefined, { home: first.home });
+    // Before OpenRig's first whole list nothing tells an ask gone, whoever reconciles (a wake does the same): a partial list neither.
+    w.operator.reconcile();
+    w.asksChanged({ asks: [ask('q2')], partial: true });
+    w.operator.reconcile();
+    expect(w.journal.open().map(e => e.subjectId)).toEqual(['q1', 'q2']);
     w.asksChanged({ asks: [ask('q2')] });
     expect(w.journal.open().map(e => e.subjectId)).toEqual(['q2']);
     expect(settledOf(w, 'q1')[0]).toMatchObject({ settled: true, where: 'elsewhere' });
