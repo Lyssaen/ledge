@@ -19,6 +19,8 @@ export async function bornShell(opts: {
   killSession?(name: string): void;
   name?(): string;
   log?(line: string): void;
+  /** #299: how to start the shell with its integration (OSC 633 marks), or null to start it as before. */
+  integration?(shell: string, env: Record<string, string>): { command: string[]; env: Record<string, string> } | null;
 }): Promise<void> {
   const name = opts.name?.() ?? `sh-${randomBytes(6).toString('hex')}`;
   if (opts.alive && !opts.alive()) return;
@@ -27,7 +29,8 @@ export async function bornShell(opts: {
   try { env = await opts.env(); } catch { env = {}; }
   const shell = env.SHELL || process.env.SHELL || '/bin/bash';
   try {
-    await opts.newSession({ name, cwd, env, command: [shell, '-l'] });
+    const start = opts.integration?.(shell, env) ?? { command: [shell, '-l'], env };
+    await opts.newSession({ name, cwd, env: start.env, command: start.command });
   } catch {
     opts.log?.(`shell ${opts.tag} of ${opts.session.id} failed`);
     if (!opts.alive || opts.alive()) opts.reply({ type: 'term.exit', id: opts.session.id, shell: opts.tag, why: 'failed' });
