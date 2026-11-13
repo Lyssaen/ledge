@@ -339,9 +339,9 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useEffect(() => onOpenTarget(raw => {
     const target = parseTarget(raw);
     if (target?.kind === 'terminal') showTerminal(target.id);
-    else if (target?.kind === 'ask') {
-      // A rig's question from the notch: « À toi » in front, on that question.
-      setAskFocus({ id: target.id, n: ++askSeq.current });
+    else if (target?.kind === 'ask' || target?.kind === 'atoi') {
+      // A rig's question from the notch: « À toi » in front, on that question; a decision: « À toi » in front, where it is listed.
+      if (target.kind === 'ask') setAskFocus({ id: target.id, n: ++askSeq.current });
       const tab: Tab = { kind: 'atoi', ref: 'main' };
       wsStore.update(w => openTab(w, tab));
     }

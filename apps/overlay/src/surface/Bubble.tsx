@@ -124,20 +124,25 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   /** Ledge speaks for the operator: its mark (amber, something waits on the user), its sentence, the notice's own actions. */
   if (kind === 'operator') {
     const rig = opNotice?.kind === 'rig.ask';
+    const decision = opNotice?.kind === 'decision';
     const options = rig ? opNotice?.options ?? [] : [];
     return (
       <div ref={setRoot} data-layer="bubble" data-kind="operator" data-notice={opNotice?.kind} data-ack="none" inert={!visible} style={shell}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <span data-ledge-mark className="nt-mark" data-pending="question" />
           <span data-ledge-sentence style={{ fontSize: 14, lineHeight: '20px', minWidth: 0, overflowWrap: 'anywhere' }}>
-            {!opNotice ? null : rig
+            {!opNotice ? null : decision
+              ? <><b style={{ fontWeight: 600 }}>{opNotice.who ?? t.resident.name}</b>{t.bubble.decision.asks}</>
+              : rig
               ? <><b style={{ fontWeight: 600 }}>{opNotice.who ?? t.resident.name}</b>{opNotice.rig && <span style={{ color: 'var(--muted-foreground)' }}> · {opNotice.rig}</span>}{t.bubble.rigAsk.colon}{t.bubble.rigAsk.quote(opNotice.text)}</>
               : inline(opNotice.text)}
           </span>
         </div>
         {failure && <span role="status" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{failure}</span>}
         <div data-actions style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          {!rig ? (
+          {decision ? (
+            <Button variant="primary" size="sm" onClick={() => onOpen()}>{t.bubble.decision.see}</Button>
+          ) : !rig ? (
             <>
               <Button variant="ghost" size="sm" disabled={blocked !== null} title={blocked ?? undefined} onClick={() => onLater?.()}>{t.bubble.point.later}</Button>
               <Button variant="primary" size="sm" disabled={blocked !== null} title={blocked ?? undefined} onClick={() => onSeePoint?.()}>{t.bubble.point.see}</Button>

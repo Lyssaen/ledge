@@ -94,6 +94,17 @@ describe('the notch speaks for the operator', () => {
     expect(f.sent).toEqual([]);
   });
 
+  it('a decision put to Ledge speaks at once: « <giver> asks you for a decision », and See opens « À toi »', () => {
+    snapshot([]); mount();
+    f.set({ local: [{ id: 'decision:t1', kind: 'decision', text: 'Fusionner #309 ?', who: 'Nova', priority: 'routine', at: '2026-11-13T14:00:00.000Z' }] });
+    tick(540);
+    expect(surface()).toHaveAttribute('data-mode', 'bubble');
+    expect(sentence()).toHaveTextContent('Nova asks you for a decision');
+    fireEvent.click(screen.getByRole('button', { name: 'See' }));
+    expect(opened).toEqual([{ kind: 'atoi' }]);
+    expect(f.sent).toEqual([]);
+  });
+
   it('a session\'s request comes first; the point waits behind it', () => {
     snapshot([fakeSession('a', { name: 'Nova', state: 'waiting_permission', pending: { kind: 'permission', text: 'pnpm -r test -u', tool: 'Bash', source: 'hook' } })]);
     mount();

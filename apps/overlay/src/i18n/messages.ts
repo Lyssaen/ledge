@@ -156,7 +156,9 @@ const fr = {
     },
     /** A notice from the operator: a point, or an urgent question from a rig. */
     point: { later: 'Plus tard', see: 'Voir le point' },
-    rigAsk: { colon: ' : ', quote: (text: string) => `« ${text.replace(/ (?=[?!:;])/g, ' ')} »`, open: 'Répondre dans Ledge' }
+    rigAsk: { colon: ' : ', quote: (text: string) => `« ${text.replace(/ (?=[?!:;])/g, ' ')} »`, open: 'Répondre dans Ledge' },
+    /** A decision a session put to the user: Ledge names who asks, « Voir » opens « À toi ». */
+    decision: { asks: ' te demande une décision', see: 'Voir' }
   },
   handoff: {
     session: (name: string) => `Ouverture de ${name} dans Ledge Desktop`,
@@ -424,7 +426,8 @@ const en: Messages = {
       waits: 'needs your approval'
     },
     point: { later: 'Later', see: 'See the point' },
-    rigAsk: { colon: ': ', quote: (text: string) => `“${text}”`, open: 'Answer in Ledge' }
+    rigAsk: { colon: ': ', quote: (text: string) => `“${text}”`, open: 'Answer in Ledge' },
+    decision: { asks: ' asks you for a decision', see: 'See' }
   },
   handoff: {
     session: (name: string) => `Opening ${name} in Ledge Desktop`,

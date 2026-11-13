@@ -292,6 +292,8 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     const line = target.kind === 'session' ? t.handoff.session(name(target.id))
       : target.kind === 'terminal' ? t.handoff.terminal(name(target.id))
       : target.kind === 'document' ? t.handoff.document(target.path)
+      // « À toi » opens alike for a rig's question and for a decision.
+      : target.kind === 'atoi' ? t.handoff.ask
       : t.handoff[target.kind];
     setHandoff(`${line}…`);
   }), [sessions, t]);
@@ -732,6 +734,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const noticeOpen = (o: { notice: OperatorNotice }) => {
     if (o.notice.kind === 'point' && o.notice.qid) openInLedge({ kind: 'point', qid: o.notice.qid });
     else if (o.notice.kind === 'rig.ask' && o.notice.qitem) openInLedge({ kind: 'ask', id: o.notice.qitem });
+    else if (o.notice.kind === 'decision') openInLedge({ kind: 'atoi' });
     dispatch({ type: 'close' });
   };
   const noticeAnswer = (o: { key: string; machine: string; notice: OperatorNotice }, option: string) => {

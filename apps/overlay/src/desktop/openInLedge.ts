@@ -12,7 +12,9 @@ export type LedgeTarget =
   /** The operator's point: Desktop's chat panel, where the point is a turn. */
   | { kind: 'point'; qid: string }
   /** A rig's question in « À toi », by its OpenRig queue item. */
-  | { kind: 'ask'; id: string };
+  | { kind: 'ask'; id: string }
+  /** « À toi » itself: a decision put to the user, listed there. */
+  | { kind: 'atoi' };
 
 /** 'opening' at once; then 'failed' when Ledge Desktop's window could not be shown. */
 export type OpenOutcome = 'opening' | 'failed';
