@@ -16,6 +16,8 @@ export default defineConfig({
   // @ledge/protocol is a workspace package that ships TypeScript sources: bundle it into the CLI,
   // otherwise dist/cli/index.js imports src/index.ts at runtime and fails with ERR_MODULE_NOT_FOUND.
   noExternal: ['@ledge/protocol', '@ledge/seal'],
+  // tsup strips `node:` by default, and `sqlite` (the operator's journal) exists only as `node:sqlite`: the prefix stays.
+  removeNodeProtocol: false,
   define: { __LEDGE_VERSION__: JSON.stringify(version) },
   // The Ledge guide the chat writes into ledge.md (chat/guide.ts reads it beside dist/cli).
   onSuccess: async () => { copyFileSync(new URL('../../docs/ledge-guide.md', import.meta.url), new URL('./dist/ledge-guide.md', import.meta.url)); }

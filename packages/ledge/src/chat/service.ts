@@ -3,7 +3,7 @@ import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type ChatConversationSummary, type Goal, type HarnessUsage, type HumanAsk, type OpenRigState, type Projects, type PullRequest, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
+import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatPoint, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type ChatConversationSummary, type Goal, type HarnessUsage, type HumanAsk, type OpenRigState, type Projects, type PullRequest, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
@@ -64,6 +64,12 @@ export interface Chat {
   conversations?(): Promise<{ current?: ChatConversationSummary; past: ChatConversationSummary[] }>;
   /** A conversation's turns, the current one's included; null when it is no longer kept. A past one is read-only: its cards are not this chat's. */
   conversation?(id: string): Promise<ChatTurn[] | null>;
+  /** Posts the operator's point as a turn Ledge wrote itself (`by: 'ledge'`, no question), with its plan card; returns its qid. */
+  postPoint(point: ChatPoint, actions: ChatAction[], emit: (m: ChatMessage) => void): string;
+  /** Replaces the point of that turn by `f`'s; false (and nothing told) when the turn is gone or `f` changed nothing. */
+  updatePoint(qid: string, f: (p: ChatPoint) => ChatPoint, emit: (m: ChatMessage) => void): boolean;
+  /** Today's point turns, the newest last. */
+  points(): Array<{ qid: string; point: ChatPoint }>;
 }
 export interface ChatDeps {
   store: Store; tmux: Pick<Tmux, 'capture'>; home: string;
@@ -510,6 +516,24 @@ export function createChat(deps: ChatDeps): Chat {
       if (id === conversationId) return turns;
       return (await kept?.read(id)) ?? null;
     },
+    postPoint(point, actions, emit) {
+      rollDay();
+      const at = now();
+      // `answeredAt` set: a point is never a question left unanswered when the daemon restarts.
+      const turn: ChatTurn = { qid: uuid(), question: '', askedAt: at, answeredAt: at, steps: [], by: 'ledge', point, ...(actions.length > 0 ? { actions } : {}) };
+      turns = [...turns, turn].slice(-HISTORY_MAX);
+      publish(emit);
+      return turn.qid;
+    },
+    updatePoint(qid, f, emit) {
+      const t = turnOf(qid); if (!t?.point) return false;
+      const next = f(t.point);
+      if (next === t.point) return false;
+      t.point = next;
+      publish(emit);
+      return true;
+    },
+    points: () => { rollDay(); return turns.flatMap(t => (t.point ? [{ qid: t.qid, point: t.point }] : [])); },
     idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {

@@ -42,6 +42,9 @@ const GROUP_OF: Partial<Record<JournalEvent['kind'], PointGroup>> = {
   'rig.seat_unreachable': 'rigs', 'rig.state': 'rigs', 'rig.goal_update': 'rigs'
 };
 
+/** An event that waits on the user (« À toi »): while open, it is in every point, whatever the cursor. */
+export const isWaiting = (e: Pick<JournalEvent, 'kind'>): boolean => GROUP_OF[e.kind] === 'atoi';
+
 /** Options a session put in a decision's text (`oui / non ; je recommande oui`): what comes before the first `;`, split on ` / `. */
 function decisionOptions(text: string | undefined): string[] {
   const head = (text ?? '').split(/[;\n]/)[0] ?? '';

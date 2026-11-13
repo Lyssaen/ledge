@@ -168,10 +168,18 @@ export function attentesMd(live: readonly Session[], asks: readonly HumanAsk[], 
   return ['# What waits for the user', '', `At ${now}. Each line starts with the id its card needs.`, '', ...(out.length ? out : ['Nothing waits for the user.']), ''].join('\n');
 }
 
+/** What an event says, from the key its detector fills: a reply or request text, an ask's summary, a command, a rig's move, a seat's
+ *  status, a pull request's ref. */
+function eventText(p: Record<string, unknown>): string | undefined {
+  const s = (k: string) => (typeof p[k] === 'string' && (p[k] as string).trim() ? (p[k] as string) : undefined);
+  return s('text') ?? s('summary') ?? s('command') ?? (s('from') && s('to') ? `${s('from')} → ${s('to')}` : undefined) ?? s('status') ?? s('ref');
+}
+
 /** `journal.md`: one line per event, `HH:MM kind subject — text`; a finished session whose reply was written points to it. */
 export function journalMd(events: readonly JournalEvent[], replies: ReadonlySet<string>): string {
   const lines = events.map(e => {
-    const text = typeof e.payload.text === 'string' ? ` — ${oneLine(e.payload.text)}` : '';
+    const said = eventText(e.payload);
+    const text = said ? ` — ${oneLine(said)}` : '';
     const reply = e.kind === 'session.finished' && replies.has(e.subjectId) ? ` reply: reply-${e.subjectId}.md` : '';
     return `${e.at.slice(11, 16)} ${e.kind} ${oneLine(e.subjectName)}${text}${reply}`;
   });

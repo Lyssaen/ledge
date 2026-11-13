@@ -260,6 +260,23 @@ describe('writeContext: what the actions need', () => {
       expect(existsSync(join(none, 'journal.md'))).toBe(false);
     });
 
+    it('journal.md words asks, rigs, seats and requests from their own payload keys', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
+      await writeContext(dir, { ...base, sessions: [], journal: [
+        event(1, { kind: 'rig.ask', subjectKind: 'rig.ask', subjectId: 'q1', subjectName: 'max', payload: { summary: 'Which team?' } }),
+        event(2, { kind: 'rig.state', subjectKind: 'rig', subjectId: 'kernel', subjectName: 'kernel', payload: { from: 'running', to: 'stopped' } }),
+        event(3, { kind: 'rig.seat_unreachable', subjectKind: 'rig.seat', subjectId: 'kernel/max', subjectName: 'max@kernel', payload: { rig: 'kernel', seat: 'max@kernel', status: 'exited' } }),
+        event(4, { kind: 'forge.merged', subjectKind: 'pr', subjectId: 'p1', subjectName: 'Fix the build', payload: { ref: '#12' } }),
+        event(5, { kind: 'session.request', subjectKind: 'session.request', subjectId: 's1#k', subjectName: 'Nova', payload: { command: 'pnpm test' } })
+      ] });
+      const md = readFileSync(join(dir, 'journal.md'), 'utf8');
+      expect(md).toContain('01:05 rig.ask max — Which team?');
+      expect(md).toContain('02:05 rig.state kernel — running → stopped');
+      expect(md).toContain('03:05 rig.seat_unreachable max@kernel — exited');
+      expect(md).toContain('04:05 forge.merged Fix the build — #12');
+      expect(md).toContain('05:05 session.request Nova — pnpm test');
+    });
+
     it('rigs.md lists an unreachable seat, the queue rows, what a seat does and an open goal', async () => {
       const dir = mkdtempSync(join(tmpdir(), 'ctx-'));
       const seat = (logicalId: string, sessionStatus = 'running') => ({ logicalId, session: `${logicalId}@r`, runtime: 'claude-code', model: null, sessionStatus, lifecycleState: 'running', activity: 'idle', stopped: false, work: 0 });
