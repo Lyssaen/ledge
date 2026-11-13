@@ -169,7 +169,7 @@ export function Sessions({ store, filter: fromRoute, storage }: { store: MobileS
       {pressedSession && <SessionActions store={store} session={pressedSession} onDone={() => setPressed(null)} />}
       {sessions.length === 0 ? (
         <Box label={copy.agents.empty}>
-          <EmptyState glyph={<Icon name="sessions" />} title={copy.agents.empty} body={copy.agents.emptyHint}
+          <EmptyState list glyph={<Icon name="sessions" />} title={copy.agents.empty} body={copy.agents.emptyHint}
             action={<a href={href({ name: 'launch' })} className={kitButtonClass({ variant: 'primary', size: 'sm' })}><Icon name="plus" className="size-4" />{copy.sessions.newSession}</a>} />
         </Box>
       ) : atelier ? (

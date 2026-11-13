@@ -1,10 +1,11 @@
 import { createContext, useContext, type MouseEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { copy } from '../copy';
 import type { Reach } from '../link/link';
 import { href, navigate, type Route } from '../router';
 import { useBusy } from '../useBusy';
 import { Icon, type IconName } from '../ui/icons';
-import { useWide } from '../ui/layout';
+import { useBannerSlot, useWide } from '../ui/layout';
 import { kitButtonClass } from '../ui/kit/Controls';
 import { PHONE_TABS, isRoot, rootOf, tabHref, type Tab } from './tabs';
 
@@ -175,22 +176,41 @@ export function Rail({ route, active, badges, atelier, ledge }: {
 
 /**
  * The banner at the top of a tab's content when the PC or the relay does not answer: what is shown is the last known state.
- * `body`: a tab's own sentence for a PC that does not answer (the Rigs tab: nothing can be started or stopped).
+ * `body`: a tab's own sentence for a PC that does not answer (the Rigs tab: nothing can be started or stopped). In two panes
+ * (t-tablette.html §6, Q95 A), the list's banner (`across`) runs on one line over both panes, and the panes show none of their own.
  */
-export function LinkStrip({ body }: { body?: ((since: string) => string) | undefined } = {}) {
+export function LinkStrip({ body, across = false }: { body?: ((since: string) => string) | undefined; across?: boolean } = {}) {
   const { pc, look, reach, since, retry } = useShell();
   const [busy, setBusy] = useBusy();
+  const slot = useBannerSlot();
   if (look !== 'offline') return null;
   const relay = reach === 'relay_unreachable';
+  const title = relay ? copy.compare.relayTitle : copy.offline.title(pc);
+  const text = relay ? copy.compare.relayBody : since ? (body ?? copy.offline.body)(since) : copy.offline.bodyUnknown;
+  const button = (className: string) => (
+    <button type="button" disabled={busy} onClick={() => { setBusy(true); retry(); }} className={kitButtonClass({ size: 'sm', className })}>
+      <Icon name="refresh" className="size-4" />{copy.offline.retry}
+    </button>
+  );
+  const icon = <Icon name={relay ? 'cloud' : 'wifioff'} className="mt-px size-4 flex-none text-attention" />;
+  if (slot !== undefined) {
+    if (!across || !slot) return null;
+    return createPortal(
+      <section role="status" data-strip={relay ? 'relay' : 'pc'} className="strip flex items-center gap-[9px] rounded-lg border border-attention/40 px-3 py-2.5 text-[13px] leading-[18px]">
+        {icon}
+        <span className="min-w-0 flex-1"><b className="font-semibold">{title}</b> · <span className="text-muted">{text}</span></span>
+        {button('flex-none')}
+      </section>,
+      slot
+    );
+  }
   return (
     <section role="status" data-strip={relay ? 'relay' : 'pc'} className="strip flex flex-none items-start gap-[9px] rounded-lg border border-attention/40 px-3 py-2.5 text-[13px] leading-[18px]">
-      <Icon name={relay ? 'cloud' : 'wifioff'} className="mt-px size-4 text-attention" />
+      {icon}
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <b className="font-semibold">{relay ? copy.compare.relayTitle : copy.offline.title(pc)}</b>
-        <span className="text-muted">{relay ? copy.compare.relayBody : since ? (body ?? copy.offline.body)(since) : copy.offline.bodyUnknown}</span>
-        <button type="button" disabled={busy} onClick={() => { setBusy(true); retry(); }} className={kitButtonClass({ size: 'sm', className: 'self-start' })}>
-          <Icon name="refresh" className="size-4" />{copy.offline.retry}
-        </button>
+        <b className="font-semibold">{title}</b>
+        <span className="text-muted">{text}</span>
+        {button('self-start')}
       </div>
     </section>
   );
@@ -200,7 +220,7 @@ export function LinkStrip({ body }: { body?: ((since: string) => string) | undef
 function Loading() {
   const sk = 'block animate-[ledge-pulse_1.6s_ease-in-out_infinite] rounded-[5px] bg-raised';
   return (
-    <div aria-hidden="true" data-loading="" className="flex flex-col gap-3">
+    <div aria-hidden="true" data-loading="" data-list-state="" className="flex flex-col gap-3">
       <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface p-3">
         <div className="flex items-center gap-[7px]"><span className={`${sk} h-4 w-[26px]`} /><span className={`${sk} h-3.5 w-20`} /><span className="flex-1" /><span className={`${sk} h-4 w-[70px]`} /></div>
         <span className={`${sk} h-[34px]`} />
@@ -233,20 +253,23 @@ export function TabPage({ title, subtitle, wideSubtitle, actions, wideActions, c
   heading?: boolean;
 }) {
   const wide = useWide();
-  const { pc, look } = useShell();
+  const { pc, look, since } = useShell();
   const loading = look === 'loading';
+  // Beside the list's title on a wide screen: « Connexion à WSL… » before the first state, « Dernier état connu · 14:02 »
+  // offline (t-tablette.html §5, §6), else the tab's own words.
+  const headWords = loading ? copy.link.connecting(hostName(pc)) : look === 'offline' ? (since ? copy.link.lastKnownAt(since) : copy.inbox.lastKnown) : wideSubtitle;
   return (
     <>
       {wide && (
         <div className="pane-head flex h-[58px] flex-none items-center gap-2 border-b border-line pr-1.5 pl-4">
           <h1 className="text-lg font-semibold">{title}</h1>
-          {wideSubtitle && <span className="min-w-0 truncate text-small text-muted">{wideSubtitle}</span>}
-          <HostPill />
+          {headWords && <span className="min-w-0 truncate text-small text-muted">{headWords}</span>}
+          {!loading && <HostPill />}
           {wideActions && <span className="ml-auto flex flex-none items-center gap-2">{wideActions}</span>}
         </div>
       )}
       <main data-tab-scroll="" className="tab-main flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pt-3.5 pb-[18px]">
-        <LinkStrip body={offlineBody} />
+        <LinkStrip body={offlineBody} across />
         {!wide && heading && (
           <div className="flex flex-none items-baseline gap-2">
             <h1 className="text-[22px] leading-7 font-semibold tracking-[-.02em]">{title}</h1>

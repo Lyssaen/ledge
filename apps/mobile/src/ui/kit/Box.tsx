@@ -80,9 +80,13 @@ export function Card({ tone = 'plain', selected = false, label, children }: { to
  * A screen or a pane with nothing to show: a glyph (or the mascot) in a frame, a title, a line, and maybe a way out.
  * `framed`: the 48 px frame of an empty tab (§3); without it, the plain glyph of an empty right pane (§2).
  */
-export function EmptyState({ glyph, title, body, action, framed = true }: { glyph: ReactNode; title: string; body: string; action?: ReactNode; framed?: boolean }) {
+export function EmptyState({ glyph, title, body, action, framed = true, list = false }: {
+  glyph: ReactNode; title: string; body: string; action?: ReactNode; framed?: boolean;
+  /** The list has nothing at all to choose: in two panes, both join around it (t-tablette.html §5, Q94 B). */
+  list?: boolean;
+}) {
   return (
-    <div className="flex flex-col items-center gap-1.5 px-4 pt-[26px] pb-[22px] text-center">
+    <div data-list-state={list ? '' : undefined} className="flex flex-col items-center gap-1.5 px-4 pt-[26px] pb-[22px] text-center">
       {framed ? <div aria-hidden="true" className="grid size-12 place-items-center rounded-[10px] border border-line text-muted">{glyph}</div> : <div aria-hidden="true" className="text-muted">{glyph}</div>}
       <h2 className="mt-1.5 text-[17px] leading-6 font-semibold">{title}</h2>
       <p className="max-w-[300px] text-[13.5px] text-muted">{body}</p>
