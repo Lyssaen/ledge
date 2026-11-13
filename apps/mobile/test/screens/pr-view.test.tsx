@@ -1,7 +1,7 @@
 // A request of the MR/PR tab (docs/mockups/ledge-mobile-refonte/m5-mr-pr.html, §3 and §8): its head, the pipeline and the failed job's
 // log, « Pour fusionner », the details, the footer, and the detail's states.
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage, PrDetail } from '@ledge/protocol';
 import { copy } from '../../src/copy';
 import { getAssertion } from '../../src/link/webauthn';
@@ -374,5 +374,82 @@ describe('a request\'s discussion', () => {
   it('says there is no comment', () => {
     discussion({ threads: [] });
     expect(screen.getByText(C.noComment)).toBeTruthy();
+  });
+});
+
+describe('a request on a tablet (m5-mr-pr.html, §10)', () => {
+  const front = session('s-front', { name: 'Front', repo: 'ledge' });
+  const AT = '2026-11-10T10:05:00.000Z';
+  const threads: PrDetail['threads'] = [
+    { id: 't1', resolvable: true, resolved: false, file: 'term/Term.tsx', line: 88, comments: [{ id: 'c1', author: 'reviewer', at: AT, body: 'Le WebglAddon n\'est pas libéré.' }] },
+    { id: 't3', resolvable: true, resolved: true, comments: [{ id: 'c4', author: 'reviewer', at: AT, body: 'ok' }] }
+  ];
+  const before = globalThis.matchMedia;
+  /** A wide screen, on its side or upright. */
+  const tablet = (landscape: boolean) => {
+    globalThis.matchMedia = ((q: string) => ({
+      matches: q.includes('min-width: 768px') && (!q.includes('orientation: landscape') || landscape), media: q, addEventListener() {}, removeEventListener() {}
+    })) as unknown as typeof matchMedia;
+  };
+  afterEach(() => { globalThis.matchMedia = before; });
+  const views = () => within(screen.getByRole('navigation', { name: C.title })).getAllByRole('button').map(b => b.textContent);
+
+  it('on its side: the forge, the state and « Ouvrir sur GitHub » in the head, three views, the Discussion in a column', () => {
+    tablet(true);
+    const t = open(pr().id, { sessions: [front] });
+    t.give(detail(pr(), { threads }));
+    expect(document.querySelector('.split')?.getAttribute('data-split')).toBe('prs');
+    const head = document.querySelector('[data-pr-head]') as HTMLElement;
+    expect(within(head).getByText('GitHub · PR')).toBeTruthy();
+    expect(within(head).getByRole('heading', { level: 1 }).textContent).toBe(`#231 ${pr().title}`);
+    expect(within(head).getByText(C.state.open)).toBeTruthy();
+    expect(within(head).getByRole('link', { name: C.openOn('GitHub') }).textContent).toBe(C.openOn('GitHub'));
+    expect(document.querySelector('[data-back="prs"]')).toBeNull();
+    expect(views().map(v => v?.replace(/\d+$/, ''))).toEqual([C.tabs.overview, C.tabs.changes, C.tabs.commits]);
+    expect(document.querySelector('[data-pipeline="side"]')).toBeTruthy();
+    const column = screen.getByRole('complementary', { name: C.tabs.discussion });
+    expect(within(column).getByText(C.discSub(1, 1))).toBeTruthy();
+    expect(column.querySelector('[data-thread="t1"]')).toBeTruthy();
+    expect(within(column).getByPlaceholderText(C.addComment)).toBeTruthy();
+    const foot = screen.getByRole('contentinfo');
+    expect(within(foot).getByRole('button', { name: C.sendAll('Front') })).toBeTruthy();
+    expect(within(foot).getByRole('button', { name: C.merge })).toBeTruthy();
+  });
+
+  it('colours « en revue » as the board does, the other states plain', () => {
+    tablet(true);
+    const t = open(pr().id);
+    act(() => t.deliver({ type: 'forge.state', ...forgeState({ prs: [mr(), pr({ state: 'review' })] }) }));
+    const chip = document.querySelector('[data-pr-state]') as HTMLElement;
+    expect(chip.textContent).toBe(C.state.review);
+    expect(chip.className).toContain('text-attention');
+    act(() => t.deliver({ type: 'forge.state', ...forgeState({ prs: [mr(), pr({ state: 'draft' })] }) }));
+    expect(chip.textContent).toBe(C.state.draft);
+    expect(chip.className).toContain('text-muted');
+  });
+
+  it('sends all the open threads from the footer, and says so at the top of the column', () => {
+    tablet(true);
+    const t = open(pr().id, { sessions: [front] });
+    t.give(detail(pr(), { threads }));
+    fireEvent.click(within(screen.getByRole('contentinfo')).getByRole('button', { name: C.sendAll('Front') }));
+    expect(t.of('session.reply')[0]?.text).toBe(C.notesText('#231', [C.note('reviewer', C.fileLine('term/Term.tsx', 88), 'Le WebglAddon n\'est pas libéré.')]));
+    expect(within(screen.getByRole('complementary', { name: C.tabs.discussion })).getByText(C.commentSent('Front'))).toBeTruthy();
+  });
+
+  it('upright: the phone\'s four views and pipeline, no state in the head, and « Tout envoyer » in the Discussion view', () => {
+    tablet(false);
+    const t = open(pr().id, { sessions: [front] });
+    t.give(detail(pr(), { threads }));
+    const head = document.querySelector('[data-pr-head]') as HTMLElement;
+    expect(within(head).getByText('GitHub · PR')).toBeTruthy();
+    expect(document.querySelector('[data-pr-state]')).toBeNull();
+    expect(within(head).getByRole('link', { name: C.openOn('GitHub') }).textContent).toBe('');
+    expect(views()).toHaveLength(4);
+    expect(document.querySelector('[data-pipeline="side"]')).toBeNull();
+    expect(screen.queryByRole('complementary', { name: C.tabs.discussion })).toBeNull();
+    expect(within(screen.getByRole('contentinfo')).queryByRole('button', { name: C.sendAll('Front') })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${C.tabs.discussion}\\s*\\d+$`) }));
+    expect(screen.getByRole('button', { name: C.sendAll('Front') })).toBeTruthy();
   });
 });

@@ -160,33 +160,56 @@ function Resolved({ pr, t, forge, store, pc }: { pr: PullRequest; t: PrThread; f
   );
 }
 
-/** The Discussion view's list: its head, the open threads, the resolved folded, or « Aucun commentaire. ». */
-export function Discussion({ detail, forge, store, live, pc }: { detail: PrDetail; forge: ForgeStore; store: MobileStore; live: boolean; pc: string }) {
+/** « Tout envoyer à <agent> »: every open thread to the branch's most active session, and what the send left. */
+export type SendAll = {
+  agent: { id: string; name: string } | null; open: readonly PrThread[]; resolved: readonly PrThread[];
+  sent: Sent | null; send: () => void; clear: () => void; fresh: boolean;
+};
+
+export function useSendAll(detail: PrDetail | undefined, store: MobileStore): SendAll {
   const m = useMobile(store);
-  const pr = detail.pr;
   const [sent, setSent] = useState<Sent | null>(null);
-  const first = sessionsOf(pr, m.sessions)[0];
+  const threads = detail?.threads ?? [];
+  const first = detail ? sessionsOf(detail.pr, m.sessions)[0] : undefined;
   const agent = first ? { id: first.id, name: first.name } : null;
-  const open = detail.threads.filter(t => !t.resolved);
-  const resolved = detail.threads.filter(t => t.resolved);
-  if (!detail.threads.length) return <p className="m-0 p-2.5 text-center text-[12.5px] text-muted">{C.noComment}</p>;
-  const sendAll = () => {
-    if (!agent) return;
+  const open = threads.filter(t => !t.resolved);
+  const send = () => {
+    if (!agent || !detail) return;
     const notes = open.map(t => C.note(t.comments[0]!.author, whereOf(t), t.comments[0]!.body));
-    setSent(store.reply(agent.id, C.notesText(pr.ref, notes)) ? agent : 'refused');
+    setSent(store.reply(agent.id, C.notesText(detail.pr.ref, notes)) ? agent : 'refused');
   };
+  return { agent, open, resolved: threads.filter(t => t.resolved), sent, send, clear: () => setSent(null), fresh: m.fresh };
+}
+
+/** « Tout envoyer à <agent> », shown while open threads and the branch's session are there. */
+export function SendAllButton({ all, className = '' }: { all: SendAll; className?: string }) {
+  if (!all.agent || !all.open.length) return null;
+  return <button type="button" disabled={!all.fresh} onClick={all.send} className={rigButtonClass({ size: 'sm', className })}><Icon name="send" className="size-4" />{C.sendAll(all.agent.name)}</button>;
+}
+
+/**
+ * The Discussion's list: its head, the open threads, the resolved folded, or « Aucun commentaire. ». In the tablet's column
+ * (`column`, §10) the column carries the head and the footer « Tout envoyer », so `all` comes from the request and no head shows.
+ */
+export function Discussion({ detail, forge, store, live, pc, column }: {
+  detail: PrDetail; forge: ForgeStore; store: MobileStore; live: boolean; pc: string; column?: SendAll;
+}) {
+  const own = useSendAll(detail, store);
+  const all = column ?? own;
+  const pr = detail.pr;
+  if (!detail.threads.length) return <p className="m-0 p-2.5 text-center text-[12.5px] text-muted">{C.noComment}</p>;
   return (
     <>
-      <div className="flex items-center gap-2">
-        <span className="text-[12.5px] text-muted">{C.discSub(open.length, resolved.length)}</span>
-        <span className="flex-1" />
-        {agent && open.length > 0 && (
-          <button type="button" disabled={!m.fresh} onClick={sendAll} className={rigButtonClass({ size: 'sm' })}><Icon name="send" className="size-4" />{C.sendAll(agent.name)}</button>
-        )}
-      </div>
-      {sent && <SentNote sent={sent} onClose={() => setSent(null)} />}
-      {open.map(t => <Thread key={t.id} pr={pr} t={t} agent={agent} forge={forge} store={store} live={live} pc={pc} />)}
-      {resolved.map(t => <Resolved key={t.id} pr={pr} t={t} forge={forge} store={store} pc={pc} />)}
+      {!column && (
+        <div className="flex items-center gap-2">
+          <span className="text-[12.5px] text-muted">{C.discSub(all.open.length, all.resolved.length)}</span>
+          <span className="flex-1" />
+          <SendAllButton all={all} />
+        </div>
+      )}
+      {all.sent && <SentNote sent={all.sent} onClose={all.clear} />}
+      {all.open.map(t => <Thread key={t.id} pr={pr} t={t} agent={all.agent} forge={forge} store={store} live={live} pc={pc} />)}
+      {all.resolved.map(t => <Resolved key={t.id} pr={pr} t={t} forge={forge} store={store} pc={pc} />)}
     </>
   );
 }

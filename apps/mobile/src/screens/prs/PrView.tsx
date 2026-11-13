@@ -21,21 +21,50 @@ import { PipeChip, condText, dayTime, forgeWords, repoName, sessionsOf } from '.
 import { ForgeRunNote } from './runs';
 import { Changes } from './Changes';
 import { Commits } from './Commits';
-import { CommentFoot, Discussion } from './Discussion';
+import { CommentFoot, Discussion, SendAllButton, useSendAll } from './Discussion';
+import { useLandscape } from './landscape';
 
 /*
  * A request (m5-mr-pr.html, §3 and §8, the board PhonePR): its head, four views, the overview (the pipeline top to bottom, the failed
  * job's log under it, the description and the details), and at the bottom what a merge still needs. The list is enough to open it;
- * the rest comes with `forge.detail`. Merged or closed, it reads without a button; offline, the last detail read, greyed.
+ * the rest comes with `forge.detail`. Merged or closed, it reads without a button; offline, the last detail read, greyed. On a tablet
+ * (§10, the board TabletPR) it fills the pane beside the list; on its side, the Discussion is a column and the pipeline reads left to right.
  */
 
 const C = copy.prs;
 type View = 'overview' | 'discussion' | 'changes' | 'commits';
 
-/** The head: back, the number and the title, forge · repository · branch → target, and the request on its forge. */
-function Head({ pr }: { pr: PullRequest }) {
+/** A request's state beside its title on a tablet on its side; only « en revue » has its colour on the board (§10). */
+const STATE_TONE: Partial<Record<PullRequest['state'], string>> = { review: 'border-attention/45 text-attention' };
+
+/**
+ * The head: back, the number and the title, forge · repository · branch → target, and the request on its forge. Beside the list
+ * (§10): « GitHub · PR », the number and the title; on its side, the state and « Ouvrir sur GitHub » spelled out.
+ */
+function Head({ pr, landscape }: { pr: PullRequest; landscape: boolean }) {
   const wide = useWide();
   const w = forgeWords(pr);
+  if (wide) {
+    return (
+      <header data-pr-head="" className="flex h-[58px] flex-none items-center gap-[9px] border-b border-line pr-2.5 pl-[22px]">
+        <span className="inline-flex h-5 flex-none items-center rounded-lg border border-input px-[7px] text-[11.5px] whitespace-nowrap text-muted">{`${w.host} · ${w.kind}`}</span>
+        <h1 className="min-w-0 truncate text-[16px] font-semibold">{`${pr.ref} ${pr.title}`}</h1>
+        {landscape && (
+          <span data-pr-state={pr.state} className={`inline-flex h-[22px] flex-none items-center rounded-full border px-[9px] text-[12px] font-medium whitespace-nowrap ${STATE_TONE[pr.state] ?? 'border-input text-muted'}`}>
+            {C.state[pr.state]}
+          </span>
+        )}
+        <span className="flex-1" />
+        {landscape ? (
+          <a href={pr.url} target="_blank" rel="noreferrer" className={rigButtonClass({ size: 'sm', className: 'flex-none' })}><Icon name="external" className="size-4" />{C.openOn(w.host)}</a>
+        ) : (
+          <a href={pr.url} target="_blank" rel="noreferrer" aria-label={C.openOn(w.host)} title={C.openOn(w.host)} className={iconButtonClass()}>
+            <Icon name="external" className="size-[18px]" />
+          </a>
+        )}
+      </header>
+    );
+  }
   return (
     <header className={`flex flex-none items-center gap-2 border-b border-line pr-1.5 ${wide ? 'pane-head h-[58px]' : 'h-14 pl-0.5'}`}>
       <BackLink fallback={{ name: 'prs' }} label={C.title} />
@@ -50,12 +79,16 @@ function Head({ pr }: { pr: PullRequest }) {
   );
 }
 
-/** The four views in a band that scrolls sideways on a phone (Q57): the overview with its pipeline's dot, the others with their count. */
-function Views({ pr, d, view, onView }: { pr: PullRequest; d: PrDetail | undefined; view: View; onView: (v: View) => void }) {
+const ALL_VIEWS: readonly View[] = ['overview', 'discussion', 'changes', 'commits'];
+/** On a tablet on its side, the Discussion is a column beside the view, not a view (§10). */
+const SIDE_VIEWS: readonly View[] = ['overview', 'changes', 'commits'];
+
+/** The views in a band that scrolls sideways on a phone (Q57): the overview with its pipeline's dot, the others with their count. */
+function Views({ pr, d, view, views, onView, wide }: { pr: PullRequest; d: PrDetail | undefined; view: View; views: readonly View[]; onView: (v: View) => void; wide: boolean }) {
   const counts: Partial<Record<View, number>> = d ? { discussion: d.threads.length, changes: d.files.length, commits: d.commits.length } : {};
   return (
-    <nav aria-label={C.title} className="flex flex-none gap-0.5 overflow-x-auto overflow-y-hidden border-b border-line p-2 [scrollbar-width:none]">
-      {(['overview', 'discussion', 'changes', 'commits'] as const).map(v => (
+    <nav aria-label={C.title} className={`flex flex-none gap-0.5 overflow-x-auto overflow-y-hidden border-b border-line [scrollbar-width:none] ${wide ? 'px-1.5 py-2' : 'p-2'}`}>
+      {views.map(v => (
         <button
           key={v} type="button" aria-current={view === v ? 'page' : undefined} onClick={() => onView(v)}
           className="group inline-flex h-9 flex-none items-center gap-[5px] rounded-lg px-[7px] text-[13px] font-medium whitespace-nowrap text-muted aria-[current=page]:bg-raised aria-[current=page]:text-fg"
@@ -116,6 +149,46 @@ function Pipeline({ pr, jobs, selected, onJob }: { pr: PullRequest; jobs: readon
           <div className="mb-[5px] text-[11px] tracking-[.5px] text-muted uppercase">{pr.forge === 'gitlab' ? C.stage(i + 1, s.name) : s.name}</div>
           <div className="flex flex-col gap-1.5">
             {s.jobs.map(j => <JobRow key={j.id} job={j} selected={j.id === selected} onOpen={j.id === selected ? undefined : () => onJob(j)} />)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A job in the pipeline read left to right: as tall as its name, as wide as its name and time (§10, `.hpipe .job`). */
+function SideJob({ job, selected, onOpen }: { job: PrJob; selected: boolean; onOpen?: (() => void) | undefined }) {
+  const inner = (
+    <>
+      {job.status === 'run' ? <Spinner /> : <Dot state={PIPE_DOT[job.status]} />}
+      <span className="min-w-0 flex-1 truncate">{job.name}</span>
+      {jobRight(job)}
+    </>
+  );
+  const className = `flex h-10 min-w-[92px] items-center gap-[7px] rounded-[10px] border px-[9px] text-left text-[13px] ${jobBg(job.status)} ${JOB_BORDER[job.status]} ${selected ? 'shadow-[0_0_0_2px_var(--color-ring)]' : ''}`;
+  return onOpen
+    ? <button type="button" data-job={job.id} onClick={onOpen} className={className}>{inner}</button>
+    : <div data-job={job.id} className={className}>{inner}</div>;
+}
+
+/** The link between two stages side by side, at the height of their first job: coloured as the top-to-bottom one. */
+function SideLink({ after }: { after: Stage }) {
+  const fail = after.jobs.some(j => j.status === 'fail');
+  const ok = after.jobs.every(j => j.status === 'ok');
+  return <span aria-hidden="true" className={`mt-[39px] block w-5 flex-none ${fail ? 'border-t-2 border-dashed border-approval' : `h-0.5 ${ok ? 'bg-ok' : 'bg-input'}`}`} />;
+}
+
+/** The pipeline left to right on a tablet on its side (§10, `.hpipe`): a column per stage, named as on the phone. */
+function SidePipeline({ pr, jobs, selected, onJob }: { pr: PullRequest; jobs: readonly PrJob[]; selected: string | null; onJob: (j: PrJob) => void }) {
+  const stages = stagesOf(jobs);
+  return (
+    <div data-pipeline="side" className="flex flex-none items-start overflow-x-auto rounded-[10px] border border-line bg-surface p-3.5 dark:bg-[oklch(0.18_0_0)]">
+      {stages.map((s, i) => (
+        <div key={s.column} className="contents">
+          {i > 0 && <SideLink after={stages[i - 1]!} />}
+          <div className="flex min-w-0 flex-[0_1_auto] flex-col gap-2">
+            <div className="mb-[5px] text-[11px] tracking-[.5px] whitespace-nowrap text-muted uppercase">{pr.forge === 'gitlab' ? C.stage(i + 1, s.name) : s.name}</div>
+            {s.jobs.map(j => <SideJob key={j.id} job={j} selected={j.id === selected} onOpen={j.id === selected ? undefined : () => onJob(j)} />)}
           </div>
         </div>
       ))}
@@ -301,8 +374,8 @@ function RerunSheet({ pr, confirm, live, onRerun, onClose }: { pr: PullRequest; 
 }
 
 /** The overview: the pipeline and the failed job's log, « Pour fusionner », the description, the details. */
-function Overview({ pr, read, store, live, onJob, onLog, onRerun }: {
-  pr: PullRequest; read: DetailRead | undefined; store: MobileStore; live: boolean; onJob: (j: PrJob) => void; onLog: (j: PrJob) => void; onRerun: () => void;
+function Overview({ pr, read, store, live, onJob, onLog, onRerun, side }: {
+  pr: PullRequest; read: DetailRead | undefined; store: MobileStore; live: boolean; onJob: (j: PrJob) => void; onLog: (j: PrJob) => void; onRerun: () => void; side: boolean;
 }) {
   const d = read?.data;
   const w = forgeWords(pr);
@@ -319,7 +392,9 @@ function Overview({ pr, read, store, live, onJob, onLog, onRerun }: {
       {pipeNote && <p className="m-0 text-[12px] text-muted">{pipeNote}</p>}
       {!d ? <Loading /> : (
         <>
-          {d.jobs.length > 0 && <Pipeline pr={pr} jobs={d.jobs} selected={failed?.id ?? null} onJob={onJob} />}
+          {d.jobs.length > 0 && (side
+            ? <SidePipeline pr={pr} jobs={d.jobs} selected={failed?.id ?? null} onJob={onJob} />
+            : <Pipeline pr={pr} jobs={d.jobs} selected={failed?.id ?? null} onJob={onJob} />)}
           {failed && (
             <>
               <div className="flex items-center gap-2 text-[12px] text-muted"><span>{`${C.log.title(failed.name)} · ${C.log.lines}`}</span></div>
@@ -381,6 +456,7 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
   const [rerunning, setRerunning] = useState(false);
   const { pc, look } = useShell();
   const wide = useWide();
+  const side = useLandscape() && wide;
   const [view, setView] = useState<View>('overview');
   const [sheetJob, setSheetJob] = useState<string | null>(null);
   const offline = look === 'offline';
@@ -388,6 +464,7 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
   const read = f.details[id];
   const listed = f.state?.prs.find(p => p.id === id);
   const pr = listed ?? read?.data?.pr;
+  const all = useSendAll(read?.data, store);
 
   // Opening reads the detail; a failed pipeline's log comes with a second read, once its job is known (Q58).
   useEffect(() => { forge.readDetail(id); }, [forge, id]);
@@ -403,7 +480,7 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
   const main = useRef<HTMLElement>(null);
   useEffect(() => { main.current?.scrollTo?.({ top: 0 }); }, [view]);
 
-  const scroll = `tab-main flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain pb-[18px] ${wide ? 'pt-[18px]' : 'pt-3'}`;
+  const scroll = `tab-main flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain pb-[18px] ${wide ? 'px-[22px] pt-[18px]' : 'pt-3'}`;
   // A request the list no longer holds, and never read: it is not followed any more (§4, §8).
   if (!pr) {
     return (
@@ -426,40 +503,75 @@ export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; st
   // The merge names the head the person read: the detail's, which a new head in the list reads again.
   const merge = () => { if (d) void forge.act(id, { kind: 'merge', headSha: d.pr.headSha }); };
 
+  const views = side ? SIDE_VIEWS : ALL_VIEWS;
+  // Turned on its side on the Discussion, the request shows its overview: the Discussion is then the column beside it.
+  const shown: View = views.includes(view) ? view : 'overview';
+  const content = (
+    <>
+      <LinkStrip body={C.offlineBody} />
+      {gone && !run && <Receipt mark="warn" title={C.gone(w.kind, name)} sub={C.goneBody} />}
+      {run && <ForgeRunNote run={run} pr={pr} detail={d} forge={forge} pc={name} onReload={() => forge.readDetail(id)} />}
+      {read?.error && !d && <ReadError read={read} pr={pr} pc={name} onRetry={() => forge.readDetail(id)} />}
+      {read?.cut && <Strip lead={<Icon name="alert" className="mt-px size-4 text-muted" />}><span>{C.cut(w.host)}</span></Strip>}
+      <div className={`flex flex-col ${side ? 'gap-4' : 'gap-2.5'} ${offline ? 'opacity-50' : ''}`}>
+        {shown === 'overview' && (!read?.error || d) && (
+          <Overview pr={pr} read={read} store={store} live={live && !busy && !gone} side={side} onJob={j => { setSheetJob(j.id); openLog(j); }} onLog={openLog} onRerun={() => setRerunning(true)} />
+        )}
+        {shown !== 'overview' && !d && !read?.error && <Loading />}
+        {shown === 'discussion' && d && <Discussion detail={d} forge={forge} store={store} live={live && !gone} pc={name} />}
+        {shown === 'changes' && d && <Changes detail={d} />}
+        {shown === 'commits' && d && <Commits detail={d} />}
+      </div>
+    </>
+  );
+  const doneWords = (
+    <span data-foot="done" className={`flex min-w-0 flex-1 flex-wrap items-center gap-1.5 leading-4 text-muted ${wide ? 'text-[12.5px]' : 'text-[12px]'}`}>
+      <span className="inline-flex h-[22px] items-center rounded-full border border-input px-[9px] text-[12px] font-medium">{C.state[pr.state]}</span>
+      {pr.state === 'merged' ? C.mergedInto(pr.target, dayTime(pr.updatedAt)) : dayTime(pr.updatedAt)}
+    </span>
+  );
+  const why = <span data-foot="why" className={`min-w-0 flex-1 leading-4 text-muted ${wide ? 'text-[12.5px]' : 'text-[12px]'}`}>{d ? footWords(d, w.host) : C.footApprovals(approvalsText(pr))}</span>;
+  const mergeButton = (
+    <button type="button" disabled={!live || gone || busy || !d || !canMerge(d)} onClick={() => setMerging(true)} className={rigButtonClass(wide ? { tone: 'primary', size: 'sm', className: 'flex-none' } : { tone: 'primary', className: 'h-[42px]' })}>
+      <Icon name="merge" className="size-4" />{C.merge}
+    </button>
+  );
+  // On a tablet the footer is the board's `.tfoot`; on its side it also carries « Tout envoyer à <agent> » (§10).
+  const footClass = wide ? 'flex flex-none items-center gap-2.5 border-t border-line bg-sidebar px-[18px] py-2.5' : 'flex flex-none items-center gap-2.5 border-t border-line bg-sidebar px-3.5 py-[9px]';
+
   return (
     <>
-      <Head pr={pr} />
-      <Views pr={pr} d={d} view={view} onView={setView} />
-      <main ref={main} data-tab-scroll="" className={scroll}>
-        <LinkStrip body={C.offlineBody} />
-        {gone && !run && <Receipt mark="warn" title={C.gone(w.kind, name)} sub={C.goneBody} />}
-        {run && <ForgeRunNote run={run} pr={pr} detail={d} forge={forge} pc={name} onReload={() => forge.readDetail(id)} />}
-        {read?.error && !d && <ReadError read={read} pr={pr} pc={name} onRetry={() => forge.readDetail(id)} />}
-        {read?.cut && <Strip lead={<Icon name="alert" className="mt-px size-4 text-muted" />}><span>{C.cut(w.host)}</span></Strip>}
-        <div className={`flex flex-col gap-2.5 ${offline ? 'opacity-50' : ''}`}>
-          {view === 'overview' && (!read?.error || d) && (
-            <Overview pr={pr} read={read} store={store} live={live && !busy && !gone} onJob={j => { setSheetJob(j.id); openLog(j); }} onLog={openLog} onRerun={() => setRerunning(true)} />
-          )}
-          {view !== 'overview' && !d && !read?.error && <Loading />}
-          {view === 'discussion' && d && <Discussion detail={d} forge={forge} store={store} live={live && !gone} pc={name} />}
-          {view === 'changes' && d && <Changes detail={d} />}
-          {view === 'commits' && d && <Commits detail={d} />}
+      <Head pr={pr} landscape={side} />
+      <Views pr={pr} d={d} view={shown} views={views} onView={setView} wide={wide} />
+      {side ? (
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_320px]">
+          <main ref={main} data-tab-scroll="" className="tab-main flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto overscroll-contain px-[22px] py-[18px]">{content}</main>
+          <aside aria-labelledby={`disc-${id}`} data-pr-discussion="" className="flex min-h-0 min-w-0 flex-col border-l border-line">
+            <div className="flex h-12 flex-none items-center gap-2 border-b border-line px-3.5">
+              <h2 id={`disc-${id}`} className="m-0 text-[15px] font-semibold">{C.tabs.discussion}</h2>
+              {d && d.threads.length > 0 && <span className="text-[12.5px] text-muted">{C.discSub(all.open.length, all.resolved.length)}</span>}
+            </div>
+            <div className={`flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain p-3 ${offline ? 'opacity-50' : ''}`}>
+              {d && <Discussion detail={d} forge={forge} store={store} live={live && !gone} pc={name} column={all} />}
+            </div>
+            {!done && (
+              <div className="flex flex-none border-t border-line px-3 py-2.5">
+                <CommentFoot pr={pr} forge={forge} store={store} live={live && !gone} pc={name} />
+              </div>
+            )}
+          </aside>
         </div>
-      </main>
-      <footer className="flex flex-none items-center gap-2.5 border-t border-line bg-sidebar px-3.5 py-[9px]">
-        {view === 'discussion' && !done ? <CommentFoot pr={pr} forge={forge} store={store} live={live && !gone} pc={name} /> : done ? (
-          <span data-foot="done" className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-[12px] leading-4 text-muted">
-            <span className="inline-flex h-[22px] items-center rounded-full border border-input px-[9px] text-[12px] font-medium">{C.state[pr.state]}</span>
-            {pr.state === 'merged' ? C.mergedInto(pr.target, dayTime(pr.updatedAt)) : dayTime(pr.updatedAt)}
-          </span>
-        ) : (
+      ) : (
+        <main ref={main} data-tab-scroll="" className={scroll}>{content}</main>
+      )}
+      <footer className={footClass}>
+        {side ? (
           <>
-            <span data-foot="why" className="min-w-0 flex-1 text-[12px] leading-4 text-muted">{d ? footWords(d, w.host) : C.footApprovals(approvalsText(pr))}</span>
-            <button type="button" disabled={!live || gone || busy || !d || !canMerge(d)} onClick={() => setMerging(true)} className={rigButtonClass({ tone: 'primary', className: 'h-[42px]' })}>
-              <Icon name="merge" className="size-4" />{C.merge}
-            </button>
+            {done ? doneWords : why}
+            <SendAllButton all={all} className="flex-none" />
+            {!done && mergeButton}
           </>
-        )}
+        ) : shown === 'discussion' && !done ? <CommentFoot pr={pr} forge={forge} store={store} live={live && !gone} pc={name} /> : done ? doneWords : <>{why}{mergeButton}</>}
       </footer>
       {rerunning && <RerunSheet pr={pr} confirm={!!m.device?.confirm} live={live} onRerun={() => { void forge.act(id, { kind: 'rerun' }); }} onClose={() => setRerunning(false)} />}
       {merging && d && <MergeSheet d={d} pc={name} confirm={!!m.device?.confirm} live={live} onMerge={merge} onClose={() => setMerging(false)} />}

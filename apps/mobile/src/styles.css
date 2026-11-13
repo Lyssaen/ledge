@@ -161,9 +161,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   /* A rig and the kernel open beside the Rigs list: their « Retour » has nowhere to go. */
   .split-detail [data-back="rigs"] { display: none; }
   .app:not(:has(.split)) > :not(.rail) { width: 100%; max-width: 720px; margin-inline: auto; }
+  /* The MR/PR tab (m5-mr-pr.html, §10): its list is 320 px (290 upright) and a request fills the rest, edge to edge, its
+     Discussion in a column on its right; each of its bands keeps its own padding. */
+  .split[data-split="prs"] { grid-template-columns: 320px minmax(0, 1fr); }
+  .split[data-split="prs"] > .split-detail { padding: 0 env(safe-area-inset-right) 0 0; }
+  .split[data-split="prs"] > .split-detail > * { max-width: none; }
 }
 @media (min-width: 768px) and (min-height: 501px) and (orientation: portrait) {
   .split { grid-template-columns: 330px minmax(0, 1fr); }
+  .split[data-split="prs"] { grid-template-columns: 290px minmax(0, 1fr); }
 }
 
 /* « Réduire les animations » in Réglages (src/motion.ts): unlayered and important, it wins over every layer's animation. */
