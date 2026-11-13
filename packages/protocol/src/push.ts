@@ -45,12 +45,13 @@ export type PushSubscription = z.infer<typeof PushSubscriptionSchema>;
 export const PushPayloadSchema = z.object({
   v: z.literal(1),
   /** `resolved`: a request or question answered (anywhere), replacing its notification under the same tag; only sent to a
-   *  device whose subscription says its service worker knows it (`push.subscribe` `resolved`). */
-  kind: z.enum(['request', 'question', 'finished', 'chat', 'decision', 'resolved']),
+   *  device whose subscription says its service worker knows it (`push.subscribe` `resolved`). `point`: the operator's point, one per
+   *  paired device (the body is its lead); it replaces `finished`, which stays in the schema for older daemons but is no longer sent. */
+  kind: z.enum(['request', 'question', 'finished', 'chat', 'decision', 'resolved', 'point']),
   title: z.string().max(80),
   /**
    * Who the notification is about, so the phone writes its own title in its language (Q29): the session's name for `request`,
-   * `question`, `finished` and `resolved`, the giver's for `decision`; none for `chat`. Optional: an older daemon sends none, and an
+   * `question` and `resolved`, the giver's for `decision`; none for `chat`. Optional: an older daemon sends none, and an
    * older phone ignores it and shows `title`.
    */
   name: z.string().max(100).optional(),

@@ -11,7 +11,7 @@ import { PHONE_LAUNCH_MULTI, type OmpApproval, type PhoneLaunch, type RepoInfo }
 import { PHONE_FORGE_MESSAGE_MAX, PhoneForgeActErrorSchema, type ForgeStateMessage } from '@ledge/protocol';
 import { forgeSubject, phoneForgeDetail, phoneForgeState } from './forge.js';
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
-import { BROADCAST_SESSIONS_MAX, type DecidedBy, type DeviceKind } from '@ledge/protocol';
+import { BROADCAST_SESSIONS_MAX, type DecidedBy, type DeviceKind, type PointAnswer, type PointItem } from '@ledge/protocol';
 import { PHONE_ROW_SUMMARY_MAX } from '@ledge/protocol';
 import { folderSubject, normalizePath, FolderPathSchema, PHONE_FOLDER_ENTRIES_MAX, PHONE_RECENT_FOLDERS_MAX, projectNameKey, projectSubject, type BrainChoice, type PhoneFolderError, type PhoneServerMessage as PhoneOut, type Projects } from '@ledge/protocol';
 import { listFolder, resolveFolder } from '../daemon/folders.js';
@@ -31,6 +31,7 @@ import { ActRefused } from '../chat/act.js';
 import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js';
 import { createOutbox } from './outbox.js';
 import { createTerminalHost, type SpawnControl, type TerminalHost } from './terminal.js';
+import { humanAnswerOf } from '../operator/act.js';
 import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation, type Report } from './operations.js';
 import { capabilities, clip, forPhone, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneThread } from './project.js';
 import { atelierOf, toPhoneProjects } from './project.js';
@@ -90,6 +91,13 @@ const stableJson = (v: unknown): string =>
   Array.isArray(v) ? `[${v.map(stableJson).join(',')}]`
     : v !== null && typeof v === 'object' ? `{${Object.keys(v).sort().filter(k => (v as Record<string, unknown>)[k] !== undefined).map(k => `${JSON.stringify(k)}:${stableJson((v as Record<string, unknown>)[k])}`).join(',')}}`
       : JSON.stringify(v);
+
+/**
+ * What an `act` challenge over a point row is bound to: the turn, the row, and a digest of the exact answer, or of the suggestion row when
+ * there is no answer, so an assertion approves that and nothing else.
+ */
+export const pointActSubject = (qid: string, item: PointItem, answer?: PointAnswer): string =>
+  `point:${qid}:${item.id}:${createHash('sha256').update(stableJson(answer ?? item.suggestion ?? null)).digest('base64url')}`;
 
 /** What a « Nouvelle session » challenge is bound to: that very launch, so an assertion starts nothing else. */
 export const launchSubject = (l: PhoneLaunch): string => `new:${createHash('sha256').update(stableJson(l)).digest('base64url')}`;
@@ -168,6 +176,15 @@ export function createPhoneGateway(deps: {
   /** Closes the sessions of a turn's close card, on that thread (its own emitter and marks). */
   closeChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ closed: Array<{ row: number; id: string; how: CloseHow }>; failed: Array<{ row: number; message: string }> }>;
   /** Applies the rows of a turn's generic card, on that thread (its own emitter and marks); `rid` names the request. */
+  /**
+   * The operator's point, acted on from the phone. `device` is the device id (not a thread id); the daemon answers through the handlers the
+   * cards use, so the gateway only decides which device check an answer needs.
+   */
+  point?: {
+    act: (device: string, msg: { qid: string; item: string; answer?: PointAnswer; suggest?: true; confirmed?: true; human?: HumanAnswer }, by: DecidedBy) => Promise<{ ok: true } | { ok: false; error: string; code?: string }>;
+    later: (device: string, qid: string) => void;
+    read: (device: string, eventId: number) => void;
+  };
   actChat?: (thread: ChatThreadId, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) => Promise<{ done: number[]; failed: Array<{ row: number; message: string }> }>;
   /** A device's question ended (answered, or with a code). */
   onChatEnd?: (deviceId: string, end: { qid: string; code?: ChatErrorCode }) => void;
@@ -403,7 +420,7 @@ export function createPhoneGateway(deps: {
   };
 
   /** The operations that act on a tracked session: the registry's own, the credential's, the device's and the chat's are handled before it. */
-  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'device.rename' | 'device.prefs' | 'context.set' | 'project.edit' | 'project.order' | 'project.create' | 'project.delete' | 'project.folder.add' | 'project.folder.remove' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'session.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' | 'brain.answer' | 'rigs.act' | 'rigs.seats' | 'rigs.goal.send' | 'rigs.goal.reply' | 'forge.act' }>;
+  type SessionOperation = Exclude<PhoneOperation, { type: 'credential.register' | 'device.forget' | 'device.rename' | 'device.prefs' | 'context.set' | 'project.edit' | 'project.order' | 'project.create' | 'project.delete' | 'project.folder.add' | 'project.folder.remove' | 'push.subscribe' | 'push.unsubscribe' | 'chat.relay' | 'chat.relay.cancel' | 'chat.launch' | 'session.launch' | 'chat.close' | 'chat.act' | 'chat.ignore' | 'chat.task' | 'task.seen' | 'daemon.update' | 'daemon.restart' | 'session.close' | 'session.resume' | 'session.broadcast' | 'term.open' | 'term.hold' | 'openrig.answer' | 'brain.answer' | 'rigs.act' | 'rigs.seats' | 'rigs.goal.send' | 'rigs.goal.reply' | 'forge.act' | 'point.act' | 'point.later' | 'operator.read' }>;
   /** Whether the operation needs the device's own check: an accept of a request that is not low, or a reply to an OMP (rpc) dialog, which is never low. */
   const needsAssertion = (msg: SessionOperation, s: Session): boolean => {
     if (msg.type === 'session.decide') return msg.decision !== 'deny' && riskOf(s)?.risk !== 'low';
@@ -925,6 +942,75 @@ export function createPhoneGateway(deps: {
     return r.ok ? { status: 'applied', detail } : { status: 'failed', detail };
   };
 
+  /**
+   * A row of the operator's point answered (or its suggestion applied) from the phone. What the answer is about says which device check it
+   * needs, as the same answer does elsewhere: a request accepted (`decide`), a rig ask (`rig`), a proposal accepted (`note`), and a decision
+   * or a suggestion (`act`, bound to the turn, the row and a digest of the exact answer or suggestion: `pointActSubject`). A destructive one
+   * also needs the phone's `confirmed`. A row that is gone or settled needs no check: the daemon says so on it.
+   */
+  const pointAct = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'point.act' }>): Promise<Outcome> => {
+    const turn = ownTurn(deviceId, msg.qid);
+    if (!deps.point || !turn?.point) return { status: 'rejected', reason: 'unknown_session' };
+    if ((msg.answer === undefined) === (msg.suggest !== true)) return { status: 'rejected', reason: 'invalid' };
+    const item = turn.point.items.find(i => i.id === msg.item);
+    let human: HumanAnswer | undefined;
+    // What needs a check: its purpose, the subject it is bound to, and whether the answer is destructive (it then needs `confirmed` too).
+    let check: { purpose: 'decide' | 'act' | 'note' | 'rig'; subject: string | undefined } | undefined; let destructive = false;
+    if (item && !item.settled && msg.suggest) {
+      const row = item.suggestion;
+      if (row) {
+        // As the phone's own card: a set-aside turn applies nothing, a request the phone could only show cut is never accepted from it.
+        if (turn.ignoredAt) return SET_ASIDE;
+        if (row.state === 'done' || row.state === 'running') return { status: 'rejected', reason: 'stale' };
+        if (phoneCut(row) && row.args.decision !== 'deny') return { status: 'rejected', reason: 'not_offered' };
+        destructive = row.risk === 'destructive';
+        if (destructive || actionById(row.action)?.phone) check = { purpose: 'act', subject: pointActSubject(msg.qid, item) };
+      }
+    } else if (item && !item.settled && item.ref && msg.answer) {
+      const ref = item.ref; const answer = msg.answer;
+      const picked = 'id' in answer ? answer.id : undefined;
+      if (ref.kind === 'rig.ask') {
+        const ask = (await deps.openrig?.list())?.asks.find(a => a.id === ref.qitem);
+        human = ask ? humanAnswerOf(ask, answer) : undefined;
+        check = { purpose: 'rig', subject: human ? rigSubject(ref.qitem, human) : undefined };
+      } else if (ref.kind === 'task') {
+        if (deps.tasks?.().find(t => t.id === ref.task)?.brain) { if (picked === 'accept') check = { purpose: 'note', subject: noteSubject(ref.task, { yes: true }) }; }
+        else { check = { purpose: 'act', subject: pointActSubject(msg.qid, item, answer) }; destructive = true; }
+      } else {
+        const s = deps.session(ref.session);
+        // A request the phone could only show cut is refused from it, as on the card: the rest is read on the PC.
+        if (s?.pending && s.pending.kind !== 'question' && picked === 'accept' && phoneCut({ action: 'session.decide', args: {}, summary: '', risk: 'destructive', detail: s.pending.body ? `${s.pending.text}\n\n${s.pending.body}` : s.pending.text })) return { status: 'rejected', reason: 'not_offered' };
+        if (s?.pending?.kind !== 'question' && picked === 'accept') { destructive = true; if (!s || riskOf(s)?.risk !== 'low') check = { purpose: 'decide', subject: subjectOf(ref.session, ref.key, s) }; }
+        else if (s?.pending?.kind === 'question' && s.pending.source === 'rpc' && riskOf(s)?.risk !== 'low') check = { purpose: 'decide', subject: subjectOf(ref.session, ref.key, s) };
+      }
+    }
+    if (destructive && !msg.confirmed) return { status: 'rejected', reason: 'confirm_required' };
+    if (check) {
+      if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
+      const refused = checkAssertion(deviceId, msg.assertion, check.purpose, check.subject);
+      if (refused) return refused;
+    }
+    try {
+      const r = await deps.point.act(deviceId, { qid: msg.qid, item: msg.item, ...(msg.answer ? { answer: msg.answer } : {}), ...(msg.suggest ? { suggest: true as const } : {}), ...(human ? { human } : {}), ...(msg.confirmed ? { confirmed: true as const } : {}) }, decidedBy(deviceId));
+      if (r.ok) return { status: 'applied' };
+      if (r.code === 'confirm_required') return { status: 'rejected', reason: 'confirm_required' };
+      if (r.code === 'changed' || r.code === 'settled') return { status: 'rejected', reason: 'stale' };
+      if (r.code === 'unknown_item') return { status: 'rejected', reason: 'unknown_session' };
+      if (r.code === 'invalid') return { status: 'rejected', reason: 'invalid' };
+      return { status: 'failed' };
+    } catch (e) { log(`phone point.act failed (${e instanceof Error ? e.name : 'error'})`); return { status: 'failed' }; }
+  };
+  const pointLater = (deviceId: string, msg: Extract<PhoneOperation, { type: 'point.later' }>): Outcome => {
+    if (!deps.point || !ownTurn(deviceId, msg.qid)?.point) return { status: 'rejected', reason: 'unknown_session' };
+    deps.point.later(deviceId, msg.qid);
+    return { status: 'applied' };
+  };
+  const operatorRead = (deviceId: string, msg: Extract<PhoneOperation, { type: 'operator.read' }>): Outcome => {
+    if (!deps.point) return { status: 'rejected', reason: 'not_offered' };
+    deps.point.read(deviceId, msg.eventId);
+    return { status: 'applied' };
+  };
+
   /** A proposal about the notes answered from « Le point »: a `yes` writes, so it needs the device's check over that exact choice. */
   const brainAnswer = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'brain.answer' }>): Promise<Outcome> => {
     const t = deps.tasks?.().find(x => x.id === msg.task);
@@ -1276,6 +1362,9 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'openrig.answer') return rigAnswer(deviceId, msg);
     if (msg.type === 'brain.answer') return brainAnswer(deviceId, msg);
     if (msg.type === 'rigs.act') return rigsAct(deviceId, msg);
+    if (msg.type === 'point.act') return pointAct(deviceId, msg);
+    if (msg.type === 'point.later') return pointLater(deviceId, msg);
+    if (msg.type === 'operator.read') return operatorRead(deviceId, msg);
     if (msg.type === 'forge.act') return forgeAct(deviceId, msg);
     if (msg.type === 'rigs.seats') return rigsSeats(deviceId, msg);
     if (msg.type === 'rigs.goal.send' || msg.type === 'rigs.goal.reply') return rigsGoal(deviceId, msg);
@@ -1548,6 +1637,15 @@ export function createPhoneGateway(deps: {
           if (!cred || cred.rpId !== rp.rpId) return invalid();
           const challenge = deps.challenges.issue({ deviceId, purpose: 'close', subject: msg.qid });
           return push(deviceId, { type: 'confirm.challenge', purpose: 'close', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
+        }
+        // A point row's decision or suggestion: bound to the row and the exact answer, not to the whole turn.
+        if (msg.purpose === 'act' && msg.item !== undefined) {
+          const turn = msg.qid === undefined ? undefined : ownTurn(deviceId, msg.qid);
+          const item = turn?.point?.items.find(i => i.id === msg.item);
+          const cred = deps.credential(deviceId);
+          if (!msg.qid || !item || !cred || cred.rpId !== rp.rpId || (msg.pointAnswer === undefined) === (msg.suggest !== true) || (msg.suggest && !item.suggestion)) return invalid();
+          const challenge = deps.challenges.issue({ deviceId, purpose: 'act', subject: pointActSubject(msg.qid, item, msg.suggest ? undefined : msg.pointAnswer) });
+          return push(deviceId, { type: 'confirm.challenge', purpose: 'act', challenge, rpId: rp.rpId, credentialId: cred.id, expiresInMs: CHALLENGE_TTL_MS });
         }
         if (msg.purpose === 'act') {
           if (msg.qid === undefined || !ownTurn(deviceId, msg.qid)) return invalid();

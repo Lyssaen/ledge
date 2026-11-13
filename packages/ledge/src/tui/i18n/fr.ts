@@ -1,6 +1,7 @@
 import { formatBytes } from '@ledge/ui/images/encode';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { actionCopy } from '@ledge/ui/chat/actionCopy';
+import { pointCopy } from '@ledge/ui/chat/pointCopy';
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 
@@ -100,6 +101,9 @@ export const fr = {
     resetBody: (n: number, since: string) => `La conversation du jour (${n} ${plural(n, 'question', 'questions')}, depuis ${since}) sera effacée.`,
     draftStays: 'Ton brouillon reste.', keep: 'Garder', wipe: 'Effacer et repartir',
     above: (n: number) => `↑ ${n} ${plural(n, 'ligne', 'lignes')} plus haut · PgUp`, answering: '↓ Ledge répond · G pour suivre',
+    /** The operator's point (shared words with the other PC fronts, and the terminal's own). */
+    point: pointCopy.fr, pointCard: 'Ledge · le point', pointLater: 'Plus tard', pointSuggest: 'suggestion', pointSending: 'envoi…',
+    pointConfirm: (what: string, who: string) => `Confirmer · ${what} pour ${who} ?`, pointHint: 'Ledge ne fait rien sans toi · ↵ ne confirme pas : tape y',
     /** The generic card (#94): the words every PC front shares (`copy`), and the terminal's own. */
     action: {
       copy: actionCopy.fr,

@@ -129,6 +129,20 @@ test('notifications: turned on while pairing, a push shows a notification, an un
     await expect.poll(shown).toEqual([{ title: 'Otto attend votre accord', body: 'pnpm test', tag: 'req-s1', data: { url: '/#/request/s1/p1', kind: 'request' } }]);
   });
 
+  await test.step('a point push is titled Ledge and opens the Ledge tab', async () => {
+    await deliver(JSON.stringify({
+      v: 1, kind: 'point', title: 'Ledge', body: 'Deux choses pour toi : pilot-lead attend ta décision sur #309, et Rex a fini.', url: '/#/chat', badge: 2, tag: 'point'
+    }));
+    await expect.poll(shown).toContainEqual({ title: 'Ledge', body: 'Deux choses pour toi : pilot-lead attend ta décision sur #309, et Rex a fini.', tag: 'point', data: { url: '/#/chat', kind: 'point' } });
+  });
+
+  await test.step('a request of a PC that names the session is titled Ledge, the name once in the body', async () => {
+    await deliver(JSON.stringify({
+      v: 1, kind: 'request', title: 'Ledge', name: 'Nova', body: 'Nova · pnpm -r test -u', url: '/#/request/s1/p1', badge: 1, tag: 'req-s2'
+    }));
+    await expect.poll(shown).toContainEqual({ title: 'Ledge', body: 'Nova · pnpm -r test -u', tag: 'req-s2', data: { url: '/#/request/s1/p1', kind: 'request' } });
+  });
+
   await test.step('an unreadable push shows the fallback', async () => {
     await deliver('this is not json');
     await expect.poll(shown).toContainEqual({ title: 'Ledge', body: 'Une demande attend', tag: 'ledge', data: null });

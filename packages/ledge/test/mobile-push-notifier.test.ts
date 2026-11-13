@@ -3,6 +3,7 @@ import { createECDH, randomBytes } from 'node:crypto';
 import { DEFAULT_DEVICE_PREFS, type DevicePrefs, type MobileState, type PushPayload, type PushSend, type PushSendResult } from '@ledge/protocol';
 import { createNotifier, wanted } from '../src/mobile/push/notifier.js';
 import { chatEndPayload, resolvedFor } from '../src/mobile/push/triggers.js';
+import { pointPush } from '../src/operator/notices.js';
 
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/SECRET-ENDPOINT-TOKEN';
 const TEXT = 'private-words-of-the-agent';
@@ -41,6 +42,24 @@ function setup(o: { enabled?: boolean; result?: PushSendResult | (() => Promise<
   });
   return { n, sent, logs, pushes, keys, visible, online, clock, setRelayKey: (k: string | null | undefined) => { relayKey = k; } };
 }
+
+describe('point push', () => {
+  it('point push is held by a pause and by notify.finished false', async () => {
+    const at = Date.parse('2026-11-13T10:00:00.000Z');
+    const off: DevicePrefs = { ...DEFAULT_DEVICE_PREFS, notify: { ...DEFAULT_DEVICE_PREFS.notify, finished: false } };
+    const paused: DevicePrefs = { ...DEFAULT_DEVICE_PREFS, quietUntil: new Date(at + 60_000).toISOString() };
+    expect(wanted({ kind: 'point' }, DEFAULT_DEVICE_PREFS, at)).toBe(true);
+    expect(wanted({ kind: 'point' }, off, at)).toBe(false);
+    expect(wanted({ kind: 'point' }, paused, at)).toBe(false);
+    const t = setup();
+    await t.n.notify(pointPush('Two things wait for you', 2), undefined, 'dev1');
+    expect(t.sent).toHaveLength(1);
+    expect(t.sent[0]).toMatchObject({ urgency: 'normal', topic: 'point' });
+    const held = setup({ prefs: new Map([['dev1', off]]) });
+    await held.n.notify(pointPush('x', 0), undefined, 'dev1');
+    expect(held.sent).toHaveLength(0);
+  });
+});
 
 describe('push notifier', () => {
   it('sends nothing to a device that is online and visible, one when it is hidden', async () => {

@@ -30,13 +30,34 @@ describe('the action registry', () => {
   it('asks a phone for its device check before every destructive action', () => {
     for (const a of ACTIONS) if (riskOf(a, a.example) === 'destructive') expect(a.phone, a.id).not.toBeNull();
     expect(Object.fromEntries(ACTIONS.filter(a => a.card === 'generic' && a.phone).map(a => [a.id, a.phone]))).toEqual({
-      'session.resume': 'act', 'session.decide': 'act', 'task.cancel': 'act', 'task.answer': 'act', 'rig.act': 'act', 'rig.seats': 'act'
+      'session.resume': 'act', 'session.decide': 'act', 'task.cancel': 'act', 'task.answer': 'act', 'rig.act': 'act', 'rig.seats': 'act',
+      'rig.answer': 'act', 'rig.goal.reply': 'act', 'brain.answer': 'act', 'pr.fix': 'act'
     });
   });
   it('keeps the five earlier cards on their own card', () => {
     expect(Object.fromEntries(ACTIONS.filter(a => a.card !== 'generic').map(a => [a.id, a.card]))).toEqual({
       'session.launch': 'launch', 'session.relay': 'relay', 'session.close': 'close', 'project.propose': 'project', 'task.give': 'task'
     });
+  });
+});
+
+describe('the operator actions', () => {
+  const NEW = ['rig.answer', 'rig.goal', 'rig.goal.reply', 'rig.send', 'brain.answer', 'session.handover', 'pr.fix'];
+  it('each parses its example and carries a persona sentence that waits for the user', () => {
+    for (const id of NEW) {
+      const a = actionById(id)!;
+      expect(a.args.safeParse(a.example).success, id).toBe(true);
+      expect(a.card, id).toBe('generic');
+      expect(a.when, id).toMatch(/seulement quand l'utilisateur/);
+    }
+  });
+  it('makes the answer that confirms a launch destructive', () => {
+    expect(riskOf(actionById('rig.answer')!, { qitem: 'q1', answer: { option: 'launch-rig' } })).toBe('destructive');
+    expect(riskOf(actionById('rig.answer')!, { qitem: 'q1', answer: { text: 'oui' } })).toBe('reversible');
+    expect(riskOf(actionById('rig.goal.reply')!, { goal: 'g', answer: 'confirm' })).toBe('destructive');
+  });
+  it('takes only an absolute folder for a goal', () => {
+    expect(actionById('rig.goal')!.args.safeParse({ text: 'x', folder: 'relative/dir' }).success).toBe(false);
   });
 });
 

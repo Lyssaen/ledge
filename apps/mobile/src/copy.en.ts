@@ -169,6 +169,20 @@ export const en: Copy = {
         failed: 'Not sent: try again.', confirmRequired: 'Protect your accepts from Settings first: adding asks for this device’s passkey.', cancelled: 'Check cancelled. Nothing was written.', expired: 'The check expired. Start again.', stale: 'Already handled elsewhere.'
       }
     },
+    operator: {
+      title: 'The point',
+      ongoing: (n: number) => plural(n, '1 task in progress', `${n} tasks in progress`),
+      folded: (at: string) => `All settled since ${at}`,
+      settled: { terminal: 'settled in the terminal', phone: 'settled on the phone', desktop: 'settled in Ledge Desktop', chat: 'settled in the chat', elsewhere: 'settled elsewhere' },
+      reply: 'Reply…', answer: { label: 'Your answer', placeholder: 'Your answer…', send: 'Send', cancel: 'Cancel' },
+      suggest: {
+        'session.archive': (v: Record<string, string>) => (v.session ? `Archive ${v.session}` : undefined),
+        'session.handover': () => 'Hand over',
+        'rig.send': (v: Record<string, string>) => (v.seat ? `Write to ${v.seat}` : undefined)
+      },
+      error: (why: string) => `Not sent: ${why}`,
+      notSent: 'Not sent: try again.', setup: 'Protect your accepts from Settings first: this answer asks for this device’s passkey.', stale: 'Already settled elsewhere.'
+    },
     task: {
       label: 'Task to give', give: 'Give',
       given: (name: string, id: string, state: string) => `Given to ${name} · ${id} · ${state}`, notGiven: 'Not given.'
@@ -737,12 +751,12 @@ export const en: Copy = {
     motion: 'Reduce motion', motionHint: 'When off, the device’s setting applies.',
     notifications: 'Notifications on this device',
     notify: {
-      finished: 'Agent finished', finishedHint: 'When an agent has finished its turn.',
+      finished: 'Ledge’s point', finishedHint: 'When Ledge takes stock: finished sessions, tasks, news from the rigs.',
       chat: 'Ledge’s answer', chatHint: 'When Ledge has answered a question asked from here.',
       decision: 'Decision to make', decisionHint: 'When a session asks you to decide.',
       always: 'Approval requests and the agents’ questions always notify, except during a pause.'
     },
-    pause: 'Pause', pauseHint: 'No notification on this device during that time.',
+    pause: 'Pause', pauseHint: 'No notification on this device during that time, the point included.',
     pauseFor: { hour: '1 h', four: '4 h', morning: 'Until 8 am tomorrow' },
     pauseLabel: { hour: 'One-hour pause', four: 'Four-hour pause', morning: 'Pause until 8 am tomorrow' },
     pausedUntil: (when: string) => `Paused until ${when}`,

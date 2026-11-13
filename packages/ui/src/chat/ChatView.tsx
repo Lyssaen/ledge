@@ -16,6 +16,9 @@ import { RelayCard } from './RelayCard';
 import { ProjectCard } from './ProjectCard';
 import { TaskCard } from './TaskCard';
 import { ActionCard, actionRowOf } from './ActionCard';
+import { PointTurn, type PointConfirm } from './PointTurn';
+import { newestPointRead } from './point';
+import type { ChatPoint, PointItem } from '@ledge/protocol';
 import { groupSessions } from '@ledge/fleet';
 import type { DocumentReference } from '../documents/references';
 
@@ -77,6 +80,16 @@ export interface ChatViewProps {
   belowHeader?: ReactNode; body?: ReactNode;
   /** The field's text, when the front holds it (the suggestions and mentions write into it). */
   draft?: string; onDraft?: (text: string) => void;
+  /** The operator's point turns (docs/mockups/ledge-operator.html, board 1): drawn when the front gives `onPointAnswer` and the
+   *  copy has `point`. `pointBusy` the row on its way, `pointConfirm` the row the daemon asked to confirm (`onPointConfirm`
+   *  sends it again confirmed, or cancels); `pointMachine` the machine name to show on a point (several machines linked). */
+  onPointAnswer?: (qid: string, item: string, a: { id: string } | { text: string }) => void;
+  onPointSuggest?: (qid: string, item: string) => void;
+  onPointNav?: (turn: ChatTurn, n: NonNullable<PointItem['nav']>[number]) => void;
+  pointBusy?: { qid: string; item: string } | null; pointConfirm?: (PointConfirm & { qid: string }) | null; onPointConfirm?: (go: boolean) => void;
+  pointMachine?: (turn: ChatTurn) => string | undefined;
+  /** The newest point turn came into view: its highest journal event is read (`operator.read`, spec §5). */
+  onPointSeen?: (qid: string, eventId: number) => void;
   theme?: 'dark' | 'light'; frozen?: boolean; reducedMotion?: boolean; now?: number; contentRef?: Ref<HTMLDivElement>;
 }
 
@@ -141,6 +154,18 @@ export function ChatView(p: ChatViewProps) {
   // The resident pulses while Ledge reads.
   const [pulse, setPulse] = useState(0);
   useEffect(() => { if (!busy || !visible || p.reducedMotion) return; const id = setInterval(() => setPulse(k => k + 1), 1400); return () => clearInterval(id); }, [busy, visible, p.reducedMotion]);
+  // The newest point marks its events read once it is on screen (spec §5): watched while the thread shows, again for a newer event.
+  const newest = newestPointRead(turns);
+  const seen = useRef<HTMLDivElement | null>(null);
+  const onSeen = useRef(p.onPointSeen); onSeen.current = p.onPointSeen;
+  const shown = visible && p.body === undefined;
+  useEffect(() => {
+    const el = seen.current;
+    if (!newest || !el || !shown || !onSeen.current || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { io.disconnect(); onSeen.current?.(newest.qid, newest.eventId); } }, { root: thread.current, threshold: 0.2 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [newest?.qid, newest?.eventId, shown]); // eslint-disable-line react-hooks/exhaustive-deps
   const withImages = (p.attach?.items.length ?? 0) > 0;
   const submit = (q: string, fromField = false) => {
     const v = q.trim(), images = fromField && withImages;
@@ -198,10 +223,19 @@ export function ChatView(p: ChatViewProps) {
               </div>
             </div>
           )}
-          {turns.map(turn => (
+          {turns.map(turn => turn.point && p.onPointAnswer && t.chat.point ? (
+            <div key={turn.qid} data-turn data-point-turn ref={turn.qid === newest?.qid ? seen : undefined}>
+              <PointTurn turn={turn as ChatTurn & { point: ChatPoint }} machineName={p.pointMachine?.(turn)} mascot={mascot(18)}
+                disabled={!!p.offline || p.turnAvailable?.(turn.qid) === false}
+                busy={p.pointBusy?.qid === turn.qid ? p.pointBusy.item : p.pointBusy ? '' : null}
+                confirming={p.pointConfirm?.qid === turn.qid ? p.pointConfirm : null} onConfirm={() => p.onPointConfirm?.(true)} onCancelConfirm={() => p.onPointConfirm?.(false)}
+                onAnswer={(item, a) => p.onPointAnswer!(turn.qid, item, a)} onSuggestion={item => p.onPointSuggest?.(turn.qid, item)} onNav={n => p.onPointNav?.(turn, n)} />
+            </div>
+          ) : (
             <div key={turn.qid} data-turn style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {p.turnImages?.(turn)}
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span data-question style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', background: 'var(--secondary)', fontSize: 13, lineHeight: '19px', overflowWrap: 'anywhere' }}>{turn.question}</span></div>
+              {/* A turn Ledge wrote on its own has no question. */}
+              {turn.by !== 'ledge' && <div style={{ display: 'flex', justifyContent: 'flex-end' }}><span data-question style={{ maxWidth: '85%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px', background: 'var(--secondary)', fontSize: 13, lineHeight: '19px', overflowWrap: 'anywhere' }}>{turn.question}</span></div>}
               {turn.error === 'cancelled' ? <span data-chat-stopped style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.chat.stopped}</span>
                 : turn.error !== undefined && <span data-chat-error role="alert" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--destructive)' }}>{turn.errorCause === 'interrupted' && t.chat.interrupted !== undefined ? t.chat.interrupted : t.chat.error(turn.error)}</span>}
               {turn.error === undefined && (turn.answeredAt !== undefined || turn.steps.length > 0 || live?.qid === turn.qid || running?.qid === turn.qid) && (

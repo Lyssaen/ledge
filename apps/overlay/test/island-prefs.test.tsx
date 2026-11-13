@@ -46,11 +46,10 @@ describe('the island applies the settings Desktop shares', () => {
     expect(screen.queryByText('Pim finished')).toBeNull();
   });
 
-  it('finished off still shows an error notice', async () => {
-    render(draw({ shows: prefs({}, { finished: false }).shows }));
+  it('an error unfolds no bubble either: the point says it', async () => {
+    render(draw({ shows: prefs({}, { finished: true }).shows }));
     await act(async () => { mock.upsert(pim({ state: 'error', lastError: 'boom' })); await sleep(50); vi.advanceTimersByTime(540); });
-    expect(surface()).toHaveAttribute('data-mode', 'bubble');
-    expect(document.querySelector('[data-layer="bubble"]')).toHaveAttribute('data-kind', 'error');
+    expect(surface()).toHaveAttribute('data-mode', 'handle');
   });
 
   it('say off: no speech bubble on the handle', async () => {
@@ -83,7 +82,8 @@ describe('the island applies the settings Desktop shares', () => {
     render(draw({ shows: prefs({}, { quick: false }).shows }));
     await act(async () => { mock.upsert(pimQuestion()); await sleep(50); vi.advanceTimersByTime(540); });
     expect(surface()).toHaveAttribute('data-mode', 'bubble');
-    expect(screen.getByText('Which strategy? · speos-api')).toBeInTheDocument();
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-sentence]')).toHaveTextContent('Pim asks you: Which strategy?');
+    expect(document.querySelector('[data-layer="bubble"]')).toHaveTextContent('speos-api');
     expect(screen.queryAllByRole('radio')).toHaveLength(0);
     expect(document.querySelector('[data-layer="bubble"] [data-reply]')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Reply' })).toBeNull();
@@ -100,7 +100,7 @@ describe('the island applies the settings Desktop shares', () => {
     expect(document.querySelector('[data-unread-say]')).toBeNull();
     rerender(draw());
     expect(surface()).toHaveAttribute('data-mode', 'bubble');
-    expect(screen.getByText('Pim needs your approval')).toBeInTheDocument();
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-sentence]')).toHaveTextContent(/^Pim (wants to|needs your approval)/);
     expect(vi.mocked(setHotZone).mock.calls.at(-1)![0]).toBeGreaterThan(0);
   });
 

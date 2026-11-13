@@ -39,7 +39,7 @@ describe('Réglages: the screen', () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(snap({ daemon: {}, prefs: null, chat: true })));
     expect(screen.getByRole('switch', { name: 'Notifications' })).toBeInTheDocument();
-    expect(screen.queryByRole('switch', { name: 'Agent terminé' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Le point de Ledge' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Ledge' })).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Contexte max' })).not.toBeInTheDocument();
   });
@@ -49,17 +49,26 @@ describe('Réglages: notifications of this device', () => {
   it('only once they are on: the three kinds, and requests always said to notify', () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(snap({ push: 'off' })));
-    expect(screen.queryByRole('switch', { name: 'Agent terminé' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: 'Le point de Ledge' })).not.toBeInTheDocument();
     act(() => t.deliver(snap()));
-    for (const name of ['Agent terminé', 'Réponse de Ledge', 'Décision à prendre']) expect(screen.getByRole('switch', { name })).toBeChecked();
+    for (const name of ['Le point de Ledge', 'Réponse de Ledge', 'Décision à prendre']) expect(screen.getByRole('switch', { name })).toBeChecked();
     expect(screen.getByText(/Les demandes d’accord et les questions des agents préviennent toujours/)).toBeInTheDocument();
+  });
+
+  it('settings show Le point de Ledge with its hint', () => {
+    const t = app('ready', { hash: '#/connection' });
+    act(() => t.deliver(snap()));
+    const sw = screen.getByRole('switch', { name: 'Le point de Ledge' });
+    expect(sw).toHaveAccessibleDescription('Quand Ledge fait le point : sessions finies, tâches, nouvelles des rigs.');
+    expect(screen.queryByText('Agent terminé')).toBeNull();
+    expect(screen.getByText('Aucune notification sur cet appareil pendant ce temps, le point compris.')).toBeInTheDocument();
   });
 
   it('a switch sends the whole settings with that kind off; a second change builds on the first while it waits', async () => {
     const t = app('ready', { hash: '#/connection' });
     act(() => t.deliver(snap()));
-    fireEvent.click(screen.getByRole('switch', { name: 'Agent terminé' }));
-    expect(screen.getByRole('switch', { name: 'Agent terminé' })).not.toBeChecked();
+    fireEvent.click(screen.getByRole('switch', { name: 'Le point de Ledge' }));
+    expect(screen.getByRole('switch', { name: 'Le point de Ledge' })).not.toBeChecked();
     fireEvent.click(screen.getByRole('switch', { name: 'Décision à prendre' }));
     const sent = t.of('device.prefs');
     expect(sent.map(m => m.prefs.notify)).toEqual([

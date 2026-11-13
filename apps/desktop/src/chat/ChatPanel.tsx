@@ -5,14 +5,15 @@ import { ChatCopyProvider } from '@ledge/ui/chat/copy';
 import { useActionCards } from '@ledge/ui/chat/useActionCards';
 import { useAttachments } from '../images/useAttachments';
 import { TurnThumbs } from '../images/Thumbs';
-import type { Projects } from '@ledge/protocol';
+import type { PointItem, Projects } from '@ledge/protocol';
 import type { FleetView } from '../fleet/useFleet';
 import { chatCopy, useI18n } from '../i18n/lang';
 import { useMotionPreferences } from '../motionPreferences';
 import { useTheme } from '../shell/theme';
 import { useDefaultTool } from '../settings/tool';
+import { sendPointSeen } from './pointReads';
 import { useAgentHighlight } from './useAgentHighlight';
-import { useChatCards } from './useChatCards';
+import { useChatCards, usePointActs } from './useChatCards';
 import { CardModelPick } from './CardModelPick';
 import { useProjectReview } from './projectReview';
 import { useTaskCards } from './useTaskCards';
@@ -39,6 +40,8 @@ export interface ChatPanelProps {
   onProposal(pid: string): void;
   /** The IDE's right panel (lot 12, docs/mockups/ledge-ide-tasks-history.html): Conversation · Tâches · Historique, as the app keeps them. */
   tabs?: RightTabs;
+  /** A point row's screen (Voir, Voir la PR, Ouvrir le rig, a task), on the machine that wrote the point. */
+  onPointNav?(machine: string, n: NonNullable<PointItem['nav']>[number]): void;
 }
 
 /** How long a question reopened from « Historique » stays lit. */
@@ -48,7 +51,7 @@ export const FLASH_MS = 1500;
  *  the real fleet. Questions go to the daemon with the default agent (Settings › General); nothing is sent while the local daemon is offline. A name hovered or
  *  focused lights its agent; a session card launches in one click and seats the agent (`onLaunched`); a relay card sends as in the island; a project card's « Review the proposal »
  *  opens the project editor prefilled (nothing is created before its button). */
-export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onOpenSession, onLaunched, onTerminal, projects, notify, onProposal, tabs }: ChatPanelProps): JSX.Element {
+export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onOpenSession, onLaunched, onTerminal, projects, notify, onProposal, tabs, onPointNav }: ChatPanelProps): JSX.Element {
   const { t } = useI18n();
   const copy = useMemo(() => chatCopy(t), [t]);
   const theme = useTheme();
@@ -66,6 +69,13 @@ export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onO
   const onMessage = useCallback((fn: Parameters<DaemonClient['onMessage']>[0]) => client.onMessage(fn), [client]);
   const actionCards = useActionCards({ send, chat, errors: view.errors, turnReady, onMessage });
   const taskCards = useTaskCards({ send, onMessage });
+  const points = usePointActs({ send, chat, errors: view.errors, turnReady });
+  // A point says its machine once more than one machine is linked (spec §4).
+  const pointMachine = (turn: { qid: string }) => (view.machines.length > 1 ? view.fleet.turnMachine(turn.qid)?.label : undefined);
+  // The newest point read once seen (spec §5). `operator.read` names no conversation: it goes to the machine owning the point's turn,
+  // whose cursor it moves. A lower event than the last sent there (a new conversation, a reset journal) is sent too.
+  const read = useRef(new Map<string, number>());
+  const onPointSeen = (qid: string, eventId: number) => { sendPointSeen(qid, eventId, view.fleet, read.current); };
   const [hovered, setHovered] = useState<string | null>(null);
   useAgentHighlight(hovered);
   // Every way in (/, the sidebar, the top bar, the footer, Ledge's desk) mounts the panel: the field takes the focus; asked for
@@ -140,6 +150,8 @@ export function ChatPanel({ client, view, paused, focus, askedOnly, onClose, onO
             relayingQid={cards.relayingQid} onRelay={cards.relay} onRelayCancel={cards.cancelRelay}
             onProject={project.review} projectNamed={project.projectNamed}
             onGiveTask={taskCards.giveTask} taskBusy={taskCards.taskBusy}
+            onPointAnswer={points.answer} onPointSuggest={points.suggest} pointBusy={points.busy} pointConfirm={points.confirm} onPointConfirm={points.settle}
+            onPointNav={(turn, n) => { const m = turnMachine(turn.qid); if (m) onPointNav?.(m, n); }} pointMachine={pointMachine} onPointSeen={onPointSeen}
             belowHeader={tabs && <RightTabStrip tab={tabs.tab} open={tabs.tasks.tasks.filter(x => !taskClosed(x)).length} onTab={tab => tabs.onTab(tab)} />} body={tabBody}
             onAgentHover={setHovered} inputRef={inputRef} attach={{ items: images.items, onFiles: images.add, onRemove: images.remove, ready: images.ready, error: images.error }}
             theme={theme} frozen={offline !== null} reducedMotion={paused || reduced} />

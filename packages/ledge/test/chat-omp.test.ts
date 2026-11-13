@@ -12,7 +12,9 @@ describe('ompChatArgs', () => {
     expect(a[a.indexOf('--tools') + 1]).toBe('read,grep,glob');
     for (const f of ['--no-extensions', '--no-skills', '--no-rules', '--no-session']) expect(a).toContain(f);
     expect(a[a.indexOf('--add-dir') + 1]).toBe('/w/ledge');
-    expect(a.join(' ')).not.toMatch(/bash|write|edit|yolo|auto-approve|--no-ui/);
+    // The persona is prose that names registry arguments (brain.answer's `edit`): only the flags are checked.
+    const prompt = a.indexOf('--append-system-prompt');
+    expect(a.filter((_, i) => i !== prompt + 1).join(' ')).not.toMatch(/bash|write|edit|yolo|auto-approve|--no-ui/);
     expect(a).not.toContain('--continue');
   });
   it('the day\'s conversation lives in its own directory and is continued, never "the latest of the folder"', () => {

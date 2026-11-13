@@ -12,7 +12,7 @@ export const LEDGE_CARD = 'lc';
 export function ledgeCard(): { chat: Chat; give(c: Client, rid: string, row: Pick<ChatTaskProposal, 'to' | 'title' | 'text'>): void } {
   const rows: ChatTaskProposal[] = [];
   const chat: Chat = {
-    async ask() {}, attachmentIds: () => [], cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
+    async ask() {}, attachmentIds: () => [], postPoint: () => '', updatePoint: () => false, points: () => [], cancel() {}, async reset() {}, history: () => [], proposal: () => undefined, markLaunched() {}, markFailed() {},
     relay: () => undefined, markRelay() {}, queuedRelays: () => [], close: () => undefined, markClosed() {}, markCloseFailed() {}, idle: async () => {},
     followTask() {}, action: () => undefined, markAction() {}, ignore: () => null, ignored: () => false,
     task: (qid, row) => (qid === LEDGE_CARD ? rows[row] : undefined),

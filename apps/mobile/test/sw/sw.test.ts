@@ -337,6 +337,20 @@ describe('the pinned service worker', () => {
       expect(w.self.registration.setAppBadge).toHaveBeenCalledWith(2);
     });
 
+    it('sw shows a point push titled Ledge', async () => {
+      const w = await firstVisit(origin());
+      await w.push({ v: 1, kind: 'point', title: 'Ledge', body: 'Deux choses pour toi : pilot-lead attend ta décision sur #309, et Rex a fini.', url: '/#/chat', badge: 2, tag: 'point' });
+      expect(w.self.registration.showNotification).toHaveBeenCalledWith('Ledge', { body: 'Deux choses pour toi : pilot-lead attend ta décision sur #309, et Rex a fini.', tag: 'point', data: { url: '/#/chat', kind: 'point' }, icon: '/icon-192.png', renotify: false });
+    });
+
+    it('a request or a question of a PC that names the session is titled Ledge, the name said once, in the body', async () => {
+      const w = await firstVisit(origin());
+      await w.push({ ...payload, title: 'Ledge', name: 'Nova', body: 'Nova · pnpm -r test -u' });
+      await w.push({ ...payload, kind: 'question', title: 'Ledge', name: 'Nova', body: 'Laquelle ?' });
+      expect(w.self.registration.showNotification).toHaveBeenNthCalledWith(1, 'Ledge', expect.objectContaining({ body: 'Nova · pnpm -r test -u' }));
+      expect(w.self.registration.showNotification).toHaveBeenNthCalledWith(2, 'Ledge', expect.objectContaining({ body: 'Nova · Laquelle ?' }));
+    });
+
     it('a resolved push replaces the request\'s notification under its tag, without ringing again', async () => {
       const w = await firstVisit(origin());
       await w.push({ ...payload, kind: 'resolved', title: 'api · traitée', body: 'sur iPad', url: '/#/thread/s1', badge: 0 });
@@ -388,13 +402,14 @@ describe('the pinned service worker', () => {
       const w = await firstVisit(origin());
       const show = w.self.registration.showNotification;
       const titles: Record<string, string> = {
-        request: 'api attend ton accord', question: 'api a une question', finished: 'api a terminé', resolved: 'api · traitée', decision: 'api attend ta décision'
+        request: 'Ledge', question: 'Ledge', finished: 'api a terminé', resolved: 'api · traitée', decision: 'api attend ta décision'
       };
       for (const [kind, title] of Object.entries(titles)) {
         show.mockClear();
         await w.push({ ...payload, kind, name: 'api' });
         expect((show.mock.calls[0] as unknown as [string, { body: string }])[0], kind).toBe(title);
-        expect((show.mock.calls[0] as unknown as [string, { body: string }])[1].body).toBe('rm -rf build');
+        // Ledge speaks for a request or a question (board 7): the session is named in the body, once.
+        expect((show.mock.calls[0] as unknown as [string, { body: string }])[1].body).toBe(kind === 'request' || kind === 'question' ? 'api · rm -rf build' : 'rm -rf build');
       }
     });
 
@@ -407,7 +422,7 @@ describe('the pinned service worker', () => {
       await w.push({ ...payload, kind: 'chat', title: 'Ledge a répondu', body: 'Touchez pour lire la réponse.', url: '/#/chat', tag: 'chat' });
       await w.push(undefined);
       expect(show.mock.calls.map((c) => [(c as unknown[])[0], ((c as unknown[])[1] as { body: string }).body])).toEqual([
-        ['api needs your approval', 'rm -rf build'],
+        ['Ledge', 'api · rm -rf build'],
         ['dev-front needs your decision', 'rm -rf build'],
         ['Ledge has answered', 'Tap to read the answer.'],
         ['Ledge', 'A request is waiting']
@@ -431,9 +446,9 @@ describe('the pinned service worker', () => {
       const w = await firstVisit(origin());
       const show = w.self.registration.showNotification;
       await w.message({ type: 'lang', lang: 'de' });
-      await w.push({ ...payload, name: 'api' });
+      await w.push({ ...payload, kind: 'decision', name: 'api' });
       await w.push({ ...payload, name: 'n'.repeat(101) });
-      expect(show.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['api attend ton accord', 'Ledge']);
+      expect(show.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['api attend ta décision', 'Ledge']);
       expect(PushPayloadSchema.safeParse({ ...payload, name: 'n'.repeat(101) }).success).toBe(false);
     });
 

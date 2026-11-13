@@ -9,7 +9,7 @@ export interface ActDeps {
   /** The row against the state now (`resolveAction`): the same row, a changed one, or why it is no longer possible. */
   resolve: (row: ChatAction) => Resolved;
   /** Applies the row through the daemon's own handler; throws (or rejects with) the reason. */
-  apply: (row: ChatAction) => Promise<void>;
+  apply: (row: ChatAction, index: number) => Promise<void>;
   emit: (m: ChatMessage) => void;
   /** The `qid#row` actions under way, shared by every caller: a second click is passed over until the first one has answered. */
   inFlight: Set<string>;
@@ -70,7 +70,7 @@ export async function actFromChat(deps: ActDeps, qid: string, rows?: number[], c
         const never = cardRefusal(row) ?? cardRefusal(current);
         if (never) { refused = never.code; throw new Error(never.refused); }
         refused = null;
-        await deps.apply(row);
+        await deps.apply(row, r);
       } catch (e) {
         const message = (e as Error).message;
         failed.push({ row: r, message, ...(refused ? { refused: true as const } : {}) });

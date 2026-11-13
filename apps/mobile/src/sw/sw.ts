@@ -199,7 +199,7 @@ function payloadOf(raw: unknown): PushPayload | null {
   const p = raw as Record<string, unknown>;
   const str = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
   const ok =
-    p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished' || p.kind === 'chat' || p.kind === 'decision' || p.kind === 'resolved') &&
+    p.v === 1 && (p.kind === 'request' || p.kind === 'question' || p.kind === 'finished' || p.kind === 'chat' || p.kind === 'decision' || p.kind === 'resolved' || p.kind === 'point') &&
     str(p.title, 80) && (p.name === undefined || str(p.name, 100)) && str(p.body, 120) && str(p.url, 300) && PUSH_URL.test(p.url) &&
     typeof p.badge === 'number' && Number.isInteger(p.badge) && p.badge >= 0 && p.badge <= 999 &&
     typeof p.tag === 'string' && PUSH_TAG.test(p.tag);
@@ -215,7 +215,7 @@ sw.addEventListener('push', (e) => {
     if (!payload) return sw.registration.showNotification(NOTIFY[l].fallbackTitle, { body: NOTIFY[l].fallbackBody, tag: 'ledge', renotify: true });
     const { title, body } = notifyText(payload, l);
     // `resolved` replaces the request's notification under its tag, silently; `kind` lets the app close a stale one.
-    await sw.registration.showNotification(title, { body, tag: payload.tag, data: { url: payload.url, kind: payload.kind }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' && payload.kind !== 'resolved' });
+    await sw.registration.showNotification(title, { body, tag: payload.tag, data: { url: payload.url, kind: payload.kind }, icon: '/icon-192.png', renotify: payload.kind !== 'finished' && payload.kind !== 'resolved' && payload.kind !== 'point' });
     // The badge is a courtesy: neither a throw nor a rejection of it may fail the notification.
     try { await sw.registration.setAppBadge?.(payload.badge); } catch { /* ignored */ }
   })());

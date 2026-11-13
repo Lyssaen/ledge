@@ -1,9 +1,10 @@
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { DEFAULT_PROJECTS, type HarnessUsage, isArchived, projectOf, seatsByRole, taskClosed, type ChatStep, type OpenRigState, type Projects, type Recent, type Session, type Task } from '@ledge/protocol';
+import { DEFAULT_PROJECTS, type Goal, type HarnessUsage, type HumanAsk, isArchived, projectOf, seatsByRole, taskClosed, type ChatStep, type OpenRigState, type Projects, type Recent, type Session, type Task } from '@ledge/protocol';
 import { LEDGE_MD, writeLedgeMd, type LedgeInfo } from './guide.js';
 import { writeNotes } from './notes.js';
+import type { JournalEvent } from '../operator/journal.js';
 
 /** `sessions`: every session the daemon holds, archived ones included (listed apart, for `session.restore`). */
 export interface ContextInput { sessions: Session[]; recents?: Recent[]; projects?: Projects; tasks?: Task[];
@@ -15,6 +16,14 @@ export interface ContextInput { sessions: Session[]; recents?: Recent[]; project
   ledge?: LedgeInfo;
   /** The user's notes folder (`~/.ledge/context`): copied as `context-<name>.md` with `context-index.md`; none when left out. */
   notesDir?: string;
+  /** What rigs ask the user (OpenRig's « À toi »): the rig part of `attentes.md`. */
+  asks?: readonly HumanAsk[];
+  /** The operator's journal events for this thread: `journal.md`, none when left out. */
+  journal?: readonly JournalEvent[];
+  /** Max's goals: `rigs.md` lists the open ones. */
+  goals?: readonly Goal[];
+  /** The queue rows not closed, per rig name: `rigs.md`. */
+  queue?: ReadonlyMap<string, Array<{ id: string; from: string; to: string; summary: string; state: string }>>;
   capture: (s: Session) => Promise<string[] | null>; git: (cwd: string) => Promise<string | null>; now: string }
 export interface Context { dir: string; steps: Map<string, ChatStep>; repoPaths: string[];
   /** `limits.md` was written: reading it reads the limits. */
@@ -34,6 +43,7 @@ const STATE: Record<Session['state'], string> = {
 export async function writeContext(dir: string, input: ContextInput): Promise<Context> {
   await rm(dir, { recursive: true, force: true }); await mkdir(dir, { recursive: true });
   const steps = new Map<string, ChatStep>();
+  const replies = new Set<string>();
   const projects = input.projects ?? DEFAULT_PROJECTS;
   // A daemon that holds no projects (a remote one) says nothing about them: the context it wrote before projects existed.
   const withProjects = projects.projects.length > 0 || projects.rules.length > 0;
@@ -58,7 +68,7 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
     if (helpers.length) lines.push(`- subagents: ${helpers.map(h => h.task || h.kind).join('; ')}`);
     const pane = await input.capture(s).catch(() => null);
     if (pane?.length) { const f = `pane-${s.id}.txt`; await writeFile(join(dir, f), pane.join('\n')); steps.set(f, { kind: 'pane', id: s.id, name: s.name }); lines.push(`- terminal, last lines: ${f}`); }
-    if (s.lastReply?.text.trim()) { const f = `reply-${s.id}.md`; await writeFile(join(dir, f), s.lastReply.text); steps.set(f, { kind: 'reply', id: s.id, name: s.name }); lines.push(`- last reply (${s.lastReply.at}): ${f}`); }
+    if (s.lastReply?.text.trim()) { const f = `reply-${s.id}.md`; await writeFile(join(dir, f), s.lastReply.text); replies.add(s.id); steps.set(f, { kind: 'reply', id: s.id, name: s.name }); lines.push(`- last reply (${s.lastReply.at}): ${f}`); }
     const g = await input.git(s.cwd).catch(() => null);
     if (g) { const f = `git-${s.id}.txt`; await writeFile(join(dir, f), g); steps.set(f, { kind: 'git', id: s.id, name: s.name }); lines.push(`- git status, log and diff stat: ${f}`); }
     lines.push('');
@@ -75,7 +85,9 @@ export async function writeContext(dir: string, input: ContextInput): Promise<Co
   // The projects (build spec §5), only where the daemon holds some; a name or a description is one line, so it forges no heading.
   if (withProjects) await writeFile(join(dir, 'projects.md'), projectsMd(projects));
   if (input.tasks) await writeTasksContext(dir, input.tasks, steps, input.now.slice(0, 10));
-  if (input.rigs?.installed) { await writeFile(join(dir, 'rigs.md'), rigsMd(input.rigs)); steps.set('rigs.md', { kind: 'sessions' }); }
+  await writeFile(join(dir, 'attentes.md'), attentesMd(live, input.asks ?? [], input.tasks ?? [], input.now)); steps.set('attentes.md', { kind: 'sessions' });
+  if (input.journal) { await writeFile(join(dir, 'journal.md'), journalMd(input.journal, replies)); steps.set('journal.md', { kind: 'sessions' }); }
+  if (input.rigs?.installed) { await writeFile(join(dir, 'rigs.md'), rigsMd(input.rigs, { sessions: input.sessions, ...(input.goals ? { goals: input.goals } : {}), ...(input.queue ? { queue: input.queue } : {}) })); steps.set('rigs.md', { kind: 'sessions' }); }
   if (input.usage) await writeFile(join(dir, LIMITS_MD), limitsMd(input.usage, input.now));
   if (input.ledge) { await writeLedgeMd(dir, input.ledge); steps.set(LEDGE_MD, { kind: 'repo', name: 'Ledge', path: LEDGE_MD }); }
   if (input.notesDir) await writeNotes(dir, input.notesDir, steps);
@@ -108,16 +120,70 @@ export function limitsMd(usage: readonly HarnessUsage[], now: string): string {
   return lines.join('\n');
 }
 
+/** What `rigs.md` adds to the seats: Max's goals, the queue rows not closed per rig, and the sessions that tell what a seat does. */
+export interface RigsExtra { sessions?: readonly Session[]; goals?: readonly Goal[]; queue?: ContextInput['queue'] }
+
 /** `rigs.md`: OpenRig on this PC as Ledge last read it, what rig.act and rig.seats name (a rig by its name, a role as `pod.member`). */
-export function rigsMd(st: OpenRigState): string {
+export function rigsMd(st: OpenRigState, extra: RigsExtra = {}): string {
   const lines = [`# OpenRig on this PC, read at ${st.at}`, '', `- OpenRig ${st.version ?? '(version unknown)'}, daemon ${st.daemon.state}, kernel ${st.kernel.state}`, ''];
+  const byName = new Map((extra.sessions ?? []).filter(s => !isArchived(s)).map(s => [s.name, s]));
   for (const r of st.rigs) {
     lines.push(`## ${oneLine(r.name)} — ${oneLine(r.status)}`, `- seats: ${r.running} of ${r.seats} running${r.attention ? `, ${r.attention} need attention` : ''}`);
     for (const [role, ids] of seatsByRole(r.nodes)) lines.push(`- role ${role}: ${ids.length} seat${ids.length > 1 ? 's' : ''} (${ids.join(', ')})`);
+    // A seat that is not stopped on purpose and whose session is not running does not answer.
+    const lost = r.nodes.filter(n => !n.stopped && n.sessionStatus !== 'running');
+    if (lost.length) lines.push(`- unreachable: ${lost.map(n => `${n.logicalId} (${oneLine(n.sessionStatus)})`).join(', ')}`);
+    for (const n of r.nodes) {
+      const s = byName.get(n.logicalId);
+      if (s) lines.push(`- ${n.logicalId}: ${STATE[s.state]}${s.topic ? `, ${oneLine(s.topic)}` : ''}`);
+    }
+    const rows = extra.queue?.get(r.name) ?? [];
+    if (rows.length) lines.push('- queue, rows not closed:', ...rows.map(q => `  - ${q.id} ${oneLine(q.from)} → ${oneLine(q.to)} (${oneLine(q.state)}): ${oneLine(q.summary)}`));
     lines.push('');
   }
   if (!st.rigs.length) lines.push('- (no rig)', '');
+  const open = (extra.goals ?? []).filter(g => g.state !== 'done' && g.state !== 'closed');
+  if (open.length) lines.push('## Open goals', '', ...open.map(g => `- ${g.goalId} (${g.state}): ${oneLine(g.text)}`), '');
   return lines.join('\n');
+}
+
+/** `attentes.md`: everything that waits for the user, each line starting with the id its card needs. */
+export function attentesMd(live: readonly Session[], asks: readonly HumanAsk[], taskList: readonly Task[], now: string): string {
+  const out: string[] = [];
+  for (const s of live) {
+    if (!s.pending) continue;
+    out.push(`- ${s.id} — ${oneLine(s.name)}, pending ${s.pending.kind}: ${oneLine(s.pending.text)}`);
+    if (s.pending.body?.trim()) out.push(`  - body: ${oneLine(s.pending.body)}`);
+    if (s.pending.options?.length) out.push(`  - options: ${s.pending.options.map(oneLine).join('; ')}`);
+  }
+  for (const a of asks) {
+    out.push(`- ${a.id} — ${a.kind} from ${oneLine(a.from.seat)}${a.from.rig ? ` (rig ${oneLine(a.from.rig)})` : ''}, ${a.priority}: ${oneLine(a.summary)}`);
+    if (a.body.trim()) out.push(`  - body: ${oneLine(a.body)}`);
+    for (const q of a.questions) out.push(`  - ${q.id} « ${oneLine(q.question)} »: ${q.options.map(o => `${o.id} = ${oneLine(o.label)}${o.recommended ? ' (recommended)' : ''}`).join('; ')}`);
+  }
+  for (const t of taskList.filter(t => t.owner === 'ledge' && !taskClosed(t))) {
+    out.push(`- ${t.id} « ${oneLine(t.title)} » — from ${oneLine(t.giverName)}, ${STATE_FR[t.state]}`, ...detail(t));
+    if (t.brain) out.push(`  - brain proposal: ${t.brain.kind === 'flag' ? 'flag' : t.brain.create ? 'create' : 'add to'} note ${t.brain.note}: ${oneLine(t.brain.fact)}`);
+  }
+  return ['# What waits for the user', '', `At ${now}. Each line starts with the id its card needs.`, '', ...(out.length ? out : ['Nothing waits for the user.']), ''].join('\n');
+}
+
+/** What an event says, from the key its detector fills: a reply or request text, an ask's summary, a command, a rig's move, a seat's
+ *  status, a pull request's ref. */
+function eventText(p: Record<string, unknown>): string | undefined {
+  const s = (k: string) => (typeof p[k] === 'string' && (p[k] as string).trim() ? (p[k] as string) : undefined);
+  return s('text') ?? s('summary') ?? s('command') ?? (s('from') && s('to') ? `${s('from')} → ${s('to')}` : undefined) ?? s('status') ?? s('ref');
+}
+
+/** `journal.md`: one line per event, `HH:MM kind subject — text`; a finished session whose reply was written points to it. */
+export function journalMd(events: readonly JournalEvent[], replies: ReadonlySet<string>): string {
+  const lines = events.map(e => {
+    const said = eventText(e.payload);
+    const text = said ? ` — ${oneLine(said)}` : '';
+    const reply = e.kind === 'session.finished' && replies.has(e.subjectId) ? ` reply: reply-${e.subjectId}.md` : '';
+    return `${e.at.slice(11, 16)} ${e.kind} ${oneLine(e.subjectName)}${text}${reply}`;
+  });
+  return ['# Journal', '', 'What happened, oldest first.', '', ...(lines.length ? lines : ['(nothing)']), ''].join('\n');
 }
 
 /** `projects.md` (also `ledge brain projects`): each project, its description and repositories per machine, then the filed folders. */

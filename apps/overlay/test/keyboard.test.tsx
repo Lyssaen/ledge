@@ -189,13 +189,13 @@ describe('<Surface> keyboard first', () => {
     render(<Surface screenH={1080} theme="dark" client={client} dnd={false} onToggleDnd={noop} />);
     act(() => shortcut());
     expect(surface()).toHaveAttribute('data-mode', 'bubble');
-    expect(screen.getByText('Otto needs your approval')).toBeInTheDocument();
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-sentence]')).toHaveTextContent(/^Otto (wants to|needs your approval)/);
     act(() => press('Escape'));
-    expect(screen.getByText('Pim has a question')).toBeInTheDocument();
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-sentence]')).toHaveTextContent(/^Pim (asks you|has a question)/);
     act(() => press('Escape'));
     expect(surface()).toHaveAttribute('data-mode', 'handle');
     act(() => shortcut());
-    expect(screen.getByText('Otto needs your approval')).toBeInTheDocument();
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-sentence]')).toHaveTextContent(/^Otto (wants to|needs your approval)/);
     act(() => press('y'));
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.decide', id: 'a', decision: 'accept' }));
   });
@@ -252,7 +252,7 @@ describe('<Surface> keyboard first', () => {
     act(() => shortcut());
     act(() => press('Escape'));
     expect(surface()).toHaveAttribute('data-mode', 'bubble');
-    expect(screen.getByText('Pim has a question')).toBeInTheDocument();
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-sentence]')).toHaveTextContent(/^Pim (asks you|has a question)/);
     act(() => press('2'));
     expect(screen.getByRole('radio', { name: /Merge/ })).toHaveAttribute('aria-checked', 'true');
     const field = screen.getByRole('textbox', { name: 'Short answer' });

@@ -107,7 +107,7 @@ export async function startDaemon(opts: { port?: number; tmux?: Tmux; tmuxSocket
     return { ...process.env, ...(await shellEnv.env) };
   };
   const forge = createForgeService({ store, env: forgeEnv });
-  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, attachments, usage, forge });
+  const server = await startServer({ store, tmux, port: opts.port, daemon, updater, history, mobile, mobileUnavailable, mail, tasks: taskJournal, attachments, usage, forge, operator: true });
   usage.start();
   forge.start();
   ompLive = () => server.omp.liveCount();

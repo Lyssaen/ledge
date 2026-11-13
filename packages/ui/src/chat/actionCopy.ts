@@ -15,7 +15,9 @@ const fr: ActionCopy = {
     'session.model': 'Changer', 'session.interrupt': 'Interrompre', 'session.archive': 'Archiver', 'session.restore': 'Restaurer', 'session.resume': 'Reprendre',
     'session.decide': 'Accepter',
     'task.cancel': 'Abandonner', 'task.pass': 'Passer le relais', 'task.answer': 'Répondre', 'note.add': 'Ajouter',
-    'rig.act': 'Appliquer', 'rig.seats': 'Changer'
+    'rig.act': 'Appliquer', 'rig.seats': 'Changer',
+    'rig.answer': 'Répondre', 'rig.goal': 'Envoyer', 'rig.goal.reply': 'Répondre', 'rig.send': 'Écrire',
+    'brain.answer': 'Répondre', 'session.handover': 'Passer le relais', 'pr.fix': 'Faire corriger'
   } as Record<string, string>,
   apply: 'Appliquer', deny: 'Refuser', ignore: 'Ignorer', review: 'Revoir', retry: 'Réessayer', running: 'En cours…',
   done: (at: string) => `Appliquée${at ? ` · ${at}` : ''}`, refusedState: 'Refusée', denied: (at: string) => `Refus envoyé${at ? ` · ${at}` : ''}`, open: (name: string) => `Ouvrir ${name}`,
@@ -55,7 +57,9 @@ const en: ActionCopy = {
     'session.model': 'Change', 'session.interrupt': 'Interrupt', 'session.archive': 'Archive', 'session.restore': 'Restore', 'session.resume': 'Resume',
     'session.decide': 'Accept',
     'task.cancel': 'Drop', 'task.pass': 'Hand over', 'task.answer': 'Answer', 'note.add': 'Add',
-    'rig.act': 'Apply', 'rig.seats': 'Change'
+    'rig.act': 'Apply', 'rig.seats': 'Change',
+    'rig.answer': 'Answer', 'rig.goal': 'Send', 'rig.goal.reply': 'Reply', 'rig.send': 'Write',
+    'brain.answer': 'Answer', 'session.handover': 'Hand over', 'pr.fix': 'Ask for a fix'
   } as Record<string, string>,
   apply: 'Apply', deny: 'Deny', ignore: 'Ignore', review: 'Review', retry: 'Retry', running: 'Running…',
   done: (at: string) => `Applied${at ? ` · ${at}` : ''}`, refusedState: 'Refused', denied: (at: string) => `Denial sent${at ? ` · ${at}` : ''}`, open: (name: string) => `Open ${name}`,

@@ -436,6 +436,16 @@ describe('multi-machine connections', () => {
       expect(server.sent.filter(m => m.type === 'forge.detail')).toEqual([]);
     });
   });
+  it('fleet keeps operator notices per machine and drops a machine that goes', () => {
+    const { client, local, server } = setup();
+    const notice = { id: 'point:q1', kind: 'point' as const, qid: 'q1', text: 'Two things wait', priority: 'routine' as const, at: '2026-11-13T10:00:00.000Z' };
+    expect(client.fleet!.operator().size).toBe(0);
+    local.emit({ type: 'operator.state', notices: [notice] }); server.emit({ type: 'operator.state', notices: [] });
+    expect([...client.fleet!.operator().keys()]).toEqual(['local', 'server']);
+    expect(client.fleet!.operator().get('local')).toEqual([notice]);
+    client.fleet!.configure([LOCAL_MACHINE]);
+    expect([...client.fleet!.operator().keys()]).toEqual(['local']);
+  });
   it('keeps each machine\'s usage; the threshold goes to every machine, « Compris » to those that hold the alert', () => {
     const { client, local, server } = setup();
     const alert = { id: 'claude|a1b2c3d4e5f6|five_hour|-|threshold|-', harness: 'claude' as const, account: 'a1b2c3d4e5f6', window: { kind: 'five_hour' as const, pct: 84, resetsAt: null }, level: 'threshold' as const, at: '2026-11-05T14:00:00.000Z' };

@@ -1,5 +1,5 @@
 import type { FleetFollowedSession, FleetForgeStatus, FleetPullRequest } from './forge';
-import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState, type UsageStateMessage, type ForgeAction, type PrDetail } from '@ledge/protocol';
+import { CONTEXT_NEAR, MachinesSchema, type Machine, type IslandPrefs, type MobileClientMessage, type MobileState, type UsageStateMessage, type OperatorNotice, type ForgeAction, type PrDetail } from '@ledge/protocol';
 import type { DaemonClient, DaemonStatus } from './client';
 import { parseServerMessage, type ClientMessage, type DaemonInfo, type Projects, type Recent, type Session, type ServerMessage, type Task } from '@ledge/protocol';
 import { useSyncExternalStore } from 'react';
@@ -62,6 +62,8 @@ export interface Fleet {
   tasks(): Task[];
   /** Each machine's harness limits as it last sent them (`usage.state`), by machine id; empty until one does. */
   usage(): ReadonlyMap<string, UsageStateMessage>;
+  /** Each machine's operator notices as it last sent them (`operator.state`), by machine id; empty until one does. */
+  operator(): ReadonlyMap<string, OperatorNotice[]>;
   /** Sets the usage alert threshold (0.5–0.95) on every machine that speaks of usage; the effect arrives on their broadcasts. */
   setUsageAlert(alert: number): void;
   /** « Compris » on an alert: sent to each machine that holds it. */
@@ -233,6 +235,11 @@ const emptyUsage: ReadonlyMap<string, UsageStateMessage> = new Map();
 /** Each machine's harness limits (`usage.state`), by machine id. */
 export function useUsage(client: DaemonClient): ReadonlyMap<string, UsageStateMessage> {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.usage ?? (() => emptyUsage), () => emptyUsage);
+}
+const emptyOperator: ReadonlyMap<string, OperatorNotice[]> = new Map();
+/** Each machine's operator notices (`operator.state`), by machine id: what the notch lets Ledge say. */
+export function useOperatorNotices(client: DaemonClient): ReadonlyMap<string, OperatorNotice[]> {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.operator ?? (() => emptyOperator), () => emptyOperator);
 }
 /** The island's settings as the local daemon holds them: undefined until it speaks of them, null while none was set. */
 export function useIsland(client: DaemonClient): IslandPrefs | null | undefined {

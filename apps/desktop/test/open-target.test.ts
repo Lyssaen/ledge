@@ -7,7 +7,10 @@ describe('« Open in Ledge » targets from the island', () => {
     expect(parseTarget('{"kind":"terminal","id":"dev:x"}')).toEqual({ kind: 'terminal', id: 'dev:x' });
     expect(parseTarget('{"kind":"document","path":"/w/plan.md"}')).toEqual({ kind: 'document', path: '/w/plan.md' });
     for (const kind of ['settings', 'launch', 'update', 'machines']) expect(parseTarget(JSON.stringify({ kind }))).toEqual({ kind });
-    for (const raw of ['', 'settings', '{"kind":"session"}', '{"kind":"session","id":""}', '{"kind":"nope"}', 'null', '[1]']) expect(parseTarget(raw)).toBeNull();
+    expect(parseTarget('{"kind":"point","qid":"p-1"}')).toEqual({ kind: 'point', qid: 'p-1' });
+    expect(parseTarget('{"kind":"ask","id":"qitem-9"}')).toEqual({ kind: 'ask', id: 'qitem-9' });
+    expect(parseTarget('{"kind":"atoi"}')).toEqual({ kind: 'atoi' });
+    for (const raw of ['', 'settings', '{"kind":"point"}', '{"kind":"ask","id":""}', '{"kind":"session"}', '{"kind":"session","id":""}', '{"kind":"nope"}', 'null', '[1]']) expect(parseTarget(raw)).toBeNull();
   });
   it('a session or its terminal opens its page; settings land on the island section; machines, updates and New session where they live', () => {
     expect(targetAction({ kind: 'session', id: 'local:a' })).toEqual({ type: 'open', id: 'local:a' });
@@ -17,5 +20,6 @@ describe('« Open in Ledge » targets from the island', () => {
     expect(targetAction({ kind: 'update' })).toEqual({ type: 'settings', section: 'about' });
     expect(targetAction({ kind: 'launch' })).toEqual({ type: 'modal', modal: { kind: 'launch' } });
     expect(targetAction({ kind: 'document', path: '/w/plan.md' })).toEqual({ type: 'home' });
+    expect(targetAction({ kind: 'point', qid: 'p-1' })).toEqual({ type: 'chat', open: true });
   });
 });

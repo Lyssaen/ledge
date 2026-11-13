@@ -1,0 +1,513 @@
+<title>Ledge opérateur</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;650&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Maquette 2026-11-13 : le chat de Ledge devient l'opérateur des projets et des rigs.
+   Base : ledge-ide-tasks-history.html (IDE v27, lot 12), jetons de packages/ui tokens.css.
+   Layout : une grille de planches ; chaque planche = un moment, la scène montre le vrai panneau (chat 300-360 px, encoche, téléphone). */
+:root{
+  --background:oklch(1 0 0);--foreground:oklch(0.145 0 0);--card:oklch(1 0 0);--muted:oklch(0.97 0 0);
+  --muted-foreground:oklch(0.556 0 0);--primary:oklch(0.505 0.213 27.518);--border:oklch(0.922 0 0);--input:oklch(0.88 0 0);
+  --shell:oklch(0.985 0 0);--side:oklch(0.975 0 0);--pane:#fff;--page:oklch(0.95 0 0);--hover:#0000000a;--note:#7c3aed;--hl:#7c3aed1f;
+  --st-perm:#dc2626;--st-ask:#b45309;--st-work:#2563eb;--st-idle:#059669;--st-off:#a1a1aa;--coral:#cc5241;
+  --notch:#fff;--desk:#cfd6de;--desk2:radial-gradient(120% 90% at 20% 110%,#e9c9c3 0%,transparent 60%),radial-gradient(90% 80% at 90% 0%,#b9cfdc 0%,transparent 65%);
+  --phone:#111;--lock:linear-gradient(170deg,#c9d6e3,#e8d3cc);
+  --sans:'Geist','Segoe UI',system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;--background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--primary:oklch(0.444 0.177 26.899);--border:#ffffff1a;--input:#ffffff26;
+  --shell:#0d0d0d;--side:#141414;--pane:#111112;--page:#000;--hover:#ffffff10;--note:#a78bfa;--hl:#a78bfa26;
+  --st-perm:#f87171;--st-ask:#fbbf24;--st-work:#60a5fa;--st-idle:#34d399;--st-off:#71717a;--coral:#ea6a58;
+  --notch:#000;--desk:#141821;--desk2:radial-gradient(120% 90% at 20% 110%,#3b2a4a 0%,transparent 60%),radial-gradient(90% 80% at 90% 0%,#1f3b4d 0%,transparent 65%);
+  --phone:#000;--lock:linear-gradient(170deg,#1d2a3a,#3a2430);
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;--background:oklch(0.145 0 0);--foreground:oklch(0.985 0 0);--card:oklch(0.205 0 0);--muted:oklch(0.269 0 0);
+  --muted-foreground:oklch(0.708 0 0);--primary:oklch(0.444 0.177 26.899);--border:#ffffff1a;--input:#ffffff26;
+  --shell:#0d0d0d;--side:#141414;--pane:#111112;--page:#000;--hover:#ffffff10;--note:#a78bfa;--hl:#a78bfa26;
+  --st-perm:#f87171;--st-ask:#fbbf24;--st-work:#60a5fa;--st-idle:#34d399;--st-off:#71717a;--coral:#ea6a58;
+  --notch:#000;--desk:#141821;--desk2:radial-gradient(120% 90% at 20% 110%,#3b2a4a 0%,transparent 60%),radial-gradient(90% 80% at 90% 0%,#1f3b4d 0%,transparent 65%);
+  --phone:#000;--lock:linear-gradient(170deg,#1d2a3a,#3a2430);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--sans);background:var(--page);color:var(--foreground);font-size:13px;line-height:18px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible{outline:2px solid var(--note);outline-offset:2px}
+code,.mono{font-family:var(--mono);font-size:11px}
+.mut{color:var(--muted-foreground)}
+header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--shell);border-bottom:1px solid var(--border)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--shell)}
+header.bar h1{font-size:14px;font-weight:600;margin:0}
+header.bar .sub{color:var(--muted-foreground);font-size:12px;flex:1;min-width:220px}
+.seg{display:inline-flex;border:1px solid var(--input);border-radius:7px;overflow:hidden}
+.seg button{padding:3px 10px;font-size:12px;color:var(--muted-foreground)}
+.seg button[aria-pressed="true"]{background:var(--muted);color:var(--foreground)}
+main{padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,400px),1fr));gap:18px;max-width:1560px;margin:0 auto;align-items:start}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.card.wide{grid-column:1/-1}
+.card h2{font-size:13px;font-weight:600;margin:0;padding:12px 14px 0;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;text-wrap:balance}
+.card h2 .n{font-family:var(--mono);font-size:11px;color:var(--muted-foreground)}
+.card .why{padding:4px 14px 10px;color:var(--muted-foreground);font-size:12px;max-width:95ch}
+.card .why b{color:var(--foreground);font-weight:500}
+.tag{font-size:10.5px;border-radius:8px;padding:0 6px;border:1px solid}
+.tag.new{color:var(--note);border-color:color-mix(in srgb,var(--note) 45%,transparent)}
+.tag.prop{color:var(--st-ask);border-color:color-mix(in srgb,var(--st-ask) 50%,transparent)}
+.scene{border-top:1px solid var(--border);background:var(--page);padding:16px;display:flex;gap:16px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+.cap{font-size:11px;color:var(--muted-foreground);text-align:center;margin-top:6px}
+.col{display:flex;flex-direction:column;align-items:center;min-width:0}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--st-off);display:inline-block}
+.dot.perm{background:var(--st-perm)}.dot.ask{background:var(--st-ask)}.dot.work{background:var(--st-work)}.dot.idle{background:var(--st-idle)}
+.btn{height:22px;padding:0 8px;border-radius:6px;border:1px solid var(--input);font-size:11.5px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0;background:var(--pane)}
+.btn.pri{background:var(--primary);border-color:transparent;color:#fff}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted-foreground)}
+.btn.danger{color:var(--st-perm);border-color:color-mix(in srgb,var(--st-perm) 45%,transparent)}
+
+/* Panneau de droite : en-tête du chat (56 px), onglets, fil. */
+.rp{width:340px;max-width:100%;background:var(--side);border:1px solid var(--border);border-radius:6px;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.rp.w300{width:300px}
+.ch{height:56px;display:flex;align-items:center;gap:8px;padding:0 8px;border-bottom:1px solid var(--border);flex-shrink:0}
+.mascot{width:28px;height:28px;border-radius:8px;background:radial-gradient(circle at 50% 40%,var(--coral),color-mix(in srgb,var(--coral) 40%,var(--side)));flex-shrink:0}
+.mascot.s{width:18px;height:18px;border-radius:5px}
+.ch .t{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.ch .t b{font-size:14px;line-height:18px;font-weight:650}.ch .t b i{color:var(--coral);font-style:normal}
+.ch .t span{font-size:11px;line-height:14px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rtabs{display:flex;height:30px;border-bottom:1px solid var(--border);padding:0 6px;flex-shrink:0}
+.rtabs span{padding:0 8px;font-size:12px;color:var(--muted-foreground);position:relative;display:flex;align-items:center;gap:5px}
+.rtabs span.on{color:var(--foreground)}
+.rtabs span.on::after{content:"";position:absolute;left:6px;right:6px;bottom:-1px;height:2px;background:var(--foreground);border-radius:1px}
+.rtabs .n{font-family:var(--mono);font-size:10.5px;color:var(--muted-foreground)}
+.msgs{padding:10px;display:flex;flex-direction:column;gap:9px}
+.bubble{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12px;line-height:17px;min-width:0}
+.bubble.me{align-self:flex-end;background:var(--muted);border-color:transparent;max-width:88%}
+.bubble p{margin:0}
+.bubble p+p,.bubble p+.grp,.bubble .grp+.grp,.bubble .grp+p{margin-top:8px}
+.op{border-color:color-mix(in srgb,var(--coral) 40%,var(--border))}
+.ophead{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted-foreground);margin-bottom:6px}
+.ophead b{color:var(--foreground);font-weight:600}
+.ophead .sp{flex:1}
+.grp h5{margin:0 0 4px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground);font-weight:500;display:flex;gap:6px;align-items:center}
+.grp h5 .c{font-family:var(--mono);letter-spacing:0}
+.item{display:grid;grid-template-columns:12px 1fr;gap:2px 7px;padding:5px 0;border-top:1px dashed var(--border)}
+.item:first-of-type{border-top:0}
+.item .dot{margin-top:5px}
+.item .txt{min-width:0}
+.item .acts{grid-column:2;display:flex;gap:5px;flex-wrap:wrap;margin-top:3px}
+.item small{display:block;font-size:11px;color:var(--muted-foreground)}
+.item q{quotes:"« " " »"}
+.acard{border:1px solid var(--input);border-radius:8px;background:var(--pane);padding:8px 9px;display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.acard .ah{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted-foreground)}
+.acard .ah b{color:var(--foreground);font-weight:600}
+.acard .body{font-size:12px}
+.acard .acts{display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap}
+.acard.done{border-style:dashed}
+.receipt{font-size:11px;color:var(--st-idle);display:flex;gap:5px;align-items:center}
+.pill{font-size:10.5px;border:1px solid var(--input);border-radius:8px;padding:0 6px;color:var(--muted-foreground);flex-shrink:0;white-space:nowrap}
+.pill.dec{color:var(--coral);border-color:color-mix(in srgb,var(--coral) 50%,transparent)}
+.pill.urg{color:var(--st-perm);border-color:color-mix(in srgb,var(--st-perm) 50%,transparent)}
+.pill.auto{color:var(--note);border-color:color-mix(in srgb,var(--note) 50%,transparent)}
+.composer{border-top:1px solid var(--border);padding:8px 10px;color:var(--muted-foreground);font-size:12px}
+.composer .in{border:1px solid var(--input);border-radius:8px;padding:7px 9px;background:var(--pane)}
+.countdown{height:3px;border-radius:2px;background:var(--muted);overflow:hidden}
+.countdown i{display:block;height:100%;width:62%;background:var(--note)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:11.5px}
+.kv span:nth-child(odd){color:var(--muted-foreground)}
+
+/* Encoche. */
+.desk{position:relative;display:flex;justify-content:center;height:92px;width:min(100%,640px);border-radius:0 0 10px 10px;overflow:hidden;background:var(--desk2),var(--desk)}
+.desk.tall{height:150px}
+.notch{display:flex;align-items:center;gap:10px;background:var(--notch);height:38px;padding:0 12px;border-radius:0 0 19px 19px;max-width:94%;font-size:12.5px;align-self:flex-start;min-width:0}
+.notch.big{height:auto;min-height:38px;flex-direction:column;align-items:stretch;padding:9px 14px 11px;border-radius:0 0 18px 18px;gap:7px;width:440px}
+.notch .row{display:flex;align-items:center;gap:9px;min-width:0}
+.ledge{width:9px;height:3px;border-radius:1px;background:var(--primary);flex:none}
+.ledge.perm{background:var(--st-perm);box-shadow:0 0 0 2px color-mix(in srgb,var(--st-perm) 25%,transparent)}
+.ledge.ask{background:var(--st-ask);box-shadow:0 0 0 2px color-mix(in srgb,var(--st-ask) 25%,transparent)}
+.line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.line b{font-weight:600}
+.cover{width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,#e8a33c,#c2452f 55%,#3b1530);flex:none}
+.say{font-size:12.5px;line-height:17px}
+.say b{font-weight:600}
+.notch .acts{display:flex;gap:6px;justify-content:flex-end}
+.mini-bal{display:flex;align-items:center;gap:7px;background:var(--notch);border-radius:0 0 14px 14px;padding:6px 12px;font-size:12px}
+.vs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;width:100%}
+.vs>div{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
+.vs h4{margin:0;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground);font-weight:500}
+
+/* Téléphone. */
+.phone{width:260px;border-radius:30px;background:var(--phone);padding:9px;flex-shrink:0}
+.screen{border-radius:22px;overflow:hidden;height:500px;display:flex;flex-direction:column;background:var(--side)}
+.screen.lock{background:var(--lock);padding:38px 10px 10px;gap:8px}
+.clock{text-align:center;font-size:44px;line-height:48px;font-weight:300;color:#fff;text-shadow:0 1px 6px #0004}
+.date{text-align:center;color:#fff;font-size:12px;margin-bottom:14px}
+.push{background:color-mix(in srgb,var(--card) 82%,transparent);backdrop-filter:blur(8px);border-radius:14px;padding:9px 10px;font-size:11.5px;line-height:15px;display:grid;grid-template-columns:22px 1fr;gap:3px 8px}
+.push .mascot{width:22px;height:22px;border-radius:6px;grid-row:1/3}
+.push b{font-weight:600}.push small{color:var(--muted-foreground);float:right;font-size:10.5px}
+.ptop{display:flex;align-items:center;gap:7px;padding:12px 12px 8px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600}
+.ptop .sp{flex:1}.ptop small{font-weight:400;color:var(--st-idle);font-size:11px}
+.pbody{flex:1;overflow:hidden;padding:10px;display:flex;flex-direction:column;gap:8px}
+.ptabs{display:flex;justify-content:space-around;border-top:1px solid var(--border);padding:7px 0 9px;font-size:10px;color:var(--muted-foreground)}
+.ptabs span.on{color:var(--foreground);font-weight:600}
+
+/* Réglages › Ledge (niveau 3). */
+.set{width:340px;max-width:100%;background:var(--pane);border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;font-size:12px}
+.set h4{margin:0;font-size:13px;font-weight:600}
+.srow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--border)}
+.srow small{display:block;color:var(--muted-foreground);font-size:11px}
+.choice{display:inline-flex;border:1px solid var(--input);border-radius:6px;overflow:hidden;font-size:11px}
+.choice span{padding:2px 7px;color:var(--muted-foreground)}
+.choice span.on{background:var(--muted);color:var(--foreground)}
+.choice.lock{opacity:.6}
+
+/* Fiche. */
+section.fiche{grid-column:1/-1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px 18px;font-size:12.5px;min-width:0}
+section.fiche h2{font-size:14px;margin:0 0 8px}
+section.fiche h3{font-size:12.5px;margin:14px 0 6px}
+.tw{overflow-x:auto}
+section.fiche table{border-collapse:collapse;width:100%;font-size:12px;min-width:560px}
+section.fiche td,section.fiche th{border-top:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top}
+section.fiche th{color:var(--muted-foreground);font-weight:500}
+section.fiche ul,section.fiche ol{margin:4px 0 0;padding-left:20px}section.fiche li{margin:4px 0;max-width:110ch}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="bar">
+  <h1>Ledge opérateur</h1>
+  <span class="sub">Maquette du 13/11 · le chat de Ledge suit tes projets et tes rigs, parle en premier, et devient seul à notifier dans l'encoche</span>
+  <div class="seg" role="group" aria-label="Thème">
+    <button type="button" id="th-sys" aria-pressed="true">Système</button>
+    <button type="button" id="th-light" aria-pressed="false">Clair</button>
+    <button type="button" id="th-dark" aria-pressed="false">Sombre</button>
+  </div>
+</header>
+
+<main>
+
+<!-- 1 · Le point -->
+<article class="card wide">
+  <h2><span class="n">1</span> Le point : Ledge parle en premier <span class="tag new">nouveau</span></h2>
+  <p class="why">Tu reviens à ton poste. Ledge a regroupé ce qui s'est passé <b>depuis la dernière fois que tu as regardé</b> (lu dans le journal), et met d'abord <b>ce qui t'attend</b>. Chaque ligne se tranche sur place. Rien ne part sans ton clic, comme aujourd'hui.</p>
+  <div class="scene">
+    <div class="rp">
+      <div class="ch"><div class="mascot"></div><div class="t"><b>Ledge<i>.</i></b><span>Opérateur · 6 sessions, 1 rig, 3 projets</span></div></div>
+      <div class="rtabs"><span class="on">Conversation</span><span>Tâches <span class="n">3</span></span><span>Historique</span></div>
+      <div class="msgs">
+        <div class="bubble op">
+          <div class="ophead"><div class="mascot s"></div><b>Ledge</b><span>de lui-même</span><span class="sp"></span><span class="mono">14:32</span></div>
+          <p>Depuis 13:50, six choses. <b>Deux t'attendent.</b></p>
+          <div class="grp">
+            <h5>À toi <span class="c">2</span></h5>
+            <div class="item"><span class="dot ask"></span><div class="txt"><b>pilot-lead</b> <span class="mut">· ledge-dev</span> <span class="pill dec">décision</span><br><q>Fusionner #309 maintenant, ou attendre la revue de qa ?</q></div>
+              <div class="acts"><button class="btn pri">Fusionner</button><button class="btn">Attendre qa</button><button class="btn ghost">Répondre…</button></div></div>
+            <div class="item"><span class="dot perm"></span><div class="txt"><b>Nova</b> <span class="mut">· Ledge, feat/pr-search</span><br>veut lancer <code>pnpm -r test -u</code></div>
+              <div class="acts"><button class="btn">Refuser</button><button class="btn pri">Autoriser</button><button class="btn ghost">Voir</button></div></div>
+          </div>
+          <div class="grp">
+            <h5>Terminé <span class="c">2</span></h5>
+            <div class="item"><span class="dot idle"></span><div class="txt"><b>Rex</b> a fini <q>socle-données</q><small>PR #41 ouverte, tests verts · 14:05</small></div>
+              <div class="acts"><button class="btn">Voir la PR</button><button class="btn">Archiver Rex</button></div></div>
+            <div class="item"><span class="dot"></span><div class="txt"><b>Pim</b> s'est arrêtée : contexte plein<small>tâche « Thème clair des réglages » laissée à moitié · 13:58</small></div>
+              <div class="acts"><button class="btn">Passer le relais</button></div></div>
+          </div>
+          <div class="grp">
+            <h5>En cours <span class="c">3</span></h5>
+            <div class="item"><span class="dot work"></span><div class="txt"><b>Iris</b> tient <q>Filtre MR par projet</q> depuis 2 h<small>rien de neuf depuis 40 min</small></div>
+              <div class="acts"><button class="btn">Lui demander où elle en est</button></div></div>
+          </div>
+          <div class="grp">
+            <h5>Rigs <span class="c">1</span></h5>
+            <div class="item"><span class="dot perm"></span><div class="txt"><b>ledge-dev</b> : le siège <code>qa.reviewer</code> ne répond plus depuis 13:58<small>c'est lui qu'attend la décision sur #309</small></div>
+              <div class="acts"><button class="btn">Écrire à pilot-lead</button><button class="btn ghost">Ouvrir le rig</button></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="composer"><div class="in">Demander à Ledge…</div></div>
+    </div>
+    <div class="col" style="max-width:340px;gap:10px;align-self:center">
+      <div class="bubble" style="width:100%"><b>D'où vient chaque ligne</b>
+        <div class="kv" style="margin-top:6px">
+          <span>À toi</span><span>demandes des sessions et des rigs, décisions posées par les sessions</span>
+          <span>Terminé</span><span>journal : sessions finies, en erreur, tâches closes, PR fusionnées</span>
+          <span>En cours</span><span>tâches ouvertes, avec le temps depuis le dernier signe</span>
+          <span>Rigs</span><span>OpenRig : file, sièges injoignables, objectifs de Max</span>
+        </div>
+      </div>
+      <p class="cap">Le point se replie en une ligne une fois tout tranché :<br>« Tout est réglé depuis 14:32 ».</p>
+    </div>
+  </div>
+</article>
+
+<!-- 2 · Réveils -->
+<article class="card">
+  <h2><span class="n">2</span> Quand Ledge se réveille <span class="tag new">nouveau</span></h2>
+  <p class="why">Ledge regroupe ce qui arrive en même temps : <b>un seul message</b> pour trois sessions qui finissent dans la même minute. Ce qui t'attend passe tout de suite.</p>
+  <div class="scene">
+    <div class="rp w300">
+      <div class="msgs">
+        <div class="bubble op">
+          <div class="ophead"><div class="mascot s"></div><b>Ledge</b><span class="sp"></span><span class="mono">15:10</span></div>
+          <p><b>Rex</b>, <b>Nova</b> et <b>Iris</b> ont fini en deux minutes.</p>
+          <div class="item"><span class="dot idle"></span><div class="txt"><b>Nova</b> : PR #312 ouverte, pipeline en cours</div></div>
+          <div class="item"><span class="dot idle"></span><div class="txt"><b>Iris</b> : tâche « Filtre MR par projet » close</div></div>
+          <div class="item"><span class="dot perm"></span><div class="txt"><b>Rex</b> : tests en échec (3)<small>dernière réponse : « je n'arrive pas à reproduire en local »</small></div>
+            <div class="acts"><button class="btn">Voir</button></div></div>
+          <div class="acard">
+            <div class="ah"><b>Plan</b> · 2 actions</div>
+            <div class="body">Archiver <b>Iris</b> · Confier « corriger les 3 tests » à <b>Rex</b></div>
+            <div class="acts"><button class="btn ghost">Ignorer</button><button class="btn pri">Appliquer</button></div>
+          </div>
+        </div>
+        <div class="bubble op">
+          <div class="ophead"><div class="mascot s"></div><b>Ledge</b><span class="sp"></span><span class="mono">15:24</span></div>
+          <p><b>pilot-lead</b> <span class="pill urg">urgent</span> : <q>la migration casse le schéma de prod, j'arrête ?</q></p>
+          <div class="acts" style="display:flex;gap:5px;margin-top:6px"><button class="btn danger">Arrêter</button><button class="btn">Continuer</button><button class="btn ghost">Répondre…</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</article>
+
+<!-- 3 · Répondre aux rigs -->
+<article class="card">
+  <h2><span class="n">3</span> Répondre à un rig depuis le chat <span class="tag new">nouveau</span></h2>
+  <p class="why">Les demandes des rigs entrent dans le chat avec leur texte complet et leurs options. Ta réponse repart dans OpenRig, qui réveille le siège. Même chemin qu'« À toi ».</p>
+  <div class="scene">
+    <div class="rp w300">
+      <div class="msgs">
+        <div class="bubble me">dis à pilot-lead qu'on attend qa, et relance qa</div>
+        <div class="bubble">
+          <p>La décision sur #309 est encore ouverte. Je réponds <b>Attendre qa</b>, et je redémarre le rig pour relancer <code>qa.reviewer</code> : ses quatre sièges s'arrêtent environ 20 s.</p>
+          <div class="acard">
+            <div class="ah"><b>Répondre à pilot-lead</b> · ledge-dev</div>
+            <div class="body"><q>Fusionner #309 ?</q> → <b>Attendre qa</b></div>
+          </div>
+          <div class="acard">
+            <div class="ah"><b>Redémarrer le rig</b> · ledge-dev <span class="pill urg">irréversible</span></div>
+            <div class="body">4 sièges, snapshot avant arrêt</div>
+            <div class="acts"><button class="btn ghost">Ignorer</button><button class="btn pri">Appliquer les 2</button></div>
+          </div>
+        </div>
+        <div class="acard done">
+          <div class="receipt">✓ Réponse envoyée · OpenRig a réveillé pilot-lead · 14:41</div>
+          <div class="receipt">✓ ledge-dev redémarré · 4/4 sièges · 14:42</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</article>
+
+<!-- 4 · Rigs : objectif à Max -->
+<article class="card">
+  <h2><span class="n">4</span> Monter une équipe : Ledge passe par Max <span class="tag new">nouveau</span></h2>
+  <p class="why">Ledge ne compose pas l'équipe lui-même. Il <b>transmet l'objectif à Max</b>, et la proposition de Max revient dans le chat sous forme de carte. Lancer un rig reste toujours ton oui.</p>
+  <div class="scene">
+    <div class="rp w300">
+      <div class="msgs">
+        <div class="bubble me">monte une équipe pour finir les issues #303 à #306 sur Ledge</div>
+        <div class="bubble">
+          <p>Je transmets l'objectif à <b>Max</b>, dans le dossier de Ledge.</p>
+          <div class="acard">
+            <div class="ah"><b>Objectif pour Max</b></div>
+            <div class="body"><q>Finir les issues #303 à #306</q><br><span class="mut mono">~/Workspace/harness-assistant</span></div>
+            <div class="acts"><button class="btn pri">Envoyer</button></div>
+          </div>
+        </div>
+        <div class="bubble op">
+          <div class="ophead"><div class="mascot s"></div><b>Ledge</b><span>Max a répondu</span><span class="sp"></span><span class="mono">14:55</span></div>
+          <p>Max propose un nouveau rig <b>issues-303</b> : 1 lead, 2 dev, 1 qa, permissions <b>Auto</b>, dans un worktree.</p>
+          <div class="acard">
+            <div class="ah"><b>Équipe proposée</b> <span class="pill dec">à toi</span></div>
+            <div class="body">lead ×1 · dev ×2 · qa ×1 · Claude Code, Sonnet 5.5</div>
+            <div class="acts"><button class="btn ghost">Changer…</button><button class="btn pri">Lancer</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</article>
+
+<!-- 5 · Projet -->
+<article class="card">
+  <h2><span class="n">5</span> Le point d'un projet</h2>
+  <p class="why">Un projet réunit ses sessions, ses rigs, ses MR et PR et ses tâches. Ledge répond avec tout cela d'un coup, et propose la suite.</p>
+  <div class="scene">
+    <div class="rp w300">
+      <div class="msgs">
+        <div class="bubble me">où en est le projet Ledge ?</div>
+        <div class="bubble">
+          <div class="grp"><h5>Sessions</h5><p><b>Nova</b> travaille, <b>Iris</b> attend une consigne, <b>Pim</b> terminée.</p></div>
+          <div class="grp"><h5>Rig</h5><p><b>ledge-dev</b> : 4 sièges sur 4, une décision ouverte (#309).</p></div>
+          <div class="grp"><h5>MR et PR</h5>
+            <div class="item"><span class="dot idle"></span><div class="txt">#309 · pipeline vert, attend la revue</div></div>
+            <div class="item"><span class="dot perm"></span><div class="txt">#310 · pipeline échoué (<code>e2e</code>)</div></div>
+          </div>
+          <div class="grp"><h5>Tâches</h5><p>2 ouvertes, 1 close aujourd'hui.</p></div>
+          <div class="acard">
+            <div class="ah"><b>Envoyer à Nova</b></div>
+            <div class="body"><q>Corrige le job e2e de #310</q>, avec son journal</div>
+            <div class="acts"><button class="btn pri">Envoyer</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</article>
+
+<!-- 6 · Encoche -->
+<article class="card wide">
+  <h2><span class="n">6</span> L'encoche : Ledge est seul à parler <span class="tag new">nouveau</span></h2>
+  <p class="why">Aujourd'hui, chaque session pousse sa propre bulle. Avec l'opérateur, <b>seul Ledge parle dans l'encoche</b> et nomme la session dans sa phrase. Une autorisation reste <b>immédiate</b> : son texte vient du daemon, sans attendre l'agent. Un point (fins de session, rigs) attend que Ledge l'ait écrit.</p>
+  <div class="scene">
+    <div class="vs">
+      <div><h4>Aujourd'hui</h4>
+        <div class="desk"><div class="mini-bal"><span class="dot perm"></span><span><b>Nova</b> attend votre accord</span></div></div>
+        <div class="desk"><div class="mini-bal"><span class="dot idle"></span><span><b>Rex</b> a terminé</span></div></div>
+        <p class="cap">une bulle par session, à chaque événement</p>
+      </div>
+      <div><h4>Avec l'opérateur · au calme</h4>
+        <div class="desk"><div class="notch"><span class="ledge"></span><span class="line"><b>Nova</b> modifie <code>prs.ts</code></span><span class="cover"></span></div></div>
+        <p class="cap">la ligne d'activité ne change pas</p>
+      </div>
+    </div>
+    <div class="vs">
+      <div><h4>Autorisation · tout de suite</h4>
+        <div class="desk tall"><div class="notch big">
+          <div class="row"><span class="ledge perm"></span><span class="say"><b>Nova</b> veut lancer <code>pnpm -r test -u</code></span></div>
+          <div class="acts"><button class="btn">Refuser</button><button class="btn pri">Autoriser</button></div>
+        </div></div>
+      </div>
+      <div><h4>Le point · regroupé</h4>
+        <div class="desk tall"><div class="notch big">
+          <div class="row"><span class="ledge ask"></span><span class="say">Deux choses pour toi : <b>pilot-lead</b> attend ta décision sur #309, et <b>Rex</b> a fini.</span></div>
+          <div class="acts"><button class="btn ghost">Plus tard</button><button class="btn pri">Voir le point</button></div>
+        </div></div>
+      </div>
+      <div><h4>Demande d'un rig</h4>
+        <div class="desk tall"><div class="notch big">
+          <div class="row"><span class="ledge ask"></span><span class="say"><b>pilot-lead</b> <span class="mut">· ledge-dev</span> : <q>Fusionner #309 maintenant ?</q></span></div>
+          <div class="acts"><button class="btn">Attendre qa</button><button class="btn pri">Fusionner</button></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</article>
+
+<!-- 7 · Téléphone -->
+<article class="card">
+  <h2><span class="n">7</span> Sur le téléphone</h2>
+  <p class="why">La notification porte la phrase de Ledge, pas une alerte par session. Elle ouvre l'onglet Ledge sur le point. Répondre à une décision demande Face ID, comme dans « À toi ».</p>
+  <div class="scene">
+    <div class="phone"><div class="screen lock">
+      <div class="clock">14:32</div><div class="date">jeudi 13 novembre</div>
+      <div class="push"><div class="mascot"></div><div><b>Ledge</b> <small>maintenant</small></div><div>Deux choses pour toi : pilot-lead attend ta décision sur #309, et Rex a fini.</div></div>
+      <div class="push"><div class="mascot"></div><div><b>Ledge</b> <small>il y a 1 min</small></div><div>Nova veut lancer pnpm -r test -u.</div></div>
+    </div></div>
+    <div class="phone"><div class="screen">
+      <div class="ptop"><div class="mascot s"></div>Ledge<span class="sp"></span><small>● PC</small></div>
+      <div class="pbody">
+        <div class="bubble op">
+          <div class="ophead"><b>Le point</b><span class="sp"></span><span class="mono">14:32</span></div>
+          <div class="item"><span class="dot ask"></span><div class="txt"><b>pilot-lead</b> : Fusionner #309 ?</div>
+            <div class="acts"><button class="btn pri">Fusionner</button><button class="btn">Attendre</button></div></div>
+          <div class="item"><span class="dot perm"></span><div class="txt"><b>Nova</b> : <code>pnpm -r test -u</code></div>
+            <div class="acts"><button class="btn pri">Autoriser</button><button class="btn">Refuser</button></div></div>
+          <div class="item"><span class="dot idle"></span><div class="txt"><b>Rex</b> a fini · PR #41</div></div>
+          <div class="item"><span class="dot work"></span><div class="txt">3 tâches en cours</div></div>
+        </div>
+      </div>
+      <div class="ptabs"><span>À toi</span><span>Sessions</span><span>MR/PR</span><span>Rigs</span><span class="on">Ledge</span></div>
+    </div></div>
+  </div>
+</article>
+
+<!-- 8 · Niveau 3 -->
+<article class="card">
+  <h2><span class="n">8</span> Ledge décide seul, sujet par sujet <span class="tag prop">proposition, à trancher</span></h2>
+  <p class="why">C'est le niveau 3. Par défaut tout est sur « Toujours moi ». Une décision prise seul part après <b>10 s, avec « Annuler »</b>, et cite sa source. Maquettes, push, PR, merge et release restent verrouillés.</p>
+  <div class="scene">
+    <div class="rp w300">
+      <div class="msgs">
+        <div class="bubble op">
+          <div class="ophead"><div class="mascot s"></div><b>Ledge</b><span class="pill auto">réglé seul</span><span class="sp"></span><span class="mono">15:02</span></div>
+          <p>J'autorise <b>Nova</b> à lancer <code>pnpm -r test</code>.</p>
+          <p class="mut" style="font-size:11px">Réglages › Ledge : « Lancer les tests » = Ledge décide. Source : <code>CLAUDE.md</code>, « pnpm test avant chaque commit ».</p>
+          <div class="countdown" style="margin-top:7px"><i></i></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px"><span class="mut mono">part dans 6 s</span><button class="btn">Annuler</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="set">
+      <h4>Réglages › Ledge · ce que Ledge décide</h4>
+      <div class="srow"><span>Lancer les tests, lire des fichiers</span><span class="choice"><span>Moi</span><span>Propose</span><span class="on">Décide</span></span></div>
+      <div class="srow"><span>Commandes qui écrivent<small>dans le dépôt de la session</small></span><span class="choice"><span>Moi</span><span class="on">Propose</span><span>Décide</span></span></div>
+      <div class="srow"><span>Questions des rigs</span><span class="choice"><span class="on">Moi</span><span>Propose</span><span>Décide</span></span></div>
+      <div class="srow"><span>Archiver une session finie</span><span class="choice"><span>Moi</span><span>Propose</span><span class="on">Décide</span></span></div>
+      <div class="srow"><span>Maquettes, push, PR, merge, release<small>verrouillé</small></span><span class="choice lock"><span class="on">Moi</span><span>Propose</span><span>Décide</span></span></div>
+    </div>
+  </div>
+</article>
+
+<!-- 10 · Réglage du téléphone -->
+<article class="card">
+  <h2><span class="n">10</span> Réglages du téléphone : « Le point de Ledge » <span class="tag new">nouveau</span></h2>
+  <p class="why">L'interrupteur « Agent terminé » devient <b>« Le point de Ledge »</b>, puisque les fins de session passent désormais par le point. Les autres réglages ne changent pas. La pause coupe aussi le point.</p>
+  <div class="scene">
+    <div class="phone"><div class="screen">
+      <div class="ptop">Réglages<span class="sp"></span></div>
+      <div class="pbody" style="gap:0">
+        <div class="mut" style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 2px 6px">Notifications sur cet appareil</div>
+        <div class="srow" style="border-top:0;box-shadow:0 0 0 2px var(--note);border-radius:6px;padding:6px"><span>Le point de Ledge<small>Quand Ledge fait le point : sessions finies, tâches, nouvelles des rigs.</small></span><span class="choice"><span class="on">Oui</span><span>Non</span></span></div>
+        <div class="srow"><span>Réponse de Ledge<small>Quand Ledge a répondu à une question posée d'ici.</small></span><span class="choice"><span class="on">Oui</span><span>Non</span></span></div>
+        <div class="srow"><span>Décision à prendre<small>Quand une session te demande de trancher.</small></span><span class="choice"><span class="on">Oui</span><span>Non</span></span></div>
+        <p class="mut" style="font-size:11px;margin:8px 2px">Les demandes d'accord et les questions des agents préviennent toujours, sauf pendant une pause.</p>
+        <div class="srow"><span>Pause<small>Aucune notification sur cet appareil pendant ce temps, le point compris.</small></span><span class="choice"><span>1 h</span><span>4 h</span><span>8 h</span></span></div>
+      </div>
+      <div class="ptabs"><span>À toi</span><span>Sessions</span><span>MR/PR</span><span>Rigs</span><span>Ledge</span></div>
+    </div></div>
+  </div>
+</article>
+
+<!-- Fiche -->
+<section class="fiche">
+  <h2>Sous le capot</h2>
+  <h3>Ce qui réveille Ledge</h3>
+  <div class="tw"><table>
+    <tr><th>Quand</th><th>Événements</th><th>Ce qui se passe</th></tr>
+    <tr><td>Tout de suite</td><td>autorisation, question d'une session, demande urgente d'un rig</td><td>Le daemon écrit la phrase de l'encoche et la notification lui-même, sans attendre l'agent. L'agent ajoute ensuite la ligne au point.</td></tr>
+    <tr><td>Regroupé (60 s)</td><td>session finie ou en erreur, tâche close, PR fusionnée, pipeline échoué, siège injoignable, réponse de Max</td><td>Un seul passage de l'agent écrit le point et ses cartes. Le daemon empêche deux passages en même temps et garde une seule bulle dans l'encoche.</td></tr>
+    <tr><td>Jamais</td><td>outils, réflexion, sous-agents, changements de modèle</td><td>Seulement la ligne d'activité de l'encoche, comme aujourd'hui.</td></tr>
+  </table></div>
+  <h3>Le journal (SQLite, <code>~/.ledge/ledge.sqlite</code>, <code>node:sqlite</code>)</h3>
+  <ul>
+    <li><code>events</code> : chaque événement daté, avec sa machine, son sujet (session, tâche, rig, PR) et son détail. Gardé 30 jours.</li>
+    <li><code>reads</code> : jusqu'où chaque appareil (PC, téléphone) a lu. C'est ce qui donne « depuis la dernière fois ».</li>
+    <li><code>wakes</code> : chaque passage de l'agent, les événements qu'il a couverts et son résultat. Après un redémarrage du daemon, rien n'est traité deux fois ni perdu.</li>
+    <li><code>decisions</code> (niveau 3) : ce que Ledge a réglé seul, sa source, s'il a été annulé.</li>
+    <li>L'agent ne lit jamais la base : le daemon en écrit <code>journal.md</code> et <code>attentes.md</code> dans le dossier du chat. Tâches, projets et conversations restent dans leurs fichiers JSON.</li>
+  </ul>
+  <h3>Ce que le chat lit et propose en plus</h3>
+  <ul>
+    <li><b>Il lit</b> : <code>attentes.md</code> (demandes des sessions et des rigs en entier, avec leurs options), <code>journal.md</code> (depuis ta dernière lecture), un <code>rigs.md</code> plus riche (file, objectifs de Max, ce que fait chaque siège, sièges injoignables).</li>
+    <li><b>Nouvelles cartes</b> : <code>rig.answer</code> (répondre à une demande d'un rig), <code>rig.goal</code> (objectif pour Max), <code>rig.send</code> (écrire à un siège), <code>rig.goal.reply</code> (confirmer l'équipe de Max), <code>brain.answer</code> (une note proposée), <code>session.handover</code> (passer le relais), <code>pr.fix</code> (envoyer un pipeline échoué à une session).</li>
+    <li><b>Ne change pas</b> : l'agent du chat reste en lecture seule, sans shell. Une action passe toujours par une carte, et une action irréversible se confirme.</li>
+  </ul>
+  <h3>À trancher</h3>
+  <ol>
+    <li>« Plus tard » sur le point de l'encoche : il revient au prochain événement regroupé, ou seulement quand tu ouvres le chat ?</li>
+    <li>Une autorisation déjà tranchée dans le terminal avant que tu voies le point : la ligne disparaît du point, ou elle reste avec un reçu ?</li>
+    <li>Niveau 3 : dans ce chantier, ou après que les niveaux 1 et 2 auront tourné quelques jours ?</li>
+  </ol>
+</section>
+
+</main>
+
+<script>
+(function(){
+  var root=document.documentElement, ids={'th-sys':null,'th-light':'light','th-dark':'dark'};
+  function set(v){ if(v) root.setAttribute('data-theme',v); else root.removeAttribute('data-theme');
+    Object.keys(ids).forEach(function(k){ document.getElementById(k).setAttribute('aria-pressed', String(ids[k]===v)); });
+    try{ localStorage.setItem('ledge-op-theme', v||''); }catch(e){} }
+  Object.keys(ids).forEach(function(k){ document.getElementById(k).addEventListener('click',function(){ set(ids[k]); }); });
+  try{ var s=localStorage.getItem('ledge-op-theme'); if(s) set(s); }catch(e){}
+})();
+</script>

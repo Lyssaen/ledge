@@ -5,7 +5,7 @@
   "type": "module",
   "bin": { "ledge": "dist/cli/index.js" },
   "files": ["dist", "assets/ledge.ico"],
-  "engines": { "node": ">=22" },
+  "engines": { "node": ">=22.13" },
   "repository": { "type": "git", "url": "git+https://github.com/Lyssaen/ledge.git", "directory": "packages/ledge" },
   "homepage": "https://github.com/Lyssaen/ledge#readme",
   "license": "UNLICENSED",

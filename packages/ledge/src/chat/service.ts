@@ -3,13 +3,14 @@ import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type ChatConversationSummary, type HarnessUsage, type OpenRigState, type Projects, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
+import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatPoint, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type ChatConversationSummary, type Goal, type HarnessUsage, type HumanAsk, type OpenRigState, type Projects, type PullRequest, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
 import type { Tmux } from '../tmux.js';
 import { gitSummary } from '../daemon/git.js';
-import { writeContext, stepFor, LIMITS_MD } from './context.js';
+import { writeContext, stepFor, LIMITS_MD, type Context, type ContextInput } from './context.js';
+import type { DeviceId, JournalEvent } from '../operator/journal.js';
 import { installedAgents, readGuide } from './guide.js';
 import { LEDGE_VERSION } from '../version.js';
 import { asksForge, type Forge } from './forge.js';
@@ -63,6 +64,12 @@ export interface Chat {
   conversations?(): Promise<{ current?: ChatConversationSummary; past: ChatConversationSummary[] }>;
   /** A conversation's turns, the current one's included; null when it is no longer kept. A past one is read-only: its cards are not this chat's. */
   conversation?(id: string): Promise<ChatTurn[] | null>;
+  /** Posts the operator's point as a turn Ledge wrote itself (`by: 'ledge'`, no question), with its plan card; returns its qid. */
+  postPoint(point: ChatPoint, actions: ChatAction[], emit: (m: ChatMessage) => void): string;
+  /** Replaces the point of that turn by `f`'s; false (and nothing told) when the turn is gone or `f` changed nothing. */
+  updatePoint(qid: string, f: (p: ChatPoint) => ChatPoint, emit: (m: ChatMessage) => void): boolean;
+  /** Today's point turns, the newest last. */
+  points(): Array<{ qid: string; point: ChatPoint }>;
 }
 export interface ChatDeps {
   store: Store; tmux: Pick<Tmux, 'capture'>; home: string;
@@ -76,6 +83,15 @@ export interface ChatDeps {
   tasks?: () => Task[];
   /** This PC's OpenRig as last read: the context's rigs.md, and what rig.act and rig.seats are checked against. */
   rigs?: () => OpenRigState | undefined;
+  /** What OpenRig's rigs ask the user, Max's goals, the queue rows not closed, and the operator's journal events for this thread: the context's attentes.md, rigs.md and journal.md. */
+  asks?: () => readonly HumanAsk[] | undefined;
+  goals?: () => readonly Goal[] | undefined;
+  /** The followed pull requests as the forge last read them: what pr.fix is checked against. */
+  prs?: () => readonly PullRequest[] | undefined;
+  queue?: () => ContextInput['queue'] | undefined;
+  journal?: (thread: DeviceId) => JournalEvent[];
+  /** The thread this chat serves (`desktop` when left out). */
+  thread?: DeviceId;
   /** The harnesses' account limits as the daemon last read them: the context's limits.md (M3 Q31). */
   usage?: () => readonly HarnessUsage[] | undefined;
   /** Reads the projects' GitHub/GitLab (#23) into the context, for a question that asks about issues, PR/MR or CI. */
@@ -92,8 +108,29 @@ export interface ChatDeps {
 }
 
 const TOOL_LABEL: Record<Tool, string> = { claude: 'Claude Code', codex: 'Codex', cursor: 'Cursor Agent', omp: 'OMP' };
-const runTool = (tool: Tool, o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawn?: typeof nodeSpawn) =>
+export const runTool = (tool: Tool, o: RunOptions, onEvent: (e: ClaudeEvent) => void, spawn?: typeof nodeSpawn) =>
   tool === 'omp' ? runOmp(o, onEvent, spawn) : tool === 'codex' ? runCodex(o, onEvent, spawn) : tool === 'cursor' ? runCursor(o, onEvent, spawn) : runClaude(o, onEvent, spawn);
+
+/** The environment a chat run gets: the CLI's own login (an API key the daemon inherited is never billed, spec §5.2), no session identity. */
+export async function chatEnv(deps: Pick<ChatDeps, 'env'>): Promise<NodeJS.ProcessEnv> {
+  const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
+  return env;
+}
+
+/**
+ * Writes the context folder a run reads (sessions, panes, tasks, rigs, journal, notes, forge files) into `dir`. Questions and the
+ * operator's wakes share it: `extra.journal` replaces the thread's journal events (a wake passes the events it covers), and the forge
+ * is read over the network only when `extra.forgeRead` is set.
+ */
+export async function writeChatContext(deps: ChatDeps, dir: string, extra: { journal?: JournalEvent[]; forgeRead?: boolean; qid?: string }): Promise<Context> {
+  const env = await chatEnv(deps);
+  const ledge = { guide: await readGuide(), version: LEDGE_VERSION, agents: await installedAgents(env.PATH) };
+  const capture = async (s: Session) => { if (!s.tmuxSession) return null; const p = await deps.tmux.capture(s.tmuxSession, PANE_LINES); return p === null ? null : p.split('\n'); };
+  const ctx = await writeContext(dir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), tasks: deps.tasks?.(), rigs: deps.rigs?.(), asks: deps.asks?.(), goals: deps.goals?.(), queue: deps.queue?.(), journal: extra.journal ?? deps.journal?.(deps.thread ?? 'desktop'), usage: deps.usage?.(), now: (deps.now ?? (() => new Date().toISOString()))(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
+  // Only a question about the forge runs gh/glab: the others never wait on the network, and get what was read before, dated.
+  if (deps.forge) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }, { read: extra.forgeRead ?? false }).catch(e => log(`chat ${extra.qid ?? 'wake'}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
+  return ctx;
+}
 
 export const ONE_AT_A_TIME = 'one question at a time: wait for the answer';
 export const TOO_MANY = 'too many questions at once: try again in a moment';
@@ -291,7 +328,7 @@ export function createChat(deps: ChatDeps): Chat {
   /** The generic blocks as rows (spec §9.2, one plan): each resolved against the state now, at most `max` per action and 8 in all; a refused,
    *  repeated or capped one is dropped with a log line. */
   function actionsFrom(blocks: Array<{ id: string; args: unknown; max: number }>, qid: string, closing: ReadonlySet<string>): { rows: ChatAction[]; reasons: string[]; counted: number } {
-    const ctx = { sessions: deps.store.all(), tasks: deps.tasks?.() ?? [], closing, rigs: deps.rigs?.() };
+    const ctx = { sessions: deps.store.all(), tasks: deps.tasks?.() ?? [], closing, rigs: deps.rigs?.(), asks: deps.asks?.(), goals: deps.goals?.(), prs: deps.prs?.() };
     const rows: ChatAction[] = []; const per = new Map<string, number>(); const over = new Map<string, number>(); let beyond = 0;
     const refused: string[] = []; let duplicates = 0;
     for (const b of blocks) {
@@ -328,11 +365,8 @@ export function createChat(deps: ChatDeps): Chat {
 
   async function run(turn: ChatTurn, emit: (m: ChatMessage) => void, fresh: boolean, mine: Running, tool: Tool): Promise<{ ok: true } | { ok: false; message: string; resumed: boolean }> {
     // The chat runs on the CLI's own login: an API key the daemon inherited is never billed (spec §5.2).
-    const env: NodeJS.ProcessEnv = { ...(await deps.env()), LEDGE_CHAT: '1' }; delete env.LEDGE_SESSION; delete env.LEDGE_NAME; delete env.ANTHROPIC_API_KEY;
-    const ledge = { guide: await readGuide(), version: LEDGE_VERSION, agents: await installedAgents(env.PATH) };
-    const ctx = await writeContext(contextDir, { sessions: deps.store.all(), recents: deps.store.recents(), projects: deps.projects?.(), tasks: deps.tasks?.(), rigs: deps.rigs?.(), usage: deps.usage?.(), now: now(), capture, git: cwd => gitSummary(cwd), ledge, ...(deps.notesDir ? { notesDir: deps.notesDir } : {}) });
-    // Only a question about the forge runs gh/glab: the others never wait on the network, and get what was read before, dated.
-    if (deps.forge) await deps.forge.write(ctx, deps.projects?.() ?? { projects: [], rules: [] }, { read: asksForge(turn.question) }).catch(e => log(`chat ${turn.qid}: forge files not written (${e instanceof Error ? e.message : String(e)})`));
+    const env = await chatEnv(deps);
+    const ctx = await writeChatContext(deps, contextDir, { forgeRead: asksForge(turn.question), qid: turn.qid });
     if (mine.cancelled) return CANCELLED;
     const { sessionId, resume } = await daySession(fresh, tool);
     const label = TOOL_LABEL[tool];
@@ -482,6 +516,24 @@ export function createChat(deps: ChatDeps): Chat {
       if (id === conversationId) return turns;
       return (await kept?.read(id)) ?? null;
     },
+    postPoint(point, actions, emit) {
+      rollDay();
+      const at = now();
+      // `answeredAt` set: a point is never a question left unanswered when the daemon restarts.
+      const turn: ChatTurn = { qid: uuid(), question: '', askedAt: at, answeredAt: at, steps: [], by: 'ledge', point, ...(actions.length > 0 ? { actions } : {}) };
+      turns = [...turns, turn].slice(-HISTORY_MAX);
+      publish(emit);
+      return turn.qid;
+    },
+    updatePoint(qid, f, emit) {
+      const t = turnOf(qid); if (!t?.point) return false;
+      const next = f(t.point);
+      if (next === t.point) return false;
+      t.point = next;
+      publish(emit);
+      return true;
+    },
+    points: () => { rollDay(); return turns.flatMap(t => (t.point ? [{ qid: t.qid, point: t.point }] : [])); },
     idle: () => (busy ? new Promise<void>(res => { idleWaiters.push(res); }) : Promise.resolve()),
     cancel(qid) { if (current?.qid === qid) { current.cancelled = true; current.handle?.kill(); } },
     async reset(emit) {

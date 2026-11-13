@@ -29,6 +29,6 @@ describe('under the island', () => {
     expect(bubble).toHaveStyle({ width: '440px', transform: 'translateY(-8px)' });
     rerender(<Bubble session={session as never} moreCount={0} visible paused={false} onOpen={() => {}} onDismiss={() => {}} onDecide={vi.fn()} onReply={vi.fn()} />);
     expect(bubble).toHaveStyle({ transform: 'translateY(0px)' });
-    expect(bubble.querySelector('svg.bot')).toHaveStyle({ '--bot-size': '40px' });
+    expect(bubble.querySelector('[data-ledge-mark]')).toHaveAttribute('data-pending', 'permission');
   });
 });

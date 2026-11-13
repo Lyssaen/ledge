@@ -6,6 +6,7 @@ import { href } from '../router';
 import { useChat, useConversations, useMobile, type MobileStore } from '../state/store';
 import { Composer } from '../ui/chat/Composer';
 import { TurnView } from '../ui/chat/TurnView';
+import { useOperatorRead } from '../ui/chat/PointTurn';
 import { HostPill, LinkStrip } from '../shell/Shell';
 import { useAttachments } from '../ui/useAttachments';
 import { LePoint } from '../ui/chat/LePoint';
@@ -78,6 +79,7 @@ export function Chat({ store, onClose }: { store: MobileStore; onReconnect?: () 
   // A past conversation open in the tab's place, read-only (§6).
   const [past, setPast] = useState<ChatConversationSummary | null>(null);
   const shownUnder = useRef(new Map<string, Map<string, string>>());
+  useOperatorRead(store);
 
   // « Répondre » on a decision: the start of the question in the field, the caret after it, for the user to finish.
   const field = useRef<HTMLTextAreaElement>(null);

@@ -1,6 +1,7 @@
 // The daemon's side of the action registry (spec 2026-10-26 action registry §2.1): whether an action is possible now, and
 // the message the daemon already handles that applies it. The chat's generic card and, in #93, the CLI share it.
-import { backendOf, isArchived, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, KERNEL_RIG, seatPlan, seatsByRole, type ActionErrorCode, type ActionId, type ChatAction, type ClientMessage, type OpenRigAction, type OpenRigState, type Session, type Task } from '@ledge/protocol';
+import { createHash } from 'node:crypto';
+import { backendOf, isArchived, LEDGE_GIVER, offers, pendingKey, riskOf, taskClosed, actionById, DETAIL_MAX, KERNEL_RIG, seatPlan, seatsByRole, type ActionErrorCode, type ActionId, type ChatAction, type ClientMessage, type Goal, type HumanAsk, type OpenRigAction, type OpenRigState, type PullRequest, type Session, type Task } from '@ledge/protocol';
 import { isOmpSeat } from './omp/seats.js';
 import { noteName } from '../brain/write.js';
 
@@ -10,6 +11,8 @@ export interface ResolveCtx {
   closing?: ReadonlySet<string>;
   /** This PC's OpenRig as last read (rig.act, rig.seats); none when the daemon has not read it: those rows are refused. */
   rigs?: OpenRigState;
+  /** What the rigs ask the person (rig.answer, rig.goal.reply), Max's goals (rig.goal.reply) and the followed pull requests (pr.fix), as last read. */
+  asks?: readonly HumanAsk[]; goals?: readonly Goal[]; prs?: readonly PullRequest[];
 }
 /** Why not: the daemon's words (the log, the PC's error) and a code for a front's own. */
 /** `missing`: for `unknown`, what is gone (OpenRig, the rig, the role's seats), so a front names the right cause. */
@@ -78,6 +81,11 @@ export function cutVars(rig: string, sessions: readonly string[]): Record<string
 }
 /** Each kind's words up to its object, article included: French contracts « de le » into « du » (« Prendre un snapshot du rig »). */
 const RIG_VERB: Record<string, string> = { start: 'Démarrer le', stop: 'Arrêter le', restart: 'Redémarrer le', snapshot: 'Prendre un snapshot du' };
+
+/** An answer that starts a rig: the person's own yes to a team Max proposes to launch (`confirm`, or `launch-rig`); a team that exists is only joined. */
+const launches = (ask: HumanAsk, option: string): boolean => ask.team?.kind === 'launch' && (option === 'confirm' || option === 'launch-rig');
+/** An id of the form OpenRig's goals take (8 to 64 letters, digits and dashes), the same for the same parts: a retry of a card's row (its qid and row index) sends the same row. */
+const idFrom = (...parts: string[]): string => createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 32);
 
 const IMPLS: Partial<Record<ActionId, Impl>> = {
   // A rig's or the kernel's power, checked against OpenRig as last read: a start of what runs, or a stop of what does not, is refused.
@@ -177,6 +185,84 @@ const IMPLS: Partial<Record<ActionId, Impl>> = {
       return row('task.pass', { task: t.id, to: s.id, ...(note ? { note } : {}) }, `Passer la tâche « ${title(t)} » de ${b(t.ownerName)} à ${b(s.name)}`,
         { task: t.title, owner: t.ownerName, session: s.name, note }, { session: s.id });
     });
+  },
+  // An open ask of the rigs, answered as « À toi » does (human.answer): the option's question is found here, since the handler wants it.
+  'rig.answer': (a, ctx) => {
+    const ask = ctx.asks?.find(x => x.id === a.qitem);
+    if (!ask) return no('closed', `${String(a.qitem)} is not an open ask`);
+    const ans = a.answer as { option?: string; text?: string; seen?: true };
+    const from = ask.from.seat;
+    if (ans.seen) {
+      if (ask.kind !== 'update') return no('not_decision', `${ask.id} is not a piece of news`);
+      return row('rig.answer', { qitem: ask.id, answer: { seen: true } }, `Marquer comme vue la nouvelle de ${b(from)}`, { ask: ask.summary, seat: from }, { detail: ask.summary });
+    }
+    if (ans.text !== undefined) {
+      if (ask.kind === 'update') return no('not_decision', `${ask.id} is news: it is marked seen, not answered`);
+      return row('rig.answer', { qitem: ask.id, answer: { text: ans.text, ...(ask.kind === 'parked' ? { parked: true } : {}) } },
+        `Répondre à ${b(from)} : « ${fit(ans.text, 100)} »`, { ask: ask.summary, seat: from, answer: ans.text }, detailOf(ans.text));
+    }
+    const option = String(ans.option);
+    const q = ask.questions.find(x => x.answer === null && x.options.some(o => o.id === option));
+    if (!q) return no('unknown', `${ask.id} offers no open option ${option}`);
+    const label = q.options.find(o => o.id === option)!.label;
+    return row('rig.answer', { qitem: ask.id, answer: { option, question: q.id } }, `Répondre « ${fit(label, 100)} » à ${b(from)}`, { ask: ask.summary, seat: from, option: label },
+      { risk: launches(ask, option) ? 'destructive' : 'reversible' });
+  },
+  // A goal for Max: the card's id is derived from the request, so a retry never makes a second row.
+  'rig.goal': (a, ctx) => {
+    if (ctx.rigs && !ctx.rigs.installed) return no('unknown', 'OpenRig is not on this machine', 'openrig');
+    const text = String(a.text); const folder = a.folder as string | undefined;
+    return row('rig.goal', { text, ...(folder ? { folder } : {}) }, `Donner un objectif à Max${folder ? ` dans ${b(folder)}` : ''}`, { folder }, detailOf(text));
+  },
+  'rig.goal.reply': (a, ctx) => {
+    const g = ctx.goals?.find(x => x.goalId === a.goal || x.qitemId === a.goal);
+    if (!g) return no('unknown', `unknown goal ${String(a.goal)}`);
+    if (g.state === 'done' || g.state === 'closed') return no('closed', `goal ${g.goalId} is ${g.state}`);
+    if (typeof a.answer === 'object') {
+      const text = String((a.answer as { text: string }).text);
+      return row('rig.goal.reply', { goal: g.goalId, answer: { text } }, `Écrire à Max au sujet de l'objectif « ${fit(g.text, 100)} »`, { goal: g.text, answer: text }, detailOf(text));
+    }
+    // A confirmation is the answer to Max's open team proposal for the goal, never a message of its own.
+    const ask = ctx.asks?.find(x => x.goalId === g.goalId && x.team);
+    const q = ask?.questions.find(x => x.answer === null && x.options.some(o => o.id === 'confirm'));
+    if (!ask || !q) return no('no_request', `goal ${g.goalId} has no team proposal to confirm`);
+    return row('rig.goal.reply', { goal: g.goalId, answer: 'confirm', qitem: ask.id, question: q.id }, `Confirmer l'équipe ${b(ask.team!.rig)} pour l'objectif « ${fit(g.text, 100)} »`,
+      { goal: g.text, rig: ask.team!.rig }, { risk: launches(ask, 'confirm') ? 'destructive' : 'reversible' });
+  },
+  // A seat's session, written to as the seat tab does (a reply in its thread).
+  'rig.send': (a, ctx) => {
+    if (!ctx.rigs?.installed) return no('unknown', 'OpenRig is not on this machine', 'openrig');
+    const rig = ctx.rigs.rigs.find(r => r.name === a.rig);
+    if (!rig) return no('unknown', `unknown rig ${String(a.rig)}`, 'rig');
+    const node = rig.nodes.find(n => n.logicalId === a.seat || n.session === a.seat);
+    if (!node) return no('unknown', `${rig.name} has no seat ${String(a.seat)}`, 'role');
+    if (node.stopped) return no('not_running', `${node.logicalId} of ${rig.name} is stopped`);
+    const s = ctx.sessions.find(x => x.state !== 'exited' && (x.tmuxSession === node.session || x.name === node.session || x.id === node.session));
+    if (!s) return no('unknown', `the seat ${node.logicalId} has no session`);
+    const text = String(a.text);
+    return writable(s) ?? row('rig.send', { rig: rig.name, seat: node.logicalId, text, session: s.id }, `Écrire à ${b(node.logicalId)} de ${b(rig.name)}`, { rig: rig.name, seat: node.logicalId, text }, { session: s.id, ...detailOf(text) });
+  },
+  'brain.answer': (a, ctx) => {
+    const t = taskOf(String(a.task), ctx);
+    if (isRefusal(t)) return t;
+    if (!t.brain || t.owner !== LEDGE_GIVER) return no('not_decision', `task ${t.id} is not a note proposal`);
+    const choice = a.choice as 'add' | 'refuse' | { edit: string };
+    const what = choice === 'add' ? 'Ajouter' : choice === 'refuse' ? 'Refuser' : 'Ajouter, corrigée,';
+    return row('brain.answer', { task: t.id, choice }, `${what} la proposition de note « ${title(t)} »`, { task: t.title, choice: typeof choice === 'string' ? choice : 'edit' },
+      typeof choice === 'object' ? detailOf(choice.edit) : {});
+  },
+  'session.handover': (a, ctx) => withSession(ctx, a.session, s => (s.state === 'exited' || isArchived(s) ? no('exited', `${s.name} has exited`) : s.source !== 'launcher' ? no('read_only', `${s.name} was not launched by Ledge`) : null),
+    s => row('session.handover', { session: s.id }, `Passer le relais de ${b(s.name)}`, { session: s.name }, { session: s.id })),
+  // « Demander à X de corriger »: the same words as the Desktop's and the phone's, to the branch's most active session.
+  'pr.fix': (a, ctx) => {
+    const pr = ctx.prs?.find(p => p.id === a.pr);
+    if (!pr) return no('unknown', `${String(a.pr)} is not a followed pull request`);
+    if (pr.state === 'merged' || pr.state === 'closed') return no('closed', `${pr.ref} is ${pr.state}`);
+    if (pr.pipeline !== 'fail') return no('no_request', `the pipeline of ${pr.ref} does not fail`);
+    const ref = a.session as string | undefined;
+    const target = ref ? sessionOf(ref, ctx) : pr.sessions.map(id => ctx.sessions.find(x => x.id === id && x.state !== 'exited')).find(Boolean) ?? no('unknown', `no session on ${pr.branch}`);
+    if (isRefusal(target)) return target;
+    return writable(target) ?? row('pr.fix', { pr: pr.id, session: target.id, text: `Le pipeline de ${pr.ref} échoue. Lis les jobs en échec, corrige et pousse.` }, `Demander à ${b(target.name)} de corriger ${b(pr.ref)}`, { pr: pr.ref, session: target.name }, { session: target.id });
   }
 };
 
@@ -222,8 +308,10 @@ export function resolveAction(id: string, args: unknown, ctx: ResolveCtx): Resol
 }
 
 /** A resolved row as the message the daemon already handles; `rid` names the request where the message takes one. */
-export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: string): ClientMessage {
+export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: string, card?: string): ClientMessage {
   const a = r.args as Args;
+  // A card's row keeps its goal ids across retries, whatever request id each retry carries; outside a card the request's own is all there is.
+  const key = card ?? rid;
   const s = String(a.session ?? '');
   switch (r.action) {
     case 'session.model': return { type: 'session.model', id: s, model: a.model as string | null, effort: a.effort as string | null };
@@ -241,6 +329,23 @@ export function actionMessage(r: Pick<ChatAction, 'action' | 'args'>, rid: strin
     case 'task.pass': return { type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'pass', task: String(a.task), to: String(a.to), ...(a.note ? { text: String(a.note) } : {}) };
     case 'rig.act': return { type: 'openrig.act', requestId: rid, action: (a.rig !== undefined ? { kind: a.kind, rig: a.rig } : { kind: a.kind }) as OpenRigAction };
     case 'rig.seats': return { type: 'openrig.seats', requestId: rid, rig: String(a.rig), seats: { [String(a.role)]: Number(a.count) } };
+    case 'rig.answer': {
+      const ans = a.answer as { option?: string; question?: string; text?: string; parked?: true; seen?: true };
+      const answer = ans.seen ? { kind: 'seen' as const } : ans.text !== undefined ? { kind: ans.parked ? 'resolve' as const : 'words' as const, text: ans.text }
+        : { kind: 'choice' as const, questionId: String(ans.question), optionId: String(ans.option) };
+      return { type: 'openrig.answer', requestId: rid, qitemId: String(a.qitem), answer };
+    }
+    case 'rig.goal': return { type: 'openrig.goal.send', requestId: rid, goalId: idFrom(key, String(a.text), String(a.folder ?? '')), text: String(a.text), ...(a.folder ? { folder: String(a.folder) } : {}) };
+    case 'rig.goal.reply': return a.answer === 'confirm'
+      ? { type: 'openrig.answer', requestId: rid, qitemId: String(a.qitem), answer: { kind: 'choice', questionId: String(a.question), optionId: 'confirm' } }
+      : { type: 'openrig.goal.reply', requestId: rid, goalId: String(a.goal), replyId: idFrom(key, String(a.goal), String((a.answer as { text: string }).text)), text: String((a.answer as { text: string }).text) };
+    case 'rig.send': return { type: 'session.reply', id: String(a.session), text: String(a.text) };
+    case 'brain.answer': {
+      const c = a.choice as 'add' | 'refuse' | { edit: string };
+      return { type: 'brain.answer', rid, task: String(a.task), choice: c === 'add' ? { yes: true } : c === 'refuse' ? { yes: false } : { yes: true, text: c.edit } };
+    }
+    case 'session.handover': return { type: 'session.handover', rid, id: s };
+    case 'pr.fix': return { type: 'session.reply', id: s, text: String(a.text) };
     default: throw new Error(`${r.action} is not a generic action`);
   }
 }

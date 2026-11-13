@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { canBroadcast, daemonStore, prOfSession, prsFailing, prsWaitingForYou, sessionForge, projectOf, splitId, type BroadcastTo, type FleetPullRequest, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
+import { canBroadcast, daemonStore, qualify, prOfSession, prsFailing, prsWaitingForYou, sessionForge, projectOf, splitId, type BroadcastTo, type FleetPullRequest, useIsland, useMobile, useMobileError, useProjects, useTokenMissing, type DaemonClient } from '@ledge/fleet';
 import { isOmpSeat, type Project, type Projects, type Session } from '@ledge/protocol';
 import { LangProvider, loadLang, messagesFor, saveLang, useI18n, type Lang } from './i18n/lang';
 import { loadMessages } from './i18n/messages';
@@ -34,6 +34,7 @@ import { LaunchModalPlace } from './launch/lazy';
 import type { LaunchWhere } from './launch/LaunchModal';
 import { openWhere } from './launch/modalModel';
 import { ChatPlace } from './chat/lazy';
+import { sendPointReads } from './chat/pointReads';
 import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
 import { daemonTarget, useDaemonUpdates } from './update/daemon';
@@ -83,7 +84,7 @@ import { useWebglMax } from './term/webglPrefs';
 import { ATELIER_TAB, SETTINGS_TAB, createWorkspaceStore, loadWorkspace as loadIdeWorkspace, openrigTab, rigTab, useWorkspace } from './workspace/store';
 import { bootWorkspace, capture, loadBoot, loadDispositions, plan, saveCurrent, saveDispositions, signature, upsert, useCurrentDisposition, useDispositions } from './workspace/dispositions';
 import { layoutFor, loadLayout, saveLayout, type LayoutAction } from './workspace/layout';
-import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, MAIN, move as moveTab, moveActive, moveTo as moveTabTo, open as openTab, parseRigRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, windowOf, type Tab } from './workspace/model';
+import { agentTerminalTab, beside, changesBeside, close as dropTab, closeGroup, cycleTab, emptyProposals, find as findTab, focusGroup, focusNth, focused, keyOf, MAIN, move as moveTab, moveActive, moveTo as moveTabTo, open as openTab, parseRigRef, rigTabRef, sessionOf, reconcile as reconcileTabs, setView, split as splitGroup, windowOf, type Tab } from './workspace/model';
 import { hasTerminal, projectLabel, providerOf, tabAlert, tabView } from './workspace/sessionTab';
 import { ChangesTabLabel, SessionTabLabel } from './ide/SessionTabLabel';
 import { TabMenu } from './ide/TabMenu';
@@ -338,8 +339,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useEffect(() => onOpenTarget(raw => {
     const target = parseTarget(raw);
     if (target?.kind === 'terminal') showTerminal(target.id);
+    else if (target?.kind === 'ask' || target?.kind === 'atoi') {
+      // A rig's question from the notch: « À toi » in front, on that question; a decision: « À toi » in front, where it is listed.
+      if (target.kind === 'ask') setAskFocus({ id: target.id, n: ++askSeq.current });
+      const tab: Tab = { kind: 'atoi', ref: 'main' };
+      wsStore.update(w => openTab(w, tab));
+    }
     else if (target) dispatch(targetAction(target));
-  }), [showTerminal]);
+  }), [showTerminal, wsStore]);
   // The Atelier in its own window (#21): what it opens shows here, this window brought forward; its closing gives it back.
   // The tray speaks the app's language and names the way back from do not disturb.
   const [dnd] = useDnd();
@@ -403,6 +410,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // kept), Settings and the OpenRig page on the section and sub-place they were last left on.
   const front: Tab | undefined = focused(ws).tabs[focused(ws).active];
   const frontKey = front ? keyOf(front) : null;
+  // Opening « À toi » (its page, or the explorer's view) reads each ready machine's newest point on that machine (spec §5), as the
+  // chat does when it shows one.
+  const atoiOpen = front?.kind === 'atoi' || (layout.sideOpen && layout.sideView === 'atoi');
+  useEffect(() => {
+    if (!atoiOpen) return;
+    sendPointReads(daemonStore.getState().chat, fleetView.fleet);
+  }, [atoiOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const lastOpenRig = useRef(new Map<string, { section?: OpenRigSection; role?: string; seat?: string }>());
   if (place.kind === 'settings') lastSettings.current = place.section;
   if (place.kind === 'openrig') lastOpenRig.current.set(place.machine ?? 'local', { ...(place.section ? { section: place.section } : {}), ...(place.role !== undefined ? { role: place.role } : {}), ...(place.seat !== undefined ? { seat: place.seat } : {}) });
@@ -992,6 +1006,13 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
           <ChatPlace label={t.side.chat} client={fleetClient} view={fleetView} paused={nav.paused} focus={nav.chatFocus - (ideChatFrom.current ?? 0)} askedOnly
             onOpenSession={id => dispatch({ type: 'open', id })} onTerminal={showTerminal} onLaunched={chatLaunched}
             projects={projects} notify={notify} onProposal={openProposal}
+            onPointNav={(m, n) => {
+              // A point's ids are its machine's own: a session is qualified, a rig tab names its machine, PRs and tasks keep theirs.
+              if (n.kind === 'session') dispatch({ type: 'open', id: qualify(m, n.id) });
+              else if (n.kind === 'pr') onTab({ kind: 'pr', ref: n.id });
+              else if (n.kind === 'rig') onTab({ kind: 'rig', ref: rigTabRef(m, n.id) });
+              else dispatch({ type: 'ledge', tab: 'tasks', task: n.id });
+            }}
             tabs={{ tasks: tasksApi, ...rightTab, onAsked: () => setRightTab(({ ask: _, ...x }) => x), onTab: (tab, task) => setRightTab(x => ({ ...x, tab, ...(task !== undefined ? { task } : {}) })) }} />
         }
         footer={<Footer dispatch={dispatch} localDown={localDown} island={island} machines={footMachines} />}

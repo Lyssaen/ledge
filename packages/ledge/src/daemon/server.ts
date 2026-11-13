@@ -1,11 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { nameTaken, namesInUse, openName, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, taskClosed, type BrainChoice, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
+import { nameTaken, namesInUse, openName, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, MAX_PROPOSALS, taskClosed, type BrainChoice, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress, type Goal, type HumanAsk } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, ATTACHMENT_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type DecidedBy, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -31,7 +31,7 @@ import { extraRoots, scanRepos } from './scan.js';
 import { createFolder, listFolder, resolveFolder } from './folders.js';
 import { loginShellEnv } from '../shell-path.js';
 import { log } from '../log.js';
-import { type Chat } from '../chat/service.js';
+import { type Chat, type ChatDeps } from '../chat/service.js';
 import { createChatThreads } from '../chat/threads.js';
 import { createForge } from '../chat/forge.js';
 import { paths } from '../paths.js';
@@ -51,7 +51,7 @@ import { launchFromChat, LaunchRefused, refuseTooWide } from '../chat/launch.js'
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
-import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } from './actions.js';
+import { actionMessage, cardRefusal, resolveAction, resolveRun, runGuard, type Resolved, type ResolveCtx } from './actions.js';
 import { createMailbox, type MailboxDeps, type MailJournal } from './mailbox.js';
 import { broadcastFromSession, broadcastFromUser } from './broadcast.js';
 import { addFromUser, applyProposal, checkProposal, clearFlag, markChecked, noteInfos } from '../brain/write.js';
@@ -66,7 +66,8 @@ import type { MobileService } from '../mobile/service.js';
 import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
 import { phoneLaunch } from '../mobile/launch.js';
 import { createNotifier } from '../mobile/push/notifier.js';
-import { chatEndPayload, decisionPayload } from '../mobile/push/triggers.js';
+import { chatEndPayload, decisionPayload, rigAskPayload } from '../mobile/push/triggers.js';
+import { createNoticeFeed, pointPush } from '../operator/notices.js';
 import { pushFor, resolvedFor } from '../mobile/push/triggers.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
@@ -80,6 +81,10 @@ import type { UsageService } from './usage/service.js';
 import type { ForgeService } from './forge/service.js';
 import { ForgeError, ForgeRefusal } from './forge/types.js';
 import { redact } from './forge/run.js';
+import type { OperatorWired } from '../operator/index.js';
+import { applySuggestionRow, createPointActor, rowWhere, type Fail } from '../operator/act.js';
+import { pointHandlers } from '../operator/point-handlers.js';
+import type { DeviceId } from '../operator/journal.js';
 
 /** A seat's session without what belonged to the harness it ran before: its request, its reply, its conversation, its model. */
 function withoutHarness(s: Session): Session {
@@ -208,7 +213,9 @@ function logDroppedRequest(id: string, ev: SessionEvent, before: Session | undef
  */
 export async function startServer(opts: { store: Store; tmux: Tmux; port?: number; host?: string; now?: () => string; verify?: { attempts?: number; intervalMs?: number }; confirmMs?: number; untilMs?: number; launcher?: string[]; home?: string; agentEnv?: () => Promise<NodeJS.ProcessEnv>; chat?: Chat; claudeBin?: string[]; daemon?: DaemonInfo; updater?: ReturnType<typeof createDaemonUpdater>; ssh?: typeof serveSsh; history?: History; machinesFile?: string; projectsFile?: string; islandFile?: string; contextFile?: string; scan?: typeof scanRepos; models?: Models; commands?: Commands; openrig?: OpenRig; human?: HumanChannelService; goals?: GoalsService; mobile?: MobileService; mobileUnavailable?: string; omp?: OmpHost; ompSeats?: OmpSeats; browserLive?: BrowserLiveService; close?: { freeMs?: number; exitMs?: number }; peers?: () => readonly ClaudePeer[]; mail?: MailJournal; tasks?: TasksJournal; handoverBriefMs?: number; attachments?: AttachmentStore;
   /** Each harness's account limits (docs/mockups/ledge-harness-usage.html): the daemon's own, started with it; tests give one or none. */ usage?: UsageService;
-  /** The pull and merge requests of the sessions' branches (lot 8a): the daemon's own, started with it; tests give one or none. */ forge?: ForgeService }): Promise<ServerHandle> {
+  /** The pull and merge requests of the sessions' branches (lot 8a): the daemon's own, started with it; tests give one or none. */ forge?: ForgeService;
+  /** The operator (journal, wakes, points in every chat thread): the daemon's own; tests leave it out, so no wake ever runs a harness. */ operator?: boolean;
+  /** Loads the operator's module, which needs `node:sqlite` (Node >= 22.13); tests give one that fails. */ loadOperator?: () => Promise<typeof import('../operator/index.js')> }): Promise<ServerHandle> {
   const { store, tmux } = opts;
   const now = opts.now ?? (() => new Date().toISOString());
   const launcher = opts.launcher ?? [process.execPath, process.argv[1] ?? 'ledge'];
@@ -217,7 +224,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const agentEnv = opts.agentEnv ?? (async () => ({ ...process.env, ...(await loginShellEnv()) }));
   const attachments = opts.attachments ?? new AttachmentStore(paths().attachments);
   const reducer = new CaptureReducer();
-  const threads = createChatThreads({ attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all(), rigs: () => openrig.peek?.(), usage: () => opts.usage?.state().harnesses });
+  /** The operator, once the threads, the tasks and OpenRig's channel exist (`opts.operator`). */
+  let operator: OperatorWired | undefined;
+  /** OpenRig's asks and Max's goals as last read: what the chat's attentes.md and rigs.md say. */
+  let rigAsks: readonly HumanAsk[] | undefined, rigGoals: readonly Goal[] | undefined;
+  // The chat's queue rows per rig are left out: OpenRig's queue is read per rig through `rig`, too costly at every question.
+  const chatDeps: ChatDeps = { attachments, store, tmux, home: paths().dir, notesDir: join(paths().dir, 'context'), userHome: opts.home, env: agentEnv, bin: opts.claudeBin, now, projects: () => projects, forge: createForge({ env: agentEnv }), tasks: () => tasks.all(), rigs: () => openrig.peek?.(), usage: () => opts.usage?.state().harnesses,
+    asks: () => rigAsks, goals: () => rigGoals, prs: () => opts.forge?.state().prs, ...(opts.operator ? { journal: (t: DeviceId) => operator?.journalFor(t) ?? [] } : {}) };
+  const threads = createChatThreads(chatDeps);
   const chat: Chat = opts.chat ?? threads.desktop;
   const router = createRouter({ env: agentEnv });
   const omp = opts.omp ?? createOmpHost({ store, env: agentEnv, dir: join(paths().dir, 'omp'), now, attachments });
@@ -309,7 +323,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // An OMP seat drives its browser through `eval`: its result is a moment to keep an image.
   const ompSeats = opts.ompSeats ?? createOmpSeats({ store, onTool: (id, tool) => { if (tool === 'eval' || /browser/i.test(tool)) browserLive.poke(id); } });
   ompSeats.start();
-  const seatTimer = setInterval(() => { void openrig.state().then(discoverSeats).catch(e => log(`openrig: seats not read: ${(e as Error).message}`)); }, SEATS_EVERY_MS);
+  const seatTimer = setInterval(() => { void openrig.state().then(st => { operator?.rigsRead(st); return discoverSeats(st); }).catch(e => log(`openrig: seats not read: ${(e as Error).message}`)); }, SEATS_EVERY_MS);
   seatTimer.unref?.();
   // « À toi » (docs/vision/ledge-human-channel-contract.md): what OpenRig asks the person, pushed whole to every front when it changes.
   // Lot 2 (docs/vision/ledge-goal-contract.md): goals given to Max, pushed whole to every front when OpenRig's queue moves, once a front
@@ -326,6 +340,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     goalsTimer = setTimeout(() => {
       goalsTimer = null;
       void goals.list().then(l => {
+        rigGoals = l.goals; operator?.goalsChanged(l);
         const key = JSON.stringify(l);
         if (key !== lastGoals) { lastGoals = key; broadcast({ type: 'openrig.goalsChanged', ...l }); }
       }).catch(e => log(`openrig goals: not read: ${(e as Error).message}`));
@@ -333,7 +348,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   };
   const human = opts.human ?? createHumanChannel({ state: () => openrig.state(), run: execRun(agentEnv), onEvent: pushGoals });
   /** « À toi »: OpenRig followed from the first front (desktop, TUI or phone) that asks; each change goes to all of them, and moves the goals. */
-  const followAsks = () => human.start(l => { broadcast({ type: 'openrig.asksChanged', ...l }); pushGoals(); });
+  const followAsks = () => human.start(l => { rigAsks = l.asks; operator?.asksChanged(l); broadcast({ type: 'openrig.asksChanged', ...l }); pushGoals(); });
   /** The seats recognised before and idle since (no hook to bring them): looked for again at start and at each OpenRig read. */
   const adoptSeats = () => { for (const s of store.all()) if (s.rig) adoptSeat(s.id, s.rig.seat); };
   adoptSeats();
@@ -442,7 +457,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   // The pull and merge requests, after every snapshot and on each change: to the local clients, and to the phones that asked (B5), which
   // the gateway gives no CLI message.
   const forge = opts.forge;
-  const unsubscribeForge = forge?.onChange(() => { const m = forge.state(); for (const c of localClients) send(c, m); gateway?.forward(m); });
+  const unsubscribeForge = forge?.onChange(() => { const m = forge.state(); operator?.forgeChanged(m); for (const c of localClients) send(c, m); gateway?.forward(m); });
   /** A forge request that failed: a refusal keeps its code; an error of gh or glab its (redacted) message. */
   const forgeFailure = (e: unknown): { message: string; code?: RefusalCode } =>
     e instanceof ForgeRefusal ? { code: e.code, message: e.message } : e instanceof ForgeError ? { message: e.message } : { message: redact(e instanceof Error ? e.message : String(e)).slice(0, 400) };
@@ -461,6 +476,12 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   let notifyChatEnd: ((deviceId: string, code?: ChatErrorCode) => void) | undefined;
   /** A new decision put to the user, pushed to the phones (set once the notifier is). */
   let notifyDecision: ((task: Task) => void) | undefined;
+  /** The operator's point, pushed to each paired phone with the chat turn it got (set once the notifier is). */
+  let notifyPoint: ((lead: string, qidByDevice: Map<DeviceId, string>) => void) | undefined;
+  /** The urgent rig asks, pushed to every paired phone as they arrive (set once the notifier is). */
+  let notifyAsks: ((asks: HumanAsk[]) => void) | undefined;
+  /** The notices the notch last got (`operator.state`), replayed after every snapshot; undefined while the operator is off. */
+  const notices = createNoticeFeed(n => broadcast({ type: 'operator.state', notices: n }));
   /** Every local front gets it; the phone gateway passes on only what it knows. */
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
   // The browsers' states reach the local fronts only: neither a phone nor a remote peer.
@@ -562,6 +583,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   const relay = createRelay({ threads: cardThreads, store, replyTo: async (id, text) => { const r = await replyTo(id, text); return r && { message: r.message, code: r.code }; }, now, typing, closing, next: id => mailbox.kick(id) });
   const tasks = createTasks({ store, mailbox, now, ...(opts.tasks ? { journal: opts.tasks } : {}), brain: (p, answer, by, at) => applyProposal(p, answer, by, at, notesDir()), onTask: (task, entry) => {
     broadcast({ type: 'task.updated', task });
+    operator?.tasksChanged();
     // The card that gave it follows it, on whichever thread holds it: only Ledge gives from a card.
     if (givenByLedge(task)) for (const [thread, c] of cardThreads.all()) c.followTask?.(task, cardThreads.emitterOf(thread) ?? broadcast);
     // A session that handed it over sees it in its thread, as a message it sent (issue #92); Ledge has no thread.
@@ -637,6 +659,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
     const u = usageMsg(); if (u) reply(u); // the harnesses' limits
+    const on = notices.current(); if (on) reply({ type: 'operator.state', notices: on }); // what the notch should show of the operator
     if (forge) reply(forge.state()); // the pull and merge requests of the sessions' branches
     for (const m of browserLive.states()) reply(m); // last: the agents' browsers that are not `none`
   };
@@ -1108,11 +1131,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * A generic card's rows (spec 2026-10-26 action registry §2.1), applied through the daemon's own handlers so their rules stay in
    * one place: a row fails on the handler's `error`, or on the reason its `task.result` carries.
    */
-  function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) {
+  /** The live state a row resolves against, read again for each row: an earlier row of the plan may have changed it. */
+  const liveCtx = (): ResolveCtx => ({ sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.(), ...(forge ? { prs: forge.state().prs } : {}) });
+  /** The asks and goals, read from OpenRig only for the rows that name them; a read that fails leaves them out, so those rows are refused. */
+  async function rigCtx(actions: Array<string | undefined>): Promise<Pick<ResolveCtx, 'asks' | 'goals'>> {
+    if (!actions.some(a => a === 'rig.answer' || a === 'rig.goal.reply')) return {};
+    try {
+      const [asked, given] = await Promise.all([human.list(), goals.list()]);
+      return { asks: asked.asks, goals: given.goals };
+    } catch (e) { log(`action: asks and goals not read: ${(e as Error).message}`); return {}; }
+  }
+  async function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) {
+    const rig = await rigCtx((rows ?? [...Array(MAX_PROPOSALS).keys()]).map(r => card.chat.action(qid, r)?.action));
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
-      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.() }),
-      apply: async row => { const r = await applyRow(row, rid, by); if (r.failure !== undefined) throw new Error(r.failure); }
+      resolve: row => resolveAction(row.action, row.args, { ...liveCtx(), ...rig }),
+      apply: async (row, index) => { const r = await applyRow(row, rid, by, `${qid}#${index}`); if (r.failure !== undefined) throw new Error(r.failure); }
     }, qid, rows, confirmed, deny);
   }
   /** The turn's cards were set aside (« Ignorer », on any thread's device): nothing of them applies until opened again. */
@@ -1129,19 +1163,59 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const r = tasks.run({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'done', task, text: choice.yes ? 'oui' : 'non', choice });
     return r.reason !== undefined ? { reason: r.reason } : { ...(r.task?.result ? { result: r.task.result } : {}) };
   }
-  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string, by?: DecidedBy): Promise<{ failure?: string }> {
-    const made = actionMessage(row, rid);
+  /**
+   * The operator's rows answered from a chat thread (`point.act`): each answer goes through the handler the daemon already has for what the
+   * row is about, so the guards are the cards' own. A destructive one (an accepted request, a decision) is refused unless `confirmed`.
+   */
+  const rowFail = async (id: 'session.decide' | 'task.answer', args: Record<string, unknown>, confirmed: boolean, by?: DecidedBy): Promise<Fail> => {
+    // A row the registry's own schema turns down (an answer too long, say) is the row's error, not an exception of the daemon.
+    const parsed = actionById(id)!.args.safeParse(args);
+    if (!parsed.success) return { message: parsed.error.issues.map(i => `${i.path.join('.') || '(root)'} ${i.message}`).join('; '), code: 'invalid' };
+    const r = resolveAction(id, parsed.data, liveCtx());
+    if ('refused' in r) return { message: r.refused, code: r.code };
+    const cut = id === 'session.decide' && args.decision === 'accept' ? cardRefusal(r) : null;
+    if (cut) return { message: cut.refused, code: cut.code };
+    if (r.risk === 'destructive' && !confirmed) return { message: 'confirm before applying a destructive action', code: 'confirm_required' };
+    const { failure } = await applyRow(r, randomUUID(), by);
+    return failure !== undefined ? { message: failure } : undefined;
+  };
+  const pointActor = createPointActor({
+    chatOf: device => { const c = cardThreads.all().find(([id]) => id === device)?.[1]; return c ? { chat: c, emit: cardThreads.emitterOf(device) ?? (() => {}) } : undefined; },
+    session: id => store.get(id), asks: () => rigAsks ?? [],
+    decide: (session, decision, confirmed, by) => rowFail('session.decide', { session, decision }, confirmed, by),
+    reply: async (id, text, by) => { const r = await replyTo(id, text, by ? { by } : {}); return r ? { message: r.message, ...(r.code ? { code: r.code } : {}) } : undefined; },
+    // Not `askAnswered`: the point settles the row itself, with where `chat`.
+    answerAsk: (qitem, answer) => human.answer(qitem, answer),
+    answerTask: (task, answer, confirmed) => rowFail('task.answer', { task, answer }, confirmed),
+    answerBrain: (task, yes) => { const r = answerProposal(task, { yes }, randomUUID()); return r.reason !== undefined ? { message: r.reason } : undefined; },
+    applySuggestion: (qid, itemId, row, confirmed, by, onMark) => applySuggestionRow(qid, itemId, row, confirmed, (card, cardQid, ok) => actOnCard(card, cardQid, randomUUID(), [0], ok, undefined, by), onMark),
+    isBrain: task => tasks.all().find(t => t.id === task)?.brain !== undefined,
+    operator: {
+      settle: (...a) => { try { operator?.operator.settle(...a); } catch (e) { log(`operator: point not settled: ${(e as Error).message}`); } },
+      expect: (...a) => operator?.operator.expect(...a) ?? (() => {})
+    }
+  });
+  const points = pointHandlers(pointActor, () => operator?.operator);
+  /** The rig asks a phone's card is answering now: the operator settles them `phone`, not the PC's `desktop`. */
+  const phoneAnswers = new Set<string>();
+  async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string, by?: DecidedBy, card?: string): Promise<{ failure?: string }> {
+    const made = actionMessage(row, rid, card);
     // A request answered from a device's card is that device's decision (`by`, the gateway's); from the PC's, none: the PC.
     const out = by && made.type === 'session.decide' ? { ...made, by } : made;
     if (out.type === 'task.cmd') { const r = tasks.run(out); return r.reason !== undefined ? { failure: r.reason } : {}; }
     let failure: string | undefined;
-    await handle(out, m => {
+    const fromPhone = out.type === 'openrig.answer' && rowWhere(by) === 'phone' && !phoneAnswers.has(out.qitemId) ? out.qitemId : undefined;
+    if (fromPhone) phoneAnswers.add(fromPhone);
+    try { await handle(out, m => {
       if (m.type === 'error') failure ??= m.message;
       else if (m.type === 'task.result' && m.reason) failure ??= m.reason;
       else if (m.type === 'brain.result' && m.reason) failure ??= m.reason;
       // An OpenRig row (rig.act, rig.seats) answers with its end: not ok is a failure, in OpenRig's words.
       else if ((m.type === 'openrig.done' || m.type === 'openrig.reseated') && !m.ok) failure ??= m.error ?? 'failed';
-    });
+      // The rows that answer an ask, give or answer a goal, or pass a session's relief end the same way.
+      else if ((m.type === 'openrig.answered' || m.type === 'openrig.goal.sent' || m.type === 'openrig.goal.replied') && !m.ok) failure ??= m.message ?? m.error ?? 'failed';
+      else if (m.type === 'session.handover.result' && !m.ok) failure ??= m.reason ?? 'failed';
+    }); } finally { if (fromPhone) phoneAnswers.delete(fromPhone); }
     return failure !== undefined ? { failure } : {};
   }
   /**
@@ -1164,7 +1238,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
     const wrong = msg.by === undefined ? undefined : notItsKey(msg.by, msg.key);
     if (wrong) return answer({ reason: wrong, code: 'identity' });
-    const r: Resolved = resolveRun(msg.action, parsed.data, { sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.() });
+    const r: Resolved = resolveRun(msg.action, parsed.data, { ...liveCtx(), ...await rigCtx([msg.action]) });
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
     const guard = runGuard(r, msg.by);
     if (guard) return answer({ row: r, reason: guard, code: 'agent' });
@@ -1285,6 +1359,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       case 'openrig.status': {
         adoptSeats();
         const state = await openrig.state();
+        operator?.rigsRead(state);
         void discoverSeats(state).catch(e => log(`openrig: seats not followed: ${(e as Error).message}`));
         return reply({ type: 'openrig.state', requestId: msg.requestId, state });
       }
@@ -1315,23 +1390,37 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // Followed from the first front that asks: a machine nobody looks at from « À toi » never reads OpenRig's events.
       case 'openrig.asks': followAsks(); return reply({ type: 'openrig.asksChanged', requestId: msg.requestId, ...await human.list() });
-      case 'openrig.answer': return reply({ type: 'openrig.answered', requestId: msg.requestId, ...await human.answer(msg.qitemId, msg.answer) });
+      case 'openrig.answer': {
+        const r = await human.answer(msg.qitemId, msg.answer);
+        operator?.askAnswered(msg.qitemId, phoneAnswers.has(msg.qitemId) ? 'phone' : 'desktop', r);
+        return reply({ type: 'openrig.answered', requestId: msg.requestId, ...r });
+      }
       // Lot 2: the goals given to Max. Followed from the first front that asks, on the same OpenRig events as « À toi ».
       case 'openrig.goals': {
         goalsFollowed = true; followAsks();
         const l = await goals.list();
-        lastGoals = JSON.stringify(l);
+        lastGoals = JSON.stringify(l); rigGoals = l.goals; operator?.goalsChanged(l);
         return reply({ type: 'openrig.goalsChanged', requestId: msg.requestId, ...l });
       }
       case 'openrig.goal.send': { const r = await goals.send(msg.goalId, msg.text, msg.folder); pushGoals(); return reply({ type: 'openrig.goal.sent', requestId: msg.requestId, goalId: msg.goalId, ...r }); }
       case 'openrig.goal.reply': { const r = await goals.reply(msg.goalId, msg.replyId, msg.text); pushGoals(); return reply({ type: 'openrig.goal.replied', requestId: msg.requestId, goalId: msg.goalId, replyId: msg.replyId, ...r }); }
       case 'openrig.act': {
+        // Every rig.act goes through here (a card, the Rigs view, the phone): a rig Ledge stops is not reported as fallen.
+        operator?.ledgeRigAct(msg.action);
         const done = await openrig.act(msg.action, { noPaths: msg.noPaths === true });
         reply({ type: 'openrig.done', requestId: msg.requestId, ...done });
         // Every front sees what the action changed, not only the one that asked.
         if (done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
         return;
       }
+      // The operator's point (Task 10): a row answered, the point set aside, the events read by this front's device (the PC's: `desktop`).
+      case 'point.act': {
+        const failed = await points.pc.act(msg);
+        if (failed) reply(failed);
+        return;
+      }
+      case 'point.later': return points.pc.later(msg.qid);
+      case 'operator.read': return points.pc.read(msg.eventId);
       case 'snapshot.request': return sendSnapshot(reply);
       case 'browser.watch': return browserLive.watch(msg.id, reply);
       case 'browser.unwatch': return browserLive.unwatch(msg.id, reply);
@@ -1655,7 +1744,10 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // The brain's screens (lot 4): a proposal's buttons, Réglages › Notes and its two writes.
       case 'brain.answer': {
-        const r = answerProposal(msg.task, msg.choice, msg.rid);
+        // From a local front: the PC's. A phone's goes through the gateway, which said `phone` first (the first hint wins).
+        const release = operator?.operator.expect('task', msg.task, 'desktop') ?? (() => {});
+        let r: ReturnType<typeof answerProposal>;
+        try { r = answerProposal(msg.task, msg.choice, msg.rid); } finally { release(); }
         return reply({ type: 'brain.result', rid: msg.rid, ...r });
       }
       case 'brain.add': return reply({ type: 'brain.result', rid: msg.rid, ...addFromUser(msg.note, msg.fact, now(), notesDir(), msg.source) });
@@ -1764,7 +1856,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   if (mobile) gateway = createPhoneGateway({
     mobile,
     // « À toi » on the phone (lot 3): this PC's OpenRig, as the desktop has it; a phone's answer goes through the same checks.
-    openrig: { list: () => human.list(), answer: (qitemId, answer) => human.answer(qitemId, answer), follow: followAsks },
+    openrig: { list: () => human.list(), answer: async (qitemId, answer) => { const r = await human.answer(qitemId, answer); operator?.askAnswered(qitemId, 'phone', r); return r; }, follow: followAsks },
     // Rigs and the kernel on the phone (refonte mobile B4): the Desktop's reads and actions through `dispatch`, and these two reads it does not make.
     ...(openrig.closed && openrig.routing ? { rigs: { closed: openrig.closed.bind(openrig), routing: openrig.routing.bind(openrig) } } : {}),
     // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
@@ -1776,7 +1868,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     session: id => store.get(id),
     thread: id => history?.items(id),
     preview: id => previews.get(id),
-    dispatch,
+    // A proposal answered from the phone is settled `phone`: said before the PC's own handler runs, whose hint is the PC's.
+    dispatch: (msg, reply) => {
+      const release = msg.type === 'brain.answer' ? operator?.operator.expect('task', msg.task, 'phone') : undefined;
+      return release ? dispatch(msg, reply).finally(release) : dispatch(msg, reply);
+    },
     attachments,
     relay,
     launchChat: (thread, qid, rows) => {
@@ -1801,6 +1897,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const card = cardOf(cardThreads, qid);
       if (!card || card.thread !== thread) return Promise.reject(new ActRefused('unknown action'));
       return actOnCard(card, qid, rid, rows, confirmed, deny, by);
+    },
+    point: {
+      ...points.phone
     },
     onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',
@@ -1857,6 +1956,17 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const badge = store.all().filter(s => s.pending).length + tasks.all().filter(openDecision).length;
       void notifier.notify(decisionPayload(task, badge), undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
     };
+    notifyAsks = asks => {
+      const badge = store.all().filter(s => s.pending).length + tasks.all().filter(openDecision).length;
+      for (const a of asks) void notifier.notify(rigAskPayload(a, badge), undefined).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+    };
+    notifyPoint = (lead, qidByDevice) => {
+      const badge = store.all().filter(s => s.pending).length + tasks.all().filter(openDecision).length;
+      for (const [device, qid] of qidByDevice) {
+        if (!device.startsWith('device:')) continue;
+        void notifier.notify(pointPush(lead, badge), undefined, device.slice('device:'.length)).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+      }
+    };
     /** Who answered each session's request, from its `Decided` (heard before the change it makes). */
     const answeredBy = new Map<string, DecidedBy | null>();
     const unsubscribeDecided = store.onEvent((id, ev) => { if (ev.name === 'Decided') answeredBy.set(id, ev.by ?? null); });
@@ -1870,6 +1980,34 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       if (p) void notifier.notify(p, after.id).catch(failed);
     });
     unsubscribePush = () => { unsubscribeDecided(); unsubscribeApply(); };
+  }
+
+  if (opts.operator) {
+    // The journal needs `node:sqlite`: on an older Node the daemon runs on without the operator rather than not at all.
+    let mod: typeof import('../operator/index.js') | undefined;
+    try { mod = await (opts.loadOperator ?? (() => import('../operator/index.js').then(m => { m.requireSqlite(); return m; })))(); }
+    catch (e) { log(`operator off: Node >= 22.13 needed (${(e as Error).message})`); }
+    if (mod) try {
+      operator = mod.wireOperator({ journalPath: join(paths().dir, 'ledge.sqlite'), machine: hostname(), threads, store, tasks: () => tasks.all(),
+        // Every paired phone gets its point, the ones that have not talked to this daemon run included.
+        devices: () => (mobile?.state().enabled ? mobile.state().devices.map(d => d.id) : []),
+        contextNear: () => contextPrefs.near, tool: () => threads.deviceTool(), chatDeps: { ...chatDeps, thread: 'desktop' },
+        // The notch hears the notices when they change; each paired phone gets its one push per point.
+        onNotices: n => notices.tell(n),
+        onPointPush: (lead, qidByDevice) => notifyPoint?.(lead, qidByDevice), onUrgentAsks: asks => notifyAsks?.(asks) });
+      operator.start();
+      // OpenRig's asks are followed for the journal too, where OpenRig is installed; the first list read is the baseline.
+      // Max's goals too: the first list read is their baseline.
+      void openrig.state().then(st => {
+        if (!st.installed) return;
+        followAsks(); goalsFollowed = true;
+        void goals.list().then(l => { lastGoals = JSON.stringify(l); rigGoals = l.goals; operator?.goalsChanged(l); }).catch(e => log(`operator: goals not read: ${(e as Error).message}`));
+      }).catch(e => log(`operator: OpenRig not read: ${(e as Error).message}`));
+    } catch (e) {
+      // A start that failed half way closes the journal it opened.
+      try { operator?.stop(); } catch { /* already closed */ }
+      operator = undefined; log(`operator not started: ${(e as Error).message}`);
+    }
   }
 
   wss.on('connection', (ws, req) => {
@@ -1915,6 +2053,6 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     sweepAttachments,
     closeSession: id => { const s = store.get(id); return s ? closeSession(s) : Promise.reject(unknownSession()); },
     labelExited,
-    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); unsubscribeUsage?.(); unsubscribeForge?.(); panes?.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribeRecovery?.(); unsubscribePush?.(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
+    close: () => new Promise(res => { clearInterval(sweepTimer); clearInterval(seatTimer); ompSeats.stop(); browserLive.stop(); unsubscribeUsage?.(); unsubscribeForge?.(); panes?.stop(); human.stop(); if (goalsTimer) clearTimeout(goalsTimer); void reducer.close(); unsubscribe(); for (const u of unsubscribeHistory) u(); unsubscribeMobile?.(); unsubscribeRecovery?.(); unsubscribePush?.(); operator?.stop(); gateway?.stop(); relay.close(); mailbox.close(); tasks.close(); handovers.close(); void omp.closeAll(); for (const c of wss.clients) c.terminate(); for (const socket of sockets) socket.destroy(); wss.close(() => httpServer.close(() => res())); })
   };
 }

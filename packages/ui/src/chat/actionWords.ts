@@ -57,6 +57,13 @@ const fr: ActionWords = {
     'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Passer la tâche « ${short(w.task)} » de ${b(w.owner)} à ${b(w.session)}`),
     'task.answer': v => need(v, ['task', 'session'], w => `Répondre à la décision « ${short(w.task)} » de ${b(w.session)}`),
     'note.add': v => need(v, ['note'], w => `Ajouter à la note ${b(w.note)}`),
+    'rig.answer': v => need(v, ['seat'], w => (v.option ? `Répondre « ${short(v.option)} » à ${b(w.seat)}` : v.answer ? `Répondre à ${b(w.seat)} : « ${short(v.answer)} »` : `Marquer comme vue la nouvelle de ${b(w.seat)}`)),
+    'rig.goal': () => (`Donner un objectif à Max`),
+    'rig.goal.reply': v => need(v, ['goal'], w => (v.rig ? `Confirmer l’équipe ${b(v.rig)} pour l’objectif « ${short(w.goal)} »` : `Écrire à Max au sujet de l’objectif « ${short(w.goal)} »`)),
+    'rig.send': v => need(v, ['rig', 'seat'], w => `Écrire à ${b(w.seat)} de ${b(w.rig)}`),
+    'brain.answer': v => need(v, ['task'], w => `${v.choice === 'refuse' ? 'Refuser' : v.choice === 'edit' ? 'Ajouter, corrigée,' : 'Ajouter'} la proposition de note « ${short(w.task)} »`),
+    'session.handover': v => need(v, ['session'], w => `Passer le relais de ${b(w.session)}`),
+    'pr.fix': v => need(v, ['pr', 'session'], w => `Demander à ${b(w.session)} de corriger ${b(w.pr)}`),
     'rig.act': v => need(v, ['kind', 'rig'], w => {
       const verb = ({ start: 'Démarrer', stop: 'Arrêter', restart: 'Redémarrer' } as Record<string, string>)[w.kind.split('.')[1]!];
       if (w.kind.startsWith('kernel.')) return verb ? `${verb} le kernel` : undefined;
@@ -125,6 +132,13 @@ const en: ActionWords = {
     'task.pass': v => need(v, ['task', 'owner', 'session'], w => `Pass ${b(w.owner)}’s task “${short(w.task)}” to ${b(w.session)}`),
     'task.answer': v => need(v, ['task', 'session'], w => `Answer ${b(w.session)}’s decision “${short(w.task)}”`),
     'note.add': v => need(v, ['note'], w => `Add to the note ${b(w.note)}`),
+    'rig.answer': v => need(v, ['seat'], w => (v.option ? `Answer “${short(v.option)}” to ${b(w.seat)}` : v.answer ? `Answer ${b(w.seat)}: “${short(v.answer)}”` : `Mark ${b(w.seat)}’s news as seen`)),
+    'rig.goal': () => (`Give Max a goal`),
+    'rig.goal.reply': v => need(v, ['goal'], w => (v.rig ? `Confirm the team ${b(v.rig)} for the goal “${short(w.goal)}”` : `Write to Max about the goal “${short(w.goal)}”`)),
+    'rig.send': v => need(v, ['rig', 'seat'], w => `Write to ${b(w.seat)} of ${b(w.rig)}`),
+    'brain.answer': v => need(v, ['task'], w => `${v.choice === 'refuse' ? 'Refuse' : v.choice === 'edit' ? 'Add, corrected,' : 'Add'} the note proposal “${short(w.task)}”`),
+    'session.handover': v => need(v, ['session'], w => `Hand over ${b(w.session)}`),
+    'pr.fix': v => need(v, ['pr', 'session'], w => `Ask ${b(w.session)} to fix ${b(w.pr)}`),
     'rig.act': v => need(v, ['kind', 'rig'], w => {
       const verb = ({ start: 'Start', stop: 'Stop', restart: 'Restart' } as Record<string, string>)[w.kind.split('.')[1]!];
       if (w.kind.startsWith('kernel.')) return verb ? `${verb} the kernel` : undefined;

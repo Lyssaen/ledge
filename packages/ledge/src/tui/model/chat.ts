@@ -1,8 +1,8 @@
-import { proposalRows, type ChatStep, type ChatTurn } from '@ledge/protocol';
+import { proposalRows, type ChatPoint, type ChatStep, type ChatTurn, type PointItem } from '@ledge/protocol';
 import type { Glyphs } from '../glyphs.js';
 import type { Messages } from '../i18n/lang.js';
 import { C } from '../theme.js';
-import { pad, row, wrapSegs, type Line } from './cells.js';
+import { lineCells, pad, row, wrapSegs, type Line } from './cells.js';
 import { markdownLines } from './markdown.js';
 import { cardClosed, cardPlan, lineOf } from './actionCard.js';
 import { imageLine } from './thread.js';
@@ -24,6 +24,11 @@ export function chatView(turns: readonly ChatTurn[], live: { qid: string; text: 
   for (const turn of turns) {
     const out: Line[] = [];
     if (lines.length) out.push([{ text: '' }]);
+    if (turn.by === 'ledge' && turn.point) {
+      out.push(...pointLines(turn.point, t, g, width));
+      for (const l of out) { lines.push(l); keys.push(turn.qid); }
+      continue;
+    }
     wrapSegs([{ text: turn.question, color: C.fg, bold: true }], width - 2).forEach((l, k) => out.push([k ? pad(2) : { text: `${g.cursor} `, color: C.coral }, ...l]));
     for (const a of turn.attachments ?? []) out.push(imageLine(a, t, 'alt+o'));
     const steps = [...new Set(turn.steps.map(s => stepLabel(s, t.ask.steps)))];
@@ -42,6 +47,34 @@ export function chatView(turns: readonly ChatTurn[], live: { qid: string; text: 
   }
   return { lines, keys, turns: new Map() };
 }
+
+const POINT_GROUPS = ['atoi', 'done', 'ongoing', 'rigs'] as const;
+const TONE_COLOR: Record<PointItem['tone'], string> = { perm: C.red, ask: C.yellow, work: C.blue, idle: C.green, off: C.faint };
+
+/** A point Ledge wrote on its own: its lead, then each group with its count and a line per row; a settled row keeps its receipt. */
+function pointLines(point: ChatPoint, t: Messages, g: Glyphs, width: number): Line[] {
+  const c = t.ask.point, out: Line[] = [];
+  wrapSegs([{ text: point.lead, color: C.fg, bold: true }], width - 2).forEach(l => out.push([pad(2), ...l]));
+  for (const group of POINT_GROUPS) {
+    const items = point.items.filter(i => i.group === group);
+    if (!items.length) continue;
+    out.push([{ text: '' }], [{ text: `  ${c.groups[group].toUpperCase()} (${items.length})`, color: C.faint }]);
+    for (const i of items) {
+      const head: Line = [pad(2), { text: `${g.idle} `, color: TONE_COLOR[i.tone] }, { text: i.who, color: C.fg, bold: true }, ...(i.rig ? [{ text: ` · ${i.rig}`, color: C.faint }] : []), { text: '  ' }];
+      const body = wrapSegs([{ text: i.text, color: i.settled ? C.faint : C.fg }], Math.max(10, width - lineCells(head)));
+      body.forEach((l, k) => out.push(k ? [pad(lineCells(head)), ...l] : [...head, ...l]));
+      const sub = i.sub;
+      if (sub) out.push([pad(4), { text: sub, color: C.faint }]);
+      if (i.settled) out.push([pad(4), { text: `${g.ok} ${c.settled[i.settled.where]}${i.settled.answer ? ` · ${i.settled.answer}` : ''} · ${clock(i.settled.at)}`, color: C.green }]);
+      if (i.error) out.push([pad(4), { text: c.error(i.error), color: C.red }]);
+    }
+  }
+  return out;
+}
+
+/** The rows of a point still to answer: not settled, with an answer, free text or a suggestion to apply. */
+export const pointRows = (point: ChatPoint): PointItem[] =>
+  point.items.filter(i => !i.settled && (i.answers?.length || i.freeText || (i.suggestion && i.suggestion.state !== 'done')));
 
 export const chatLines = (turns: readonly ChatTurn[], live: { qid: string; text: string } | null, o: { t: Messages; g: Glyphs; width: number }): Line[] => chatView(turns, live, o).lines;
 
@@ -88,13 +121,20 @@ export type Card =
   | { kind: 'launch'; qid: string; rows: number[] }
   | { kind: 'relay'; qid: string }
   | { kind: 'close'; qid: string; rows: number[] }
-  | { kind: 'action'; qid: string };
+  | { kind: 'action'; qid: string }
+  | { kind: 'point'; qid: string; items: string[] };
 
 /** The cards of the answered turns still to act on, the newest turn first: sessions to start (not started yet), an
  *  instruction to relay (not sent yet; a queued one can be taken back), sessions to close (not closed yet). */
 export function openCards(turns: readonly ChatTurn[]): Card[] {
   const out: Card[] = [];
   for (const turn of [...turns].reverse()) {
+    // The newest open point is one card; a point set aside (« Plus tard ») or folded offers none.
+    if (turn.by === 'ledge' && turn.point) {
+      const rows = turn.point.laterAt || turn.point.foldedAt || out.some(c => c.kind === 'point') ? [] : pointRows(turn.point);
+      if (rows.length) out.push({ kind: 'point', qid: turn.qid, items: rows.map(i => i.id) });
+      continue;
+    }
     // Ignored (on any device): none of its cards is offered until it is opened again (ctrl+r).
     if (!turn.answeredAt || turn.ignoredAt) continue;
     if (turn.actions && !cardClosed(turn.actions)) out.push({ kind: 'action', qid: turn.qid });

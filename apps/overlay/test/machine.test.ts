@@ -157,11 +157,11 @@ describe('sober surface machine', () => {
     expect(run([{ type: 'outsideClick' }]).s.mode).toBe('handle');
   });
 
-  it('a finish on the bare handle unfolds a 6 s notice; an ask replaces it at once', () => {
-    const grew = run([{ type: 'finished', id: 'a' }]);
+  it('a notice on the bare handle unfolds for 6 s; an ask replaces it at once', () => {
+    const grew = run([{ type: 'notice', id: 'a', kind: 'offline' }]);
     expect(grew.s.mode).toBe('handle'); expect(grew.effects).toContain('startTimer:unfold');
     const up = run([{ type: 'unfoldElapsed' as never }], grew.s);
-    expect(up.s).toMatchObject({ mode: 'bubble', bubbleId: 'a', bubbleKind: 'finished' });
+    expect(up.s).toMatchObject({ mode: 'bubble', bubbleId: 'a', bubbleKind: 'offline' });
     expect(up.effects).toContain('startTimer:bubble');
     expect(run([{ type: 'bubbleElapsed' }], up.s).s.mode).toBe('handle');
     const replaced = run([{ type: 'ask', id: 'b' }], up.s);
@@ -169,21 +169,21 @@ describe('sober surface machine', () => {
   });
 
   it('a second notice waits behind the first', () => {
-    const up = run([{ type: 'finished', id: 'a' }, { type: 'unfoldElapsed' as never }]).s;
+    const up = run([{ type: 'notice', id: 'a', kind: 'offline' }, { type: 'unfoldElapsed' as never }]).s;
     const chained = run([{ type: 'notice', id: 'm', kind: 'offline' }], up);
     expect(chained.s.bubbleId).toBe('a'); expect(chained.s.done).toEqual(['a', 'm']);
     const next = run([{ type: 'bubbleElapsed' }], chained.s);
     expect(next.s).toMatchObject({ mode: 'bubble', bubbleId: 'm', bubbleKind: 'offline' });
   });
 
-  it('an error notice does not cover an ask; it follows once the ask is done', () => {
-    const waiting = run([{ type: 'notice', id: 'a', kind: 'error' }], ask()).s;
+  it('a notice does not cover an ask; it follows once the ask is done', () => {
+    const waiting = run([{ type: 'notice', id: 'a', kind: 'offline' }], ask()).s;
     expect(waiting).toMatchObject({ mode: 'bubble', bubbleId: 'a', bubbleKind: 'ask', done: ['a'] });
-    expect(run([{ type: 'defer' }], waiting).s).toMatchObject({ mode: 'bubble', bubbleKind: 'error', bubbleId: 'a' });
+    expect(run([{ type: 'defer' }], waiting).s).toMatchObject({ mode: 'bubble', bubbleKind: 'offline', bubbleId: 'a' });
   });
 
   it('hovering pauses a notice clock and leaving resumes the remainder', () => {
-    const up = run([{ type: 'finished', id: 'a' }, { type: 'unfoldElapsed' as never }]).s;
+    const up = run([{ type: 'notice', id: 'a', kind: 'offline' }, { type: 'unfoldElapsed' as never }]).s;
     const paused = run([{ type: 'surfaceEnter' }], up);
     expect(paused.effects).toContain('pauseTimer:bubble');
     expect(run([{ type: 'surfaceLeave' }], paused.s).effects).toContain('resumeTimer:bubble');
@@ -191,13 +191,9 @@ describe('sober surface machine', () => {
 
   it('a notice during do not disturb is not unfolded', () => {
     const quiet = run([{ type: 'dnd', on: true }]).s;
-    expect(run([{ type: 'finished', id: 'a' }, { type: 'notice', id: 'm', kind: 'offline' }], quiet).s.mode).toBe('handle');
+    expect(run([{ type: 'notice', id: 'a', kind: 'offline' }, { type: 'notice', id: 'm', kind: 'offline' }], quiet).s.mode).toBe('handle');
   });
 
-  it('a Ledge finish opens the chat when its bubble is activated', () => {
-    const up = run([{ type: 'finished', id: 'ledge' }, { type: 'unfoldElapsed' as never }]).s;
-    expect(run([{ type: 'bubbleClick' }], up).s.mode).toBe('chat');
-  });
 });
 
 function fakeClock() {
@@ -224,8 +220,8 @@ function fakeClock() {
 const noticeOpen = () => {
   const clock = fakeClock();
   const c = createSurfaceController({ onState: () => {}, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, now: clock.now });
-  c.dispatch({ type: 'finished', id: 'a' }); clock.advance(540);
-  expect(c.state()).toMatchObject({ mode: 'bubble', bubbleId: 'a', bubbleKind: 'finished' });
+  c.dispatch({ type: 'notice', id: 'a', kind: 'offline' }); clock.advance(540);
+  expect(c.state()).toMatchObject({ mode: 'bubble', bubbleId: 'a', bubbleKind: 'offline' });
   return { clock, c };
 };
 
@@ -246,7 +242,7 @@ describe('controller timers', () => {
     expect(FINISHED_BUBBLE_MS).toBe(6000);
     const timers: Array<{ ms: number; fn: () => void }> = [];
     const c = createSurfaceController({ onState: () => {}, setTimeout: ((fn: () => void, ms: number) => { timers.push({ ms, fn }); return timers.length; }) as never, clearTimeout: (() => {}) as never });
-    c.dispatch({ type: 'finished', id: 'a' }); timers.at(-1)!.fn();
+    c.dispatch({ type: 'notice', id: 'a', kind: 'offline' }); timers.at(-1)!.fn();
     expect(timers.at(-1)!.ms).toBe(6000);
     c.dispose();
   });
@@ -320,5 +316,37 @@ describe('controller timers', () => {
   it('dispose clears pending timers', () => {
     const { clock, c } = noticeOpen();
     c.dispose(); expect(clock.pending()).toBe(0);
+  });
+});
+
+describe('operator notices', () => {
+  it('a notice unfolds from the handle without a clock, and leaves when it is gone', () => {
+    const r = run([{ type: 'operator', id: 'local|point:p1' }]);
+    expect(r.s).toMatchObject({ mode: 'handle', operator: 'local|point:p1', unfoldDue: true });
+    expect(r.effects).toContain('startTimer:unfold');
+    const r2 = run([{ type: 'unfoldElapsed' as never }], r.s);
+    expect(r2.s).toMatchObject({ mode: 'bubble', bubbleId: 'local|point:p1', bubbleKind: 'operator' });
+    expect(r2.effects).not.toContain('startTimer:bubble');
+    expect(run([{ type: 'bubbleElapsed' }], r2.s).s.mode).toBe('bubble');
+    expect(run([{ type: 'operator', id: null }], r2.s).s.mode).toBe('handle');
+  });
+  it('a request comes first: the notice waits behind it, then unfolds once it is answered', () => {
+    const s = run([{ type: 'operator', id: 'n1' }], ask('a')).s;
+    expect(s).toMatchObject({ mode: 'bubble', bubbleId: 'a', bubbleKind: 'ask', operator: 'n1' });
+    const after = run([{ type: 'askCleared', id: 'a' }], s).s;
+    expect(after).toMatchObject({ mode: 'bubble', bubbleId: 'n1', bubbleKind: 'operator' });
+    const replaced = run([{ type: 'ask', id: 'b' }], after).s;
+    expect(replaced).toMatchObject({ mode: 'bubble', bubbleId: 'b', bubbleKind: 'ask' });
+  });
+  it('a newer notice replaces the shown one in place; closed, it only comes back from the Ledge mark', () => {
+    const shown = run([{ type: 'operator', id: 'n1' }, { type: 'unfoldElapsed' as never }, { type: 'operator', id: 'n2' }]).s;
+    expect(shown).toMatchObject({ mode: 'bubble', bubbleId: 'n2', bubbleKind: 'operator' });
+    const closed = run([{ type: 'close' }, { type: 'operator', id: 'n2' }], shown);
+    expect(closed.s.mode).toBe('handle'); expect(closed.effects).not.toContain('startTimer:unfold');
+    expect(run([{ type: 'operator', id: 'n2', show: true }], closed.s).s).toMatchObject({ mode: 'bubble', bubbleId: 'n2', bubbleKind: 'operator' });
+  });
+  it('Do not disturb keeps a notice folded', () => {
+    const r = run([{ type: 'dnd', on: true }, { type: 'operator', id: 'n1' }]);
+    expect(r.s).toMatchObject({ mode: 'handle', operator: 'n1' }); expect(r.effects).not.toContain('startTimer:unfold');
   });
 });

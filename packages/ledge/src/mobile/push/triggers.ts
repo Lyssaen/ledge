@@ -1,4 +1,4 @@
-import { pendingKey, type ChatErrorCode, type DecidedBy, type PushPayload, type Session, type Task } from '@ledge/protocol';
+import { pendingKey, type ChatErrorCode, type DecidedBy, type HumanAsk, type PushPayload, type Session, type Task } from '@ledge/protocol';
 
 const TAG_MAX = 32;
 const TITLE_MAX = 80;
@@ -29,8 +29,8 @@ function requestBody(s: Session): string {
 }
 
 /**
- * What the phone should be told about this change of a session, or nothing: a new request or question, or a turn that
- * just ended. Pure; the one-minute spacing of `finished` is the notifier's.
+ * What the phone should be told about this change of a session, or nothing: a new request or question. A turn that ended
+ * is no longer a push of its own: the operator's point says it. Pure.
  */
 export function pushFor(before: Session | undefined, after: Session, all: readonly Session[]): PushPayload | null {
   const badge = Math.min(999, all.filter(s => s.pending).length);
@@ -38,11 +38,9 @@ export function pushFor(before: Session | undefined, after: Session, all: readon
   const p = after.pending;
   if (p && (!before?.pending || pendingKey(p) !== pendingKey(before.pending))) {
     const url = `/#/request/${encodeURIComponent(after.id)}/${encodeURIComponent(pendingKey(p))}`;
-    if (p.kind === 'question') return { v: 1, kind: 'question', title: cut(`${after.name} a une question`, TITLE_MAX), name: cut(after.name, NAME_MAX), body: cut(p.text.trim(), BODY_MAX), url, badge, tag };
-    return { v: 1, kind: 'request', title: cut(`${after.name} attend votre accord`, TITLE_MAX), name: cut(after.name, NAME_MAX), body: cut(requestBody(after), BODY_MAX), url, badge, tag };
-  }
-  if (before?.state === 'working' && after.state === 'idle' && !p) {
-    return { v: 1, kind: 'finished', title: cut(`${after.name} a terminé`, TITLE_MAX), name: cut(after.name, NAME_MAX), body: cut((after.lastReply?.text ?? '').trim(), BODY_MAX), url: `/#/thread/${encodeURIComponent(after.id)}`, badge, tag };
+    // Ledge speaks for every session: the title is Ledge's, the body names the session.
+    if (p.kind === 'question') return { v: 1, kind: 'question', title: 'Ledge', name: cut(after.name, NAME_MAX), body: cut(`${after.name} · ${p.text.trim()}`, BODY_MAX), url, badge, tag };
+    return { v: 1, kind: 'request', title: 'Ledge', name: cut(after.name, NAME_MAX), body: cut(`${after.name} · ${requestBody(after)}`, BODY_MAX), url, badge, tag };
   }
   return null;
 }
@@ -79,5 +77,17 @@ export function decisionPayload(t: Task, badge: number): PushPayload {
   return {
     v: 1, kind: 'decision', title: cut(`${t.giverName} attend votre décision`, TITLE_MAX), name: cut(t.giverName, NAME_MAX), body: cut(t.title.trim(), BODY_MAX),
     url: '/#/chat', badge: Math.max(0, Math.min(999, badge)), tag: safeTag(t.id)
+  };
+}
+
+/**
+ * An urgent or critical question of a rig, pushed at once (it does not wait for the operator's point): titled « Ledge », the body
+ * names the seat, and it opens « À toi », where the ask waits. A question with options asks; one without is still a request to read.
+ */
+export function rigAskPayload(a: HumanAsk, badge: number): PushPayload {
+  const kind = a.questions.some(q => q.answer === null) ? 'question' : 'request';
+  return {
+    v: 1, kind, title: 'Ledge', name: cut(a.from.seat, NAME_MAX), body: cut(`${a.from.seat} · ${a.summary.trim()}`, BODY_MAX),
+    url: '/#/', badge: Math.max(0, Math.min(999, badge)), tag: safeTag(`ask-${a.id}`)
   };
 }
