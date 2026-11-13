@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import { boot, closeDaemons, listSessions } from './helpers';
-import { DEFAULT_VIEW_KEY, getDefaultView, reloadDefaultView, setDefaultView } from '../src/session/defaultView';
+import { DEFAULT_VIEW_KEY, getDefaultView, hasLiveScreen, reloadDefaultView, setDefaultView, startViewOf } from '../src/session/defaultView';
 import { loadSessionPrefs, saveSessionPrefs, SESSION_KEY } from '../src/session/prefs';
 import { routeNav } from '../src/workspace/route';
 import { empty, focused, open } from '../src/workspace/model';
@@ -32,7 +32,27 @@ describe('the setting’s value', () => {
   });
 });
 
+describe('the view a session starts on (review #300: Terminal only where there is a screen)', () => {
+  const base = listSessions().find(s => s.name === 'Nova')!;
+  it('a live screen takes the setting; no screen (OMP native, offline, ended, archived, outside tmux): Fil', () => {
+    expect(hasLiveScreen(base)).toBe(true);
+    expect(startViewOf(base, 'terminal')).toBe('terminal');
+    expect(startViewOf(base, 'thread')).toBe('thread');
+    for (const s of [{ ...base, tool: 'omp' as const, backend: 'omp-rpc' as const, tmuxSession: null }, { ...base, offline: true }, { ...base, state: 'exited' as const },
+      { ...base, archivedAt: new Date().toISOString() }, { ...base, tmuxSession: null }]) expect(startViewOf(s, 'terminal')).toBe('thread');
+  });
+});
+
 describe('a new IDE tab starts on it; an open tab keeps its own', () => {
+  it('an OMP native session (no screen of its own) opens on the Fil with the setting on Terminal', async () => {
+    const sessions = listSessions().map(s => s.name === 'Nova' ? { ...s, tool: 'omp' as const, backend: 'omp-rpc' as const, tmuxSession: null } : s);
+    const { user } = await boot({ sessions, list: true });
+    act(() => setDefaultView('terminal'));
+    await user.click(within(screen.getByRole('tree', { name: 'Projects, branches and sessions' })).getByRole('button', { name: /^Nova/ }));
+    await waitFor(() => expect(shown()).toBe('local:nova'));
+    expect(screen.queryByRole('region', { name: 'Terminal' })).toBeNull();
+  });
+
   it('routeNav: a new session tab gets startView’s view; a tab already open keeps what it has', () => {
     const w = routeNav({ type: 'open', id: 'b' }, ctx(() => 'terminal')).ws!(empty());
     expect(focused(w).tabs[0]).toEqual({ kind: 'session', ref: 'b', view: 'terminal' });

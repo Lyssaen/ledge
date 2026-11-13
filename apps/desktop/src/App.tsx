@@ -62,7 +62,7 @@ import { BroadcastDialog } from './broadcast/BroadcastDialog';
 import { AgentTerminalPlace, ChangesPlace, FreeShellPlace, loadedWorkspace, loadWorkspace, SessionPlace } from './session/lazy';
 import { createSessionMemory } from './session/memory';
 import { loadSessionPrefs, saveSessionPrefs, viewShown, type SessionPrefs, type SessionView } from './session/prefs';
-import { getDefaultView, useDefaultView } from './session/defaultView';
+import { startViewOf, useDefaultView } from './session/defaultView';
 import { useStored } from './state/useStored';
 import { ptyBackend } from './term/backend';
 import { paintScreen } from './term/paint';
@@ -259,9 +259,10 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   const lastSettings = useRef<SectionId>('general');
   const dispatch = useCallback((a: NavAction) => {
     const r = routeNav(a, { isSeat: id => knownNow.current.find(s => s.id === id)?.rig != null, modalOpen: ideNow.current.nav.modal !== null, openSession: ideNow.current.openSession, lastSettings: lastSettings.current,
-      // A new session tab starts on « Vue par défaut d'une session » (#300) when that is the Terminal and the session has one: the
-      // tab's view, OMP's rule and « no terminal → Fil » keep their priority, and changing the setting leaves open tabs alone.
-      startView: id => { const s = knownNow.current.find(x => x.id === id); return getDefaultView() === 'terminal' && s && hasTerminal({ kind: s.rig != null ? 'seat' : 'session', ref: id }, s) ? 'terminal' : undefined; } });
+      // A new session tab starts on « Vue par défaut d'une session » (#300) when that is the Terminal and the session has a live
+      // screen (startViewOf): the tab's view, OMP's rule and « no terminal → Fil » keep their priority, and changing the setting
+      // leaves open tabs alone.
+      startView: id => { const s = knownNow.current.find(x => x.id === id); return s && startViewOf(s) === 'terminal' ? 'terminal' : undefined; } });
     if (r.nav) navDispatch(r.nav);
     // The right panel is `layout.right`, never `nav.chat`: asking for the chat only bumps `chatFocus` (its field takes the
     // focus), and `nav.chat` goes straight back to false, or the single keys, Alt + 1…9 and the screen's Escape would stay off.
@@ -513,7 +514,7 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // of the last view. A view changed on the page lasts for that visit (`seatView`), for every session now. An OMP seat of OpenRig
   // (design-ux, 2026-11-03 12:23Z) keeps its rule: running, its Terminal view, « Fil » for the visit only; stopped, « Fil ».
   const defaultView = useDefaultView();
-  const sessionView = viewShown(session, seatView && session && seatView.id === session.id ? seatView.view : defaultView, seatView);
+  const sessionView = seatView && session && seatView.id === session.id ? viewShown(session, seatView.view, seatView) : session ? startViewOf(session, defaultView) : defaultView;
   const placeId = place.kind === 'session' ? place.id : null;
   useEffect(() => { setSeatView(v => (v && v.id !== placeId ? null : v)); }, [placeId]);
   // Stable across renders: the page renders only for what it shows.
