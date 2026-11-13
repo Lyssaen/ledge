@@ -14,6 +14,9 @@ const OPEN_TIMEOUT_MS = 5_000;
 const PAUSE_AFTER_S = 2;
 /** A paused pane gets going again after this, with a fresh screen: under a flood, at most a few screens a second. */
 const RESUME_MS = 200;
+/** #298: the history lines a screen carries above the visible ones, outside the alternate screen; the text stays under
+ *  TERM_PANE_SCREEN_MAX (cut from the top). xterm keeps 5 000 lines: the rest comes as the pane writes. */
+export const PANE_HISTORY_LINES = 2_000;
 const RESTORE_MS = 20;
 
 type PaneMsg =
@@ -230,7 +233,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     // Written together, so tmux runs both before reading the pane again: the cursor is the one of the captured screen. The capture's
     // reply is the boundary (#296): from it, output is after the screen and kept, not dropped.
     const [cap, info] = await Promise.all([
-      w.client.command(`capture-pane -p -e -t ${target}`, () => { if (w.state === 'capturing') w.state = 'pending'; }),
+      w.client.command(`capture-pane -p -e -S -${PANE_HISTORY_LINES} -t ${target}`, () => { if (w.state === 'capturing') w.state = 'pending'; }),
       w.client.command(`display-message -p -t ${target} '${INFO_FORMAT}'`)
     ]);
     if ((w.state as Watch['state']) === 'closed') return;
@@ -240,7 +243,9 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     // The output kept before the pane was known: only the watched pane's, in the order it came.
     for (const e of w.early.splice(0)) if (e.pane === w.pane) w.buffer = w.buffer.length ? Buffer.concat([w.buffer, e.data]) : e.data;
     if (w.buffer.length) w.since ??= now();
-    let lines = cap.lines;
+    // The history above the visible lines (#298), only outside the alternate screen: a full-screen program's has nothing to scroll
+    // back to. The cursor stays the visible screen's: the screen is the text's last `rows` lines.
+    let lines = m[6]?.[0] === '0' ? cap.lines : cap.lines.slice(-w.rows);
     let text = lines.join('\n');
     while (text.length > TERM_PANE_SCREEN_MAX && lines.length > 1) { lines = lines.slice(1); text = lines.join('\n'); }
     if (text.length > TERM_PANE_SCREEN_MAX) text = text.slice(-TERM_PANE_SCREEN_MAX);
