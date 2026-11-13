@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Session, SessionEvent, SessionState } from '@ledge/protocol';
 import { doingOf, pendingKey, RUNNING_MAX } from '@ledge/protocol';
 import { reduce, answeredBy, doingLabel, HOOK_PRIORITY_MS } from '../src/daemon/state.js';
+import { riskOf } from '../src/mobile/risk.js';
 
 const T0 = '2026-10-09T18:00:00.000Z';
 const later = (ms: number) => new Date(Date.parse(T0) + ms).toISOString();
@@ -364,9 +365,82 @@ describe('reduce: post-tool events', () => {
     expect(reduce(s, ev('PostToolUse', { tool: 'Bash', at: later(6000) })).pending).toBeDefined();
     expect(reduce(s, ev('PostToolUse', { tool: 'request_user_input', at: later(6000) })).pending).toBeUndefined();
   });
-  it('Codex: an apply_patch permission is a diff', () => {
-    const s = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/README.md' }));
-    expect(s.pending).toMatchObject({ kind: 'diff', text: '/w/README.md', tool: 'apply_patch' });
+  it('#302 Codex: its main agent\'s PermissionRequest is no request until the terminal shows one (« Approve for me » settles it alone)', () => {
+    const asked = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'Bash', text: 'touch /x' }));
+    expect(asked.state).toBe('working');
+    expect(asked.pending).toBeUndefined();
+    // The automatic review approved: the tool ran.
+    expect(reduce(asked, ev('PostToolUse', { tool: 'Bash', at: later(3000) }))).toMatchObject({ state: 'working' });
+    // It refused: the turn ended, no PostToolUse.
+    expect(reduce(asked, ev('Stop', { at: later(10000) }))).toMatchObject({ state: 'idle' });
+  });
+  const editDialog = (at: string): SessionEvent => ({ name: 'PanePrompt', at, source: 'pane', kind: 'diff', text: 'Edit /w/harness-assistant/README.md', options: ['Yes, proceed (y)', 'No (esc)'] });
+  it('#302 Codex: a request its terminal shows waits as today, the hook\'s exact request, and the tool\'s run clears it', () => {
+    const asked = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/harness-assistant/README.md' }));
+    expect(asked.codexAsk).toMatchObject({ kind: 'diff', source: 'hook' });
+    const shown = reduce(asked, editDialog(later(5500)));
+    expect(shown.state).toBe('waiting_permission');
+    expect(shown.pending).toEqual({ kind: 'diff', text: '/w/harness-assistant/README.md', tool: 'apply_patch', source: 'hook' });
+    expect(shown.codexAsk).toBeUndefined();
+    expect(reduce(shown, ev('PostToolUse', { tool: 'apply_patch', at: later(9000) })).pending).toBeUndefined();
+  });
+  it('#302 Codex: the phone judges an edit inside the folder as before the fix (low, no passkey)', () => {
+    const codex = session('working', { tool: 'codex' });
+    // Before #302 the hook alone made this request.
+    const before = { ...codex, state: 'waiting_permission' as const, pending: { kind: 'diff' as const, text: '/w/harness-assistant/README.md', tool: 'apply_patch', source: 'hook' as const } };
+    const now = reduce(reduce(codex, ev('PermissionRequest', { tool: 'apply_patch', text: '/w/harness-assistant/README.md' })), editDialog(later(5500)));
+    expect(riskOf(now)).toEqual(riskOf(before));
+    expect(riskOf(now)).toEqual({ risk: 'low', reason: 'edit_inside_folder' });
+  });
+  it('#302 Codex: a dialog for another file or command is not the held request: the screen\'s own waits, judged high', () => {
+    const codex = session('working', { tool: 'codex' });
+    const outside: SessionEvent = { name: 'PanePrompt', at: later(5500), source: 'pane', kind: 'diff', text: 'Edit /etc/critical.conf', options: ['Yes, proceed (y)', 'No (esc)'] };
+    const crossed = reduce(reduce(codex, ev('PermissionRequest', { tool: 'apply_patch', text: '/w/harness-assistant/safe.txt' })), outside);
+    expect(crossed.pending).toMatchObject({ kind: 'diff', text: 'Edit /etc/critical.conf', source: 'pane' });
+    expect(riskOf(crossed)?.risk).toBe('high');
+    // Read before the hook, the same.
+    const early = reduce(reduce(codex, outside), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/harness-assistant/safe.txt' }));
+    expect(early.pending).toMatchObject({ source: 'pane', text: 'Edit /etc/critical.conf' });
+    // A relative path in the patch is under the folder the agent works in.
+    const rel = reduce(reduce(codex, ev('PermissionRequest', { tool: 'apply_patch', text: 'README.md' })), editDialog(later(5500)));
+    expect(rel.pending).toMatchObject({ source: 'hook', text: 'README.md' });
+    // Another command: the screen's.
+    const cmd = reduce(reduce(codex, ev('PermissionRequest', { tool: 'Bash', text: 'ls' })), { name: 'PanePrompt', at: later(5500), source: 'pane', kind: 'permission', text: 'rm -rf /w', options: ['Yes, proceed (y)', 'No (esc)'] });
+    expect(cmd.pending).toMatchObject({ source: 'pane', text: 'rm -rf /w' });
+    expect(riskOf(cmd)?.risk).toBe('high');
+  });
+  it('#302 Codex: a dialog read before its hook gives way to the hook\'s request; a held request ends with the turn', () => {
+    const codex = session('working', { tool: 'codex' });
+    const screenFirst = reduce(reduce(codex, editDialog(later(4000))), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/harness-assistant/README.md' }));
+    expect(screenFirst.pending).toMatchObject({ source: 'hook', tool: 'apply_patch' });
+    expect(screenFirst.codexAsk).toBeUndefined();
+    // Refused by the automatic review: Stop drops it, a later dialog is the screen's own.
+    const ended = reduce(reduce(codex, ev('PermissionRequest', { tool: 'apply_patch', text: '/w/harness-assistant/README.md' })), ev('Stop', { at: later(9000) }));
+    expect(ended.codexAsk).toBeUndefined();
+    expect(reduce(ended, editDialog(later(12000))).pending).toMatchObject({ source: 'pane' });
+    // A dialog of another kind is not that request.
+    const other = reduce(reduce(codex, ev('PermissionRequest', { tool: 'Bash', text: 'touch /x' })), editDialog(later(5500)));
+    expect(other.pending).toMatchObject({ kind: 'diff', source: 'pane' });
+    expect(other.codexAsk).toBeUndefined();
+  });
+  it('#302 Codex: a terminal that cannot be captured falls back on the hook, as before; read again, the dialog decides again', () => {
+    const codex = session('working', { tool: 'codex' });
+    const held = reduce(codex, ev('PermissionRequest', { tool: 'Bash', text: 'touch /x' }));
+    const lost = reduce(held, { name: 'PaneUnreadable', at: later(6000), source: 'daemon' });
+    expect(lost).toMatchObject({ state: 'waiting_permission', paneUnreadable: true, pending: { kind: 'permission', tool: 'Bash', text: 'touch /x', source: 'hook' } });
+    expect(lost.codexAsk).toBeUndefined();
+    // Unreadable first: the hook's request waits at once.
+    const blind = reduce(codex, { name: 'PaneUnreadable', at: later(1000), source: 'daemon' });
+    expect(reduce(blind, ev('PermissionRequest', { tool: 'Bash', text: 'touch /y' })).state).toBe('waiting_permission');
+    // Read again: a new request is held until its dialog.
+    const back = reduce(blind, { name: 'PaneReadable', at: later(2000), source: 'daemon' });
+    expect(back.paneUnreadable).toBeUndefined();
+    expect(reduce(back, ev('PermissionRequest', { tool: 'Bash', text: 'touch /y' })).state).toBe('working');
+  });
+  it('#302 unchanged: Claude Code\'s PermissionRequest and a Codex helper\'s still wait', () => {
+    expect(reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'ls' })).state).toBe('waiting_permission');
+    const helper = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'Bash', text: 'ls', helperId: 'h1' }));
+    expect(helper.pending).toMatchObject({ helperId: 'h1' });
   });
   it('PostToolUse of ExitPlanMode clears a plan pending', () => {
     const s = reduce(session('working'), ev('PreToolUse', { tool: 'ExitPlanMode', text: 'plan' }));

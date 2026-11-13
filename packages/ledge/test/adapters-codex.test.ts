@@ -4,6 +4,7 @@ import type { Pending } from '@ledge/protocol';
 import { codexAdapter, REPLY_ENTER_DELAY_MS } from '../src/adapters/codex.js';
 import { adapterFor } from '../src/adapters/index.js';
 import { buildPreview } from '../src/adapters/preview.js';
+import { assertDialogIs, dialogMismatch } from '../src/adapters/types.js';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/panes/${n}.txt`, import.meta.url), 'utf8');
 /** What the server's verify step sees: the last `n` lines, trailing whitespace trimmed like Tmux.capture. */
@@ -22,9 +23,28 @@ describe('codex adapter: detection (Codex CLI 0.162 captures)', () => {
   });
   it('detects an edit approval as the destination file, its wrapped lines joined', () => {
     expect(codexAdapter.detectPrompt(fx('codex-permission-patch'))).toEqual({
-      kind: 'permission', text: 'Edit /home/dev/demo/README.md',
+      kind: 'diff', text: 'Edit /home/dev/demo/README.md',
       options: ['Yes, proceed', "Yes, and don't ask again for these files", 'No, and tell Codex what to do differently']
     });
+  });
+  it('#302: an edit dialog read on screen (diff) can be answered from Ledge, never refused as stale; a command dialog is not an edit', () => {
+    const shown = codexAdapter.detectPrompt(fx('codex-permission-patch'))!;
+    expect(dialogMismatch(shown, { kind: 'diff', text: 'Edit /home/dev/demo/README.md', source: 'pane' })).toBeNull();
+    expect(dialogMismatch(shown, { kind: 'permission', text: 'Edit /home/dev/demo/README.md', source: 'pane' })).toBeNull();
+    expect(() => assertDialogIs({ kind: 'diff', text: 'x', source: 'pane' }, 'diff')).not.toThrow();
+    expect(dialogMismatch(codexAdapter.detectPrompt(fx('codex-permission-exec')), { kind: 'question', text: 'x', source: 'pane' })).not.toBeNull();
+  });
+  it('#302: a patch the hook named is answered only on the edit dialog of one of its files', () => {
+    const shown = codexAdapter.detectPrompt(fx('codex-permission-patch'))!;
+    const hook = (text: string) => ({ kind: 'diff' as const, text, tool: 'apply_patch', source: 'hook' as const });
+    expect(dialogMismatch(shown, hook('/home/dev/demo/README.md'))).toBeNull();
+    expect(dialogMismatch(shown, hook('/home/dev/demo/a.ts, /home/dev/demo/README.md'))).toBeNull();
+    expect(dialogMismatch(shown, hook('README.md'), undefined, undefined, '/home/dev/demo')).toBeNull();
+    expect(dialogMismatch(shown, hook('/home/dev/demo/safe.txt'))).not.toBeNull();
+    // Relative, and no folder to place it: uncertain, refused.
+    expect(dialogMismatch(shown, hook('README.md'))).not.toBeNull();
+    // A command dialog is not that patch, though both are file or command approvals.
+    expect(dialogMismatch(codexAdapter.detectPrompt(fx('codex-permission-exec')), hook('/home/dev/demo/README.md'))).not.toBeNull();
   });
   it('detects a request_user_input question with its option labels and their descriptions', () => {
     expect(codexAdapter.detectPrompt(fx('codex-question'))).toEqual({

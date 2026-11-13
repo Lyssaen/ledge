@@ -1,7 +1,7 @@
 import { cleanTopic, DOING_LABEL_MAX, RUNNING_MAX, pendingKey, parseRigPrompt, sessionTitle, type RunningCall, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 import { crossSession, crossSessionNotices, ledgeNotice, ledgeTask } from './crossSession.js';
-import { sameQuestion } from '../adapters/types.js';
+import { codexEditIs, sameQuestion } from '../adapters/types.js';
 import { ledgeTitleRest } from '../names.js';
 
 export const HOOK_PRIORITY_MS = 2000;
@@ -11,6 +11,52 @@ export const HOOK_PRIORITY_MS = 2000;
  * stale or poorer. Cursor Agent's and Codex's never do: their prompts come from the pane alone, at once.
  */
 const hooksReportPrompts = (s: Session) => s.tool === 'claude';
+
+/** Codex's main agent asking a permission through its hook (#302): not proof that it waits, the terminal's dialog is. Only where
+ *  Ledge reads a terminal: a session it only hears through hooks (hook_only, no tmux), or whose capture fails now, keeps the hook's
+ *  request, as before (missing a real request is worse than showing one the automatic review settles). */
+export function isCodexAsk(s: Pick<Session, 'tool' | 'tmuxSession' | 'paneUnreadable'> | undefined, ev: SessionEvent): boolean {
+  return s?.tool === 'codex' && !!s.tmuxSession && !s.paneUnreadable && ev.name === 'PermissionRequest' && ev.source === 'hook' && !ev.helperId;
+}
+
+const TURN_ENDS: ReadonlySet<SessionEvent['name']> = new Set(['Stop', 'StopFailure', 'SessionEnd', 'PaneGone']);
+const flat = (t: string) => t.replace(/\s+/g, ' ').trim();
+/** Whether the dialog on screen is the held Codex request (#302), not only one of its kind: the same command, or an edit of one of
+ *  the patch's files. Uncertain is no: the screen's own request (judged high on the phone) then waits instead. */
+export function sameCodexAsk(ask: Pending, shown: { kind?: Pending['kind']; text?: string }, cwd?: string): boolean {
+  if (ask.kind !== (shown.kind ?? 'permission')) return false;
+  const text = shown.text ?? '';
+  if (ask.kind === 'diff') return codexEditIs(ask.text, text, cwd);
+  return flat(text) !== '' && flat(text) === flat(ask.text);
+}
+/** Whether `ev` settles a held Codex request (Session.codexAsk) no dialog showed: the end of the very call it is for (a helper's, or
+ *  another call, never), or the end of the turn (a refusal by the automatic review sends only Stop). Codex's PermissionRequest names
+ *  no call: it is the one its PreToolUse named (codexAskCall). When that is not known (no id, or several calls it could be), the
+ *  end of any call of its tool settles it: if its dialog still shows, it is then the screen's own request, judged high. */
+export function endsCodexAsk(s: Pick<Session, 'codexAsk' | 'codexAskCall'>, ev: SessionEvent): boolean {
+  const ask = s.codexAsk;
+  if (!ask) return false;
+  // A helper's events are its own, its Stop included.
+  if (ev.helperId) return false;
+  if (TURN_ENDS.has(ev.name)) return true;
+  if (ev.name !== 'PostToolUse' && ev.name !== 'PostToolUseFailure') return false;
+  if (s.codexAskCall && ev.toolUseId) return ev.toolUseId === s.codexAskCall;
+  return !ask.tool || !ev.tool || ask.tool === ev.tool;
+}
+
+/** The main agent's call a Codex PermissionRequest is for: the only running call of its tool, or the only one whose label is its text. */
+function callOf(s: Session, ask: Pending): string | undefined {
+  const calls = (s.running ?? []).filter(c => c.id && c.tool === ask.tool);
+  if (calls.length === 1) return calls[0]!.id;
+  const text = flat(ask.text);
+  const same = calls.filter(c => { const l = flat(c.label).replace(/…$/, ''); return l !== '' && (text === l || text.startsWith(l)); });
+  return same.length === 1 ? same[0]!.id : undefined;
+}
+
+function withoutCodexAsk(s: Session): Session {
+  const { codexAsk: _held, codexAskCall: _call, ...rest } = s;
+  return rest;
+}
 
 export function isPending(s: Session): boolean {
   return s.state === 'waiting_permission' || s.state === 'waiting_input';
@@ -23,6 +69,9 @@ const DIFF_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', '
 
 /** The options' descriptions travel with them, only when there are some. */
 const details = (ev: SessionEvent) => (ev.optionDetails?.some(Boolean) ? { optionDetails: ev.optionDetails } : {});
+
+/** The request a held Codex PermissionRequest describes (#302). */
+export const codexAskOf = (ev: SessionEvent): Pending => pendingFor(ev)!;
 
 function pendingFor(ev: SessionEvent): Pending | undefined {
   if (ev.name === 'PermissionRequest') {
@@ -307,10 +356,39 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
   if (ev.helperId && ev.source === 'hook' && ev.name !== 'SessionEnd') return reduceHelper(s, { ...ev, helperId: ev.helperId });
   // The transcript a hook names is the live one (it follows /clear and --resume): it replaces the one the launch implied.
   if (ev.source === 'hook' && ev.transcriptPath && ev.transcriptPath !== s.transcriptPath) s = { ...s, transcriptPath: ev.transcriptPath };
+  // #302: Codex sends its main agent's PermissionRequest before it knows whether it will ask: with « Approve for me » (its
+  // approvals_reviewer auto_review) the automatic review settles it alone, and the same payload means no question at all. Only its
+  // dialog in the terminal (PanePrompt) says it waits on the person: the hook is activity, nothing more. Claude Code, OMP and Codex's
+  // helpers are unchanged. Its exact request (tool, files) is held until the dialog shows, then it is the request, as before: the
+  // phone judges it from the same files (an edit inside the folder needs no passkey).
+  if (isCodexAsk(s, ev)) {
+    const ask = pendingFor(ev)!;
+    // The dialog was read before its hook: the hook's request replaces the screen's, as a hook's always did.
+    if (s.pending?.source === 'pane' && !s.pending.helperId && sameCodexAsk(ask, s.pending, s.workdir ?? s.cwd)) {
+      return { ...withoutCodexAsk(s), pending: ask, lastHookAt: at, lastActivityAt: at };
+    }
+    const call = ev.toolUseId ?? callOf(s, ask);
+    return { ...withoutCodexAsk(s), codexAsk: ask, ...(call ? { codexAskCall: call } : {}), lastHookAt: at, lastActivityAt: at };
+  }
+  // The held request was settled without a dialog (the automatic review: the tool ran, or the turn ended on a refusal).
+  if (endsCodexAsk(s, ev)) s = withoutCodexAsk(s);
 
   switch (ev.name) {
     case 'SessionEnd':
       return { ...s, state: 'exited', pending: undefined, exitCode: ev.exitCode ?? null, exitedAt: s.exitedAt ?? at, lastActivityAt: at };
+    case 'PaneUnreadable': {
+      // The terminal can no longer be read: no dialog will prove a held request, so it waits now, as the hook alone did before #302.
+      if (s.paneUnreadable) return s;
+      const ask = s.codexAsk;
+      const marked = { ...withoutCodexAsk(s), paneUnreadable: true as const };
+      return ask && !s.pending ? { ...marked, state: 'waiting_permission', pending: ask, lastActivityAt: at } : marked;
+    }
+    case 'PaneReadable': {
+      // Read again: the dialog decides the next requests; the one shown stays until its tool ran or the turn ended.
+      if (!s.paneUnreadable) return s;
+      const { paneUnreadable: _gone, ...rest } = s;
+      return rest;
+    }
     case 'PaneGone':
       return { ...s, state: 'exited', pending: undefined, exitCode: null, exitedAt: s.exitedAt ?? at, lastActivityAt: at };
     case 'PaneChanged':
@@ -369,6 +447,12 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     }
     case 'PanePrompt': {
       const incoming = pendingFor(ev)!;
+      // #302: Codex's dialog proves its held request waits: the hook's exact request is the one shown and answered.
+      if (s.codexAsk) {
+        const ask = s.codexAsk;
+        s = withoutCodexAsk(s);
+        if (!s.pending && sameCodexAsk(ask, incoming, s.workdir ?? s.cwd)) return { ...s, state: 'waiting_permission', pending: ask, lastActivityAt: at };
+      }
       // A hook question the pane has moved past (the next question of an AskUserQuestion, its review: the last one
       // answered in the terminal) gives way to what the pane asks. No hook reports the next one: only the end of all.
       const moved = s.pending?.source === 'hook' && s.pending.kind === 'question' && incoming.kind === 'question'

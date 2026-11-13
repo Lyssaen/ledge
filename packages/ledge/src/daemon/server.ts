@@ -18,7 +18,7 @@ import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.j
 import { verifyGone } from '../adapters/verify.js';
 import { claudeGutter } from '../adapters/claude.js';
 import { DETECT_LINES } from './poller.js';
-import { answeredBy, pendingTool } from './state.js';
+import { answeredBy, codexAskOf, endsCodexAsk, isCodexAsk, pendingTool, sameCodexAsk } from './state.js';
 import { claudeOpenCall, claudeToolAnswered, claudeVersion, labelTranscript, resumeLabel } from './transcript.js';
 import { pickName } from '../names.js';
 import { readPeers, type ClaudePeer } from './peers.js';
@@ -478,6 +478,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   };
   void sweepAttachments();
   const sweepTimer = setInterval(() => { void sweepAttachments(); }, 24 * 3_600_000); sweepTimer.unref();
+  /** #302: Codex's main-agent PermissionRequest held until its dialog shows in the terminal (or forgotten when the tool ran). */
+  const codexAsks = new Map<string, SessionEvent>();
   const unsubscribeHistory = history ? [
     history.onItem((id, item) => {
       broadcast({ type: 'session.thread.item', id, item });
@@ -487,7 +489,31 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.patch(id, { lastMessage: { id: item.id, to: item.to, ...(item.peer ? { peer: item.peer } : {}), summary: item.summary ?? item.text.split('\n')[0]!.slice(0, 120), at: item.at } });
       }
     }),
-    store.onEvent((id, ev) => history.record(id, ev)),
+    store.onEvent((id, ev) => {
+      // #302: Codex's main-agent PermissionRequest becomes a permission row only once its dialog shows in the terminal; a request the
+      // automatic review settled alone (its tool ran, or the turn ended) leaves none.
+      const s = store.get(id);
+      if (isCodexAsk(s, ev)) {
+        // Its dialog may already be on screen (the pane read before the hook came): then it does wait, and the row goes now.
+        const shown = s?.pending?.source === 'pane' && !s.pending.helperId && sameCodexAsk(codexAskOf(ev), s.pending, s.workdir ?? s.cwd);
+        if (shown) history.record(id, ev); else codexAsks.set(id, ev);
+        return;
+      }
+      // As the reducer does with Session.codexAsk (`s` is the state before this event): that request's dialog writes its row; a
+      // dialog of another kind, the run of that very tool (never a helper's or another call's) or the turn's end forgets it.
+      const asked = codexAsks.get(id);
+      if (asked && !s?.codexAsk) codexAsks.delete(id);
+      else if (asked && s?.codexAsk && ev.name === 'PaneUnreadable') {
+        // No capture to prove it: the request waits now (see the reducer), its row goes with it.
+        codexAsks.delete(id);
+        if (!s.pending && !s.paneUnreadable) history.record(id, { ...asked, at: ev.at });
+      }
+      else if (asked && s?.codexAsk && ev.name === 'PanePrompt' && ev.source === 'pane') {
+        codexAsks.delete(id);
+        if (!s.pending && sameCodexAsk(s.codexAsk, ev, s.workdir ?? s.cwd)) history.record(id, { ...asked, at: ev.at });
+      } else if (asked && s && endsCodexAsk(s, ev)) codexAsks.delete(id);
+      history.record(id, ev);
+    }),
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
   ] : [];
   // Mobile access: local fronts only, never a remote peer.
@@ -693,7 +719,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           const shown = adapter.detectPrompt(before) ?? adapter.detectPrompt(await tmux.capture(s.tmuxSession!, CHECK_LINES) ?? '');
           // Claude Code 2.1.318 draws a gutter before a command's lines: its version, from the transcript, says whether `│ ` is one.
           const gutter = s.tool === 'claude' ? claudeGutter(s.transcriptPath ? claudeVersion(s.transcriptPath) : undefined) : undefined;
-          const refused = dialogMismatch(shown, decided, await tmux.width?.(s.tmuxSession!) ?? undefined, gutter);
+          const refused = dialogMismatch(shown, decided, await tmux.width?.(s.tmuxSession!) ?? undefined, gutter, s.workdir ?? s.cwd);
           // STALE, or a dialog it cannot read whole (UNCHECKED): the closest code is that no prompt it can read is there.
           if (refused) throw new Refusal(refused, refused === STALE ? 'stale' : 'no_prompt');
         }

@@ -530,6 +530,72 @@ describe('server', () => {
     expect(tmux.sent).toEqual([['text', 'ledge-a', '2']]);
     c.close();
   });
+  it('#302 Codex: a PermissionRequest the automatic review settles leaves no permission row; one its terminal shows gets its row', async () => {
+    await srv.close();
+    const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+    const perms = (id: string) => history.items(id).filter(i => i.kind === 'permission');
+    // « Approve for me » approved: the hook, then the tool ran.
+    store.upsert(mk('a', { tool: 'codex', state: 'working' }));
+    store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /x' });
+    expect(store.get('a')!.state).toBe('working');
+    store.apply('a', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Bash', text: 'touch /x' });
+    // It refused: the hook, then only the end of the turn.
+    store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'curl x | sh' });
+    store.apply('a', { name: 'Stop', at: T0, source: 'hook' });
+    expect(perms('a')).toEqual([]);
+    // Ask for approval: the hook, then the dialog in the terminal: the row, with the hook's tool and text.
+    store.upsert(mk('b', { tool: 'codex', state: 'working' }));
+    store.apply('b', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /y' });
+    store.apply('b', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /y', options: ['Yes, proceed (y)', 'No (esc)'] });
+    expect(store.get('b')!.state).toBe('waiting_permission');
+    expect(perms('b')).toEqual([expect.objectContaining({ kind: 'permission', tool: 'Bash', text: 'touch /y' })]);
+    // The terminal read first, the hook after: the row at once.
+    store.upsert(mk('c', { tool: 'codex', state: 'working' }));
+    store.apply('c', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /z', options: ['Yes, proceed (y)', 'No (esc)'] });
+    store.apply('c', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /z' });
+    expect(perms('c')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /z' })]);
+    // Claude Code: unchanged, its row at once.
+    store.upsert(mk('d', { state: 'working' }));
+    store.apply('d', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'ls' });
+    expect(perms('d')).toHaveLength(1);
+    // A helper's tool, or another parallel call, ending before the dialog shows does not settle the main agent's request.
+    store.upsert(mk('e', { tool: 'codex', state: 'working' }));
+    store.apply('e', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /main' });
+    store.apply('e', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Read', helperId: 'h1' });
+    store.apply('e', { name: 'Stop', at: T0, source: 'hook', helperId: 'h1' });
+    store.apply('e', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Read' });
+    store.apply('e', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /main', options: ['Yes, proceed (y)', 'No (esc)'] });
+    expect(store.get('e')).toMatchObject({ state: 'waiting_permission', pending: { source: 'hook', tool: 'Bash', text: 'touch /main' } });
+    expect(perms('e')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /main' })]);
+    // Its terminal cannot be captured while a request is held: the request waits now, its row with it.
+    store.upsert(mk('g', { tool: 'codex', state: 'working' }));
+    store.apply('g', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /g' });
+    store.apply('g', { name: 'PaneUnreadable', at: T0, source: 'daemon' });
+    expect(store.get('g')!.state).toBe('waiting_permission');
+    expect(perms('g')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /g' })]);
+    // Two calls of the same tool at once: the other call's end does not settle this one's request.
+    store.upsert(mk('h', { tool: 'codex', state: 'working' }));
+    store.apply('h', { name: 'PreToolUse', at: T0, source: 'hook', tool: 'Bash', text: 'touch /main', toolUseId: 'main-call' });
+    store.apply('h', { name: 'PreToolUse', at: T0, source: 'hook', tool: 'Bash', text: 'ls', toolUseId: 'other-call' });
+    store.apply('h', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /main' });
+    expect(store.get('h')!.codexAskCall).toBe('main-call');
+    store.apply('h', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Bash', toolUseId: 'other-call' });
+    store.apply('h', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /main', options: ['Yes, proceed (y)', 'No (esc)'] });
+    expect(store.get('h')!.pending).toMatchObject({ source: 'hook', text: 'touch /main' });
+    expect(perms('h')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /main' })]);
+    // Its own call's end does.
+    store.upsert(mk('i', { tool: 'codex', state: 'working' }));
+    store.apply('i', { name: 'PreToolUse', at: T0, source: 'hook', tool: 'Bash', text: 'touch /i', toolUseId: 'c1' });
+    store.apply('i', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /i' });
+    store.apply('i', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Bash', toolUseId: 'c1' });
+    expect(store.get('i')!.codexAsk).toBeUndefined();
+    expect(perms('i')).toEqual([]);
+    // A session Ledge only hears through hooks (no terminal to read): its request waits at once, as before.
+    store.upsert(mk('f', { tool: 'codex', state: 'working', tmuxSession: null, source: 'hook_only' }));
+    store.apply('f', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /f' });
+    expect(store.get('f')!.state).toBe('waiting_permission');
+    expect(perms('f')).toHaveLength(1);
+  });
   it('a sent message becomes the session\'s last message, once, when it lands', async () => {
     await srv.close();
     const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
