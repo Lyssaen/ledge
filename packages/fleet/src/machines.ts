@@ -167,13 +167,23 @@ export function terminalCommand(machine: MachineState, rawId: string, opts: { re
   const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, command.map(quote).join(' ')] : command;
   return argv.every(wslArg) ? argv : null;
 }
-/** A login shell in `dir` (home when it is gone): the user's own shell, read from passwd here and from `$SHELL` over ssh. */
-export function shellCommand(machine: MachineState, dir: string): string[] | null {
+/** A free shell's nonce (#299): 32 hexadecimal characters, drawn by the front for each shell. */
+export const SHELL_NONCE = /^[0-9a-f]{32}$/;
+/** A login shell in `dir` (home when it is gone): the user's own shell, read from passwd here and from `$SHELL` over ssh. With
+ *  `nonce`, and a machine whose daemon says `freeShell`, its launcher prints the line that starts the shell with the integration
+ *  (OSC 633, E signed with `nonce`) and the shell evaluates it; if that fails, the plain login shell as before. */
+export function shellCommand(machine: MachineState, dir: string, nonce?: string): string[] | null {
   if (!wslArg(dir)) return null; // empty, or one wsl.exe would mangle: no shell
-  const go = `cd ${quote(dir)} 2>/dev/null || cd; exec`;
+  const go = integrated(machine, nonce)
+    // No double quote (wsl.exe would split the argument on it): IFS empty and globbing off keep the printed line one word, as is.
+    ? `set -f; IFS=; eval $(${[...machine.launcher!, 'shell', '--nonce', nonce!, dir].map(quote).join(' ')}); unset IFS; set +f; cd ${quote(dir)} 2>/dev/null || cd; exec`
+    : `cd ${quote(dir)} 2>/dev/null || cd; exec`;
   const argv = machine.ssh ? ['ssh', '-t', '--', machine.ssh, `${go} $SHELL -l`] : ['sh', '-c', `${go} $(getent passwd $(id -un) | cut -d: -f7) -l`];
   return argv.every(wslArg) ? argv : null;
 }
+/** Whether a free shell on `machine` starts with the integration: its daemon says so, its launcher is known, the nonce is one. */
+export const integrated = (machine: MachineState, nonce: string | undefined): boolean =>
+  !!nonce && SHELL_NONCE.test(nonce) && machine.daemon?.freeShell === true && !!machine.launcher?.length;
 const EMPTY: MachineState[] = [];
 const noopSubscribe = () => () => {};
 const emptySnapshot = () => EMPTY;

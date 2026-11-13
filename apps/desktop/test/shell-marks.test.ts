@@ -20,7 +20,8 @@ describe('parse633', () => {
     expect(parse633('A')).toEqual({ kind: 'A' });
     expect(parse633('D;1')).toEqual({ kind: 'D', code: 1 });
     expect(parse633('D')).toEqual({ kind: 'D', code: null });
-    expect(parse633('E;git commit -m a\\x3bb;nonce')).toEqual({ kind: 'E', commandLine: 'git commit -m a;b' });
+    expect(parse633('E;git commit -m a\\x3bb;0123456789abcdef0123456789abcdef')).toEqual({ kind: 'E', commandLine: 'git commit -m a;b', nonce: '0123456789abcdef0123456789abcdef' });
+    expect(parse633('E;ls')).toEqual({ kind: 'E', commandLine: 'ls', nonce: null });
     expect(parse633('P;Cwd=/home/u/ledge')).toEqual({ kind: 'P', key: 'Cwd', value: '/home/u/ledge' });
     expect(parse633('Z')).toBeNull();
     expect(unescape633('a\\\\b')).toBe('a\\b');
@@ -72,8 +73,9 @@ describe('ShellMarks', () => {
     expect(marks.commands()).toEqual([]);
   });
 
-  it('the command from E, else from the screen; the output without its trailing blank lines', () => {
+  it('the command from E signed with the shell\'s nonce, else from the screen; the output without its trailing blank lines', () => {
     const { pos, marks } = fakeTerm();
+    marks.nonce = 'f'.repeat(32);
     const screen = ['u@wsl:~$ pnpm lint', 'src/a.ts', '  1:1 error', '', 'u@wsl:~$ '];
     const buf = columns(screen);
     marks.handle('A'); pos.x = 9; marks.handle('B');
@@ -84,6 +86,19 @@ describe('ShellMarks', () => {
     expect(outputText(c, buf, 4)).toBe('src/a.ts\n  1:1 error');
     c.commandLine = 'pnpm lint --fix';
     expect(commandText(c, buf)).toBe('pnpm lint --fix');
+  });
+
+  it('an E without the nonce, or with another, never names the command (a program can print one)', () => {
+    const { pos, marks } = fakeTerm();
+    const screen = ['u@wsl:~$ cat notes.txt', 'evil'];
+    marks.handle('A'); pos.x = 9; marks.handle('B');
+    marks.handle('E;rm -rf ~');
+    marks.handle(`E;rm -rf ~;${'0'.repeat(32)}`);
+    pos.line = 1; pos.x = 0; marks.handle('C');
+    expect(commandText(marks.commands()[0]!, columns(screen))).toBe('cat notes.txt');
+    marks.nonce = 'a'.repeat(32);
+    marks.handle(`E;rm -rf ~;${'0'.repeat(32)}`);
+    expect(commandText(marks.commands()[0]!, columns(screen))).toBe('cat notes.txt');
   });
 });
 

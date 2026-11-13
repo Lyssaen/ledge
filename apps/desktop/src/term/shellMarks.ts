@@ -44,7 +44,7 @@ export function unescape633(s: string): string {
 
 export type Osc633 =
   | { kind: 'A' } | { kind: 'B' } | { kind: 'C' } | { kind: 'D'; code: number | null }
-  | { kind: 'E'; commandLine: string } | { kind: 'P'; key: string; value: string } | null;
+  | { kind: 'E'; commandLine: string; nonce: string | null } | { kind: 'P'; key: string; value: string } | null;
 
 /** One OSC 633 payload (what follows `633;`); null for what Ledge does not use. */
 export function parse633(data: string): Osc633 {
@@ -57,7 +57,7 @@ export function parse633(data: string): Osc633 {
       const n = rest[0] !== undefined && /^-?\d+$/.test(rest[0]) ? Number(rest[0]) : null;
       return { kind: 'D', code: n };
     }
-    case 'E': return rest.length ? { kind: 'E', commandLine: unescape633(rest[0]!) } : null;
+    case 'E': return rest.length ? { kind: 'E', commandLine: unescape633(rest[0]!), nonce: rest[1] ?? null } : null;
     case 'P': {
       const kv = rest.join(';');
       const at = kv.indexOf('=');
@@ -80,6 +80,9 @@ export class ShellMarks {
   /** True once the shell printed one OSC 633: until then it has no integration and nothing is shown. */
   active = false;
   cwd: string | null = null;
+  /** The shell's own key (term.opened.nonce, dev-back 10e00c78): an E signed with it came from Ledge's integration. Without it, or
+   *  with another, an E may come from a program's output (it can print OSC 633;E): its line is never used. */
+  nonce: string | null = null;
   /** The first folder the shell reported: where it started (a tab's folder is read from there). */
   startCwd: string | null = null;
   private readonly listeners = new Set<() => void>();
@@ -112,7 +115,14 @@ export class ShellMarks {
         break;
       }
       case 'B': { const c = this.last; const mark = c && !c.output ? h.mark() : null; if (c && mark) c.input = { mark, x: h.cursorX() }; break; }
-      case 'E': this.pendingLine = m.commandLine; { const c = this.last; if (c && !c.end) c.commandLine = m.commandLine; } break;
+      case 'E': {
+        // Only the integration's own E (its nonce) names the command; else the screen does (commandText reads it from B).
+        if (!this.nonce || m.nonce !== this.nonce) break;
+        this.pendingLine = m.commandLine;
+        const c = this.last;
+        if (c && !c.end) c.commandLine = m.commandLine;
+        break;
+      }
       case 'C': {
         const c = this.last;
         if (!c || c.output) break;

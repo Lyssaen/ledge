@@ -15,10 +15,13 @@ export const agentTabId = (sessionId: string): string => `${sessionId}#agent`;
 /** The right panel's first tab, « ± Modifications »: fixed, never closed, and where the panel opens while it has no shell. */
 export const changesTabId = (sessionId: string): string => `${sessionId}#changes`;
 /** A shell of the bottom panel: it belongs to no session. */
+/** 32 hexadecimal characters from the system's random source. */
+const newNonce = (): string => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+
 export interface FreeShell { id: string; kind: ShellKind; n: number; title: string; dir: string; status: 'running' | 'ended' | 'unavailable'; end?: { code: number | null; lost: boolean };
   /** Shell integration (#299): the folder P;Cwd last reported and the first one (where it started); absent without integration. */
   cwd?: string; startCwd?: string }
-export interface TermDeps { backend: PtyBackend | null; /** What a free shell runs, null when it cannot (absent: it cannot). */ freeLaunch?(kind: ShellKind, dir: string): { argv: string[] } | { native: 'powershell' | 'cmd' | 'gitbash' } | null; freeTitle?(kind: ShellKind, n: number): string; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout; /** Absent: the agent screen is always the pseudo-terminal, as before the control stream. */ agentRoute?: (sessionId: string) => AgentRoute; stream?: AgentStream; /** Shells born beside the daemon, when `agentRoute` says `stream`. Absent: a shell is the local pseudo-terminal. */ shellStream?: ShellStream }
+export interface TermDeps { backend: PtyBackend | null; /** What a free shell runs, null when it cannot (absent: it cannot). */ freeLaunch?(kind: ShellKind, dir: string, nonce?: string): { argv: string[]; integrated?: boolean } | { native: 'powershell' | 'cmd' | 'gitbash' } | null; /** A free shell's key (#299), 32 hex; absent: crypto. */ nonce?(): string; freeTitle?(kind: ShellKind, n: number): string; surface(): TermSurface; agentArgv(id: string, readOnly: boolean): string[] | null; shellArgv(id: string): string[] | null; shellPlace(sessionId: string): { dir: string; remote: boolean }; now?(): number; setTimeout?: typeof setTimeout; /** Absent: the agent screen is always the pseudo-terminal, as before the control stream. */ agentRoute?: (sessionId: string) => AgentRoute; stream?: AgentStream; /** Shells born beside the daemon, when `agentRoute` says `stream`. Absent: a shell is the local pseudo-terminal. */ shellStream?: ShellStream }
 
 const OFF: AgentLink = { state: 'off', attempt: 0 };
 /** `ssh`'s exit code when the connection fails or drops. */
@@ -459,10 +462,13 @@ export class TermStore {
 
   private runFree(id: string, f: { shell: FreeShell; run: Run | null }): void {
     const { backend } = this.deps;
-    const launch = backend ? this.deps.freeLaunch?.(f.shell.kind, f.shell.dir) ?? null : null;
+    // #299: a key per run, signing the shell's command lines; kept by its marks only when it started with the integration.
+    const nonce = this.deps.nonce?.() ?? newNonce();
+    const launch = backend ? this.deps.freeLaunch?.(f.shell.kind, f.shell.dir, nonce) ?? null : null;
     if (!backend || !launch) { f.run = null; this.setFree(id, { status: 'unavailable', end: undefined }); return; }
     const surface = this.surfaceFor(id, () => this.frees.get(id)?.run ?? null);
     this.watchCwd(id, surface);
+    if (surface.shell) surface.shell.marks.nonce = 'argv' in launch && launch.integrated ? nonce : null;
     const run: Run = { handle: null, typed: [] };
     const current = () => this.frees.get(id)?.run === run;
     f.run = run;

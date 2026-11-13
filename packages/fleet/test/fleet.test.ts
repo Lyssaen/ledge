@@ -117,6 +117,18 @@ describe('multi-machine connections', () => {
     expect(shellCommand(at(), '/home/u/w t')).toEqual(['sh', '-c', "cd '/home/u/w t' 2>/dev/null || cd; exec $(getent passwd $(id -un) | cut -d: -f7) -l"]);
     expect(shellCommand(at('build-01'), "/srv/it's")).toEqual(['ssh', '-t', '--', 'build-01', "cd '/srv/it'\\''s' 2>/dev/null || cd; exec $SHELL -l"]);
   });
+  it('#299: with its nonce and a daemon that says freeShell, the launcher starts the shell with the integration', () => {
+    const N = '0123456789abcdef0123456789abcdef';
+    const at = (ssh: string | undefined, freeShell: boolean | undefined) => ({ ...LOCAL_MACHINE, ssh, launcher: ['node', '/opt/ledge/cli.js'], status: 'open', ready: true, recents: [], sessions: [],
+      daemon: { version: '0.58.0', install: 'npm', systemd: true, ...(freeShell === undefined ? {} : { freeShell }) } }) as MachineState;
+    expect(shellCommand(at(undefined, true), '/home/u/w t', N)).toEqual(['sh', '-c',
+      `set -f; IFS=; eval $('node' '/opt/ledge/cli.js' 'shell' '--nonce' '${N}' '/home/u/w t'); unset IFS; set +f; cd '/home/u/w t' 2>/dev/null || cd; exec $(getent passwd $(id -un) | cut -d: -f7) -l`]);
+    expect(shellCommand(at('build-01', true), '/srv', N)).toEqual(['ssh', '-t', '--', 'build-01',
+      `set -f; IFS=; eval $('node' '/opt/ledge/cli.js' 'shell' '--nonce' '${N}' '/srv'); unset IFS; set +f; cd '/srv' 2>/dev/null || cd; exec $SHELL -l`]);
+    // An older daemon, no nonce, or not a nonce: the shell as before, no marks.
+    for (const [m, n] of [[at(undefined, undefined), N], [at(undefined, false), N], [at(undefined, true), undefined], [at(undefined, true), "x'; rm -rf ~"]] as const)
+      expect(shellCommand(m, '/w', n)).toEqual(['sh', '-c', "cd '/w' 2>/dev/null || cd; exec $(getent passwd $(id -un) | cut -d: -f7) -l"]);
+  });
   it('no shell for a folder wsl.exe would mangle', () => {
     const local = { ...LOCAL_MACHINE, launcher: null, status: 'open', ready: true, recents: [], sessions: [] } as MachineState;
     expect(shellCommand(local, '/w/"x"')).toBeNull();

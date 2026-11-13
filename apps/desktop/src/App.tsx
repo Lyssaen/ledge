@@ -136,7 +136,7 @@ function useTermStore(client: DaemonClient, onThread: () => void, avail: ShellsA
   titling.current = { avail, t };
   const [store] = useState(() => new TermStore({
     backend: ptyBackend(),
-    freeLaunch: (kind, dir) => shellLaunch(kind, { dir, machines: client.fleet?.machines() ?? [] }),
+    freeLaunch: (kind, dir, nonce) => shellLaunch(kind, { dir, machines: client.fleet?.machines() ?? [], ...(nonce ? { nonce } : {}) }),
     freeTitle: (kind, n) => {
       const { avail: a, t: msgs } = titling.current;
       const row = a ? shellMenu(a, client.fleet?.machines() ?? [], kind, msgs).find(r => r.kind === kind) : undefined;

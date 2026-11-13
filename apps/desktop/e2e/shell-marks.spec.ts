@@ -27,13 +27,16 @@ const prompt = (dir: string) => `${o('A')}\x1b[32motto@wsl\x1b[0m:\x1b[34m${dir}
 const typed = (dir: string, cmd: string) => `${prompt(dir)}${cmd}\r\n${o(`E;${cmd}`)}${o('C')}`;
 const ended = (code: number) => o(`D;${code}`);
 
-async function boot(page: Page, theme: 'light' | 'dark', lang: 'fr' | 'en') {
+/** The nonce the fixtures' streams were recorded with (withIntegration's, fixed for the recording). */
+const RECORDED_NONCE = '0123456789abcdef0123456789abcdef';
+
+async function boot(page: Page, theme: 'light' | 'dark', lang: 'fr' | 'en', freeShell = false) {
   await seedAtelier(page);
   await page.addInitScript(([t, l]) => {
     try { localStorage.setItem('desktop.lang', l!); localStorage.setItem('desktop.theme', t!); } catch { /* ignore */ }
     (window as unknown as { __ledgeShells: unknown }).__ledgeShells = { wsl: 'Ubuntu', powershell: false, cmd: false, gitBash: false };
   }, [theme, lang]);
-  await fakeDaemon(page, sessions, { projects: twoProjects, home: HOME });
+  await fakeDaemon(page, sessions, { projects: twoProjects, home: HOME, ...(freeShell ? { launcher: ['ledge'], daemon: { version: '0.58.0', install: 'npm', systemd: true, freeShell: true } } : {}) });
   await page.goto('/');
   await ideReady(page);
   await page.keyboard.press('Control+j');
@@ -108,12 +111,17 @@ test('marks, the handle and its menu, the margin, the tab following cd', async (
 });
 
 // The real stream: dev-back's integration (feat/shell-integration 173362bd) for bash and fish in a tmux pane, recorded by a control
-// client (%output) — e2e/osc633-<shell>.json, home renamed /home/otto. The client attached after the first prompt, as Desktop does
+// client (%output), E signed with a fixed nonce — e2e/osc633-<shell>.json, home renamed /home/otto, fish's user and host renamed at the same length (it moves the cursor by columns). The client attached after the first prompt, as Desktop does
 // after its opening screen: the first command has no marks (dev-back: a capture-pane screen carries none). zsh is not installed here.
 for (const shell of ['bash', 'fish'] as const) {
   test(`the real stream through tmux (${shell}): failed, running, E unescaped, the tab following cd`, async ({ page }) => {
-    const chunks = JSON.parse(readFileSync(new URL(`./osc633-${shell}.json`, import.meta.url), 'utf8')) as string[];
-    await boot(page, 'light', 'en');
+    // The daemon says freeShell: Desktop starts the shell through its launcher with a nonce of its own, which the stream signs E with.
+    await boot(page, 'light', 'en', true);
+    const argv = (await page.evaluate(() => (window as unknown as { __ledgePtyOpens: { argv: string[] }[] }).__ledgePtyOpens))[0]!.argv;
+    const nonce = /'--nonce' '([0-9a-f]{32})'/.exec(argv.join(' '))?.[1];
+    expect(argv.join(' ')).toContain("'ledge' 'shell' '--nonce'");
+    expect(nonce).toMatch(/^[0-9a-f]{32}$/);
+    const chunks = (JSON.parse(readFileSync(new URL(`./osc633-${shell}.json`, import.meta.url), 'utf8')) as string[]).map(c => c.replaceAll(RECORDED_NONCE, nonce!));
     for (const c of chunks) await emit(page, c);
     const marks = screenEl(page).locator('.shell-marks');
     // false (1), ls nope (2): a red mark each in the margin (the whole buffer); sleep 30: running, on screen.
@@ -174,3 +182,14 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 }
+
+test('an E with another nonce never names the command: Copy command reads the screen', async ({ page }) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await boot(page, 'light', 'en', true);
+  await emit(page, `\x1b[2J\x1b[H${o(`P;Cwd=${HOME}/Workspace/ledge`)}${prompt('~/Workspace/ledge')}cat notes.txt\r\n${o(`E;rm -rf ~;${RECORDED_NONCE}`)}${o('C')}notes\r\n${ended(0)}${prompt('~/Workspace/ledge')}`);
+  await screenEl(page).locator('.xterm').click();
+  await page.keyboard.press('Control+ArrowUp');
+  await page.keyboard.press('Enter');
+  await page.getByRole('menuitem', { name: 'Copy command' }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('cat notes.txt');
+});
