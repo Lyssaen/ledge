@@ -264,6 +264,20 @@ describe('poller robustness', () => {
     expect(previews).toEqual([['x']]);
     p.stop();
   });
+  it('#302 a Codex terminal that cannot be captured: its held request waits from the hook until a capture works again', async () => {
+    panes['ledge-a'] = 'x'; store.upsert(mk('a', { tool: 'codex', state: 'working' }));
+    const p = startPoller({ store, tmux: fakeTmux(panes), intervalMs: 100000, now });
+    clock += 1000; await p.tick();
+    store.apply('a', { name: 'PermissionRequest', at: now(), source: 'hook', tool: 'Bash', text: 'touch /x' });
+    expect(store.get('a')!.state).toBe('working'); // held: the dialog would prove it
+    failing['ledge-a'] = true; clock += 1000; await p.tick();
+    expect(store.get('a')).toMatchObject({ state: 'waiting_permission', paneUnreadable: true, pending: { source: 'hook', tool: 'Bash', text: 'touch /x' } });
+    clock += 1000; await p.tick(); // once, not every tick
+    delete failing['ledge-a']; panes['ledge-a'] = 'y'; clock += 1000; await p.tick();
+    expect(store.get('a')!.paneUnreadable).toBeUndefined();
+    expect(store.get('a')!.pending).toMatchObject({ source: 'hook', text: 'touch /x' }); // the shown request stays
+    p.stop();
+  });
   it('one throwing session does not abort the tick for later sessions', async () => {
     panes['ledge-a'] = 'x'; panes['ledge-b'] = PROMPT;
     store.upsert(mk('a')); store.upsert(mk('b'));

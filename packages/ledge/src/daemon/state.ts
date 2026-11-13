@@ -13,9 +13,10 @@ export const HOOK_PRIORITY_MS = 2000;
 const hooksReportPrompts = (s: Session) => s.tool === 'claude';
 
 /** Codex's main agent asking a permission through its hook (#302): not proof that it waits, the terminal's dialog is. Only where
- *  Ledge reads a terminal: a session it only hears through hooks (hook_only, no tmux) keeps the hook's request, as before. */
-export function isCodexAsk(s: Pick<Session, 'tool' | 'tmuxSession'> | undefined, ev: SessionEvent): boolean {
-  return s?.tool === 'codex' && !!s.tmuxSession && ev.name === 'PermissionRequest' && ev.source === 'hook' && !ev.helperId;
+ *  Ledge reads a terminal: a session it only hears through hooks (hook_only, no tmux), or whose capture fails now, keeps the hook's
+ *  request, as before (missing a real request is worse than showing one the automatic review settles). */
+export function isCodexAsk(s: Pick<Session, 'tool' | 'tmuxSession' | 'paneUnreadable'> | undefined, ev: SessionEvent): boolean {
+  return s?.tool === 'codex' && !!s.tmuxSession && !s.paneUnreadable && ev.name === 'PermissionRequest' && ev.source === 'hook' && !ev.helperId;
 }
 
 const TURN_ENDS: ReadonlySet<SessionEvent['name']> = new Set(['Stop', 'StopFailure', 'SessionEnd', 'PaneGone']);
@@ -346,6 +347,19 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
   switch (ev.name) {
     case 'SessionEnd':
       return { ...s, state: 'exited', pending: undefined, exitCode: ev.exitCode ?? null, exitedAt: s.exitedAt ?? at, lastActivityAt: at };
+    case 'PaneUnreadable': {
+      // The terminal can no longer be read: no dialog will prove a held request, so it waits now, as the hook alone did before #302.
+      if (s.paneUnreadable) return s;
+      const ask = s.codexAsk;
+      const marked = { ...withoutCodexAsk(s), paneUnreadable: true as const };
+      return ask && !s.pending ? { ...marked, state: 'waiting_permission', pending: ask, lastActivityAt: at } : marked;
+    }
+    case 'PaneReadable': {
+      // Read again: the dialog decides the next requests; the one shown stays until its tool ran or the turn ended.
+      if (!s.paneUnreadable) return s;
+      const { paneUnreadable: _gone, ...rest } = s;
+      return rest;
+    }
     case 'PaneGone':
       return { ...s, state: 'exited', pending: undefined, exitCode: null, exitedAt: s.exitedAt ?? at, lastActivityAt: at };
     case 'PaneChanged':

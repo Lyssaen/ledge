@@ -503,6 +503,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       // dialog of another kind, the run of that very tool (never a helper's or another call's) or the turn's end forgets it.
       const asked = codexAsks.get(id);
       if (asked && !s?.codexAsk) codexAsks.delete(id);
+      else if (asked && s?.codexAsk && ev.name === 'PaneUnreadable') {
+        // No capture to prove it: the request waits now (see the reducer), its row goes with it.
+        codexAsks.delete(id);
+        if (!s.pending && !s.paneUnreadable) history.record(id, { ...asked, at: ev.at });
+      }
       else if (asked && s?.codexAsk && ev.name === 'PanePrompt' && ev.source === 'pane') {
         codexAsks.delete(id);
         if (!s.pending && s.codexAsk.kind === (ev.kind ?? 'permission')) history.record(id, { ...asked, at: ev.at });

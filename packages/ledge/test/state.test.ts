@@ -406,6 +406,20 @@ describe('reduce: post-tool events', () => {
     expect(other.pending).toMatchObject({ kind: 'diff', source: 'pane' });
     expect(other.codexAsk).toBeUndefined();
   });
+  it('#302 Codex: a terminal that cannot be captured falls back on the hook, as before; read again, the dialog decides again', () => {
+    const codex = session('working', { tool: 'codex' });
+    const held = reduce(codex, ev('PermissionRequest', { tool: 'Bash', text: 'touch /x' }));
+    const lost = reduce(held, { name: 'PaneUnreadable', at: later(6000), source: 'daemon' });
+    expect(lost).toMatchObject({ state: 'waiting_permission', paneUnreadable: true, pending: { kind: 'permission', tool: 'Bash', text: 'touch /x', source: 'hook' } });
+    expect(lost.codexAsk).toBeUndefined();
+    // Unreadable first: the hook's request waits at once.
+    const blind = reduce(codex, { name: 'PaneUnreadable', at: later(1000), source: 'daemon' });
+    expect(reduce(blind, ev('PermissionRequest', { tool: 'Bash', text: 'touch /y' })).state).toBe('waiting_permission');
+    // Read again: a new request is held until its dialog.
+    const back = reduce(blind, { name: 'PaneReadable', at: later(2000), source: 'daemon' });
+    expect(back.paneUnreadable).toBeUndefined();
+    expect(reduce(back, ev('PermissionRequest', { tool: 'Bash', text: 'touch /y' })).state).toBe('working');
+  });
   it('#302 unchanged: Claude Code\'s PermissionRequest and a Codex helper\'s still wait', () => {
     expect(reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'ls' })).state).toBe('waiting_permission');
     const helper = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'Bash', text: 'ls', helperId: 'h1' }));

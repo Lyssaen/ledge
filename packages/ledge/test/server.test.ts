@@ -566,6 +566,12 @@ describe('server', () => {
     store.apply('e', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /main', options: ['Yes, proceed (y)', 'No (esc)'] });
     expect(store.get('e')).toMatchObject({ state: 'waiting_permission', pending: { source: 'hook', tool: 'Bash', text: 'touch /main' } });
     expect(perms('e')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /main' })]);
+    // Its terminal cannot be captured while a request is held: the request waits now, its row with it.
+    store.upsert(mk('g', { tool: 'codex', state: 'working' }));
+    store.apply('g', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /g' });
+    store.apply('g', { name: 'PaneUnreadable', at: T0, source: 'daemon' });
+    expect(store.get('g')!.state).toBe('waiting_permission');
+    expect(perms('g')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /g' })]);
     // A session Ledge only hears through hooks (no terminal to read): its request waits at once, as before.
     store.upsert(mk('f', { tool: 'codex', state: 'working', tmuxSession: null, source: 'hook_only' }));
     store.apply('f', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /f' });
