@@ -19,7 +19,7 @@ import type { ForgeStore } from '../state/forge';
 import { useMobile, type MobileStore } from '../state/store';
 import { useNow } from '../useNow';
 import { footLimit, indicators, tokenCount } from '../model/usage';
-import { useWide } from '../ui/layout';
+import { useWide, useWideSide } from '../ui/layout';
 import { physicalKeyboard } from '../ui/MessageField';
 import { windowLabel } from '../ui/chat/Limits';
 import { BackLink, LinkStatus, linkView } from '../ui/Header';
@@ -165,6 +165,8 @@ export function Thread({ store, sessionId, storage, onReconnect, panel, forge }:
   const state = useMobile(store);
   const now = useNow();
   const wide = useWide();
+  // Upright, the thread takes the phone's head and foot (t-tablette.html §2, Q92); the keys and the composer's hint stay.
+  const side = useWideSide();
   const session = state.sessions.get(sessionId);
   const thread = state.threads.get(sessionId);
   const { fresh, ops } = state;
@@ -306,14 +308,14 @@ export function Thread({ store, sessionId, storage, onReconnect, panel, forge }:
   const dot = dotOf(session);
   const startedIn = startedHere(sessionId, storage);
   const endedAt = session.state === 'exited' && session.exitedAt ? copy.sessions.line.ended(endedAtLabel(session.exitedAt, now)) : undefined;
-  // A wide screen's head also says where the session works (§10): its project and its branch.
-  const where = wide ? [session.project, session.branch].filter(Boolean).join(' · ') || undefined : undefined;
+  // A wide screen's head on its side also says where the session works (§10): its project and its branch.
+  const where = side ? [session.project, session.branch].filter(Boolean).join(' · ') || undefined : undefined;
 
   return (
     <>
       <DetailHeader
         back={panel ? <span className="w-2.5" /> : <BackLink fallback={{ name: 'sessions' }} label={copy.thread.back} />}
-        tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && fresh} sub={endedAt ?? where} under={!wide && !!endedAt}
+        tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && fresh} sub={endedAt ?? where} under={!side && !!endedAt}
         more={<>
           {panel ? <PanelButtons sessionId={sessionId} panel={panel} /> : <ViewToggle sessionId={sessionId} current="thread" onLeave={() => { if (scroller.current) keptScroll.set(sessionId, scroller.current.scrollTop); }} />}
           <button type="button" aria-haspopup="dialog" aria-label={copy.sessions.moreOf(session.name)} title={copy.sessions.more} onClick={() => setMore(true)} className={iconButtonClass({ className: more ? 'bg-raised text-fg' : 'text-muted' })}>
@@ -350,7 +352,7 @@ export function Thread({ store, sessionId, storage, onReconnect, panel, forge }:
           alert={endError && <EndErrorNotice error={endError} fresh={fresh} onRetry={() => openSheet('close')} onReconnect={onReconnect} />}
           {...(modelSwitchable(state.daemon, session) ? { lead: <SessionModelChip store={store} session={session} />, leadNote: <SessionModelNote store={store} session={session} /> } : {})} />
         : <EndFooter key={ending.kind} ending={ending.kind === 'ended' && ending.error?.op === cleared ? { ...ending, error: null } : ending} name={session.name} canResume={closable} resumeHeld={resumeHeld(session, ops, boot, now)} readOnly={!!session.readOnly} fresh={fresh} focus={sent} onResume={() => openSheet('resume')} onReconnect={onReconnect} />}
-      <SessionFoot store={store} forge={forge} session={session} wide={wide} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
+      <SessionFoot store={store} forge={forge} session={session} wide={side} threshold={state.device?.contextNear ?? CONTEXT_NEAR} onModel={() => setModel(true)} />
       </>}
       {more && <SessionMore store={store} session={session} closable={closable && !omp} closing={shut} onClose={() => setMore(false)}
         onModel={() => { setMore(false); setModel(true); }} onCloseSession={() => { setMore(false); openSheet('close'); }} />}
@@ -389,7 +391,7 @@ export function SessionFoot({ store, forge, session, wide, threshold, onModel }:
   const i = indicators(session, now, threshold);
   const S = copy.sessions;
   const can = modelOff(daemon, session) === null;
-  // A wide screen's foot adds what the PC knows (Q27): the context in tokens, the project, the tool's limit on the right.
+  // A tablet on its side adds what the PC knows to the foot (Q27; upright, the phone's foot, Q92): the context in tokens, the project, the tool's limit on the right.
   const limit = wide ? footLimit(session.tool, usage, usageAlert, now, fresh) : null;
   return (
     <footer aria-label={S.foot(session.name)} className="bleed flex h-10 flex-none items-center gap-2.5 border-t border-line bg-sidebar px-3 text-small whitespace-nowrap text-muted">

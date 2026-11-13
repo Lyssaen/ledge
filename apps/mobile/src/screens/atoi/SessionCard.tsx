@@ -17,7 +17,7 @@ import { isApple } from '../device';
 import { useDeviceCheck, type CheckProblem } from './check';
 import { Leaving, Receipt } from './Receipt';
 import { useShortcuts } from '../../ui/keys';
-import { useWide } from '../../ui/layout';
+import { useWideSide } from '../../ui/layout';
 
 /** What was tapped last on this card: the button that turns while it goes, and what « Réessayer » sends again. */
 type Sent = { kind: 'decide'; decision: 'accept' | 'deny' | 'always' } | { kind: 'reply'; text: string; label: string };
@@ -68,9 +68,10 @@ export function SessionCard(p: SessionCardProps) {
   const [checking, setChecking] = useState(false);
   const [problem, setProblem] = useState<CheckProblem | null>(null);
   const check = useDeviceCheck(store);
-  // In a wide screen's thread the three answers share one line (m2-sessions.html §10); on a phone « Toujours » goes under them (§3).
-  const wide = useWide();
-  const oneRow = inThread && wide;
+  // In a tablet's thread on its side the three answers share one line (m2-sessions.html §10); on a phone, and upright (t-tablette.html
+  // §2, Q92), « Toujours » goes under them (§3).
+  const side = useWideSide();
+  const oneRow = inThread && side;
   const R = copy.atoi.receipt;
   const bot = item.botName;
   const kindWord = copy.atoi.pill[item.kind];

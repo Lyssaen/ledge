@@ -354,7 +354,8 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           case 'thread': return <Split list={sessions} detail={<Thread key={route.sessionId} store={store} sessionId={route.sessionId} storage={storage} onReconnect={retry} forge={forge} />} />;
           // « Nouvelle session » opens beside the list, like a session (Q82, validated by the user 2026-11-11).
           case 'launch': return <Split list={sessions} detail={<NewSession store={store} storage={storage} />} />;
-          case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} forge={forge} />} />;
+          // Upright, the terminal folds the list and takes the whole width (t-tablette.html §3, Q93).
+          case 'terminal': return <Split fold list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} forge={forge} />} />;
           case 'prs': case 'pr': return <Split tab="prs" list={prsList} detail={prView ?? <EmptyPane icon="pr" {...copy.prs.pane} />} />;
           case 'rigs': case 'rig': case 'kernel': case 'max': return <Split list={rigsList} detail={rigsDetail ?? <EmptyPane icon="rigs" {...copy.rigs.pane} />} />;
           case 'atelier': return mobile.daemon?.atelier

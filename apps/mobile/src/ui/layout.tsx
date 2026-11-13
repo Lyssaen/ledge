@@ -5,17 +5,29 @@ import { useSyncExternalStore, type ReactNode } from 'react';
  * same query as the `tablet` variant and the `.split` rules of styles.css.
  */
 export const WIDE_QUERY = '(min-width: 768px) and (min-height: 501px)';
+/** A wide screen on its side: the right pane is roomy enough for what the tablet adds to the phone's thread (Q27). */
+export const WIDE_SIDE_QUERY = `${WIDE_QUERY} and (orientation: landscape)`;
 
-const media = () => (typeof globalThis.matchMedia === 'function' ? globalThis.matchMedia(WIDE_QUERY) : null);
-const subscribe = (fn: () => void) => {
-  const m = media();
-  m?.addEventListener?.('change', fn);
-  return () => m?.removeEventListener?.('change', fn);
-};
+const media = (q: string) => (typeof globalThis.matchMedia === 'function' ? globalThis.matchMedia(q) : null);
+function useMedia(q: string): boolean {
+  return useSyncExternalStore(
+    fn => { const m = media(q); m?.addEventListener?.('change', fn); return () => m?.removeEventListener?.('change', fn); },
+    () => media(q)?.matches ?? false,
+    () => false
+  );
+}
 
 /** Whether the app shows two panes: the list on the left, what it opens on the right. */
 export function useWide(): boolean {
-  return useSyncExternalStore(subscribe, () => media()?.matches ?? false, () => false);
+  return useMedia(WIDE_QUERY);
+}
+
+/**
+ * Whether the two panes are side by side on a tablet on its side. Upright, the right pane is barely wider than a phone
+ * (t-tablette.html §2, Q92): the thread and « Nouvelle session » take the phone's head, foot and cards there.
+ */
+export function useWideSide(): boolean {
+  return useMedia(WIDE_SIDE_QUERY);
 }
 
 /** The Atelier's tab (docs/mockups/ledge-ipad-atelier.html): a wide screen only, and a PC that sends its projects (`daemon.atelier`). */
@@ -26,10 +38,12 @@ export function useAtelierTab(daemon: { atelier?: true } | null): boolean {
 /**
  * Two panes: `list` (the inbox or the agents, with the tabs) and `detail` (what it opened, or `empty`). `tab` names the tab whose
  * panes differ from the others' (`data-split`, read by styles.css): the MR/PR tab's list is narrower and its detail edge to edge.
+ * `fold`: upright, the list folds and the detail takes the whole width, its « Retour » reopening the list (the terminal,
+ * t-tablette.html §3, Q93).
  */
-export function Split({ list, detail, tab }: { list: ReactNode; detail: ReactNode; tab?: 'prs' }) {
+export function Split({ list, detail, tab, fold = false }: { list: ReactNode; detail: ReactNode; tab?: 'prs'; fold?: boolean }) {
   return (
-    <div className="split" data-split={tab}>
+    <div className="split" data-split={tab} data-fold={fold ? '' : undefined}>
       <section className="split-list">{list}</section>
       <section className="split-detail">{detail}</section>
     </div>

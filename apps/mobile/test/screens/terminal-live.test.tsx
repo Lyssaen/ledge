@@ -184,13 +184,33 @@ function fakeXterm() {
 }
 
 describe('the live terminal screen', () => {
-  function page(daemon: Record<string, true>, device = { confirm: true }, state: 'working' | 'waiting_permission' = 'working') {
+  function page(daemon: Record<string, true>, device = { confirm: true }, state: 'working' | 'waiting_permission' = 'working', branch?: string) {
     const t = setup();
-    const snap = snapshot([session('a', { name: 'Kai', state, project: 'billing-api' })], 'Atelier', undefined, device);
+    const snap = snapshot([session('a', { name: 'Kai', state, project: 'billing-api', ...(branch ? { branch } : {}) })], 'Atelier', undefined, device);
     t.deliver({ ...snap, ...(snap.type === 'snapshot' ? { daemon: { ...snap.daemon, ...daemon } } : {}) } as PhoneServerMessage);
     const xt = fakeXterm();
     return { ...t, xt };
   }
+
+  it('upright, its head says where the session works and its foot is the phone\'s; on its side neither (t-tablette.html §3, Q93)', async () => {
+    const { TerminalLive } = await import('../../src/screens/TerminalLive');
+    const media = (q: (s: string) => boolean) => { globalThis.matchMedia = ((s: string) => ({ matches: q(s), media: s, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia; };
+    try {
+      media(s => !s.includes('landscape') && !s.includes('pointer'));
+      const t = page({ terminal: true }, undefined, 'working', 'feat/x');
+      const kai = () => t.store.getState().sessions.get('a')!;
+      const upright = render(<TerminalLive store={t.store} link={t.link} session={kai()} storage={t.storage} makeScreen={t.xt.make} />);
+      expect(screen.getByText('billing-api · feat/x')).toBeInTheDocument();
+      expect(screen.getByRole('contentinfo', { name: 'État de Kai' })).toHaveTextContent('feat/x');
+      expect(screen.getByRole('contentinfo', { name: 'État de Kai' })).not.toHaveTextContent('billing-api');
+      upright.unmount();
+      media(s => !s.includes('pointer'));
+      render(<TerminalLive store={t.store} link={t.link} session={kai()} storage={t.storage} makeScreen={t.xt.make} />);
+      expect(screen.queryByText('billing-api · feat/x')).toBeNull();
+    } finally {
+      media(() => false);
+    }
+  });
 
   it('keeps the preview for a PC that does not stream terminals', () => {
     const t = page({});

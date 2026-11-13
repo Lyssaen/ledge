@@ -215,6 +215,25 @@ describe('the thread on a wide screen (m2-sessions.html §10, Q27)', () => {
     expect(screen.getByRole('button', { name: 'Toujours dans ce projet' })).toBeInTheDocument();
   });
 
+  it('upright, takes the phone\'s head, foot and stacked buttons, and keeps Y / N and the composer\'s hint (t-tablette.html §2, Q92)', () => {
+    globalThis.matchMedia = ((q: string) => ({ matches: !q.includes('landscape') && !q.includes('pointer'), media: q, addEventListener() {}, removeEventListener() {} })) as unknown as typeof matchMedia;
+    const t = opened({ project: 'ledge', state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }), context: { at: at(-1), used: 620_000, window: 1_000_000 } });
+    act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));
+    act(() => t.deliver({ type: 'usage.state', harnesses: [{ harness: 'claude', status: 'ok', readAt: at(-1), windows: [{ kind: 'five_hour', pct: 84, resetsAt: at(60) }] }], prefs: { alert: 0.8 } }));
+    expect(screen.queryByText('ledge · feat/x')).not.toBeInTheDocument();
+    const foot = screen.getByRole('contentinfo', { name: 'État de Kai' });
+    expect(foot).not.toHaveTextContent('620k');
+    expect(foot).not.toHaveTextContent('Claude 5 h');
+    expect(foot).toHaveTextContent('feat/x');
+    expect(foot).not.toHaveTextContent('feat/xledge');
+    const row = screen.getByRole('button', { name: 'Autoriser' }).parentElement!;
+    expect([...row.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Autoriser', 'Refuser']);
+    expect(screen.getByRole('button', { name: 'Toujours dans ce projet' })).toBeInTheDocument();
+    expect(screen.getByText('Y / N au clavier')).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'y' });
+    expect(t.of('session.decide')).toEqual([expect.objectContaining({ id: 'a', decision: 'accept' })]);
+  });
+
   it('on a phone keeps the head, the card and the foot as §3 draws them', () => {
     const t = opened({ project: 'ledge', state: 'waiting_permission', pending: pending({ key: 'k1', text: 'pnpm build' }), context: { at: at(-1), used: 620_000, window: 1_000_000 } });
     act(() => t.deliver({ type: 'session.thread', id: 'a', items: [], cut: [], more: false }));

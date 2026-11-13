@@ -9,6 +9,7 @@ import { iconButtonClass } from '../ui/Button';
 import { BackLink } from '../ui/Header';
 import { Icon } from '../ui/icons';
 import { DetailHeader } from '../ui/kit/Controls';
+import { useWide, useWideSide } from '../ui/layout';
 import { useNow } from '../useNow';
 import { EndSheet } from './SessionClose';
 import { ChangeSheet, available as modelSwitchable } from './SessionModel';
@@ -33,13 +34,17 @@ export function SessionHead({ store, session, current, onLeave, onReconnect, dis
   const setModel = onModel ?? setOwnModel;
   const [closing, setClosing] = useState(false);
   const dot = dotOf(session);
+  // Upright, the terminal has the whole width (t-tablette.html §3, Q93): its head says where the session works, as the thread's on its side.
+  const wide = useWide();
+  const side = useWideSide();
+  const where = current === 'terminal' && wide && !side ? [session.project, session.branch].filter(Boolean).join(' · ') || undefined : undefined;
   const closable = !!state.daemon?.sessionClose && !session.readOnly;
   const shut = closeHeld(session, state.ops, state.daemon?.boot ?? null, now);
   return (
     <>
       <DetailHeader
         back={<BackLink fallback={{ name: 'sessions' }} label={copy.thread.back} />}
-        tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && state.fresh}
+        tool={session.tool} name={session.name} dot={dot} pulse={dot === 'work' && state.fresh} sub={where}
         more={<>
           <ViewToggle sessionId={session.id} current={current} {...(onLeave ? { onLeave } : {})} />
           <button type="button" aria-haspopup="dialog" aria-label={copy.sessions.moreOf(session.name)} title={copy.sessions.more} onClick={() => setMore(true)} className={iconButtonClass({ className: more ? 'bg-raised text-fg' : 'text-muted' })}>
