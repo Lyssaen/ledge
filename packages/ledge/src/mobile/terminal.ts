@@ -250,8 +250,8 @@ interface Term {
   state: 'capturing' | 'pending' | 'live' | 'closed';
   pane: string | null; cols: number; rows: number;
   decoder: StringDecoder; buffer: string; since: number | null;
-  /** Output after the capture while the pane is not known yet (the first open), with the pane it came from: only the watched
-   *  pane's bytes are kept once it is known. */
+  /** Output after the capture, before `display-message` says which pane the screen is (a first open, or a pane switched since the
+   *  last screen), with the pane it came from: only the watched pane's bytes are kept once it is known. */
   early: Array<{ pane: string; data: Buffer }>;
   seq: number; nextN: number;
   held: { at: number; last: number } | null;
@@ -333,7 +333,9 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
     switch (e.kind) {
       case 'output': {
         if (t.state !== 'live' && t.state !== 'pending') return;
-        if (t.pane === null) { t.early.push({ pane: e.pane, data: e.data }); return; }
+        // Between the capture's reply and display-message's, which pane is watched is not known yet (it may have changed since the
+        // last screen): kept with its pane, sorted once it is.
+        if (t.state === 'pending') { t.early.push({ pane: e.pane, data: e.data }); return; }
         if (e.pane !== t.pane) return;
         const text = t.decoder.write(e.data);
         if (!text) return;

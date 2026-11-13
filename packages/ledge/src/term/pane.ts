@@ -73,8 +73,8 @@ interface Watch {
   /** The grid the watcher asked for. `cols`/`rows` are what the pane last reported. */
   want: { cols: number; rows: number } | null;
   buffer: Buffer; since: number | null;
-  /** Output after the capture while the pane is not known yet (the first open, before `display-message` answers), with the pane it
-   *  came from: a window may have several, and only the watched one's bytes are kept once it is known. */
+  /** Output after the capture, before `display-message` says which pane the screen is (a first open, or a pane switched since the
+   *  last screen), with the pane it came from: a window may have several, and only the watched one's bytes are kept once known. */
   early: Array<{ pane: string; data: Buffer }>;
   queued: string[]; typing: Promise<void>;
   timer: { stop(): void }; openTimer: { stop(): void } | null;
@@ -251,7 +251,9 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     switch (e.kind) {
       case 'output': {
         if (w.state !== 'live' && w.state !== 'pending') return;
-        if (w.pane === null) { w.early.push({ pane: e.pane, data: e.data }); return; }
+        // Between the capture's reply and display-message's, which pane is watched is not known yet (it may have changed since the
+        // last screen): kept with its pane, sorted once it is.
+        if (w.state === 'pending') { w.early.push({ pane: e.pane, data: e.data }); return; }
         if (e.pane !== w.pane) return;
         w.buffer = w.buffer.length ? Buffer.concat([w.buffer, e.data]) : e.data;
         w.since ??= now();
