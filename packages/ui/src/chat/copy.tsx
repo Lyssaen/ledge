@@ -42,6 +42,8 @@ export interface ChatCopy {
     /** The generic card (#94): a row per action, a plan past one. `verbs` the button of each action, by its id, `apply`
      *  when the front knows none; `at` a time already put in words (10:42), empty when the daemon gave none. Left out by a front that does not show it yet. */
     action?: ActionCopy;
+    /** The operator's point (docs/mockups/ledge-operator.html, board 1). Left out by a front that does not show it yet. */
+    point?: PointCopy;
   };
   machines: { destination: string; local: string; offline: string; choose: Say; clarification: string };
   time: { seconds: (n: number) => string; minutes: (n: number) => string; hours: (n: number) => string; locale: string };
@@ -66,6 +68,17 @@ export interface ActionCopy {
   ignored: (n: number, at: string, sent?: { done: number; denied: number; failed: number }) => string;
   /** The rows' lines and why one was refused, from their `vars` (actionWords.ts). */
   words: ActionWords;
+}
+
+/** The point's words: `groups` its group titles, `nav` a row's screen buttons, `suggest` a suggestion's button by its action
+ *  when it says more than the action's verb (from its `vars`), `settled` a receipt by where the row was settled. */
+export interface PointCopy {
+  by: string; groups: Record<'atoi' | 'done' | 'ongoing' | 'rigs', string>; reply: string;
+  nav: Record<'session' | 'pr' | 'rig' | 'task', string>; wantsToRun: string; quote: Say;
+  suggest: Record<string, (vars: Record<string, string>) => string | undefined>;
+  folded: Say; settled: Record<'terminal' | 'phone' | 'desktop' | 'chat' | 'elsewhere', string>;
+  answer: { label: string; placeholder: string; send: string; cancel: string };
+  confirmAnswer: (label: string, who: string) => string; error: Say;
 }
 
 const ChatCopyContext = createContext<ChatCopy | null>(null);

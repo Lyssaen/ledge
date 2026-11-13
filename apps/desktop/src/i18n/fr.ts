@@ -1,4 +1,5 @@
 import { actionCopy } from '@ledge/ui/chat/actionCopy';
+import { pointCopy } from '@ledge/ui/chat/pointCopy';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import type { SectionId } from '../nav/state';
 import type { Bucket, GroupBy } from '../list/model';
@@ -1422,7 +1423,7 @@ export const fr = {
       state: { open: 'à prendre', taken: 'prise', done: 'finie', refused: 'refusée', dropped: 'abandonnée' }, failed: (why: string) => `Refusée : ${why}`
     },
     // #94 : la carte générique, une ligne par action, un plan au-delà d’une (docs/mockups/ledge-action-card.html).
-    action: actionCopy.fr,
+    action: actionCopy.fr, point: pointCopy.fr,
     project: {
       label: 'Proposition de projet', title: (name: string) => `Proposition de projet · ${name}`, complete: (name: string) => `Compléter ${name}`,
       repos: (n: number) => `${n} dépôt${n > 1 ? 's' : ''}`, review: 'Vérifier la proposition'

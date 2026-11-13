@@ -139,3 +139,73 @@ export function useChatCards(o: ChatCardsOptions): ChatCards {
 
   return { launchingQid, launchingRows, closingQid, closingRows, close, relayingQid, launch, relay, cancelRelay, pick, setPick };
 }
+
+export interface PointActsOptions {
+  send(m: ClientMessage): void;
+  chat: readonly ChatTurn[];
+  errors: readonly DaemonError[];
+  /** Whether the machine that wrote this point is online: a row of one that is not does nothing. */
+  turnReady(qid: string): boolean;
+}
+type PointAnswer = { id: string } | { text: string };
+/** A row of a point being acted on: the answer (or the suggestion, without one), what the row was when it went, the last error then. */
+interface PointActing { qid: string; item: string; answer?: PointAnswer; from: string; errorSeq: number }
+export interface PointActs {
+  /** The row on its way, and the row the daemon asked to confirm (its answer, or the suggestion without one). */
+  busy: { qid: string; item: string } | null;
+  confirm: { qid: string; item: string; answer?: PointAnswer } | null;
+  answer(qid: string, item: string, a: PointAnswer): void;
+  suggest(qid: string, item: string): void;
+  /** Sends the row asked to confirm again with `confirmed`, or drops it. */
+  settle(go: boolean): void;
+}
+
+/** How a row looks now, to tell its change (settled, an error, its suggestion's state) from the row as it was sent. */
+const rowState = (chat: readonly ChatTurn[], qid: string, item: string): string => {
+  const i = chat.find(x => x.qid === qid)?.point?.items.find(x => x.id === item);
+  return i ? JSON.stringify([i.settled, i.error, i.suggestion?.state, i.suggestion?.code]) : 'gone';
+};
+
+/** The operator point's rows (Task 11, spec §4), one at a time, nothing optimistic: `point.act { qid, item, answer | suggest }` is
+ *  freed once the row changes in the history or the daemon refuses it. A refusal coded `confirm_required` (an accepted request, a
+ *  decision, a destructive suggestion) asks the row again, as the generic card does, then goes with `confirmed`. */
+export function usePointActs(o: PointActsOptions): PointActs {
+  const latest = useRef(o);
+  latest.current = o;
+  const acting = useRef<PointActing | null>(null);
+  const [busy, setBusy] = useState<PointActs['busy']>(null);
+  const [confirm, setConfirm] = useState<PointActs['confirm']>(null);
+  const free = () => { acting.current = null; setBusy(null); };
+
+  const go = useCallback((qid: string, item: string, answer: PointAnswer | undefined, confirmed: boolean) => {
+    const { send, chat, errors, turnReady } = latest.current;
+    if (acting.current || !turnReady(qid)) return;
+    acting.current = { qid, item, ...(answer ? { answer } : {}), from: rowState(chat, qid, item), errorSeq: errors.at(-1)?.seq ?? 0 };
+    setBusy({ qid, item }); setConfirm(null);
+    send({ type: 'point.act', qid, item, ...(answer ? { answer } : { suggest: true as const }), ...(confirmed ? { confirmed: true as const } : {}) });
+  }, []);
+  const answer = useCallback((qid: string, item: string, a: PointAnswer) => go(qid, item, a, false), [go]);
+  const suggest = useCallback((qid: string, item: string) => go(qid, item, undefined, false), [go]);
+  const asked = useRef(confirm);
+  asked.current = confirm;
+  const settle = useCallback((yes: boolean) => {
+    const c = asked.current;
+    setConfirm(null);
+    if (c && yes) go(c.qid, c.item, c.answer, true);
+  }, [go]);
+
+  const { chat, errors } = o;
+  const ready = busy ? o.turnReady(busy.qid) : true;
+  useEffect(() => {
+    const a = acting.current;
+    if (!a) return;
+    const refusal = errors.find(e => e.seq > a.errorSeq && e.request === 'point.act');
+    if (refusal?.code === 'confirm_required') { free(); setConfirm({ qid: a.qid, item: a.item, ...(a.answer ? { answer: a.answer } : {}) }); return; }
+    // A suggestion stays running while its card applies: the row is freed once it is no longer running.
+    const now = rowState(chat, a.qid, a.item);
+    const running = chat.find(x => x.qid === a.qid)?.point?.items.find(x => x.id === a.item)?.suggestion?.state === 'running';
+    if (refusal || !ready || (now !== a.from && !running)) free();
+  }, [chat, errors, ready]);
+
+  return { busy, confirm, answer, suggest, settle };
+}

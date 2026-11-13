@@ -1,4 +1,5 @@
 import { actionCopy } from '@ledge/ui/chat/actionCopy';
+import { pointCopy } from '@ledge/ui/chat/pointCopy';
 import type { Messages } from './messages';
 import type { DeviceWord } from '../settings/recovery';
 
@@ -1348,7 +1349,7 @@ export const en: Messages = {
       state: { open: 'to take', taken: 'taken', done: 'done', refused: 'refused', dropped: 'dropped' }, failed: (why: string) => `Refused: ${why}`
     },
     // #94: the generic card, a row per action, a plan past one (docs/mockups/ledge-action-card.html).
-    action: actionCopy.en,
+    action: actionCopy.en, point: pointCopy.en,
     project: {
       label: 'Project proposal', title: (name: string) => `Project proposal · ${name}`, complete: (name: string) => `Complete ${name}`,
       repos: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'}`, review: 'Review the proposal'
