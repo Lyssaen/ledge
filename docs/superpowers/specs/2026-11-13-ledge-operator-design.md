@@ -106,6 +106,28 @@ Never events: tool lines, thinking, sub-agents, model changes (they stay in the 
   waiting items first, at most N lines, propose cards only from the registry ». Its answer becomes a chat turn tagged
   `by: 'ledge'` (no user question), with its cards, persisted like any turn (`chat/conversations.ts`).
 - A wake whose events are all settled by the time it runs posts nothing (`outcome: empty`).
+
+**What a point is made of** (my call after the builder check). The point is **built by the daemon**, not parsed from the
+agent: a new chat turn kind `point` (in `@ledge/protocol`, beside today's turns) holds `groups` (À toi, Terminé, En cours,
+Rigs) of `items`, each item tied to its event id and, for a waiting item, to its request, task, ask or proposal id. An
+item carries its own buttons:
+- the request's own answers (Refuser / Autoriser, an ask's options, « Répondre… » which opens the answer field), applied
+  through the same daemon handlers as « À toi », one item at a time, outside the plan rules of `act.ts`;
+- navigation (Voir, Voir la PR, Ouvrir le rig), which opens the screen and is not an action;
+- at most one suggested registry action (Archiver, Passer le relais, Écrire à pilot-lead…), proposed by the agent for
+  that item and applied as a one-row card.
+
+The agent writes only the point's **lead sentence** (also the notch's and the push's text) and may add one ordinary plan
+card under the point for cross-item suggestions (board 2's « Plan · 2 actions »), with today's rules and caps. Because
+items are tied to ids, the daemon updates the stored turn itself: a settled item gets its receipt (« réglé dans le
+terminal »), and the point folds to « Tout est réglé depuis 14:32 » once every item is settled. If the agent run fails,
+the point still posts with a daemon-written lead sentence (« 3 choses depuis 14:10 »).
+
+**One run, several conversations** (my call). A wake makes **one** agent run, over the union of the events it covers.
+The daemon then posts a point turn into each conversation that exists: the Desktop chat and each paired phone with the
+chat on. Each turn's items come from that device's own cursor; the lead sentence is shared. The caps count runs, and the
+`wakes` row keeps one `qid` per conversation (a JSON list). A phone that never opens the app still gets its turn,
+because posting a stored turn costs nothing.
 - Turn persistence: the operator's turns count in `HISTORY_MAX` like others.
 
 Cost guard: at most one wake per 60 s per machine, and at most 30 wakes per hour; beyond, events wait for the next allowed
@@ -132,6 +154,12 @@ New registry actions (`packages/protocol/src/actions.ts`), each wired to an exis
 | `rig.goal.reply` | `openrigGoals` reply (confirm / words) | destructive when it confirms a rig launch | 1 |
 | `rig.send` | `rig send` to a seat, as the Desktop seat tab does | reversible | 4 |
 | `brain.answer` | the brain proposal answer used by « À toi » (add / refuse) | reversible | 4 |
+| `session.handover` | the context relief that already exists (`daemon/handover.ts`, `createHandovers`): a fresh session takes over | reversible | 4 |
+| `pr.fix` | the forge's existing « Demander à X de corriger »: the failed job's log goes to the branch's session | reversible | 4 |
+
+(My calls after the builder check: board 1's « Passer le relais » is `session.handover`, board 5's « Envoyer à Nova …
+avec son journal » is `pr.fix`, on the requests the forge service already follows, with no new discovery. The mockup's
+`rig.launch` is `rig.goal.reply` confirming Max's team.)
 
 Each also gets a phone mapping where « À toi » already has the operation (`openrig.answer`, `rigs.goal.send`,
 `rigs.goal.reply`, `brain.answer`), with the same Face ID rules as today. The persona's `when` rules follow the existing
