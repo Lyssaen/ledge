@@ -145,6 +145,26 @@ describe('the usage service: Claude Code', () => {
     expect(svc.state().harnesses).toEqual([]);
   });
 
+  it('#301 review: switching accounts while both local tokens are past their time drops the old account at once', async () => {
+    const now = T0;
+    let who = 'A', expiresAt = now + 10_000;
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: `tok-${who}`, expiresAt } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: `acc-${who}` } });
+      throw new Error('ENOENT');
+    };
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => now, read, version: async () => '2.1.318',
+      get: async () => ({ status: 200, body: JSON.stringify({ five_hour: { utilization: 42, resets_at: null } }), headers: {} }) });
+    await svc.tick();
+    expiresAt = now - 1;
+    await svc.tick();
+    expect(svc.state().harnesses[0]).toMatchObject({ cause: 'local_expired' });
+    who = 'B';
+    await svc.tick();
+    expect(svc.state().harnesses).toEqual([]);
+    expect(svc.state().alerts).toEqual([]);
+  });
+
   it('#301: a token past its time after a read keeps the last values as stale, said local_expired, then the harness leaves the list past an hour', async () => {
     let t = T0, expiresAt = T0 + 60_000;
     const calls: string[] = [];
