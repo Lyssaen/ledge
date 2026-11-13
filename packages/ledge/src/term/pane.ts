@@ -10,6 +10,10 @@ const TICK_MS = 16;
 /** Past this, what is waiting is dropped and a fresh screen is sent. */
 const BEHIND_BYTES = 262_144;
 const OPEN_TIMEOUT_MS = 5_000;
+/** #297: tmux stops sending a pane's output to this client once it is this many seconds behind (`%pause`). */
+const PAUSE_AFTER_S = 2;
+/** A paused pane gets going again after this, with a fresh screen: under a flood, at most a few screens a second. */
+const RESUME_MS = 200;
 const RESTORE_MS = 20;
 
 type PaneMsg =
@@ -67,8 +71,12 @@ interface Watch {
   reply: PaneReply; id: string; shell: string; tmuxName: string; sizing: boolean; owned: boolean; lock: boolean;
   client: ControlClient;
   /** `capturing`: output is dropped (it is in the screen being taken); `pending`: the capture's reply is in, so what follows is after
-   *  the screen: kept, sent once `term.opened` is; `live`: kept and sent. */
-  state: 'capturing' | 'pending' | 'live' | 'closed';
+   *  the screen: kept, sent once `term.opened` is; `live`: kept and sent; `paused` (#297): tmux sends nothing of the pane (it fell
+   *  behind, or Ledge did); after RESUME_MS it continues and a fresh screen is taken, so nothing written meanwhile is lost. */
+  state: 'capturing' | 'pending' | 'live' | 'paused' | 'closed';
+  /** tmux paused the pane while its screen was being taken: once the screen is sent, the pane is resumed through a new one. */
+  pauseSeen: boolean;
+  resume: { stop(): void } | null;
   pane: string | null; cols: number; rows: number;
   /** The grid the watcher asked for. `cols`/`rows` are what the pane last reported. */
   want: { cols: number; rows: number } | null;
@@ -144,6 +152,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     w.state = 'closed';
     w.timer.stop();
     w.openTimer?.stop();
+    w.resume?.stop();
     watches.delete(w);
     const restore = w.sizing && releaseSize(w.tmuxName);
     const own = restore ? kept.get(w.tmuxName) : undefined;
@@ -169,9 +178,10 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
   const flush = (w: Watch) => {
     if (w.state !== 'live' || w.buffer.length === 0) return;
     if (w.buffer.length > BEHIND_BYTES || (w.since !== null && now() - w.since > 2_000)) {
-      deps.log(`pane ${w.id} behind (${w.buffer.length} bytes): fresh screen`);
-      w.buffer = Buffer.alloc(0); w.since = null;
-      void screen(w);
+      deps.log(`pane ${w.id} behind (${w.buffer.length} bytes): paused, then a fresh screen`);
+      // tmux stops sending instead of Ledge reading what it would drop.
+      if (w.pane) void w.client.command(`refresh-client -A '${w.pane}:pause'`);
+      pause(w);
       return;
     }
     const chunk = takeBytes(w.buffer);
@@ -182,10 +192,25 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     if (data.length <= TERM_CHUNK_B64) send(w, { type: 'term.output', id: w.id, data });
   };
 
+  /** Nothing of the pane flows (tmux paused it, or was asked to): what waits is dropped; after RESUME_MS the pane continues and its
+   *  screen is taken again. `continue` is written before the capture, so what the pane writes from then is in the screen or after it. */
+  const pause = (w: Watch) => {
+    if (w.state === 'closed' || w.state === 'paused') return;
+    w.state = 'paused';
+    w.buffer = Buffer.alloc(0); w.since = null; w.early = []; w.pauseSeen = false;
+    w.resume?.stop();
+    w.resume = later(() => {
+      w.resume = null;
+      if (w.state !== 'paused') return;
+      if (w.pane) void w.client.command(`refresh-client -A '${w.pane}:continue'`);
+      void screen(w);
+    }, RESUME_MS);
+  };
+
   const screen = async (w: Watch) => {
     if (w.state === 'closed') return;
     w.state = 'capturing';
-    w.buffer = Buffer.alloc(0); w.since = null; w.early = [];
+    w.buffer = Buffer.alloc(0); w.since = null; w.early = []; w.pauseSeen = false;
     const target = targetOf(w.tmuxName);
     let sized: { cols: number; rows: number } | null = null;
     if (w.sizing && w.want) {
@@ -223,6 +248,8 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     send(w, { type: 'term.opened', id: w.id, cols: w.cols, rows: w.rows, screen: text, cursor: { x: Number(m[4]), y: Number(m[5]) }, ...(modes ? { modes } : {}) });
     // What tmux sent after the capture, kept while the screen was answered, follows the screen at once.
     flush(w);
+    // Paused while the screen was taken: what follows the capture is not coming, so the pane is resumed with a new screen.
+    if (w.pauseSeen && (w.state as Watch['state']) === 'live') pause(w);
     // A resize that arrived while the screen was taken: the capture shows the old grid, so the window follows now.
     if (w.want && sized && (w.want.cols !== sized.cols || w.want.rows !== sized.rows)) void w.client.command(`resize-window -x ${w.want.cols} -y ${w.want.rows} -t ${target}`);
     void drain(w);
@@ -259,6 +286,12 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
         w.since ??= now();
         return;
       }
+      case 'pause':
+        // Another pane of the window, once the watched one is known, is not this screen's business.
+        if (w.pane && e.pane !== w.pane) return;
+        if (w.state === 'live') pause(w); else if (w.state === 'capturing' || w.state === 'pending') w.pauseSeen = true;
+        return;
+      case 'continue': return; // Ledge resumes the pane itself, with a screen.
       case 'layout':
         if (w.state === 'closed' || (e.cols === w.cols && e.rows === w.rows)) return;
         w.cols = e.cols; w.rows = e.rows;
@@ -285,7 +318,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
       const client = openControl(argv, spawnIt, e => { if (w.state === 'closed') return; onEvent(w, e); });
       w = {
         reply, id: session.id, shell: tag, tmuxName: session.tmuxName, sizing: size !== null, owned: !!session.owned, lock: !session.owned,
-        client, state: 'capturing', pane: null, cols: size?.cols ?? 0, rows: size?.rows ?? 0,
+        client, state: 'capturing', pauseSeen: false, resume: null, pane: null, cols: size?.cols ?? 0, rows: size?.rows ?? 0,
         want: size ? { ...size } : null,
         buffer: Buffer.alloc(0), since: null, early: [], queued: [], typing: Promise.resolve(),
         timer: timer(() => flush(w), TICK_MS), openTimer: null
@@ -294,6 +327,9 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
       w.openTimer = later(() => { if (w.state !== 'closed') end(w, 'failed'); }, OPEN_TIMEOUT_MS);
       watches.add(w);
       deps.log(`pane ${w.id}${w.shell ? ` shell ${w.shell}` : ''} opened${w.sizing ? '' : ' read-only'}`);
+      // #297: a pane that falls behind is paused by tmux (`%pause`) instead of piling up output Ledge would drop. Its output then
+      // comes as `%extended-output`. An older tmux refuses the flag: the host works as before.
+      void client.command(`refresh-client -f pause-after=${PAUSE_AFTER_S}`);
       void screen(w);
     },
     input(reply, id, data, shell) {
