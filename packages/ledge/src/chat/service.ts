@@ -3,7 +3,7 @@ import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawn as nodeSpawn } from 'node:child_process';
-import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type ChatConversationSummary, type Goal, type HarnessUsage, type HumanAsk, type OpenRigState, type Projects, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
+import { extractProposal, LEGACY_FENCE_ACTION, MAX_PROPOSALS, proposalRows, parseActionBlock, parseProjectBlock, parseCloseBlock, parseRelayBlock, parseTaskBlock, projectOf, type BlockKind, type ChatAction, type ChatClose, type ChatProjectProposal, type ChatProposal, type ChatRelay, type ChatTaskProposal, type CloseHow, type ChatTurn, type AttachmentRef, type ChatConversationSummary, type Goal, type HarnessUsage, type HumanAsk, type OpenRigState, type Projects, type PullRequest, type ServerMessage, type Session, type Task, type Tool } from '@ledge/protocol';
 import { resolveAction, sessionOf } from '../daemon/actions.js';
 import { resolveFolder } from '../daemon/folders.js';
 import type { Store } from '../daemon/store.js';
@@ -80,6 +80,8 @@ export interface ChatDeps {
   /** What OpenRig's rigs ask the user, Max's goals, the queue rows not closed, and the operator's journal events for this thread: the context's attentes.md, rigs.md and journal.md. */
   asks?: () => readonly HumanAsk[] | undefined;
   goals?: () => readonly Goal[] | undefined;
+  /** The followed pull requests as the forge last read them: what pr.fix is checked against. */
+  prs?: () => readonly PullRequest[] | undefined;
   queue?: () => ContextInput['queue'] | undefined;
   journal?: (thread: DeviceId) => JournalEvent[];
   /** The thread this chat serves (`desktop` when left out). */
@@ -299,7 +301,7 @@ export function createChat(deps: ChatDeps): Chat {
   /** The generic blocks as rows (spec §9.2, one plan): each resolved against the state now, at most `max` per action and 8 in all; a refused,
    *  repeated or capped one is dropped with a log line. */
   function actionsFrom(blocks: Array<{ id: string; args: unknown; max: number }>, qid: string, closing: ReadonlySet<string>): { rows: ChatAction[]; reasons: string[]; counted: number } {
-    const ctx = { sessions: deps.store.all(), tasks: deps.tasks?.() ?? [], closing, rigs: deps.rigs?.() };
+    const ctx = { sessions: deps.store.all(), tasks: deps.tasks?.() ?? [], closing, rigs: deps.rigs?.(), asks: deps.asks?.(), goals: deps.goals?.(), prs: deps.prs?.() };
     const rows: ChatAction[] = []; const per = new Map<string, number>(); const over = new Map<string, number>(); let beyond = 0;
     const refused: string[] = []; let duplicates = 0;
     for (const b of blocks) {

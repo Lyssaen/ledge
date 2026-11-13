@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { WebSocketServer, WebSocket } from 'ws';
-import { nameTaken, namesInUse, openName, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, taskClosed, type BrainChoice, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
+import { nameTaken, namesInUse, openName, actionById, contextNear, isArchived, givenByLedge, LEDGE_GIVER, MAX_PROPOSALS, taskClosed, type BrainChoice, openDecision, transmissions, type Task, projectOf, type ChatAction, parseBroadcastAddress } from '@ledge/protocol';
 import { ATTACHMENT_LOCAL_MAX, ATTACHMENT_MAX, DEFAULT_RELAY_URL, NOTE_NOT_TYPED, PROTOCOL_PORT, SshAliasSchema, offers, parseClientMessage, pendingKey, type AttachmentRef, type ImageUpload, type ChatErrorCode, type ClientMessage, type DaemonInfo, type MobileState, type Decision, type DecidedBy, type Pending, type ServerMessage, type Session, type SessionEvent, type Tool, type OmpApproval, type CloseHow, type ModelRefusal, type RefusalCode, backendOf } from '@ledge/protocol';
 import type { Store } from './store.js';
 import type { History } from './history.js';
@@ -51,7 +51,7 @@ import { launchFromChat, LaunchRefused, refuseTooWide } from '../chat/launch.js'
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
-import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved } from './actions.js';
+import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved, type ResolveCtx } from './actions.js';
 import { createMailbox, type MailboxDeps, type MailJournal } from './mailbox.js';
 import { broadcastFromSession, broadcastFromUser } from './broadcast.js';
 import { addFromUser, applyProposal, checkProposal, clearFlag, markChecked, noteInfos } from '../brain/write.js';
@@ -1108,10 +1108,18 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
    * A generic card's rows (spec 2026-10-26 action registry §2.1), applied through the daemon's own handlers so their rules stay in
    * one place: a row fails on the handler's `error`, or on the reason its `task.result` carries.
    */
-  function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) {
+  /** What the resolver needs beyond the live state: the asks and goals are read from OpenRig only for the rows that name them. */
+  async function resolveCtx(actions: Array<string | undefined>): Promise<ResolveCtx> {
+    const base: ResolveCtx = { sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.(), ...(forge ? { prs: forge.state().prs } : {}) };
+    if (!actions.some(a => a === 'rig.answer' || a === 'rig.goal.reply')) return base;
+    const [asked, given] = await Promise.all([human.list(), goals.list()]);
+    return { ...base, asks: asked.asks, goals: given.goals };
+  }
+  async function actOnCard(card: { chat: Pick<Chat, 'action' | 'markAction'>; emit: (m: ChatMessage) => void }, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) {
+    const ctx = await resolveCtx((rows ?? [...Array(MAX_PROPOSALS).keys()]).map(r => card.chat.action(qid, r)?.action));
     return actFromChat({
       chat: card.chat, emit: card.emit, inFlight: chatActs, now,
-      resolve: row => resolveAction(row.action, row.args, { sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.() }),
+      resolve: row => resolveAction(row.action, row.args, ctx),
       apply: async row => { const r = await applyRow(row, rid, by); if (r.failure !== undefined) throw new Error(r.failure); }
     }, qid, rows, confirmed, deny);
   }
@@ -1141,6 +1149,9 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       else if (m.type === 'brain.result' && m.reason) failure ??= m.reason;
       // An OpenRig row (rig.act, rig.seats) answers with its end: not ok is a failure, in OpenRig's words.
       else if ((m.type === 'openrig.done' || m.type === 'openrig.reseated') && !m.ok) failure ??= m.error ?? 'failed';
+      // The rows that answer an ask, give or answer a goal, or pass a session's relief end the same way.
+      else if ((m.type === 'openrig.answered' || m.type === 'openrig.goal.sent' || m.type === 'openrig.goal.replied') && !m.ok) failure ??= m.message ?? m.error ?? 'failed';
+      else if (m.type === 'session.handover.result' && !m.ok) failure ??= m.reason ?? 'failed';
     });
     return failure !== undefined ? { failure } : {};
   }
@@ -1164,7 +1175,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     // A session is who its key says (#93): a `by` from another environment, or none, is refused before anything is resolved.
     const wrong = msg.by === undefined ? undefined : notItsKey(msg.by, msg.key);
     if (wrong) return answer({ reason: wrong, code: 'identity' });
-    const r: Resolved = resolveRun(msg.action, parsed.data, { sessions: store.all(), tasks: tasks.all(), rigs: openrig.peek?.() });
+    const r: Resolved = resolveRun(msg.action, parsed.data, await resolveCtx([msg.action]));
     if ('refused' in r) return answer({ reason: r.refused, code: 'refused' });
     const guard = runGuard(r, msg.by);
     if (guard) return answer({ row: r, reason: guard, code: 'agent' });

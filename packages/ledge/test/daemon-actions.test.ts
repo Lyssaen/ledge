@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ACTION_ERROR_CODES, actionById, ChatActionSchema, type OpenRigState, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Session, type Task } from '@ledge/protocol';
+import { ACTION_ERROR_CODES, actionById, ChatActionSchema, type OpenRigState, type Goal, type HumanAsk, type PullRequest, NOTE_MAX, pendingKey, TASK_TEXT_MAX, TASK_TITLE_MAX, type ActionId, type ChatAction, type Pending, type Session, type Task } from '@ledge/protocol';
 import { actFromChat, denied } from '../src/chat/act.js';
 import { actionMessage, cardRefusal, cutVars, GENERIC_ACTIONS, resolveAction, type ResolveCtx } from '../src/daemon/actions.js';
 
@@ -33,8 +33,8 @@ const refused = (id: ActionId, args: unknown, c = ctx()): string => {
 
 describe('resolveAction', () => {
   it('covers every generic action of the registry', () => {
-    expect([...GENERIC_ACTIONS].sort()).toEqual(['note.add', 'rig.act', 'rig.seats', 'session.archive', 'session.decide', 'session.interrupt', 'session.model', 'session.restore', 'session.resume',
-      'task.answer', 'task.cancel', 'task.pass']);
+    expect([...GENERIC_ACTIONS].sort()).toEqual(['brain.answer', 'note.add', 'pr.fix', 'rig.act', 'rig.answer', 'rig.goal', 'rig.goal.reply', 'rig.seats', 'rig.send', 'session.archive', 'session.decide',
+      'session.handover', 'session.interrupt', 'session.model', 'session.restore', 'session.resume', 'task.answer', 'task.cancel', 'task.pass']);
   });
   it('names a session by id or by bot name, and refuses an unknown or ambiguous one', () => {
     expect(ok('session.interrupt', { session: 'Bix' }).args).toEqual({ session: 'bix' });
@@ -309,5 +309,78 @@ describe('rig.act and rig.seats', () => {
     const seats = actionMessage(ok('rig.seats', { rig: 'ledge-dev', role: 'dev.back', count: 1 }, c), 'r1');
     expect(seats).toEqual({ type: 'openrig.seats', requestId: 'r1', rig: 'ledge-dev', seats: { 'dev.back': 1 } });
     for (const m of [restart, kernel, seats]) expect(() => parseClientMessage(m)).not.toThrow();
+  });
+});
+
+describe('the operator actions', () => {
+  const ask = (extra: Partial<HumanAsk> = {}): HumanAsk => ({ id: 'q-1', kind: 'decision', alert: false, priority: 'routine', from: { seat: 'max@kernel', rig: null, role: null }, summary: 'Quelle équipe ?', body: '', bodyTruncated: false,
+    detail: null, evidenceRef: null, questions: [{ id: 'team', question: 'Équipe ?', options: [{ id: 'confirm', label: 'Confirmer', recommended: true }, { id: 'launch-rig', label: 'Lancer', recommended: false }], answer: null }],
+    createdAt: T0, updatedAt: T0, ...extra });
+  const team = { kind: 'launch' as const, rig: 'ledge-dev', running: false, folder: '/w/api', seats: [], reason: null, launch: null };
+  const goal = (extra: Partial<Goal> = {}): Goal => ({ goalId: 'goal-0001', qitemId: 'qitem-ledge-goal-goal-0001', text: 'Ajouter la pagination', folder: null, sentAt: T0, to: 'max@kernel', state: 'proposed',
+    trail: [], current: null, question: null, proposal: null, ...extra } as unknown as Goal);
+  const node = (logicalId: string, extra = {}) => ({ logicalId, session: `${logicalId.replace('.', '-')}@ledge-dev`, runtime: 'claude-code', model: null, sessionStatus: 'running', lifecycleState: 'running', activity: 'idle', stopped: false, work: 0, ...extra });
+  const rigs = { installed: true, daemon: { state: 'running' }, kernel: { state: 'ready' }, rigs: [{ id: 'r1', name: 'ledge-dev', status: 'running', lifecycleState: 'running', seats: 1, running: 1, attention: 0, uptime: null, snapshot: null, nodes: [node('dev.back'), node('dev.front', { stopped: true })] }] } as unknown as OpenRigState;
+  const pr = (extra: Partial<PullRequest> = {}): PullRequest => ({ id: 'github.com/a/api#226', forge: 'github', host: 'github.com', repo: 'a/api', number: 226, ref: '#226', url: 'https://github.com/a/api/pull/226', title: 'Roles', state: 'open',
+    branch: 'feat/roles', target: 'main', headSha: 'abc', pipeline: 'fail', approvals: { given: 0 }, mergeable: false, openThreads: 0, updatedAt: T0, sessions: ['bix'], ...extra } as PullRequest);
+
+  it('rig.answer on a closed qitem is refused', () => {
+    expect(code('rig.answer', { qitem: 'q-gone', answer: { option: 'confirm' } }, ctx({ asks: [ask()] }))).toBe('closed');
+    expect(code('rig.answer', { qitem: 'q-1', answer: { option: 'nope' } }, ctx({ asks: [ask()] }))).toBe('unknown');
+  });
+  it('rig.answer confirm on a team ask is destructive, and goes to human.answer', () => {
+    const r = ok('rig.answer', { qitem: 'q-1', answer: { option: 'confirm' } }, ctx({ asks: [ask({ team })] }));
+    expect(r.risk).toBe('destructive');
+    expect(actionMessage(r, 'rid')).toMatchObject({ type: 'openrig.answer', qitemId: 'q-1', answer: { kind: 'choice', questionId: 'team', optionId: 'confirm' } });
+    expect(ok('rig.answer', { qitem: 'q-1', answer: { option: 'confirm' } }, ctx({ asks: [ask()] })).risk).toBe('reversible');
+  });
+  it('rig.answer sends words, a parked row\'s resolution, and « Vu » only on news', () => {
+    expect(actionMessage(ok('rig.answer', { qitem: 'q-1', answer: { text: 'Oui' } }, ctx({ asks: [ask()] })), 'r')).toMatchObject({ answer: { kind: 'words', text: 'Oui' } });
+    expect(actionMessage(ok('rig.answer', { qitem: 'q-1', answer: { text: 'Fait' } }, ctx({ asks: [ask({ kind: 'parked' })] })), 'r')).toMatchObject({ answer: { kind: 'resolve', text: 'Fait' } });
+    expect(code('rig.answer', { qitem: 'q-1', answer: { seen: true } }, ctx({ asks: [ask()] }))).toBe('not_decision');
+    expect(actionMessage(ok('rig.answer', { qitem: 'q-1', answer: { seen: true } }, ctx({ asks: [ask({ kind: 'update' })] })), 'r')).toMatchObject({ answer: { kind: 'seen' } });
+  });
+  it('rig.goal sends the goal to Max with a goal id stable for a retry', () => {
+    const r = ok('rig.goal', { text: 'Ajouter la pagination', folder: '/w/api' });
+    const m1 = actionMessage(r, 'rid-1'), m2 = actionMessage(r, 'rid-1');
+    expect(m1).toMatchObject({ type: 'openrig.goal.send', text: 'Ajouter la pagination', folder: '/w/api' });
+    expect(m1).toEqual(m2);
+    expect((m1 as { goalId: string }).goalId).toMatch(/^[A-Za-z0-9-]{8,64}$/);
+  });
+  it('rig.goal.reply writes to Max, or confirms the team he proposes', () => {
+    expect(code('rig.goal.reply', { goal: 'nope', answer: 'confirm' }, ctx({ goals: [goal()] }))).toBe('unknown');
+    const text = ok('rig.goal.reply', { goal: 'goal-0001', answer: { text: 'Plutôt ledge-dev' } }, ctx({ goals: [goal()] }));
+    expect(text.risk).toBe('reversible');
+    expect(actionMessage(text, 'r')).toMatchObject({ type: 'openrig.goal.reply', goalId: 'goal-0001', text: 'Plutôt ledge-dev' });
+    expect(code('rig.goal.reply', { goal: 'goal-0001', answer: 'confirm' }, ctx({ goals: [goal()], asks: [] }))).toBe('no_request');
+    const c = ok('rig.goal.reply', { goal: 'goal-0001', answer: 'confirm' }, ctx({ goals: [goal()], asks: [ask({ goalId: 'goal-0001', team })] }));
+    expect(c.risk).toBe('destructive');
+    expect(actionMessage(c, 'r')).toMatchObject({ type: 'openrig.answer', qitemId: 'q-1', answer: { questionId: 'team', optionId: 'confirm' } });
+  });
+  it('rig.send to an unknown seat is refused, and a stopped seat too', () => {
+    const c = ctx({ rigs, sessions: [mk('bk', 'dev-back@ledge-dev', { tmuxSession: 'dev-back@ledge-dev', source: 'rig' })] });
+    expect(code('rig.send', { rig: 'ledge-dev', seat: 'qa.tester', text: 'Salut' }, c)).toBe('unknown');
+    expect(code('rig.send', { rig: 'ledge-dev', seat: 'dev.front', text: 'Salut' }, c)).toBe('not_running');
+    const r = ok('rig.send', { rig: 'ledge-dev', seat: 'dev.back', text: 'Salut' }, c);
+    expect(actionMessage(r, 'r')).toEqual({ type: 'session.reply', id: 'bk', text: 'Salut' });
+  });
+  it('brain.answer answers a note proposal only', () => {
+    const proposal = task({ id: 'tnote001', giver: 'nova', giverName: 'Nova', owner: 'ledge', ownerName: 'Ledge', state: 'open', brain: { note: 'machines', fact: 'Legion a 64 Go' } } as Partial<Task>);
+    expect(code('brain.answer', { task: 'tdeci01', choice: 'add' }, ctx({ tasks: [proposal, task({ id: 'tdeci01', giver: 'nova', owner: 'ledge', state: 'open' })] }))).toBe('not_decision');
+    expect(actionMessage(ok('brain.answer', { task: 'tnote001', choice: { edit: 'Legion a 32 Go' } }, ctx({ tasks: [proposal] })), 'r')).toEqual({ type: 'brain.answer', rid: 'r', task: 'tnote001', choice: { yes: true, text: 'Legion a 32 Go' } });
+    expect(actionMessage(ok('brain.answer', { task: 'tnote001', choice: 'refuse' }, ctx({ tasks: [proposal] })), 'r')).toMatchObject({ choice: { yes: false } });
+  });
+  it('session.handover on an exited session is refused', () => {
+    expect(code('session.handover', { session: 'Old' })).toBe('exited');
+    expect(code('session.handover', { session: 'Ro' })).toBe('read_only');
+    expect(actionMessage(ok('session.handover', { session: 'Bix' }), 'r')).toEqual({ type: 'session.handover', rid: 'r', id: 'bix' });
+  });
+  it('pr.fix on a PR not followed is refused, and goes to the branch\'s session as a reply', () => {
+    expect(code('pr.fix', { pr: 'github.com/a/api#226' }, ctx({ prs: [] }))).toBe('unknown');
+    expect(code('pr.fix', { pr: 'github.com/a/api#226' }, ctx({ prs: [pr({ pipeline: 'ok' })] }))).toBe('no_request');
+    expect(code('pr.fix', { pr: 'github.com/a/api#226' }, ctx({ prs: [pr({ state: 'merged' })] }))).toBe('closed');
+    const r = ok('pr.fix', { pr: 'github.com/a/api#226' }, ctx({ prs: [pr()] }));
+    expect(actionMessage(r, 'r')).toMatchObject({ type: 'session.reply', id: 'bix', text: expect.stringContaining('#226') });
+    expect(ok('pr.fix', { pr: 'github.com/a/api#226', session: 'Lu' }, ctx({ prs: [pr()] })).session).toBe('lu');
   });
 });

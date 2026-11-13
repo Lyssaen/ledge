@@ -21,7 +21,8 @@ export type ActionPhoneCheck = 'launch' | 'close' | 'decide' | 'act';
 export const ACTION_IDS = [
   'session.launch', 'session.relay', 'session.close', 'project.propose', 'task.give',
   'session.model', 'session.interrupt', 'session.archive', 'session.restore', 'session.resume', 'session.decide',
-  'task.cancel', 'task.pass', 'task.answer', 'note.add', 'rig.act', 'rig.seats'
+  'task.cancel', 'task.pass', 'task.answer', 'note.add', 'rig.act', 'rig.seats',
+  'rig.answer', 'rig.goal', 'rig.goal.reply', 'rig.send', 'brain.answer', 'session.handover', 'pr.fix'
 ] as const;
 export const ActionIdSchema = z.enum(ACTION_IDS);
 export type ActionId = z.infer<typeof ActionIdSchema>;
@@ -42,6 +43,13 @@ const def = <A extends z.ZodTypeAny>(d: ActionDef<A>): ActionDef => d as unknown
 /** A session as Ledge names it: its id or its bot name, as sessions.md gives them. */
 const SessionRef = z.string().trim().min(1).max(80);
 const TaskRef = z.string().trim().min(1).max(40);
+/** An option that starts a rig: the person's own yes, so answering with it is never undone by a click. */
+const LAUNCH_OPTIONS: readonly string[] = ['confirm', 'launch-rig'];
+const RigAnswer = z.union([
+  z.object({ option: z.string().trim().min(1).max(200) }).strict(),
+  z.object({ text: z.string().trim().min(1).max(8000) }).strict(),
+  z.object({ seen: z.literal(true) }).strict()
+]);
 
 /** What the chat may do to OpenRig (refonte mobile B4): a rig's or the kernel's power, and a snapshot. Never the daemon itself, nor
  *  permissions: those stay on the Rigs screens. */
@@ -160,6 +168,56 @@ export const ACTIONS: readonly ActionDef[] = [
     summary: 'mettre un rôle d\'un rig en cours à count sièges (role tel que rigs.md le donne, pod.membre) : ajoute des copies du premier siège, ou retire les dernières',
     when: 'seulement quand l\'utilisateur demande explicitement d\'ajouter ou de retirer des sièges d\'un rôle d\'un rig qui tourne, lu dans rigs.md',
     example: { rig: 'ledge-dev', role: 'dev.back', count: 2 }
+  }),
+  def({
+    id: 'rig.answer', card: 'generic', phone: 'act', max: 4,
+    args: z.object({ qitem: z.string().trim().min(1).max(200), answer: RigAnswer }),
+    // The daemon knows whether the ask proposes a team; here an option that confirms or launches is taken as the destructive one.
+    risk: a => ('option' in a.answer && LAUNCH_OPTIONS.includes(a.answer.option) ? 'destructive' : 'reversible'),
+    summary: 'répondre, au nom de l\'utilisateur, à une demande de « À toi » (attentes.md) : une option (option, son id), ses propres mots (text) ou « Vu » sur une nouvelle (seen) ; confirmer un lancement de rig ne se défait pas',
+    when: 'seulement quand l\'utilisateur donne lui-même sa réponse à une demande ouverte de attentes.md : option reprend l\'id d\'une option qu\'il a choisie, text ses mots, sans rien inventer ni choisir à sa place ; si sa réponse manque, cite les options et demande-la',
+    example: { qitem: 'qitem-20261113-0001', answer: { option: 'confirm' } }
+  }),
+  def({
+    id: 'rig.goal', card: 'generic', phone: null, risk: 'reversible', max: 1,
+    args: z.object({ text: z.string().trim().min(1).max(2000), folder: z.string().trim().min(1).max(4096).refine(f => f.startsWith('/'), 'an absolute path').optional() }),
+    summary: 'donner un objectif à Max, l\'orchestrateur d\'OpenRig, qui propose l\'équipe ; folder (chemin absolu) seulement s\'il est connu',
+    when: 'seulement quand l\'utilisateur demande explicitement de donner un objectif aux rigs ; text reprend ses mots, folder un chemin absolu lu dans sessions.md ou folders.md ou donné tel quel',
+    example: { text: 'Ajouter la pagination à /invoices', folder: '/home/alice/projets/api' }
+  }),
+  def({
+    id: 'rig.goal.reply', card: 'generic', phone: 'act', max: 1,
+    args: z.object({ goal: z.string().trim().min(1).max(100), answer: z.union([z.literal('confirm'), z.object({ text: z.string().trim().min(1).max(8000) }).strict()]) }),
+    risk: a => (a.answer === 'confirm' ? 'destructive' : 'reversible'),
+    summary: 'répondre à Max au sujet d\'un objectif (goal, son id de rigs.md) : confirmer l\'équipe qu\'il propose (confirm), ou lui écrire (text) ; confirmer un lancement de rig ne se défait pas',
+    when: 'seulement quand l\'utilisateur demande explicitement de confirmer l\'équipe proposée pour un objectif ou d\'écrire à Max à son sujet, et que rigs.md ou attentes.md montre cet objectif ; confirm seulement s\'il a dit oui à cette équipe',
+    example: { goal: 'a1b2c3d4-e5f6', answer: { text: 'Plutôt l\'équipe ledge-dev' } }
+  }),
+  def({
+    id: 'rig.send', card: 'generic', phone: null, risk: 'reversible', max: 4,
+    args: z.object({ rig: RigNameSchema, seat: z.string().trim().min(1).max(200), text: z.string().trim().min(1).max(4000) }),
+    summary: 'écrire à un siège d\'un rig qui tourne (rig send) : le texte lui est envoyé tel quel',
+    when: 'seulement quand l\'utilisateur demande explicitement d\'écrire à un siège d\'un rig ; seat tel que rigs.md le donne (son identifiant ou sa session) ; le texte est formulé pour l\'agent',
+    example: { rig: 'ledge-dev', seat: 'dev.back', text: 'Peux-tu relire la PR 226 ?' }
+  }),
+  def({
+    id: 'brain.answer', card: 'generic', phone: 'act', risk: 'reversible', max: 4,
+    args: z.object({ task: TaskRef, choice: z.union([z.enum(['add', 'refuse']), z.object({ edit: z.string().trim().min(1).max(BRAIN_FACT_MAX) }).strict()]) }),
+    summary: 'répondre à une proposition de note de « À toi » (tasks.md) : l\'ajouter telle quelle (add), la refuser (refuse), ou l\'ajouter corrigée (edit, le fait corrigé)',
+    when: 'seulement quand l\'utilisateur dit s\'il veut ajouter, refuser ou corriger une proposition de note de tasks.md',
+    example: { task: 't91b0d4', choice: 'add' }
+  }),
+  def({
+    id: 'session.handover', args: z.object({ session: SessionRef }), card: 'generic', phone: null, risk: 'reversible', max: 4,
+    summary: 'passer le relais d\'une session en cours : elle écrit son point de reprise, puis une session fraîche le reprend',
+    when: 'seulement quand l\'utilisateur demande explicitement de passer le relais d\'une session, ou de la renouveler parce que son contexte est plein',
+    example: { session: 'Nova' }
+  }),
+  def({
+    id: 'pr.fix', args: z.object({ pr: z.string().trim().min(1).max(500), session: SessionRef.optional() }), card: 'generic', phone: 'act', risk: 'reversible', max: 4,
+    summary: 'demander à la session d\'une pull request suivie de corriger son pipeline en échec (pr, son id de prs.md ; session, sinon la plus active de la branche)',
+    when: 'seulement quand l\'utilisateur demande explicitement de faire corriger une pull request ou son pipeline, et que prs.md la montre suivie',
+    example: { pr: 'github.com/alice/api#226' }
   })
 ];
 
