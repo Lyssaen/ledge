@@ -163,6 +163,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   /* A rig and the kernel open beside the Rigs list: their « Retour » has nowhere to go. */
   .split-detail [data-back="rigs"] { display: none; }
   .app:not(:has(.split)) > :not(.rail, .lpane) { width: 100%; max-width: 720px; margin-inline: auto; }
+  /* The MR/PR tab (m5-mr-pr.html, §10): its list is 320 px (290 upright) and a request fills the rest, edge to edge, its
+     Discussion in a column on its right; each of its bands keeps its own padding. */
+  .split[data-split="prs"] { grid-template-columns: 320px minmax(0, 1fr); }
+  .split[data-split="prs"] > .split-detail { padding: 0 env(safe-area-inset-right) 0 0; }
+  .split[data-split="prs"] > .split-detail > * { max-width: none; }
   /* The Ledge pane (m3-chat.html §7, Q36): 400 px on the right, over any tab. On its side, the tablet makes room for it, the
      list keeping its width and the detail giving way; upright, it goes over the detail, with a shadow. */
   .lpane {
@@ -181,6 +186,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 @media (min-width: 768px) and (min-height: 501px) and (orientation: portrait) {
   .split { grid-template-columns: 330px minmax(0, 1fr); }
+  .split[data-split="prs"] { grid-template-columns: 290px minmax(0, 1fr); }
   .lpane { box-shadow: -12px 0 32px #0006; }
   /* Upright, the pane goes over the Atelier's session panel too, as over any tab (§7). */
   .app:has(> .lpane:not([hidden])) > .atelier-panel { z-index: 14; }

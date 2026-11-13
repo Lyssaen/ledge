@@ -326,7 +326,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
       prs: failed ? { text: failed > 99 ? '99+' : String(failed), tone: 'red' as const } : null
     };
     const prsList = prsOn ? <PrsList forge={forge} store={store} /> : <Prs />;
-    const prView = prsOn && route.name === 'pr' ? <PrView key={route.id} id={route.id} forge={forge} store={store} /> : null;
+    const prView = prsOn && route.name === 'pr' ? <PrView key={route.id} id={route.id} forge={forge} store={store} pane={paneOpen} /> : null;
     const inbox = <Inbox store={store} onReconnect={retry} forge={forge} />;
     const sessions = <Sessions store={store} filter={route.name === 'sessions' ? route.filter : undefined} />;
     // The Ledge tab: the chat when the PC offers it (or, offline, while that is not known yet); else it says the PC does not.
@@ -355,7 +355,7 @@ export function App({ link, store, storage, fetchImpl = defaultFetch, updates = 
           // « Nouvelle session » opens beside the list, like a session (Q82, validated by the user 2026-11-11).
           case 'launch': return <Split list={sessions} detail={<NewSession store={store} storage={storage} />} />;
           case 'terminal': return <Split list={sessions} detail={<Terminal key={route.sessionId} store={store} link={link} sessionId={route.sessionId} storage={storage} forge={forge} />} />;
-          case 'prs': case 'pr': return <Split list={prsList} detail={prView ?? <EmptyPane icon="pr" {...copy.prs.pane} />} />;
+          case 'prs': case 'pr': return <Split tab="prs" list={prsList} detail={prView ?? <EmptyPane icon="pr" {...copy.prs.pane} />} />;
           case 'rigs': case 'rig': case 'kernel': case 'max': return <Split list={rigsList} detail={rigsDetail ?? <EmptyPane icon="rigs" {...copy.rigs.pane} />} />;
           case 'atelier': return mobile.daemon?.atelier
             ? <AtelierScreen store={store} {...(route.sessionId ? { sessionId: route.sessionId } : {})} {...(route.requestKey ? { requestKey: route.requestKey } : {})} storage={storage} onReconnect={retry} />

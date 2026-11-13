@@ -119,6 +119,35 @@ for (const lang of ['fr', 'en'] as const) {
   }
 }
 
+// A tablet (m5-mr-pr.html, §10): on its side, the request beside the list with its Discussion in a column; upright, the phone's views.
+for (const theme of ['dark', 'light'] as const) {
+  test.describe(`on a tablet, ${theme}`, () => {
+    test.use({ viewport: { width: 1180, height: 820 }, hasTouch: true, isMobile: false });
+    test('a failed MR on its side, its Discussion in a column; upright, the four views', async ({ page }) => {
+      const C = copyFor('fr').prs;
+      await pair(page, theme, 'fr');
+      await go(page, at(mr().id));
+      const column = page.getByRole('complementary', { name: C.tabs.discussion });
+      await expect(column.getByText(C.discSub(2, 1))).toBeVisible();
+      await expect(page.locator('[data-pipeline="side"]')).toBeVisible();
+      await expect(page.locator('footer').getByRole('button', { name: C.sendAll('Tom') })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: C.title }).getByRole('button')).toHaveCount(3);
+      // The Discussion column sits on the right of the overview, the list on its left.
+      const box = (await column.boundingBox())!;
+      expect.soft(Math.round(box.width)).toBe(320);
+      expect.soft(Math.round(box.x + box.width)).toBe(1180);
+      expect.soft(Math.round((await page.locator('.split-list').boundingBox())!.width)).toBe(320);
+      await shot(page, `tablet-landscape-${theme}`);
+
+      await page.setViewportSize({ width: 820, height: 1180 });
+      await expect(column).toBeHidden();
+      await expect(page.getByRole('navigation', { name: C.title }).getByRole('button')).toHaveCount(4);
+      expect.soft(Math.round((await page.locator('.split-list').boundingBox())!.width)).toBe(290);
+      await shot(page, `tablet-portrait-${theme}`);
+    });
+  });
+}
+
 test.describe('with Face ID', () => {
   test.use(pixel);
   test.skip(({ browserName }) => browserName !== 'chromium', 'The virtual authenticator is a Chromium DevTools feature');

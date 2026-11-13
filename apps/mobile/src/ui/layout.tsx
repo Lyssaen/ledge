@@ -23,10 +23,13 @@ export function useAtelierTab(daemon: { atelier?: true } | null): boolean {
   return useWide() && !!daemon?.atelier;
 }
 
-/** Two panes: `list` (the inbox or the agents, with the tabs) and `detail` (what it opened, or `empty`). */
-export function Split({ list, detail }: { list: ReactNode; detail: ReactNode }) {
+/**
+ * Two panes: `list` (the inbox or the agents, with the tabs) and `detail` (what it opened, or `empty`). `tab` names the tab whose
+ * panes differ from the others' (`data-split`, read by styles.css): the MR/PR tab's list is narrower and its detail edge to edge.
+ */
+export function Split({ list, detail, tab }: { list: ReactNode; detail: ReactNode; tab?: 'prs' }) {
   return (
-    <div className="split">
+    <div className="split" data-split={tab}>
       <section className="split-list">{list}</section>
       <section className="split-detail">{detail}</section>
     </div>
