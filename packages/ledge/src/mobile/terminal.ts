@@ -250,6 +250,9 @@ interface Term {
   state: 'capturing' | 'pending' | 'live' | 'closed';
   pane: string | null; cols: number; rows: number;
   decoder: StringDecoder; buffer: string; since: number | null;
+  /** Output after the capture while the pane is not known yet (the first open), with the pane it came from: only the watched
+   *  pane's bytes are kept once it is known. */
+  early: Array<{ pane: string; data: Buffer }>;
   seq: number; nextN: number;
   held: { at: number; last: number } | null;
   /** The device's keys, typed in order. */
@@ -301,6 +304,7 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
     t.state = 'capturing';
     t.buffer = '';
     t.since = null;
+    t.early = [];
     t.decoder = new StringDecoder('utf8');
     const target = `'=${t.tmuxName}:'`;
     // Written together, the capture first, so tmux runs both before reading the pane again: the cursor is the captured screen's. The
@@ -314,6 +318,9 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
     const m = info.ok ? /^(%\d+) (\d+) (\d+) (\d+) (\d+)$/.exec(info.lines[0] ?? '') : null;
     if (!m || !cap.ok) return end(t, 'failed');
     t.pane = m[1]!; t.cols = Number(m[2]); t.rows = Number(m[3]);
+    // The output kept before the pane was known: only the watched pane's, in the order it came.
+    for (const e of t.early.splice(0)) if (e.pane === t.pane) t.buffer += t.decoder.write(e.data);
+    if (t.buffer) t.since ??= now();
     t.state = 'live';
     if (t.openTimer) { clearTimeout(t.openTimer); t.openTimer = null; }
     send(t, {
@@ -325,7 +332,9 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
   const onEvent = (t: Term, e: Exclude<ControlEvent, { kind: 'reply' }>) => {
     switch (e.kind) {
       case 'output': {
-        if ((t.state !== 'live' && t.state !== 'pending') || (t.pane !== null && e.pane !== t.pane)) return;
+        if (t.state !== 'live' && t.state !== 'pending') return;
+        if (t.pane === null) { t.early.push({ pane: e.pane, data: e.data }); return; }
+        if (e.pane !== t.pane) return;
         const text = t.decoder.write(e.data);
         if (!text) return;
         t.buffer += text;
@@ -384,7 +393,7 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
       t = {
         tid, deviceId, sessionId: session.id, tmuxName: session.tmuxName, readOnly: !!session.readOnly, client,
         state: 'capturing', pane: null, cols: 0, rows: 0,
-        decoder: new StringDecoder('utf8'), buffer: '', since: null, seq: 0, nextN: 0, held: null, typing: Promise.resolve(),
+        decoder: new StringDecoder('utf8'), buffer: '', since: null, early: [], seq: 0, nextN: 0, held: null, typing: Promise.resolve(),
         timer: setInterval(() => tick(t), TICK_MS), openTimer: null
       };
       t.openTimer = setTimeout(() => { if (t.openTimer) end(t, 'failed'); }, OPEN_TIMEOUT_MS);

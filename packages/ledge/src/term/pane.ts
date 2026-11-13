@@ -73,6 +73,9 @@ interface Watch {
   /** The grid the watcher asked for. `cols`/`rows` are what the pane last reported. */
   want: { cols: number; rows: number } | null;
   buffer: Buffer; since: number | null;
+  /** Output after the capture while the pane is not known yet (the first open, before `display-message` answers), with the pane it
+   *  came from: a window may have several, and only the watched one's bytes are kept once it is known. */
+  early: Array<{ pane: string; data: Buffer }>;
   queued: string[]; typing: Promise<void>;
   timer: { stop(): void }; openTimer: { stop(): void } | null;
 }
@@ -182,7 +185,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
   const screen = async (w: Watch) => {
     if (w.state === 'closed') return;
     w.state = 'capturing';
-    w.buffer = Buffer.alloc(0); w.since = null;
+    w.buffer = Buffer.alloc(0); w.since = null; w.early = [];
     const target = targetOf(w.tmuxName);
     let sized: { cols: number; rows: number } | null = null;
     if (w.sizing && w.want) {
@@ -207,6 +210,9 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     const m = info.ok ? INFO.exec(info.lines[0] ?? '') : null;
     if (!m || !cap.ok) return end(w, 'failed');
     w.pane = m[1]!; w.cols = Number(m[2]); w.rows = Number(m[3]);
+    // The output kept before the pane was known: only the watched pane's, in the order it came.
+    for (const e of w.early.splice(0)) if (e.pane === w.pane) w.buffer = w.buffer.length ? Buffer.concat([w.buffer, e.data]) : e.data;
+    if (w.buffer.length) w.since ??= now();
     let lines = cap.lines;
     let text = lines.join('\n');
     while (text.length > TERM_PANE_SCREEN_MAX && lines.length > 1) { lines = lines.slice(1); text = lines.join('\n'); }
@@ -244,7 +250,9 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
   const onEvent = (w: Watch, e: Exclude<ControlEvent, { kind: 'reply' }>) => {
     switch (e.kind) {
       case 'output': {
-        if ((w.state !== 'live' && w.state !== 'pending') || (w.pane !== null && e.pane !== w.pane)) return;
+        if (w.state !== 'live' && w.state !== 'pending') return;
+        if (w.pane === null) { w.early.push({ pane: e.pane, data: e.data }); return; }
+        if (e.pane !== w.pane) return;
         w.buffer = w.buffer.length ? Buffer.concat([w.buffer, e.data]) : e.data;
         w.since ??= now();
         return;
@@ -277,7 +285,7 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
         reply, id: session.id, shell: tag, tmuxName: session.tmuxName, sizing: size !== null, owned: !!session.owned, lock: !session.owned,
         client, state: 'capturing', pane: null, cols: size?.cols ?? 0, rows: size?.rows ?? 0,
         want: size ? { ...size } : null,
-        buffer: Buffer.alloc(0), since: null, queued: [], typing: Promise.resolve(),
+        buffer: Buffer.alloc(0), since: null, early: [], queued: [], typing: Promise.resolve(),
         timer: timer(() => flush(w), TICK_MS), openTimer: null
       };
       if (w.sizing) hold(session.tmuxName);
