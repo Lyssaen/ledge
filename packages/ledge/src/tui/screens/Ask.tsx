@@ -5,7 +5,7 @@ import { daemonStore } from '@ledge/fleet';
 import { LEDGE_GIVER, proposalRows, type ChatTurn } from '@ledge/protocol';
 import { useEditing, useScreenKeys, useScreenSize, useTui } from '../context.js';
 import { ChipsLine, type Chip, useChips, useOpenImage, usePaste } from '../images.js';
-import { askHistory, chatView, openCards, type Card } from '../model/chat.js';
+import { askHistory, chatView, openCards, pointRows, type Card } from '../model/chat.js';
 import { cardPlan, moveRow, selectedRow, type Room } from '../model/actionCard.js';
 import { wrapSegs } from '../model/cells.js';
 import { anchorLine } from '../model/thread.js';
@@ -51,6 +51,14 @@ export function Ask() {
   const [rowOf, setRowOf] = useState<Record<string, number>>({});
   const [confirming, setConfirming] = useState<{ qid: string; rows: number[] } | null>(null);
   const [review, setReview] = useState<string | null>(null);
+  // The point card (operator): the row chosen, and the answer a destructive row asks to confirm (as the daemon's confirm_required says).
+  const [pointSel, setPointSel] = useState<Record<string, number>>({});
+  type PointAsk = { qid: string; item: string; answer?: { id: string }; suggest?: true };
+  const [pointConfirm, setPointConfirm] = useState<PointAsk | null>(null);
+  const lastPoint = useRef<PointAsk | null>(null);
+  useEffect(() => client.onMessage(m => {
+    if (m.type === 'error' && m.request === 'point.act' && m.code === 'confirm_required' && lastPoint.current) setPointConfirm(lastPoint.current);
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps
   useEditing(focus === -1 && !confirm);
   // What the last question carried: given back if the daemon refuses it, as a session reply does.
   const sentAsk = useRef<{ qid: string; taken: Chip[]; text: string } | null>(null);
@@ -118,7 +126,7 @@ export function Ask() {
     return true;
   };
   const act = (card: Card) => {
-    if (busy || card.kind === 'action') return;
+    if (busy || card.kind === 'action' || card.kind === 'point') return;
     const turn = d.chat.find(x => x.qid === card.qid);
     if (!turn) return;
     if (card.kind === 'task') {
@@ -175,6 +183,35 @@ export function Ask() {
       if (p.open.length || p.shown.some(x => x === 'cut')) client.send({ type: 'chat.ignore', qid }); else setFocus(-1);
       return true;
     }
+    return false;
+  };
+
+  /** A point's answer or suggestion through point.act; a destructive one comes back confirm_required and is asked in the box. */
+  const sendPoint = (a: PointAsk, confirmed?: true) => {
+    const turn = d.chat.find(x => x.qid === a.qid);
+    lastPoint.current = a;
+    setBusy({ qid: a.qid, turn, errorSeq: d.errors.at(-1)?.seq ?? 0, at: Date.now() });
+    client.send({ type: 'point.act', qid: a.qid, item: a.item, ...(a.answer ? { answer: a.answer } : {}), ...(a.suggest ? { suggest: true as const } : {}), ...(confirmed ? { confirmed } : {}) });
+  };
+  /** The keys of the focused point card: ↑ ↓ the row, 1-4 its answers, s its suggestion, l « Plus tard », y confirms, esc cancels. */
+  const pointKey = (qid: string, input: string, key: { upArrow: boolean; downArrow: boolean; escape: boolean }): boolean => {
+    const turn = d.chat.find(x => x.qid === qid);
+    const rows = turn?.point ? pointRows(turn.point) : [];
+    if (!turn?.point || !rows.length) return false;
+    if (pointConfirm?.qid === qid) {
+      if (input === 'y') { const a = pointConfirm; setPointConfirm(null); sendPoint(a, true); }
+      else if (key.escape) setPointConfirm(null);
+      return true;
+    }
+    if (busy?.qid === qid) return true;
+    const sel = Math.min(pointSel[qid] ?? 0, rows.length - 1), row = rows[sel]!;
+    if (key.upArrow || input === 'k') { setPointSel(m => ({ ...m, [qid]: Math.max(0, sel - 1) })); return true; }
+    if (key.downArrow || input === 'j') { setPointSel(m => ({ ...m, [qid]: Math.min(rows.length - 1, sel + 1) })); return true; }
+    if (input === 'l') { client.send({ type: 'point.later', qid }); return true; }
+    if (input === 's' && row.suggestion && row.suggestion.state !== 'done') { sendPoint({ qid, item: row.id, suggest: true }); return true; }
+    const n = Number(input);
+    if (n >= 1 && n <= (row.answers?.length ?? 0)) { sendPoint({ qid, item: row.id, answer: { id: row.answers![n - 1]!.id } }); return true; }
+    if (key.escape) { setFocus(-1); return true; }
     return false;
   };
 
@@ -236,6 +273,7 @@ export function Ask() {
     }
     if (focus < 0) return false;
     if (cards[focus]!.kind === 'action') return actionKey(cards[focus]!.qid, input, key);
+    if (cards[focus]!.kind === 'point') return pointKey(cards[focus]!.qid, input, key);
     if (key.return) { act(cards[focus]!); return true; }
     if (key.escape) { setFocus(-1); return true; }
     return false;
@@ -267,6 +305,8 @@ export function Ask() {
     : focus === -1 ? [['↵', t.keys.sendOnly], ...review$, ['alt+↵', t.keys.newLine], ['esc', t.keys.back], ['PgUp PgDn', t.keys.scroll], ['↑ ↓', t.keys.history], ['tab', cards.length ? t.keys.nextCard : t.keys.conversation], ['alt+v', t.keys.image], ...(turnImages.length ? [['alt+o', t.keys.openImage] as const] : []), ['ctrl+n', t.keys.newChat], ...stop]
     : focus === CONVO ? [['j k', t.keys.line], ['PgUp PgDn', t.keys.page], ['G', t.keys.end], ...stop, ['tab', t.keys.question], ['esc', t.keys.question]]
     : card?.kind === 'action' ? [...actionKeys(card.qid), ...stop, ...review$]
+    : card?.kind === 'point' ? (pointConfirm?.qid === card.qid ? [['y', t.keys.apply], ['esc', t.keys.cancel]]
+      : [['1-4', t.keys.answer], ['s', t.ask.pointSuggest], ['↑ ↓', t.keys.line], ['l', t.ask.pointLater], ['tab', focus + 1 < cards.length ? t.keys.nextCard : t.keys.conversation], ['esc', t.keys.back]])
     : [['↵', t.keys.send], ['tab', focus + 1 < cards.length ? t.keys.nextCard : t.keys.conversation], ['ctrl+n', t.keys.newChat], ...stop, ['esc', t.keys.back]];
   // Scrolled: how much is above and below, or that the answer goes on below; at the bottom, what is above.
   const foot = up > 0 ? (asking && live?.qid === asking.qid ? t.ask.answering : t.session.scrolled(lines.length - view - up, up))
@@ -281,6 +321,7 @@ export function Ask() {
       </TitledBox>
       {cards.map((c, i) => {
         const turn = d.chat.find(x => x.qid === c.qid)!;
+        if (c.kind === 'point') return <PointBox key={`point:${c.qid}`} turn={turn} ids={c.items} sel={pointSel[c.qid] ?? 0} focused={i === focus} busy={busy?.qid === c.qid} confirming={pointConfirm?.qid === c.qid ? pointConfirm : null} />;
         if (c.kind !== 'action') return <CardBox key={`${c.kind}:${c.qid}`} card={c} turn={turn} focused={i === focus} busy={busy?.qid === c.qid} />;
         const p = planOf(turn);
         const sel = selectedRow(p, rowOf[c.qid]);
@@ -297,7 +338,7 @@ export function Ask() {
   );
 }
 
-function CardBox({ card, turn, focused, busy }: { card: Exclude<Card, { kind: 'action' }>; turn: ChatTurn; focused: boolean; busy: boolean }) {
+function CardBox({ card, turn, focused, busy }: { card: Exclude<Card, { kind: 'action' | 'point' }>; turn: ChatTurn; focused: boolean; busy: boolean }) {
   const { t, g } = useTui();
   const color = focused ? C.coral : C.line;
   if (card.kind === 'task') {
@@ -342,6 +383,27 @@ function CardBox({ card, turn, focused, busy }: { card: Exclude<Card, { kind: 'a
     <TitledBox title={t.ask.closeCard} flexShrink={0} color={color} titleColor={C.red}>
       {card.rows.map(r => <Text key={r} wrap="truncate"><Text color={C.fg}>{closes[r]!.name}</Text> <Text color={C.faint}>{TOOL_NAME[closes[r]!.tool]}</Text>{closes[r]!.error ? <Text color={C.red}>  {closes[r]!.error}</Text> : null}</Text>)}
       <Box columnGap={2}><Button label={t.ask.close} k="↵" primary={focused} /></Box>
+    </TitledBox>
+  );
+}
+
+/** The operator's point as a card: its unsettled rows with their answers numbered (the row chosen ▸); a destructive answer is asked
+ *  in the red box, and only y confirms it. */
+function PointBox({ turn, ids, sel, focused, busy, confirming }: { turn: ChatTurn; ids: string[]; sel: number; focused: boolean; busy: boolean; confirming: { item: string; answer?: { id: string }; suggest?: true } | null }) {
+  const { t } = useTui();
+  const rows = (turn.point?.items ?? []).filter(i => ids.includes(i.id));
+  const chosen = Math.min(sel, rows.length - 1);
+  const asked = confirming && rows.find(r => r.id === confirming.item);
+  const what = asked ? (confirming.answer ? asked.answers?.find(a => a.id === confirming.answer!.id)?.label ?? confirming.answer.id : asked.suggestion?.summary ?? '') : '';
+  return (
+    <TitledBox title={asked ? t.ask.pointConfirm(what, asked.who) : t.ask.pointCard} flexShrink={0} color={asked ? C.red : focused ? C.coral : C.line} titleColor={asked ? C.red : C.coral}>
+      {rows.map((r, i) => (
+        <Box key={r.id} flexDirection="column">
+          <Text wrap="truncate"><Text color={C.coral}>{focused && i === chosen ? '▸ ' : '  '}</Text><Text color={C.fg} bold>{r.who}</Text> <Text color={C.dim}>{r.text}</Text></Text>
+          {focused && i === chosen && !asked ? <Text wrap="truncate" color={C.faint}>    {[...(r.answers ?? []).map((a, k) => `${k + 1} ${a.label}`), ...(r.suggestion && r.suggestion.state !== 'done' ? [`s ${r.suggestion.summary.replace(/\*\*/g, '')}`] : [])].join('   ')}{busy ? `   ${t.ask.pointSending}` : ''}</Text> : null}
+        </Box>
+      ))}
+      <Text color={C.faint}>{asked ? t.ask.pointHint : ''}</Text>
     </TitledBox>
   );
 }

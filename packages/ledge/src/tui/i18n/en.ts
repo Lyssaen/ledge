@@ -1,4 +1,5 @@
 import { actionCopy } from '@ledge/ui/chat/actionCopy';
+import { pointCopy } from '@ledge/ui/chat/pointCopy';
 import { formatBytes } from '@ledge/ui/images/encode';
 import type { Messages } from './lang.js';
 
@@ -94,6 +95,9 @@ export const en: Messages = {
     resetBody: (n, since) => `Today's conversation (${n} ${plural(n, 'question', 'questions')}, since ${since}) will be cleared.`,
     draftStays: 'Your draft stays.', keep: 'Keep', wipe: 'Clear and start over',
     above: n => `↑ ${n} ${plural(n, 'line', 'lines')} above · PgUp`, answering: '↓ Ledge is answering · G to follow',
+    /** The operator's point (shared words with the other PC fronts, and the terminal's own). */
+    point: pointCopy.en, pointCard: 'Ledge · the point', pointLater: 'Later', pointSuggest: 'suggestion', pointSending: 'sending…',
+    pointConfirm: (what, who) => `Confirm · ${what} for ${who}?`, pointHint: 'Ledge does nothing without you · ↵ never confirms: type y',
     action: {
       copy: actionCopy.en,
       plan: n => `Plan · ${n} actions`, request: (kind, name) => `${kind} · ${name}`,

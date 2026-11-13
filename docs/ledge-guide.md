@@ -23,7 +23,7 @@ Ledge veille sur les sessions d'agents de l'utilisateur : Claude Code, Codex, Cu
   - `Ctrl+Alt+N` ouvre « Nouvelle session » dans Ledge Desktop.
   - Ses réglages sont dans Réglages › Encoche.
 - **Ledge mobile** est une application web pour le téléphone, servie par un relais. Elle se lie au PC depuis Réglages › Accès mobile.
-- **Le chat de Ledge** (toi) lit et ne touche à rien. Une action passe par une carte que l'utilisateur valide.
+- **Le chat de Ledge** (toi) répond aux questions, et écrit de lui-même « le point » (voir « Ledge, l'opérateur »). Il ne touche à rien sans un clic de l'utilisateur : une action passe par une carte ou un bouton qu'il valide.
 
 Les notes de l'utilisateur se rangent dans `~/.ledge/context/*.md`. Le front matter est optionnel :
 - `title`, et `when`, qui dit quand lire la note ;
@@ -32,6 +32,23 @@ Les notes de l'utilisateur se rangent dans `~/.ledge/context/*.md`. Le front mat
 - `checked` : la date (`AAAA-MM-JJ`) où son contenu a été vérifié.
 
 Le chat les recopie à chaque question. Une session lancée par Ledge reçoit à son démarrage l'index des notes de son projet, jamais les notes elles-mêmes, et en lit une avec `ledge brain <nom>`. `scope: chat` retire une note de ce que Ledge propose aux sessions ; ce n'est pas une protection : une session qui a un shell peut lire le dossier.
+
+## Ledge, l'opérateur
+
+Ledge n'attend pas qu'on l'interroge : il écrit « le point » dans le chat, de lui-même (« de lui-même » dans l'en-tête du tour). C'est un tour de la conversation, avec une phrase d'ouverture, puis des lignes rangées en quatre groupes : « À toi » (ce qui attend l'utilisateur), « Terminé », « En cours » et « Rigs ». Chaque ligne dit qui, quoi, et porte ses boutons : les réponses possibles (« Autoriser », « Refuser », le choix d'un rig), « Répondre… » pour un texte libre, et parfois une suggestion de Ledge (« Archiver Otto », « Passer le relais »). Une ligne réglée ailleurs, dans le terminal, sur le téléphone ou sur le PC, garde un reçu (« réglé dans le terminal ») au lieu de boutons. Quand tout est réglé, le point se replie en une ligne.
+
+**Ce qui réveille Ledge :**
+- tout de suite : une demande d'accord, une question d'un agent, une demande urgente d'un rig ;
+- groupé, au plus une fois par minute : une session terminée ou en erreur, des tâches, une PR, des rigs, la réponse de Max ;
+- jamais : les outils, la réflexion, les sous-agents.
+
+Un plafond évite que Ledge parle trop. Il lit un journal de ce qui s'est passé (`~/.ledge/ledge.sqlite`) et n'agit jamais seul : répondre, archiver, passer un relais, écrire à un siège ou réparer une PR est toujours un clic. Une réponse irréversible demande une confirmation.
+
+**L'encoche n'a qu'une voix : Ledge.** Les bulles « session terminée » et « erreur » n'existent plus ; Ledge dit le point, ou la question d'un rig, dans une bulle courte. « Plus tard » met la bulle de côté : elle revient avec un point plus récent, ou quand la conversation est lue. Le réglage « Bulle quand un agent a terminé » ne commande plus que le son.
+
+**Sur le téléphone**, le réglage « Le point de Ledge » (Réglages › Notifications, l'ancien « Agent terminé ») active la notification d'un point. Le point et ses réponses s'y affichent comme sur le PC.
+
+**Dans `ledge tui`**, le point est affiché dans « Demander à Ledge », avec ses groupes et ses reçus ; ses lignes à traiter forment une carte : `1`-`4` choisissent une réponse, `s` applique la suggestion, `l` dit « Plus tard », `y` confirme une réponse irréversible.
 
 ## Ledge Desktop
 
@@ -207,13 +224,13 @@ Photo de profil, thème (Galet clair, Signal sombre), couleur d'accent, échelle
 - « Mode discret sous une fenêtre ».
 - Taille de l'encoche et de ses fenêtres.
 - « Autoriser et répondre depuis l'encoche ».
-- « Bulle quand un agent a terminé ».
+- « Bulle quand un agent a terminé » (ne commande plus que le son : Ledge est la seule voix de l'encoche).
 - Bulles de parole, sous-agents.
 - Raccourci d'ouverture.
 
 ##### Notifications (`notifications`)
 
-« Ne pas déranger », et ce qui se passe quand un agent a terminé : bulle et son, bulle, son, ou état de session seul.
+« Ne pas déranger », et ce qui se passe quand un agent a terminé : son, ou état de session seul (plus de bulle : c'est Ledge qui parle, voir « Ledge, l'opérateur »).
 
 ##### Sons (`sounds`)
 
@@ -363,7 +380,7 @@ Sur iPad seulement, avec un PC qui le propose : l'Atelier de Ledge Desktop, ses 
 
 ### Ledge (`chat`)
 
-Le chat de Ledge sur le téléphone, avec « Le point ». Les cartes proposent une session ou une tâche. Cette conversation est propre au téléphone. Avec un PC qui ne propose pas le chat à l'appareil, l'onglet le dit, sans champ, et renvoie à « À toi ».
+Le chat de Ledge sur le téléphone, avec « Le point » que Ledge écrit de lui-même (réponses et « Plus tard » comme sur le PC). Les cartes proposent une session ou une tâche. Cette conversation est propre au téléphone. Avec un PC qui ne propose pas le chat à l'appareil, l'onglet le dit, sans champ, et renvoie à « À toi ».
 
 ### Fil d'une session (`thread`)
 
@@ -394,7 +411,7 @@ Une demande OpenRig en entier, ouverte depuis sa carte dans « À toi » : qui l
 S'ouvre depuis la roue dentée en en-tête (par-dessus l'onglet courant, qui reste allumé), ou depuis « Réglages » en bas du rail sur tablette. Dans l'ordre :
 - **Cet appareil :** son nom (« Renommer »).
 - **Apparence :** le thème, la langue (Français ou English ; français par défaut, appliquée tout de suite) et « Réduire les animations », propres à cet appareil.
-- **Notifications sur cet appareil :** l'interrupteur principal ; une fois activées, « Agent terminé », « Réponse de Ledge » et « Décision à prendre » se coupent une à une, et « Pause » (1 h, 4 h, jusqu'à demain 8 h) les suspend toutes. Les demandes d'accord et les questions préviennent toujours, sauf pendant une pause.
+- **Notifications sur cet appareil :** l'interrupteur principal ; une fois activées, « Le point de Ledge », « Réponse de Ledge » et « Décision à prendre » se coupent une à une, et « Pause » (1 h, 4 h, jusqu'à demain 8 h) les suspend toutes. Les demandes d'accord et les questions préviennent toujours, sauf pendant une pause.
 - **Ledge :** « Contexte max » (le seuil partagé avec le PC, comme Réglages › Général sur le desktop) et « Agent du chat » (l'agent qui répond aux questions posées depuis cet appareil ; « PC » : le même que le chat du PC).
 - **Projets :** la liste dans son ordre, chaque projet avec sa couleur et ses agents. Monter ou descendre un projet, « Modifier » (nom, couleur), « Nouveau projet » (un projet vide), et « Supprimer le projet… » avec la passkey de l'appareil : ses agents, ses dossiers et ses règles vont sans projet ou vers un autre projet. « Dossiers… » liste les dossiers du projet (« Retirer ») ; « Ajouter un dossier » parcourt les dossiers du PC, ses dossiers récents en tête, et ajoute celui affiché avec la passkey de l'appareil. Les dossiers d'un serveur et les règles de rangement se règlent sur le desktop.
 - **Le PC :** met à jour ou redémarre le daemon du PC.

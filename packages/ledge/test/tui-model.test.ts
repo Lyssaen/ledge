@@ -27,7 +27,7 @@ describe('tui copy', () => {
   /** Every key of the French copy has an English one of the same kind, never empty. */
   function same(a: unknown, b: unknown, path: string): void {
     // The action card's words every PC front shares (packages/ui actionCopy): checked there, not the TUI's own.
-    if (path === 'en.ask.action.copy') { expect(b).toBeTypeOf('object'); return; }
+    if (path === 'en.ask.action.copy' || path === 'en.ask.point') { expect(b).toBeTypeOf('object'); return; }
     expect(typeof b, path).toBe(typeof a);
     if (typeof a === 'string') expect((b as string).length, path).toBeGreaterThan(0);
     else if (typeof a === 'function') expect(String((b as (...x: unknown[]) => string)('x', 1)).length, path).toBeGreaterThan(0);
@@ -351,6 +351,35 @@ describe('tui overview and Ledge’s tasks', () => {
     expect(openCards([done])).toEqual([]);
     const lines = text(chatLines([done], null, { t: fr, g: glyphsFor({}), width: 80 }));
     expect(lines).toContain('  Implémenter · ✓ Confiée à Mila · t91b0d4 · prise');
+  });
+});
+
+describe('tui point turns', () => {
+  const at = '2026-11-13T09:00:00.000Z';
+  const item = (id: string, group: 'atoi' | 'done' | 'ongoing' | 'rigs', extra: Record<string, unknown> = {}) =>
+    ({ id, event: 1, group, tone: 'ask', who: 'Otto', text: 'veut lancer rm -rf coverage', at, ...extra });
+  const point = (items: unknown[], extra: Record<string, unknown> = {}): ChatTurn => ({ qid: 'p1', question: '', askedAt: at, steps: [], by: 'ledge', answer: '', answeredAt: at,
+    point: { since: at, lead: 'Otto attend toi.', leadBy: 'daemon', items: items as never }, ...extra } as ChatTurn);
+  const view = (turns: ChatTurn[]) => text(chatLines(turns, null, { t: fr, g: glyphsFor({}), width: 80 }));
+  it('a point turn renders its groups and a settled receipt', () => {
+    const lines = view([point([
+      item('session.request:a', 'atoi', { answers: [{ id: 'allow', label: 'Autoriser', style: 'primary' }] }),
+      item('session.request:b', 'atoi', { settled: { at, where: 'terminal' } }),
+      item('session:c', 'done', { tone: 'idle', who: 'Nova', text: 'a fini' })
+    ])]);
+    expect(lines).toContain('  Otto attend toi.');
+    expect(lines).toContain('  À TOI (2)');
+    expect(lines).toContain('  TERMINÉ (1)');
+    expect(lines.some(l => l.includes('Otto') && l.includes('veut lancer rm -rf coverage'))).toBe(true);
+    expect(lines.some(l => l.includes('✓ réglé dans le terminal'))).toBe(true);
+    expect(lines.some(l => l.includes('vous ·'))).toBe(false);
+  });
+  it('the open point offers its unsettled answerable rows as one card, until set aside', () => {
+    const t = point([item('a', 'atoi', { answers: [{ id: 'allow', label: 'Autoriser', style: 'primary' }] }), item('b', 'done')]);
+    expect(openCards([t])).toEqual([{ kind: 'point', qid: 'p1', items: ['a'] }]);
+    expect(openCards([{ ...t, point: { ...t.point!, laterAt: at } }])).toEqual([]);
+    expect(openCards([{ ...t, point: { ...t.point!, foldedAt: at } }])).toEqual([]);
+    expect(openCards([point([item('a', 'atoi', { settled: { at, where: 'chat' }, answers: [{ id: 'x', label: 'X', style: 'plain' }] })])])).toEqual([]);
   });
 });
 
