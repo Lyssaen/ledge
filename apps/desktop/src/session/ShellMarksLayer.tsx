@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef, useState, type JSX, type KeyboardEvent a
 import { useI18n } from '../i18n/lang';
 import { Menu, MenuItem } from '../shell/Menu';
 import type { TermSurface } from '../term/surface';
-import { commandRows, commandText, draftText, outputText, statusOf, type CommandStatus, type ShellCommand } from '../term/shellMarks';
+import { commandRows, commandText, draftText, outputText, statusOf, typeable, type CommandStatus, type ShellCommand } from '../term/shellMarks';
 import { fmtDur } from './exchanges';
 
 
@@ -111,7 +111,7 @@ export function ShellMarksLayer({ surface, area }: { surface: TermSurface; area:
   const draft = draftText(sh!.marks, reader, v.cursor);
   // A command on several lines goes as one bracketed paste; a shell without it would run its lines one by one: greyed then
   // (design-ux 11:41Z, qitem-20261113114102).
-  const rerunnable = (c: ShellCommand) => { const x = commandText(c, reader); return !!x && (!x.includes('\n') || sh!.bracketed()); };
+  const rerunnable = (c: ShellCommand) => { const x = typeable(commandText(c, reader)); return !!x && (!x.includes('\n') || sh!.bracketed()); };
   const canRerun = !sh!.marks.running() && draft === '';
   const area_h = v.rows * v.rowPx;
   const failed = ran.filter(d => d.status === 'failed');
@@ -151,7 +151,7 @@ export function ShellMarksLayer({ surface, area }: { surface: TermSurface; area:
           <MenuItem onSelect={() => copy(outputText(active.c, reader, v.cursor))}>{m.copyOutput}</MenuItem>
           {/* Typed, never sent: E carries no nonce and a program can forge it, so the person confirms with Entrée (dev-back 11:36Z). */}
           <MenuItem disabled={!canRerun || !rerunnable(active.c)} onSelect={() => {
-            const cmd = commandText(active.c, reader);
+            const cmd = typeable(commandText(active.c, reader));
             if (cmd.includes('\n')) sh!.paste(cmd); else sh!.type(cmd);
             // The prompt in view, the keyboard on the terminal: the person runs it with Entrée, or erases it.
             sh!.scrollTo(sh!.view().length);

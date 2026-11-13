@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commandRows, commandText, dirLabel, draftText, outputText, parse633, ShellMarks, statusOf, unescape633, type Mark, type ShellCommand } from '../src/term/shellMarks';
+import { commandRows, commandText, dirLabel, draftText, typeable, outputText, parse633, ShellMarks, statusOf, unescape633, type Mark, type ShellCommand } from '../src/term/shellMarks';
 
 /** #299 (docs/mockups/ledge-shell-marks.html, form A): the OSC 633 model of a free shell. */
 
@@ -150,6 +150,10 @@ describe('review #299', () => {
     pos.line = 5; marks.handle('A');
     expect(statusOf(marks.commands()[0]!, false)).toBe('unknown');
   });
+});
+
+it('review #299 point 4: Relancer types no control character but the line feed', () => {
+  expect(typeable(unescape633('ls\\x0d rm -rf ~\\x1b[201~\\x09x\\x0anext\\x7f'))).toBe('ls rm -rf ~[201~x\nnext');
 });
 
 describe('dirLabel (design-ux, qitem-20261113103231)', () => {

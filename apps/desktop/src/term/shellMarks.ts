@@ -211,6 +211,10 @@ export function outputText(c: ShellCommand, buf: LineReader, cursorLine: number)
   return lines.join('\n');
 }
 
+/** A command as « Relancer » may type it: no control character but the line feed (review #299, point 4). E's escapes decode
+ *  `\x0d` or `\x1b`: a CR would press Entrée, an ESC could end a bracketed paste early. */
+export const typeable = (cmd: string): string => cmd.replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '');
+
 /** What is typed at the prompt now (B to the cursor), or null when the prompt is not known: the last command is not a prompt being
  *  typed in (a pause #297 lost its marks, a program runs). « Relancer » types only into an empty prompt (#299 review). */
 export function draftText(marks: { commands(): readonly ShellCommand[] }, buf: LineReader, cursorLine: number): string | null {

@@ -121,10 +121,12 @@ describe('multi-machine connections', () => {
     const N = '0123456789abcdef0123456789abcdef';
     const at = (ssh: string | undefined, freeShell: boolean | undefined) => ({ ...LOCAL_MACHINE, ssh, launcher: ['node', '/opt/ledge/cli.js'], status: 'open', ready: true, recents: [], sessions: [],
       daemon: { version: '0.58.0', install: 'npm', systemd: true, ...(freeShell === undefined ? {} : { freeShell }) } }) as MachineState;
+    // Run for real in shell-command-exec.test.ts; here, its shape: the launcher asked, its line evaluated only behind the mark.
     expect(shellCommand(at(undefined, true), '/home/u/w t', N)).toEqual(['sh', '-c',
-      `set -f; IFS=; eval $('node' '/opt/ledge/cli.js' 'shell' '--nonce' '${N}' '/home/u/w t'); unset IFS; set +f; cd '/home/u/w t' 2>/dev/null || cd; exec $(getent passwd $(id -un) | cut -d: -f7) -l`]);
-    expect(shellCommand(at('build-01', true), '/srv', N)).toEqual(['ssh', '-t', '--', 'build-01',
-      `set -f; IFS=; eval $('node' '/opt/ledge/cli.js' 'shell' '--nonce' '${N}' '/srv'); unset IFS; set +f; cd '/srv' 2>/dev/null || cd; exec $SHELL -l`]);
+      `set -f; IFS=; l=$('node' '/opt/ledge/cli.js' 'shell' '--nonce' '${N}' '/home/u/w t' 2>/dev/null); case $l in ': ledge-shell; '*) eval $l;; esac; unset IFS; set +f; cd '/home/u/w t' 2>/dev/null || cd; exec $(getent passwd $(id -un) | cut -d: -f7) -l`]);
+    const ssh = shellCommand(at('build-01', true), '/srv', N)!;
+    expect(ssh.slice(0, 4)).toEqual(['ssh', '-t', '--', 'build-01']);
+    expect(ssh[4]).toMatch(/^sh -c 'IFS=; set -f; eval \$\(printf %s \$0 \| base64 -d\)' [A-Za-z0-9+/=]+$/);
     // An older daemon, no nonce, or not a nonce: the shell as before, no marks.
     for (const [m, n] of [[at(undefined, undefined), N], [at(undefined, false), N], [at(undefined, true), undefined], [at(undefined, true), "x'; rm -rf ~"]] as const)
       expect(shellCommand(m, '/w', n)).toEqual(['sh', '-c', "cd '/w' 2>/dev/null || cd; exec $(getent passwd $(id -un) | cut -d: -f7) -l"]);
