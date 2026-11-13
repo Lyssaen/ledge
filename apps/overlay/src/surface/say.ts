@@ -1,6 +1,12 @@
-/** The comic balloon's situation. Urgency is the array order: an approval outranks a finished notice. */
-export type SayKind = 'approval' | 'question' | 'diff' | 'plan' | 'error' | 'ledge' | 'finished';
-export const SAY_PRIORITY: readonly SayKind[] = ['approval', 'question', 'diff', 'plan', 'error', 'ledge', 'finished'];
+import type { Session } from '@ledge/protocol';
+import type { Messages } from '../i18n/messages.js';
+
+/** What Ledge may speak about in the notch. Urgency is the array order: a session's request outranks an urgent rig ask, which
+ *  outranks a point, which outranks Ledge's unread reply (operator spec, board 6). */
+export type SayKind = 'approval' | 'question' | 'diff' | 'plan' | 'rigask' | 'point' | 'error' | 'ledge' | 'finished';
+export const SAY_PRIORITY: readonly SayKind[] = ['approval', 'question', 'diff', 'plan', 'rigask', 'point', 'error', 'ledge', 'finished'];
+/** The kinds that hang a short balloon under the notch; the others speak in the bubble. */
+export type BalloonKind = Exclude<SayKind, 'rigask' | 'point'>;
 /** How long a balloon stays on the handle once seen; the situation itself (unread, pending) outlives it. */
 export const SAY_LINGER_MS = 5000;
 
@@ -17,6 +23,22 @@ export function sayKindOf(session: { state: string; pending?: { kind: string } |
   }
   if (session.state === 'error') return 'error';
   return null;
+}
+
+/** A tool whose request text is a shell command, which Ledge says it « wants to run ». */
+const SHELL_TOOL = /bash|shell|exec|command|terminal/i;
+
+/** The heading of a session's request in Ledge's words: the session's name, said in bold, then what it wants, with any
+ *  command between backticks for the inline renderer. */
+export function ledgeSentence(s: Session, t: Messages): { who: string; rest: string } {
+  const p = s.pending;
+  const text = p?.text?.trim() ?? '';
+  const words = t.bubble.sentence;
+  if (p?.kind === 'question' || (s.state === 'waiting_input' && p?.kind !== 'diff' && p?.kind !== 'plan')) return { who: s.name, rest: text ? words.asks(text) : words.asksNothing };
+  if (p?.kind === 'diff' || p?.kind === 'plan') return { who: s.name, rest: words.review(p.kind) };
+  if (!text) return { who: s.name, rest: words.waits };
+  if (!p?.tool || SHELL_TOOL.test(p.tool)) return { who: s.name, rest: words.run(text) };
+  return { who: s.name, rest: words.use(p.tool, text) };
 }
 
 const hash = (seed: string) => {

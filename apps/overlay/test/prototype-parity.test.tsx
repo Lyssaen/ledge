@@ -110,7 +110,7 @@ describe('prototype parity', () => {
     snapshot([otto(asks('rm -rf dist')), pim(asks('git push'))]);
     render(<Surface screenH={1080} theme="dark" client={rec.client} dnd={false} onToggleDnd={() => {}} />);
     tick(540);
-    expect(screen.getByText('Otto needs your approval')).toBeInTheDocument();
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-sentence]')).toHaveTextContent(/^Otto (wants to|needs your approval)/);
     fireEvent.click(within(layer('bubble')).getByRole('button', { name: 'Approve' }));
     expect(rec.sent).toContainEqual({ type: 'session.decide', id: 'a', decision: 'accept' });
     // Ctrl+Alt+L while Otto's ask is showing opens the chat. The late confirmation must not steal it.
@@ -145,8 +145,6 @@ describe('prototype parity', () => {
     expect(bubble).toHaveAttribute('data-ack', 'failed');
     expect(btn('Approve')).toBeEnabled();
     expect(within(bubble).getByText(/the terminal did not take it/)).toBeInTheDocument();
-    expect(bubble.querySelector('svg.bot')).toHaveAttribute('data-state', 'error');
-    expect(bubble.querySelector('svg.bot')).not.toHaveAttribute('data-gesture');
     expect(within(bubble).queryByText(/received/i)).toBeNull();
     tick(900);
     expect(mode()).toBe('bubble');
@@ -220,7 +218,7 @@ describe('prototype parity', () => {
     expect(rec.sent.some(m => m.type === 'session.decide')).toBe(false);
     press('Escape');
     expect(mode()).toBe('bubble');
-    expect(screen.getByText('Pim has a question')).toBeInTheDocument();
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-sentence]')).toHaveTextContent(/^Pim (asks you|has a question)/);
     const radio = screen.getByRole('radio', { name: /Rebase/ });
     act(() => radio.focus());
     for (const k of ['j', 'k', 'y', 'n']) fireEvent.keyDown(radio, { key: k });
@@ -311,7 +309,6 @@ describe('carried items', () => {
     fireEvent.click(within(layer('bubble')).getByRole('button', { name: 'Approve' }));
     act(() => daemonStore.setStatus('unreachable'));
     expect(layer('bubble')).toHaveAttribute('data-ack', 'failed');
-    expect(layer('bubble').querySelector('svg.bot')).toHaveAttribute('data-frozen', 'true');
     // Offline keeps the actions off until the daemon is back.
     expect(within(layer('bubble')).getByRole('button', { name: 'Approve' })).toBeDisabled();
     snapshot([otto({ state: 'working' })]);

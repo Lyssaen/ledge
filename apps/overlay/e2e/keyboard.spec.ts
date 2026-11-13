@@ -19,7 +19,7 @@ test('Ctrl+Alt+L opens the oldest ask; Y approves; a second press opens the chat
   await expectMode(page, 'handle');
   await page.keyboard.press('Control+Alt+L');
   await expectMode(page, 'bubble');
-  await expect(layer(page, 'bubble')).toContainText('Pim needs your approval');
+  await expect(layer(page, 'bubble').locator('[data-ledge-sentence]')).toContainText(/^Pim wants to/);
   await page.keyboard.press('y');
   expect(await received(d.received, 'session.decide', m => m.id === 'b')).toEqual({ type: 'session.decide', id: 'b', decision: 'accept' });
   await page.keyboard.press('Control+Alt+L');

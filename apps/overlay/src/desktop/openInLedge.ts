@@ -8,7 +8,11 @@ export type LedgeTarget =
   | { kind: 'settings' }
   | { kind: 'launch' }
   | { kind: 'update' }
-  | { kind: 'machines' };
+  | { kind: 'machines' }
+  /** The operator's point: Desktop's chat panel, where the point is a turn. */
+  | { kind: 'point'; qid: string }
+  /** A rig's question in « À toi », by its OpenRig queue item. */
+  | { kind: 'ask'; id: string };
 
 /** 'opening' at once; then 'failed' when Ledge Desktop's window could not be shown. */
 export type OpenOutcome = 'opening' | 'failed';

@@ -236,6 +236,11 @@ const emptyUsage: ReadonlyMap<string, UsageStateMessage> = new Map();
 export function useUsage(client: DaemonClient): ReadonlyMap<string, UsageStateMessage> {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.usage ?? (() => emptyUsage), () => emptyUsage);
 }
+const emptyOperator: ReadonlyMap<string, OperatorNotice[]> = new Map();
+/** Each machine's operator notices (`operator.state`), by machine id: what the notch lets Ledge say. */
+export function useOperatorNotices(client: DaemonClient): ReadonlyMap<string, OperatorNotice[]> {
+  return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.operator ?? (() => emptyOperator), () => emptyOperator);
+}
 /** The island's settings as the local daemon holds them: undefined until it speaks of them, null while none was set. */
 export function useIsland(client: DaemonClient): IslandPrefs | null | undefined {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.island ?? undefinedSnapshot, undefinedSnapshot);

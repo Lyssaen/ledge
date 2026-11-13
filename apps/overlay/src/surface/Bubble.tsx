@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react';
-import type { Session } from '@ledge/protocol';
+import type { OperatorNotice, Session } from '@ledge/protocol';
+import { inline } from '@ledge/ui/chat/inline';
+import { ledgeSentence } from './say.js';
 import { Bot } from '../bots/Bot';
 import { ResidentMascot } from '../bots/ResidentMascot';
 import { botState, poseFor } from '../bots/poseFor';
@@ -47,11 +49,19 @@ interface BubbleProps {
   onDismiss?: () => void;
   onDecide: (decision: 'accept' | 'deny') => void;
   onReply: (text: string) => void;
+  /** The operator notice an `operator` bubble says (a point, or a rig's question). */
+  notice?: OperatorNotice;
+  /** « Plus tard » on a point. */
+  onLater?: () => void;
+  /** « Voir le point »: the point in Desktop's chat. */
+  onSeePoint?: () => void;
+  /** One of a rig question's options, by id; without options, the question opens in Ledge (`onOpen`). */
+  onOption?: (id: string) => void;
   theme?: 'dark' | 'light';
   ref?: Ref<HTMLDivElement>;
 }
 
-export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', elapsedMs, preview, failure, deciding = false, quick = true, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, theme = 'dark', ref, maxH }: BubbleProps) {
+export function Bubble({ session, moreCount, visible, paused, remainingMs, ack = null, kind = 'ask', elapsedMs, preview, failure, deciding = false, quick = true, blocked = null, frozen = false, reducedMotion, onOpen, onDismiss, onDecide, onReply, notice: opNotice, onLater, onSeePoint, onOption, theme = 'dark', ref, maxH }: BubbleProps) {
   const pending = session?.pending;
   const notice = kind !== 'ask';
   const holdMs = FINISHED_BUBBLE_MS;
@@ -100,9 +110,7 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
     : !session ? ''
     : kind === 'error' ? t.bubble.failedTitle(session.name)
     : kind === 'finished' ? t.bubble.finished(session.name)
-    : isQ ? t.bubble.question(session.name)
-    : review ? t.bubble.review(session.name, pending!.kind)
-    : t.bubble.approval(session.name);
+    : '';
   const finishedSub = preview ?? (elapsedMs !== undefined ? t.bubble.finishedSub(duration(elapsedMs, t), session?.project ?? '') : t.bubble.finishedSubNoTime(session?.project ?? ''));
   const act = (fn: () => void) => () => { if (disabled) return; setLockedKey(askKey); fn(); };
   const answer = () => {
@@ -125,14 +133,54 @@ export function Bubble({ session, moreCount, visible, paused, remainingMs, ack =
   const note = ack === 'failed' ? t.bubble.failed(failure ?? t.bubble.lostDefault)
     : ack === 'pending' ? t.bubble.pending : ack === 'confirmed' ? t.bubble.confirmed : blocked;
 
+  /** The card's frame, shared by a request, a notice and an operator notice. */
+  const shell = { position: 'absolute', left: 0, top: 0, width: SIZES.bubbleW, maxHeight: maxH, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px 12px', opacity: visible ? 1 : 0, transform: `translateY(${visible ? 0 : -8}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', visible ? 'grow' : 'fadeOut', visible ? 140 : 0]]) } as const;
+  /** Ledge speaks for the operator: its mark (amber, something waits on the user), its sentence, the notice's own actions. */
+  if (kind === 'operator') {
+    const rig = opNotice?.kind === 'rig.ask';
+    const options = rig ? opNotice?.options ?? [] : [];
+    return (
+      <div ref={setRoot} data-layer="bubble" data-kind="operator" data-notice={opNotice?.kind} data-ack="none" inert={!visible} style={shell}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <span data-ledge-mark className="nt-mark" data-pending="question" />
+          <span data-ledge-sentence style={{ fontSize: 14, lineHeight: '20px', minWidth: 0, overflowWrap: 'anywhere' }}>
+            {!opNotice ? null : rig
+              ? <><b style={{ fontWeight: 600 }}>{opNotice.who ?? t.resident.name}</b>{opNotice.rig && <span style={{ color: 'var(--muted-foreground)' }}> · {opNotice.rig}</span>}{t.bubble.rigAsk.colon}{t.bubble.rigAsk.quote(opNotice.text)}</>
+              : inline(opNotice.text)}
+          </span>
+        </div>
+        {failure && <span role="status" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--danger-text)' }}>{failure}</span>}
+        <div data-actions style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          {!rig ? (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => onLater?.()}>{t.bubble.point.later}</Button>
+              <Button variant="primary" size="sm" onClick={() => onSeePoint?.()}>{t.bubble.point.see}</Button>
+            </>
+          ) : options.length === 0 ? (
+            <Button variant="primary" size="sm" onClick={() => onOpen()}>{t.bubble.rigAsk.open}</Button>
+          ) : (
+            // The first option is the rig's suggested answer: it is the primary button, at the right end where the eye lands.
+            [...options.slice(1), options[0]!].map(o => (
+              <Button key={o.id} variant={o === options[0] ? 'primary' : 'outline'} size="sm" disabled={deciding || blocked !== null} onClick={() => onOption?.(o.id)}>{o.label}</Button>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+  /** A request's heading is Ledge's sentence: the session named in bold, then what it wants. */
+  const sentence = !notice && session ? ledgeSentence(session, t) : null;
+
   return (
-    <div ref={setRoot} data-layer="bubble" data-tall={tall || undefined} data-kind={kind} data-ack={ack ?? 'none'} inert={!visible} style={{ position: 'absolute', left: 0, top: 0, width: kind === 'ask' ? SIZES.bubbleW : SIZES.bubbleW, maxHeight: maxH, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px 12px', opacity: visible ? 1 : 0, transform: `translateY(${visible ? 0 : -8}px)`, pointerEvents: visible ? 'auto' : 'none', transition: transition([['opacity', visible ? 'fadeIn' : 'fadeOut'], ['transform', visible ? 'grow' : 'fadeOut', visible ? 140 : 0]]) }}>
+    <div ref={setRoot} data-layer="bubble" data-tall={tall || undefined} data-kind={kind} data-ack={ack ?? 'none'} inert={!visible} style={shell}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-        {ledge || kind === 'offline' ? <ResidentMascot size={40} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} /> : session && <Bot seed={session.id} readOnly={session.source === 'hook_only'} tool={session.tool} state={kind === 'error' ? 'error' : botState(session)} pose={poseFor(session.id, session.state)} size={40} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} askKey={String(askKey)} nodKey={nod} />}
+        {sentence ? <span data-ledge-mark className="nt-mark" data-pending={pending?.kind === 'permission' ? 'permission' : 'question'} /> : ledge || kind === 'offline' ? <ResidentMascot size={40} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} /> : session && <Bot seed={session.id} readOnly={session.source === 'hook_only'} tool={session.tool} state={kind === 'error' ? 'error' : botState(session)} pose={poseFor(session.id, session.state)} size={40} theme={theme} paused={!visible} frozen={frozen} reducedMotion={reducedMotion} askKey={String(askKey)} nodKey={nod} />}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexGrow: 1, minWidth: 0 }}>
-          <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{title}</span>
+          {sentence
+            ? <span data-ledge-sentence style={{ fontSize: 14, lineHeight: '20px', overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}><b style={{ fontWeight: 600 }}>{sentence.who}</b> {inline(sentence.rest)}</span>
+            : <span style={{ fontSize: 14, lineHeight: '20px', fontWeight: 600 }}>{title}</span>}
           {notice ? <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{kind === 'offline' ? (session ? finishedSub : t.bubble.offlineSub) : kind === 'error' ? (session?.lastError || t.bubble.errorSub) : finishedSub}</span>
-            : !tall && <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{pending?.text}{session?.project ? ` · ${session.project}` : ''}</span>}
+            : !tall && session?.project && <span className="mono" style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.project}</span>}
           {moreCount > 0 && <span style={{ fontSize: 12, lineHeight: '16px', color: 'var(--muted-foreground)' }}>{t.bubble.more(moreCount)}</span>}
         </div>
       </div>

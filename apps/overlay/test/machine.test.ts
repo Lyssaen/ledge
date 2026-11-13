@@ -322,3 +322,35 @@ describe('controller timers', () => {
     c.dispose(); expect(clock.pending()).toBe(0);
   });
 });
+
+describe('operator notices', () => {
+  it('a notice unfolds from the handle without a clock, and leaves when it is gone', () => {
+    const r = run([{ type: 'operator', id: 'local|point:p1' }]);
+    expect(r.s).toMatchObject({ mode: 'handle', operator: 'local|point:p1', unfoldDue: true });
+    expect(r.effects).toContain('startTimer:unfold');
+    const r2 = run([{ type: 'unfoldElapsed' as never }], r.s);
+    expect(r2.s).toMatchObject({ mode: 'bubble', bubbleId: 'local|point:p1', bubbleKind: 'operator' });
+    expect(r2.effects).not.toContain('startTimer:bubble');
+    expect(run([{ type: 'bubbleElapsed' }], r2.s).s.mode).toBe('bubble');
+    expect(run([{ type: 'operator', id: null }], r2.s).s.mode).toBe('handle');
+  });
+  it('a request comes first: the notice waits behind it, then unfolds once it is answered', () => {
+    const s = run([{ type: 'operator', id: 'n1' }], ask('a')).s;
+    expect(s).toMatchObject({ mode: 'bubble', bubbleId: 'a', bubbleKind: 'ask', operator: 'n1' });
+    const after = run([{ type: 'askCleared', id: 'a' }], s).s;
+    expect(after).toMatchObject({ mode: 'bubble', bubbleId: 'n1', bubbleKind: 'operator' });
+    const replaced = run([{ type: 'ask', id: 'b' }], after).s;
+    expect(replaced).toMatchObject({ mode: 'bubble', bubbleId: 'b', bubbleKind: 'ask' });
+  });
+  it('a newer notice replaces the shown one in place; closed, it only comes back from the Ledge mark', () => {
+    const shown = run([{ type: 'operator', id: 'n1' }, { type: 'unfoldElapsed' as never }, { type: 'operator', id: 'n2' }]).s;
+    expect(shown).toMatchObject({ mode: 'bubble', bubbleId: 'n2', bubbleKind: 'operator' });
+    const closed = run([{ type: 'close' }, { type: 'operator', id: 'n2' }], shown);
+    expect(closed.s.mode).toBe('handle'); expect(closed.effects).not.toContain('startTimer:unfold');
+    expect(run([{ type: 'operator', id: 'n2', show: true }], closed.s).s).toMatchObject({ mode: 'bubble', bubbleId: 'n2', bubbleKind: 'operator' });
+  });
+  it('Do not disturb keeps a notice folded', () => {
+    const r = run([{ type: 'dnd', on: true }, { type: 'operator', id: 'n1' }]);
+    expect(r.s).toMatchObject({ mode: 'handle', operator: 'n1' }); expect(r.effects).not.toContain('startTimer:unfold');
+  });
+});

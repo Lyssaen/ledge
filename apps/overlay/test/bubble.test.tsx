@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Bubble } from '../src/surface/Bubble';
 import { fakeSession } from './mockDaemon';
+import { LangProvider } from '../src/i18n/lang';
 
 const perm = fakeSession('a', { state: 'waiting_permission', pending: { kind: 'permission', text: 'npm test', tool: 'Bash', source: 'hook' } });
 const q = fakeSession('b', { name: 'Pim', tool: 'codex', project: 'speos-api', state: 'waiting_input', pending: { kind: 'question', text: 'Which strategy?', options: ['Backfill', 'Shadow'], source: 'hook' } });
@@ -10,8 +11,7 @@ describe('<Bubble>', () => {
   it('speaks in the bot name and offers Deny/Approve for a permission', () => {
     const onDecide = vi.fn();
     render(<Bubble session={perm} moreCount={0} visible paused={false} onOpen={() => {}} onDecide={onDecide} onReply={() => {}} />);
-    expect(screen.getByText('Otto needs your approval')).toBeInTheDocument();
-    expect(screen.getByText(/npm test · harness-assistant/)).toBeInTheDocument();
+    expect(screen.getByText('harness-assistant')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     expect(onDecide).toHaveBeenCalledWith('accept');
     expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
@@ -20,7 +20,7 @@ describe('<Bubble>', () => {
     const onReply = vi.fn();
     const onDismiss = vi.fn();
     render(<Bubble session={q} moreCount={2} visible paused={false} onOpen={() => {}} onDismiss={onDismiss} onDecide={() => {}} onReply={onReply} />);
-    expect(screen.getByText('Pim has a question')).toBeInTheDocument();
+    expect(document.querySelector('[data-ledge-sentence]')).toHaveTextContent('Pim asks you: Which strategy?');
     expect(screen.getByText('+2 more')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Later, next/ }));
     expect(onDismiss).toHaveBeenCalled();
@@ -31,7 +31,7 @@ describe('<Bubble>', () => {
   it('Open in Ledge is a button, not the title', () => {
     const onOpen = vi.fn();
     render(<Bubble session={perm} moreCount={0} visible paused={false} onOpen={onOpen} onDecide={() => {}} onReply={() => {}} />);
-    expect(screen.queryByRole('link', { name: /Otto needs your approval/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Otto wants to run/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Open in Ledge/ }));
     expect(onOpen).toHaveBeenCalled();
   });
@@ -82,7 +82,6 @@ describe('<Bubble>', () => {
     expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Deny' })).toBeDisabled();
     expect(screen.getByText('Offline: reconnecting to the daemon')).toBeInTheDocument();
-    expect(document.querySelector('svg.bot')).toHaveAttribute('data-frozen', 'true');
   });
   it('blocked: a question can be set aside, and its answer stays disabled', () => {
     const onDismiss = vi.fn();
@@ -133,5 +132,38 @@ describe('<Bubble>', () => {
     expect(onDismiss).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Open in Ledge' }));
     expect(onOpen).toHaveBeenCalled();
+  });
+  it('a permission heading reads as Ledge\'s sentence with the session name in bold', () => {
+    render(<Bubble session={perm} moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} />);
+    const sentence = document.querySelector('[data-ledge-sentence]')!;
+    expect(sentence).toHaveTextContent('Otto wants to run npm test');
+    expect(sentence.querySelector('b')).toHaveTextContent('Otto');
+    expect(sentence.querySelector('code')).toHaveTextContent('npm test');
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-mark]')).toHaveAttribute('data-pending', 'permission');
+    expect(document.querySelector('[data-layer="bubble"] svg.bot')).toBeNull();
+    expect(screen.queryByText('Otto needs your approval')).toBeNull();
+  });
+  it('a point notice shows Plus tard and Voir le point', () => {
+    const onLater = vi.fn(); const onSeePoint = vi.fn();
+    const notice = { id: 'point:p1', kind: 'point' as const, qid: 'p1', text: 'Deux choses pour toi : **pilot-lead** attend ta décision sur #309, et **Rex** a fini.', priority: 'routine' as const, at: '2026-11-13T14:32:00.000Z' };
+    render(<LangProvider lang="fr"><Bubble session={null} kind="operator" notice={notice} moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} onLater={onLater} onSeePoint={onSeePoint} /></LangProvider>);
+    const sentence = document.querySelector('[data-ledge-sentence]')!;
+    expect(sentence).toHaveTextContent('Deux choses pour toi : pilot-lead attend ta décision sur #309, et Rex a fini.');
+    expect(sentence.querySelectorAll('strong, b')).toHaveLength(2);
+    expect(document.querySelector('[data-timer]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Plus tard' }));
+    expect(onLater).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Voir le point' }));
+    expect(onSeePoint).toHaveBeenCalled();
+  });
+  it('a rig ask notice names the seat and its rig, quotes the question and offers its options', () => {
+    const onOption = vi.fn();
+    const notice = { id: 'rig.ask:q9', kind: 'rig.ask' as const, text: 'Fusionner #309 maintenant ?', who: 'pilot-lead', rig: 'ledge-dev', qitem: 'q9', options: [{ id: 'merge', label: 'Fusionner' }, { id: 'wait', label: 'Attendre qa' }], priority: 'urgent' as const, at: '2026-11-13T14:32:00.000Z' };
+    render(<LangProvider lang="fr"><Bubble session={null} kind="operator" notice={notice} moreCount={0} visible paused={false} onOpen={() => {}} onDecide={() => {}} onReply={() => {}} onOption={onOption} /></LangProvider>);
+    expect(document.querySelector('[data-ledge-sentence]')).toHaveTextContent('pilot-lead · ledge-dev : « Fusionner #309 maintenant ? »');
+    const buttons = [...document.querySelectorAll('[data-actions] button')].map(b => b.textContent);
+    expect(buttons).toEqual(['Attendre qa', 'Fusionner']);
+    fireEvent.click(screen.getByRole('button', { name: 'Fusionner' }));
+    expect(onOption).toHaveBeenCalledWith('merge');
   });
 });

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FocusEvent } from 'react';
-import { DEFAULT_ISLAND_PREFS, proposalRows, type IslandPrefs, type Session, type Tool } from '@ledge/protocol';
+import { DEFAULT_ISLAND_PREFS, proposalRows, type IslandPrefs, type OperatorNotice, type Session, type Tool } from '@ledge/protocol';
 import { loadDefaultTool, saveDefaultTool } from '../defaultTool';
 import { useActionCards } from '@ledge/ui/chat/useActionCards';
 import { useDaemon, daemonStore } from '../daemon/store';
 import type { DaemonClient } from '../daemon/client';
-import { useMachines } from '../daemon/machines';
+import { useMachines, useOperatorNotices } from '../daemon/machines';
 import type { DocumentOrigin } from '../documents/useDocumentReader';
 import type { ResidentGesture } from '../bots/ResidentMascot';
 import { groupSessions } from '@ledge/fleet';
@@ -18,7 +18,7 @@ import { useNotchLine, useNowPlaying } from '../notch/useNotch';
 import { describe } from '../notch/describe';
 import { duration } from '../format';
 import { UnreadSay, UNREAD_SAY_BOX, SAY_TAIL_X } from './UnreadSay';
-import { pickSay, pickSpeaker, sayKindOf, SAY_LINGER_MS, type SayCandidate } from './say';
+import { pickSay, pickSpeaker, SAY_LINGER_MS, type BalloonKind, type SayCandidate } from './say';
 import { Bubble, type BubbleAck } from './Bubble';
 import { PeekCard } from './PeekCard';
 import { openInLedge, subscribeOpenInLedge } from '../desktop/openInLedge';
@@ -139,6 +139,20 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const [ledgeUnread, setLedgeUnread] = useState(false);
   const [ledgeSaySeed, setLedgeSaySeed] = useState('ledge');
   const [finishedUnread, setFinishedUnread] = useState<Record<string, string>>({});
+  // The operator's notices from every machine, newest first, each keyed by its machine so two daemons never collide.
+  const noticesByMachine = useOperatorNotices(client);
+  const operatorNotices = useMemo(() => {
+    const all: Array<{ key: string; machine: string; notice: OperatorNotice }> = [];
+    for (const [machine, list] of noticesByMachine) for (const notice of list) all.push({ key: `${machine}|${notice.id}`, machine, notice });
+    return all.sort((a, b) => b.notice.at.localeCompare(a.notice.at));
+  }, [noticesByMachine]);
+  /** Notices set aside here (« Plus tard », or an answer on its way) until the daemon's next notices settle them. */
+  const [asideNotices, setAsideNotices] = useState<ReadonlySet<string>>(() => new Set());
+  const setAside = (key: string, on: boolean) => setAsideNotices(x => { if (x.has(key) === on) return x; const next = new Set(x); if (on) next.add(key); else next.delete(key); return next; });
+  // A key the daemon no longer lists is forgotten, so a later notice with the same id speaks again.
+  useEffect(() => { setAsideNotices(x => { const live = new Set(operatorNotices.map(o => o.key)); const next = new Set([...x].filter(k => live.has(k))); return next.size === x.size ? x : next; }); }, [operatorNotices]);
+  /** A rig answer sent from the notch: its refusal is read from the next `point.act` error. */
+  const operatorAct = useRef<{ key: string; qid: string; seq: number } | null>(null);
   const [ctl] = useState(() => createSurfaceController({ onState: s => setSt(s) }));
   const [st, setSt] = useState<SurfaceState>(() => ctl.state());
   const documentSourceFocus = useRef<HTMLElement | null>(null);
@@ -570,10 +584,18 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   useEffect(() => { if (chatClosing && lastError && !lastError.id && lastError.request === 'session.close') setChatClosing(null); }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (status === 'unreachable' && chatClosing) setChatClosing(null); }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (chatClosing && client.fleet && !client.fleet.turnMachine(chatClosing)?.ready) setChatClosing(null); }, [machines, chatClosing, client]);
+  // Ledge is the notch's only voice (operator mockup, board 6): it speaks of one thing at a time, the most urgent first. A
+  // session's request comes first through its own bubble (the machine unfolds an operator notice only once no request is up,
+  // and the Ledge mark reopens requests first); then an urgent rig question or a point, as Ledge's bubble; then Ledge's unread
+  // reply, as its short balloon. Within a kind the newest wins, whatever the machine.
   const sayCandidates: SayCandidate[] = [];
+  for (const o of operatorNotices) if (!asideNotices.has(o.key)) sayCandidates.push({ id: o.key, kind: o.notice.kind === 'point' ? 'point' : 'rigask', seed: o.key });
   if (ledgeUnread) sayCandidates.push({ id: LEDGE_ID, kind: 'ledge', seed: ledgeSaySeed });
+  const top = pickSpeaker(sayCandidates);
+  const operatorTop = top && (top.kind === 'point' || top.kind === 'rigask') ? top.id : null;
+  useEffect(() => { dispatch({ type: 'operator', id: operatorTop }); }, [operatorTop, dispatch]);
   // Only Ledge's own reply speaks under the notch: the activity line says what the sessions do (user's choice, 2026-11-02).
-  const speaker = pickSpeaker(sayCandidates);
+  const speaker = top?.kind === 'ledge' ? top as SayCandidate & { kind: BalloonKind } : null;
   const sayText = speaker ? pickSay(t.say[speaker.kind], speaker.seed) : '';
   // A balloon speaks for 5 s once it is actually seen on the handle, then fades; a new situation (new ask, new finish)
   // speaks again. Leaving the handle before the 5 s are up restarts them on return. The unread state stays either way.
@@ -608,6 +630,7 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
   const openHome = () => {
     const oldest = ctl.state().queue.find(id => byId.has(id) && isPending(byId.get(id)!));
     if (pendingTone && oldest) dispatch({ type: 'botClick', id: oldest });
+    else if (operatorTop) dispatch({ type: 'operator', id: operatorTop, show: true });
     else dispatch({ type: ledgeUnread ? 'chat' : 'homeClick' });
   };
   const handleContentRef = useRef<HTMLDivElement>(null);
@@ -712,6 +735,35 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
     asks.replied(id, text);
     send({ type: 'session.reply', id, text }); sounds.user('accept'); setDrafts(x => ({ ...x, [id]: '' })); dispatch({ type: 'typing', on: false });
   };
+  // The operator's bubble acts on the notice's own machine: a point is set aside or opened in Desktop's chat, a rig question
+  // answered through the point holding it, or opened in « À toi » when no point holds it yet.
+  const bubbleNotice = st.bubbleKind === 'operator' ? operatorNotices.find(o => o.key === st.bubbleId) : undefined;
+  const sendOn = (machine: string, m: Parameters<DaemonClient['send']>[0]): boolean => { if (client.fleet) return client.fleet.sendTo(machine, m); client.send(m); return true; };
+  const [operatorFailure, setOperatorFailure] = useState<{ key: string; message: string } | null>(null);
+  const noticeLater = (o: { key: string; machine: string; notice: OperatorNotice }) => {
+    if (o.notice.qid && !sendOn(o.machine, { type: 'point.later', qid: o.notice.qid })) return;
+    setAside(o.key, true);
+  };
+  const noticeOpen = (o: { notice: OperatorNotice }) => {
+    if (o.notice.kind === 'point' && o.notice.qid) openInLedge({ kind: 'point', qid: o.notice.qid });
+    else if (o.notice.kind === 'rig.ask' && o.notice.qitem) openInLedge({ kind: 'ask', id: o.notice.qitem });
+    dispatch({ type: 'close' });
+  };
+  const noticeAnswer = (o: { key: string; machine: string; notice: OperatorNotice }, option: string) => {
+    if (!o.notice.qid || !o.notice.qitem) { noticeOpen(o); return; }
+    if (!sendOn(o.machine, { type: 'point.act', qid: o.notice.qid, item: `rig.ask:${o.notice.qitem}`, answer: { id: option } })) return;
+    operatorAct.current = { key: o.key, qid: o.notice.qid, seq: lastError?.seq ?? 0 };
+    setOperatorFailure(null); setAside(o.key, true); sounds.user('accept');
+  };
+  // A refused rig answer: a launch to confirm goes to the point in Desktop's chat (never confirmed from the notch); any other
+  // refusal brings the question back with the daemon's reason.
+  useEffect(() => {
+    const a = operatorAct.current;
+    if (!a || !lastError || lastError.seq <= a.seq || lastError.request !== 'point.act') return;
+    operatorAct.current = null;
+    if (lastError.code === 'confirm_required') { openInLedge({ kind: 'point', qid: a.qid }); return; }
+    setOperatorFailure({ key: a.key, message: lastError.message }); setAside(a.key, false);
+  }, [lastError?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   const bubbleAck: BubbleAck = st.ack ? (st.ack.confirmed ? 'confirmed' : 'pending') : st.failed && st.failed === st.bubbleId ? 'failed' : null;
   // The coachmark sits 8 px under the panel, centred on it, clamped into the work area; the native frame extends to hold it.
   const coachShown = coach && kb && st.mode === 'list';
@@ -801,8 +853,10 @@ export function Surface({ screenH, screenW = window.innerWidth, theme, client, d
         </div>
         <div data-zoom="panel" style={{ position: 'absolute', left: 0, top: 0, zoom: ps }}>
         <Bubble ref={bubbleRef} maxH={openMaxH(screenH / ps) - SURFACE_CHROME_Y} kind={st.bubbleKind} elapsedMs={st.bubbleId ? elapsed[st.bubbleId] : undefined} preview={st.bubbleId === LEDGE_ID ? ledgePreview : offlineMachine ? offlineMachine.label : undefined} session={bubbleSession} moreCount={Math.max(0, st.queue.length - 1)} visible={st.mode === 'bubble'} paused={bubblePaused} remainingMs={ctl.bubbleRemaining() ?? undefined}
-          quick={quick} ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} failure={st.bubbleId ? asks.failures[st.bubbleId] : undefined} blocked={bubbleSession ? blockedFor(bubbleSession) : null} frozen={unreachable} reducedMotion={reducedMotion}
-          onOpen={() => { if (st.bubbleId === LEDGE_ID) dispatch({ type: 'bubbleClick' }); else if (st.bubbleId?.startsWith('machine:')) openInLedge({ kind: 'machines' }); else if (st.bubbleId) openInLedge({ kind: 'session', id: st.bubbleId }); }}
+          notice={bubbleNotice?.notice} failure={bubbleNotice ? (operatorFailure?.key === bubbleNotice.key ? operatorFailure.message : undefined) : st.bubbleId ? asks.failures[st.bubbleId] : undefined}
+          onLater={() => { if (bubbleNotice) noticeLater(bubbleNotice); }} onSeePoint={() => { if (bubbleNotice) noticeOpen(bubbleNotice); }} onOption={id => { if (bubbleNotice) noticeAnswer(bubbleNotice, id); }}
+          quick={quick} ack={bubbleAck} deciding={!!st.bubbleId && asks.inFlight.has(st.bubbleId)} blocked={bubbleSession ? blockedFor(bubbleSession) : bubbleNotice && client.fleet && !machines.find(m => m.id === bubbleNotice.machine)?.ready ? t.offline : null} frozen={unreachable} reducedMotion={reducedMotion}
+          onOpen={() => { if (bubbleNotice) noticeOpen(bubbleNotice); else if (st.bubbleId === LEDGE_ID) dispatch({ type: 'bubbleClick' }); else if (st.bubbleId?.startsWith('machine:')) openInLedge({ kind: 'machines' }); else if (st.bubbleId) openInLedge({ kind: 'session', id: st.bubbleId }); }}
           onDismiss={() => dispatch({ type: st.bubbleKind === 'ask' ? 'defer' : 'close' })}
           onDecide={d => { if (st.bubbleId && !ctl.state().ack && decide(st.bubbleId, d)) dispatch({ type: 'decidedInBubble' }); }}
           onReply={text => {

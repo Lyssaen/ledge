@@ -14,7 +14,7 @@ test.describe('French by default', () => {
     await page.keyboard.press('Control+Alt+L');
     await expectMode(page, 'bubble');
     const bubble = layer(page, 'bubble');
-    await expect(bubble.getByText('Otto attend votre accord')).toBeVisible();
+    await expect(bubble.locator('[data-ledge-sentence]')).toHaveText(/^Otto veut lancer pnpm test/);
     await expect(bubble.getByRole('button', { name: 'Refuser' })).toBeVisible();
     await expect(bubble.getByRole('button', { name: 'Autoriser' })).toBeVisible();
     await expect(bubble.getByRole('button', { name: /^Plus tard/ })).toBeVisible();

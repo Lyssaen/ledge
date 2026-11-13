@@ -339,8 +339,14 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   useEffect(() => onOpenTarget(raw => {
     const target = parseTarget(raw);
     if (target?.kind === 'terminal') showTerminal(target.id);
+    else if (target?.kind === 'ask') {
+      // A rig's question from the notch: « À toi » in front, on that question.
+      setAskFocus({ id: target.id, n: ++askSeq.current });
+      const tab: Tab = { kind: 'atoi', ref: 'main' };
+      wsStore.update(w => openTab(w, tab));
+    }
     else if (target) dispatch(targetAction(target));
-  }), [showTerminal]);
+  }), [showTerminal, wsStore]);
   // The Atelier in its own window (#21): what it opens shows here, this window brought forward; its closing gives it back.
   // The tray speaks the app's language and names the way back from do not disturb.
   const [dnd] = useDnd();

@@ -134,7 +134,7 @@ describe('final review fixes', () => {
     mount();
     tick(540);
     const bubble = layer('bubble');
-    expect(within(bubble).getByText('Otto has a diff to review')).toBeInTheDocument();
+    expect(bubble.querySelector('[data-ledge-sentence]')).toHaveTextContent('Otto has changes for you to review');
     expect(within(bubble).queryByRole('button', { name: 'Approve' })).toBeNull();
     fireEvent.click(within(bubble).getByRole('button', { name: /Later/ }));
     expect(mode()).toBe('handle');
@@ -151,17 +151,17 @@ describe('final review fixes', () => {
     expect(mode()).toBe('handle');
     update(pim(review('plan', 'Refactor the poller')));
     tick(540);
-    expect(within(bubble).getByText('Pim has a plan to review')).toBeInTheDocument();
+    expect(bubble.querySelector('[data-ledge-sentence]')).toHaveTextContent('Pim has a plan for you to review');
   });
 
   it('8. removing the bubble session bubbles the next queued ask', () => {
     snapshot([otto(asks('rm -rf dist')), pim(asks('git push'))]);
     mount();
     tick(540);
-    expect(within(layer('bubble')).getByText('Otto needs your approval')).toBeInTheDocument();
+    expect(layer('bubble').querySelector('[data-ledge-sentence]')).toHaveTextContent(/^Otto (wants to|needs your approval)/);
     remove('a');
     expect(mode()).toBe('bubble');
-    expect(within(layer('bubble')).getByText('Pim needs your approval')).toBeInTheDocument();
+    expect(layer('bubble').querySelector('[data-ledge-sentence]')).toHaveTextContent(/^Pim (wants to|needs your approval)/);
   });
 
   it('9. brushing the handle right after an ask does not lose the bubble', () => {

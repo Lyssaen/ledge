@@ -54,7 +54,7 @@ describe('<Surface>', () => {
     expect(line()?.title).toContain('Pim needs your approval');
     await act(async () => { vi.advanceTimersByTime(540); });
     expect(surface()).toHaveStyle({ width: '440px', height: '128px' });
-    expect(screen.getByText('Pim needs your approval')).toBeInTheDocument();
+    expect(document.querySelector('[data-layer="bubble"] [data-ledge-sentence]')).toHaveTextContent(/^Pim (wants to|needs your approval)/);
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(mock.received).toContainEqual({ type: 'session.decide', id: 'b', decision: 'accept' }));
     await act(async () => { mock.upsert(pim({ state: 'working' })); await sleep(50); vi.advanceTimersByTime(900); });

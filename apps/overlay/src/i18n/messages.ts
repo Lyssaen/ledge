@@ -131,9 +131,6 @@ const fr = {
     hintAnswerAll: 'Une ligne par question, Entrée envoie'
   },
   bubble: {
-    question: (name: string) => `${name} a une question`,
-    review: (name: string, kind: string) => `${name} propose ${kind === 'diff' ? 'des modifications' : 'un plan'} à relire`,
-    approval: (name: string) => `${name} attend votre accord`,
     more: (n: number) => `+${n} ${plural(n, 'autre', 'autres')}`,
     failed: (why: string) => `${why}. Réessayez ou ouvrez la session.`,
     lostDefault: 'La décision n’a pas été transmise',
@@ -148,7 +145,18 @@ const fr = {
     choose: 'Choisissez une réponse ou écrivez-en une.', close: 'Fermer',
     offline: 'Une machine est hors ligne', offlineSub: 'Reconnexion automatique', offlineBadge: 'Hors ligne',
     failedTitle: (name: string) => `${name} s’est arrêtée sur une erreur`, errorSub: 'La session s’est arrêtée.',
-    answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option'
+    answer: (opt: string) => `Répondre : ${opt}`, firstOption: 'première option',
+    /** Ledge's sentence about a session's request, after the session's name (board 6 of the operator mockup). */
+    sentence: {
+      run: (cmd: string) => `veut lancer \`${cmd}\``,
+      use: (tool: string, text: string) => `veut utiliser ${tool} : \`${text}\``,
+      asks: (text: string) => `te demande : ${text}`, asksNothing: 'a une question pour toi',
+      review: (kind: 'diff' | 'plan'): string => kind === 'diff' ? 'propose des modifications à relire' : 'propose un plan à relire',
+      waits: 'attend ton accord'
+    },
+    /** A notice from the operator: a point, or an urgent question from a rig. */
+    point: { later: 'Plus tard', see: 'Voir le point' },
+    rigAsk: { colon: ' : ', quote: (text: string) => `« ${text.replace(/ (?=[?!:;])/g, ' ')} »`, open: 'Répondre dans Ledge' }
   },
   handoff: {
     session: (name: string) => `Ouverture de ${name} dans Ledge Desktop`,
@@ -158,6 +166,8 @@ const fr = {
     launch: 'Ouverture d’une nouvelle session dans Ledge Desktop',
     update: 'Ouverture des mises à jour dans Ledge Desktop',
     machines: 'Ouverture des machines dans Ledge Desktop',
+    point: 'Ouverture du point dans Ledge Desktop',
+    ask: 'Ouverture de « À toi » dans Ledge Desktop',
     failed: 'Ledge Desktop n’a pas pu s’ouvrir.'
   },
   menu: {
@@ -391,9 +401,6 @@ const en: Messages = {
     hintAnswerAll: 'One line per question, Enter sends'
   },
   bubble: {
-    question: (name: string) => `${name} has a question`,
-    review: (name: string, kind: string) => `${name} has a ${kind} to review`,
-    approval: (name: string) => `${name} needs your approval`,
     more: (n: number) => `+${n} more`,
     failed: (why: string) => `${why}. Try again or open the session.`,
     lostDefault: 'The decision was not delivered',
@@ -408,7 +415,16 @@ const en: Messages = {
     choose: 'Choose an answer or write one.', close: 'Close',
     offline: 'A machine is offline', offlineSub: 'Reconnecting on its own', offlineBadge: 'Offline',
     failedTitle: (name: string) => `${name} stopped on an error`, errorSub: 'The session stopped.',
-    answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option'
+    answer: (opt: string) => `Answer: ${opt}`, firstOption: 'first option',
+    sentence: {
+      run: (cmd: string) => `wants to run \`${cmd}\``,
+      use: (tool: string, text: string) => `wants to use ${tool}: \`${text}\``,
+      asks: (text: string) => `asks you: ${text}`, asksNothing: 'has a question for you',
+      review: (kind: 'diff' | 'plan'): string => kind === 'diff' ? 'has changes for you to review' : 'has a plan for you to review',
+      waits: 'needs your approval'
+    },
+    point: { later: 'Later', see: 'See the point' },
+    rigAsk: { colon: ': ', quote: (text: string) => `“${text}”`, open: 'Answer in Ledge' }
   },
   handoff: {
     session: (name: string) => `Opening ${name} in Ledge Desktop`,
@@ -418,6 +434,8 @@ const en: Messages = {
     launch: 'Opening a new session in Ledge Desktop',
     update: 'Opening updates in Ledge Desktop',
     machines: 'Opening machines in Ledge Desktop',
+    point: 'Opening the point in Ledge Desktop',
+    ask: 'Opening “For you” in Ledge Desktop',
     failed: 'Ledge Desktop could not open.'
   },
   menu: {

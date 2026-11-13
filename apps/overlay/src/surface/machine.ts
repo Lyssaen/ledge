@@ -6,7 +6,8 @@ export { LEDGE_ID };
 /** Acknowledgement of a decision taken in the bubble: it advances only once the 900 ms minimum
  *  has elapsed AND the daemon confirmed (askCleared or removal of that id). */
 export interface Ack { id: string; minElapsed: boolean; confirmed: boolean }
-export type BubbleKind = 'ask' | 'finished' | 'error' | 'offline';
+/** `operator` is a notice from Ledge's operator (a point, a rig's question): like an ask, it waits for the user and has no clock. */
+export type BubbleKind = 'ask' | 'operator' | 'finished' | 'error' | 'offline';
 export type NoticeKind = 'finished' | 'error' | 'offline';
 export interface SurfaceState {
   mode: Mode; selectedId: string | null;
@@ -33,6 +34,8 @@ export interface SurfaceState {
   failed: string | null;
   /** An ask arrived on the handle and its bubble has not unfolded yet (an edge brush may have deferred it). */
   unfoldDue: boolean;
+  /** The operator notice Ledge should say now (the front's key for it), or null; it unfolds once no request is up. */
+  operator: string | null;
   /** Bumped whenever the view context (mode, bubble, selection) changes; delayed events carrying an older rev are ignored. */
   rev: number;
 }
@@ -43,7 +46,7 @@ export type Effect =
 /** `rev` is stamped by the controller on timer events; omitted, the event is accepted. */
 type Elapsed<T extends string> = { type: T; rev?: number };
 export type SurfaceEvent =
-  | { type: 'ask'; id: string } | { type: 'finished'; id: string } | { type: 'notice'; id: string; kind: 'error' | 'offline' }
+  | { type: 'ask'; id: string } | { type: 'operator'; id: string | null; show?: boolean } | { type: 'finished'; id: string } | { type: 'notice'; id: string; kind: 'error' | 'offline' }
   | { type: 'askCleared'; id: string } | { type: 'askReplaced'; id: string } | { type: 'removed'; id: string; remaining: string[] }
   | { type: 'handleEnter' } | { type: 'handleLeave' } | Elapsed<'dwellElapsed'> | Elapsed<'unfoldElapsed'>
   | { type: 'surfaceEnter' } | { type: 'surfaceLeave' } | Elapsed<'leaveElapsed'>
@@ -64,7 +67,7 @@ export const ELAPSED: Record<TimerName, 'dwellElapsed' | 'leaveElapsed' | 'bubbl
 export const initialSurface = (): SurfaceState => ({
   mode: 'handle', selectedId: null, helperId: null, bubbleId: null, queue: [], openedBy: null, bubbleKind: 'ask', done: [], kinds: {}, deferred: [], quiet: false,
   hot: false, reading: false, typing: false, documentOrigin: null, documentExpanded: false,
-  hovering: false, focusWithin: false, hidden: false, editing: false, ack: null, failed: null, unfoldDue: false, rev: 0
+  hovering: false, focusWithin: false, hidden: false, editing: false, ack: null, failed: null, unfoldDue: false, operator: null, rev: 0
 });
 
 type Result = { state: SurfaceState; effects: Effect[] };
@@ -73,6 +76,8 @@ const cancel = (name: TimerName): Effect => ({ type: 'cancelTimer', name });
 const cancelAll: Effect[] = (['dwell', 'leave', 'bubble', 'hold', 'unfold'] as TimerName[]).map(cancel);
 const same = (s: SurfaceState): Result => ({ state: s, effects: [] });
 const held = (s: SurfaceState) => s.hovering || s.focusWithin || s.hidden;
+/** A bubble that waits for the user instead of draining a clock. */
+const untimed = (kind: BubbleKind) => kind === 'ask' || kind === 'operator';
 const toHandle = (s: SurfaceState): SurfaceState => ({ ...s, mode: 'handle', bubbleId: null, bubbleKind: 'ask', done: [], selectedId: null, helperId: null, openedBy: null, hot: false, reading: false, typing: false, documentOrigin: null, documentExpanded: false, ack: null, failed: null, unfoldDue: false });
 const openChat = (s: SurfaceState): Result => ({
   state: { ...s, mode: 'chat', selectedId: null, helperId: null, bubbleId: null, bubbleKind: 'ask', done: [], hot: false, ack: null, failed: null, unfoldDue: false },
@@ -83,7 +88,7 @@ const noticeKind = (s: SurfaceState, id: string): NoticeKind => s.kinds[id] ?? '
 const nextAsk = (s: SurfaceState, skip?: string) => s.queue.find(id => id !== skip && !s.deferred.includes(id));
 /** Shows the bubble for `id`. An ask stays until the user acts. A notice gets a 6 s clock, paused straight away if something already holds it. */
 const showBubble = (s: SurfaceState, id: string, extra: Effect[] = [], kind: BubbleKind = 'ask'): Result => {
-  const timed = kind !== 'ask';
+  const timed = !untimed(kind);
   return {
     state: { ...s, mode: 'bubble', bubbleId: id, bubbleKind: kind, ack: null, failed: null },
     effects: [...extra, ...(timed ? [start('bubble', FINISHED_BUBBLE_MS)] : [cancel('bubble')]), ...(timed && held(s) ? [{ type: 'pauseTimer', name: 'bubble' } as Effect] : [])]
@@ -93,13 +98,14 @@ const showBubble = (s: SurfaceState, id: string, extra: Effect[] = [], kind: Bub
 const advance = (s: SurfaceState): Result => {
   const next = nextAsk(s);
   if (next !== undefined) return showBubble(s, next, [cancel('hold')]);
+  if (s.operator !== null && !s.quiet) return showBubble(s, s.operator, [cancel('hold')], 'operator');
   const fin = !s.quiet ? s.done[0] : undefined;
   if (fin !== undefined) return showBubble(s, fin, [cancel('hold')], noticeKind(s, fin));
   return { state: toHandle(s), effects: [cancel('bubble'), cancel('hold')] };
 };
 /** Pause/resume a notice clock when the set of holds flips (an ask has no clock; never during an acknowledgement). */
 const holdEffects = (before: SurfaceState, after: SurfaceState): Effect[] => {
-  if (after.mode !== 'bubble' || after.bubbleKind === 'ask' || after.ack || held(before) === held(after)) return [];
+  if (after.mode !== 'bubble' || untimed(after.bubbleKind) || after.ack || held(before) === held(after)) return [];
   return [{ type: held(after) ? 'pauseTimer' : 'resumeTimer', name: 'bubble' }];
 };
 /** A daemon confirmation (askCleared or removal) for the acknowledged id. */
@@ -136,12 +142,27 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     }
     /* A bot finished its task (working -> idle). Only the bare handle with nothing asked shows it; elsewhere the handle's
        smiling bot is the whole signal. During an edge dwell it waits like an ask. */
+    /* The operator notice to say changed. It replaces a notice bubble or another operator notice in place, waits behind a
+       request, and unfolds from the handle like an ask. `show` is the Ledge mark clicked: it unfolds now. Gone, its bubble leaves. */
+    case 'operator': {
+      const next = { ...s, operator: e.id };
+      if (e.id === null) return s.mode === 'bubble' && s.bubbleKind === 'operator' ? advance(next) : same(next);
+      if (s.mode === 'bubble' && s.bubbleKind === 'operator') return s.bubbleId === e.id ? same(next) : showBubble(next, e.id, [], 'operator');
+      if (e.show) return showBubble({ ...next, unfoldDue: false }, e.id, [cancel('unfold')], 'operator');
+      if (e.id === s.operator || s.quiet) return same(next);
+      if (s.mode === 'bubble' && s.bubbleKind !== 'ask') return showBubble({ ...next, done: [] }, e.id, [], 'operator');
+      if (s.mode !== 'handle' || nextAsk(s) !== undefined) return same(next);
+      if (!s.hot) return { state: { ...next, unfoldDue: true }, effects: [start('unfold')] };
+      return same({ ...next, unfoldDue: true });
+    }
     case 'finished': return queueNotice(s, e.id, 'finished');
     case 'notice': return queueNotice(s, e.id, e.kind);
     case 'unfoldElapsed': {
-      const ask = nextAsk(s); const fin = s.done[0];
-      if (s.mode !== 'handle' || s.hot || s.quiet || (ask === undefined && fin === undefined)) return same({ ...s, unfoldDue: false });
-      return ask !== undefined ? showBubble({ ...s, unfoldDue: false }, ask) : showBubble({ ...s, unfoldDue: false }, fin!, [], noticeKind(s, fin!));
+      const ask = nextAsk(s); const op = s.operator; const fin = s.done[0];
+      if (s.mode !== 'handle' || s.hot || s.quiet || (ask === undefined && op === null && fin === undefined)) return same({ ...s, unfoldDue: false });
+      if (ask !== undefined) return showBubble({ ...s, unfoldDue: false }, ask);
+      if (op !== null) return showBubble({ ...s, unfoldDue: false }, op, [], 'operator');
+      return showBubble({ ...s, unfoldDue: false }, fin!, [], noticeKind(s, fin!));
     }
     case 'askCleared': {
       const queue = s.queue.filter(id => id !== e.id);
@@ -173,7 +194,7 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
     case 'handleEnter': return s.mode === 'handle' && !s.hot ? { state: { ...s, hot: true }, effects: [start('dwell'), cancel('unfold')] } : same(s);
     case 'handleLeave': {
       // An ask deferred by the edge brush unfolds once the pointer leaves the edge.
-      const rearm = s.mode === 'handle' && s.unfoldDue && (s.queue.length > 0 || s.done.length > 0) && !s.quiet;
+      const rearm = s.mode === 'handle' && s.unfoldDue && (s.queue.length > 0 || s.done.length > 0 || s.operator !== null) && !s.quiet;
       return { state: { ...s, hot: false }, effects: [cancel('dwell'), ...(rearm ? [start('unfold')] : [])] };
     }
     // The sober island has no list to drop down. The dwell still marks the edge so an ask waits out the brush.
@@ -209,8 +230,9 @@ function step(s: SurfaceState, e: SurfaceEvent): Result {
       if (s.bubbleId === LEDGE_ID) return openChat(s);
       return same(s);
     case 'bubbleElapsed': {
-      if (s.mode !== 'bubble' || s.ack || s.bubbleKind === 'ask') return same(s);
+      if (s.mode !== 'bubble' || s.ack || untimed(s.bubbleKind)) return same(s);
       if (s.done.length > 1) return showBubble({ ...s, done: s.done.slice(1) }, s.done[1]!, [], noticeKind(s, s.done[1]!));
+      if (s.operator !== null && !s.quiet) return showBubble({ ...s, done: [] }, s.operator, [], 'operator');
       return { state: toHandle(s), effects: [] };
     }
     case 'decidedInBubble':
