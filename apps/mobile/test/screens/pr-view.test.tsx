@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PhoneServerMessage, PrDetail } from '@ledge/protocol';
 import { copy } from '../../src/copy';
 import { getAssertion } from '../../src/link/webauthn';
+import { forgetLedgePane, setLedgePane } from '../../src/state/ledgePane';
 import { detail, forgeState, mr, pr } from '../model/forge-fixtures';
 import { snapshot } from '../state/helpers';
 import { session } from '../model/fixtures';
@@ -414,6 +415,24 @@ describe('a request on a tablet (m5-mr-pr.html, §10)', () => {
     const foot = screen.getByRole('contentinfo');
     expect(within(foot).getByRole('button', { name: C.sendAll('Front') })).toBeTruthy();
     expect(within(foot).getByRole('button', { name: C.merge })).toBeTruthy();
+  });
+
+  it('on its side with the Ledge pane open: the upright layout, the Discussion column back once the pane closes (Q97 A)', () => {
+    tablet(true);
+    try {
+      const t = open(pr().id, { sessions: [front] });
+      t.give(detail(pr(), { threads }));
+      act(() => setLedgePane(true));
+      expect(views().map(v => v?.replace(/\d+$/, ''))).toEqual([C.tabs.overview, C.tabs.discussion, C.tabs.changes, C.tabs.commits]);
+      expect(screen.queryByRole('complementary', { name: C.tabs.discussion })).toBeNull();
+      expect(document.querySelector('[data-pipeline="side"]')).toBeNull();
+      expect(within(screen.getByRole('contentinfo')).queryByRole('button', { name: C.sendAll('Front') })).toBeNull();
+      act(() => setLedgePane(false));
+      expect(screen.getByRole('complementary', { name: C.tabs.discussion })).toBeTruthy();
+      expect(document.querySelector('[data-pipeline="side"]')).toBeTruthy();
+    } finally {
+      forgetLedgePane();
+    }
   });
 
   it('colours « en revue » as the board does, the other states plain', () => {

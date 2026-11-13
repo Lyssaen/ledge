@@ -448,15 +448,18 @@ const lastRun = (runs: readonly ForgeRun[], id: string): ForgeRun | undefined =>
   runs.filter(r => r.prId === id && (r.action.kind === 'merge' || r.action.kind === 'rerun')).at(-1);
 const going = (r: ForgeRun | undefined) => !!r && (r.phase === 'checking' || r.phase === 'sending' || r.phase === 'received');
 
-/** A request of the MR/PR tab (`#/prs/<id>`). */
-export function PrView({ id, forge, store }: { id: string; forge: ForgeStore; store: MobileStore }) {
+/**
+ * A request of the MR/PR tab (`#/prs/<id>`). `pane`: the Ledge pane is open beside it; on its side, the tablet then gives the
+ * request its upright layout, Discussion back among the views, and the column returns once the pane closes (Q97 A).
+ */
+export function PrView({ id, forge, store, pane = false }: { id: string; forge: ForgeStore; store: MobileStore; pane?: boolean }) {
   const f = useForge(forge);
   const m = useMobile(store);
   const [merging, setMerging] = useState(false);
   const [rerunning, setRerunning] = useState(false);
   const { pc, look } = useShell();
   const wide = useWide();
-  const side = useLandscape() && wide;
+  const side = useLandscape() && wide && !pane;
   const [view, setView] = useState<View>('overview');
   const [sheetJob, setSheetJob] = useState<string | null>(null);
   const offline = look === 'offline';
