@@ -336,7 +336,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     goalsTimer = setTimeout(() => {
       goalsTimer = null;
       void goals.list().then(l => {
-        rigGoals = l.goals;
+        rigGoals = l.goals; operator?.goalsChanged(l);
         const key = JSON.stringify(l);
         if (key !== lastGoals) { lastGoals = key; broadcast({ type: 'openrig.goalsChanged', ...l }); }
       }).catch(e => log(`openrig goals: not read: ${(e as Error).message}`));
@@ -1342,12 +1342,16 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       // Followed from the first front that asks: a machine nobody looks at from « À toi » never reads OpenRig's events.
       case 'openrig.asks': followAsks(); return reply({ type: 'openrig.asksChanged', requestId: msg.requestId, ...await human.list() });
-      case 'openrig.answer': return reply({ type: 'openrig.answered', requestId: msg.requestId, ...await human.answer(msg.qitemId, msg.answer) });
+      case 'openrig.answer': {
+        const r = await human.answer(msg.qitemId, msg.answer);
+        operator?.askAnswered(msg.qitemId, 'desktop', r);
+        return reply({ type: 'openrig.answered', requestId: msg.requestId, ...r });
+      }
       // Lot 2: the goals given to Max. Followed from the first front that asks, on the same OpenRig events as « À toi ».
       case 'openrig.goals': {
         goalsFollowed = true; followAsks();
         const l = await goals.list();
-        lastGoals = JSON.stringify(l); rigGoals = l.goals;
+        lastGoals = JSON.stringify(l); rigGoals = l.goals; operator?.goalsChanged(l);
         return reply({ type: 'openrig.goalsChanged', requestId: msg.requestId, ...l });
       }
       case 'openrig.goal.send': { const r = await goals.send(msg.goalId, msg.text, msg.folder); pushGoals(); return reply({ type: 'openrig.goal.sent', requestId: msg.requestId, goalId: msg.goalId, ...r }); }
@@ -1793,7 +1797,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   if (mobile) gateway = createPhoneGateway({
     mobile,
     // « À toi » on the phone (lot 3): this PC's OpenRig, as the desktop has it; a phone's answer goes through the same checks.
-    openrig: { list: () => human.list(), answer: (qitemId, answer) => human.answer(qitemId, answer), follow: followAsks },
+    openrig: { list: () => human.list(), answer: async (qitemId, answer) => { const r = await human.answer(qitemId, answer); operator?.askAnswered(qitemId, 'phone', r); return r; }, follow: followAsks },
     // Rigs and the kernel on the phone (refonte mobile B4): the Desktop's reads and actions through `dispatch`, and these two reads it does not make.
     ...(openrig.closed && openrig.routing ? { rigs: { closed: openrig.closed.bind(openrig), routing: openrig.routing.bind(openrig) } } : {}),
     // A dropped device thread takes its queued cards with it: the sessions they waited for go on to what else waits.
@@ -1904,11 +1908,22 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   if (opts.operator) {
     try {
       operator = wireOperator({ journalPath: join(paths().dir, 'ledge.sqlite'), machine: hostname(), threads, store, tasks: () => tasks.all(),
+        // Every paired phone gets its point, the ones that have not talked to this daemon run included.
+        devices: () => (mobile?.state().enabled ? mobile.state().devices.map(d => d.id) : []),
         contextNear: () => contextPrefs.near, tool: () => threads.deviceTool(), chatDeps: { ...chatDeps, thread: 'desktop' } });
       operator.start();
       // OpenRig's asks are followed for the journal too, where OpenRig is installed; the first list read is the baseline.
-      void openrig.state().then(st => { if (st.installed) followAsks(); }).catch(e => log(`operator: OpenRig not read: ${(e as Error).message}`));
-    } catch (e) { operator = undefined; log(`operator not started: ${(e as Error).message}`); }
+      // Max's goals too: the first list read is their baseline.
+      void openrig.state().then(st => {
+        if (!st.installed) return;
+        followAsks(); goalsFollowed = true;
+        void goals.list().then(l => { lastGoals = JSON.stringify(l); rigGoals = l.goals; operator?.goalsChanged(l); }).catch(e => log(`operator: goals not read: ${(e as Error).message}`));
+      }).catch(e => log(`operator: OpenRig not read: ${(e as Error).message}`));
+    } catch (e) {
+      // A start that failed half way closes the journal it opened.
+      try { operator?.stop(); } catch { /* already closed */ }
+      operator = undefined; log(`operator not started: ${(e as Error).message}`);
+    }
   }
 
   wss.on('connection', (ws, req) => {

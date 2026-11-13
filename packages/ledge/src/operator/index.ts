@@ -1,8 +1,8 @@
-import type { ChatAction, ChatPoint, DecidedBy, ForgeStateMessage, HumanAsk, OpenRigAction, OpenRigState, OperatorNotice, PointItem, Task, Tool } from '@ledge/protocol';
+import type { ChatAction, ChatPoint, DecidedBy, ForgeStateMessage, Goal, HumanAsk, OpenRigAction, OpenRigState, OperatorNotice, PointItem, Task, Tool } from '@ledge/protocol';
 import type { Chat, ChatDeps, ChatMessage } from '../chat/service.js';
 import type { Store } from '../daemon/store.js';
 import { log } from '../log.js';
-import { fromAsks, fromForge, fromRigs, fromSession, fromTasks, settledSession, type Draft } from './detect.js';
+import { fromAsks, fromForge, fromGoals, fromRigs, fromSession, fromTasks, settledSession, type Draft } from './detect.js';
 import { openJournal, type DeviceId, type Journal, type JournalEvent } from './journal.js';
 import { runLead as defaultRunLead } from './lead.js';
 import { buildPoint, daemonLead, foldIfDone, isWaiting, settleItem, type LiveState } from './point.js';
@@ -12,6 +12,8 @@ export type SettledWhere = NonNullable<PointItem['settled']>['where'];
 
 export interface OperatorThreads {
   all(): Array<[DeviceId, Chat]>;
+  /** Opens a paired device's thread (it may never have been opened since the daemon started). */
+  device?(id: string): Chat;
   emitterOf(id: DeviceId): ((m: ChatMessage) => void) | undefined;
 }
 
@@ -23,6 +25,8 @@ export interface OperatorDeps {
   chatDeps: ChatDeps;
   onNotices: (n: OperatorNotice[]) => void;
   onPointPush: (lead: string, qidByDevice: Map<DeviceId, string>) => void;
+  /** The ids of the paired devices with the chat: each gets its point, its thread opened if need be. */
+  devices?: () => readonly string[];
   now?: () => string;
   /** The lead run; tests give a fake. */
   runLead?: typeof defaultRunLead;
@@ -66,12 +70,22 @@ export function createOperator(deps: OperatorDeps): Operator {
   const eventsOf = (device: DeviceId, last: number): JournalEvent[] =>
     union(journal.since(journal.cursor(device)).filter(e => e.id <= last), waiting(last));
 
+  /** Every thread a point goes to: the desktop's and every paired device's, opened if need be. */
+  function postTargets(): Array<[DeviceId, Chat]> {
+    for (const id of deps.devices?.() ?? []) {
+      try { threads.device?.(id); } catch (e) { log(`operator: thread of device ${id.slice(0, 8)} not opened: ${(e as Error).message}`); }
+    }
+    return threads.all();
+  }
+
   async function run(events: JournalEvent[]): Promise<void> {
     const first = events[0]!.id; const last = events.at(-1)!.id;
     const wake = journal.startWake(first, last, now());
     const qids: string[] = []; const qidByDevice = new Map<DeviceId, string>();
     let outcome: 'posted' | 'empty' | 'failed' = 'empty';
     try {
+      // A wake whose events were all settled before it ran says nothing (spec §2): no run, no point.
+      if (union(events, waiting(last)).every(e => e.settledAt !== null || e.kind === 'request.settled')) return;
       const live = deps.live();
       const since = events[0]!.at;
       const all = buildPoint(union(events, waiting(last)), live, since, { text: '', by: 'daemon' });
@@ -81,7 +95,7 @@ export function createOperator(deps: OperatorDeps): Operator {
         : { lead: null, suggestions: [], actions: [] as ChatAction[], error: 'nothing to report' };
       if (lead.error && all.items.length > 0) log(`operator lead failed, the daemon writes it: ${lead.error}`);
       const suggestion = new Map(lead.suggestions.map(s => [s.item, s.action]));
-      for (const [device, chat] of threads.all()) {
+      for (const [device, chat] of postTargets()) {
         // Read after the lead run: what was settled meanwhile is posted settled.
         const own = eventsOf(device, last);
         const sinceOwn = own[0]?.at ?? since;
@@ -153,6 +167,7 @@ export interface OperatorWiring {
   /** The user's context threshold, as the daemon holds it now. */
   contextNear: () => number;
   tool: OperatorDeps['tool']; chatDeps: ChatDeps;
+  devices?: OperatorDeps['devices'];
   lang?: LiveState['lang'];
 }
 
@@ -165,6 +180,7 @@ export function wireOperator(w: OperatorWiring) {
   let asks: readonly HumanAsk[] | undefined;
   let rigs: OpenRigState | undefined;
   let forge: ForgeStateMessage | undefined;
+  let goals: readonly Goal[] | undefined;
   let tasksBefore: readonly Task[] = [];
   /** The tasks already said stale: said once, until the task leaves `taken`. */
   const reported = new Set<string>();
@@ -176,7 +192,7 @@ export function wireOperator(w: OperatorWiring) {
   const unsubscribe: Array<() => void> = [];
 
   const operator = createOperator({
-    journal, machine: w.machine, threads: w.threads, tool: w.tool, chatDeps: w.chatDeps,
+    journal, machine: w.machine, threads: w.threads, tool: w.tool, chatDeps: w.chatDeps, ...(w.devices ? { devices: w.devices } : {}),
     live: () => ({ sessions: w.store.all(), asks: asks ?? [], tasks: w.tasks(), lang: w.lang ?? 'fr' }),
     // Task 9 broadcasts the notices and pushes the point to the phones.
     onNotices: () => {}, onPointPush: () => {}
@@ -224,13 +240,25 @@ export function wireOperator(w: OperatorWiring) {
     },
     tasksChanged,
     /** OpenRig's human channel changed: new rows are events, rows gone are settled (unless the list is partial). */
-    asksChanged(l: { asks: HumanAsk[]; partial?: boolean; truncated?: boolean }): void {
+    asksChanged(l: { channel?: { state: string }; asks: HumanAsk[]; partial?: boolean; truncated?: boolean }): void {
+      // A channel that is not ready (OpenRig stopped, restarting) lists nothing: the asks are not gone, the baseline stays.
+      if (l.channel && l.channel.state !== 'ready') return;
       const before = asks;
       // A partial list says nothing of the rows it misses: they are kept until a whole list leaves them out.
       asks = before && (l.partial || l.truncated) ? [...l.asks, ...before.filter(a => !l.asks.some(x => x.id === a.id))] : l.asks;
       if (!before) return;
       record(fromAsks(before, l.asks));
       for (const a of before) if (!asks.some(x => x.id === a.id)) settle('rig.ask', a.id, 'elsewhere');
+    },
+    /** An ask answered through Ledge (`desktop`: a PC front, `phone`: the gateway): settled there, unless questions still wait. */
+    askAnswered(qitemId: string, where: SettledWhere, r: { ok: boolean; outcome?: string }): void {
+      if (r.ok && r.outcome !== 'recorded') settle('rig.ask', qitemId, where);
+    },
+    /** Max's goals as read again: the first list is the baseline; a partial one says nothing. */
+    goalsChanged(l: { goals: Goal[]; partial?: boolean }): void {
+      if (l.partial) return;
+      const before = goals; goals = l.goals;
+      if (before) record(fromGoals(before, l.goals));
     },
     /** A read of OpenRig's state: a rig Ledge stopped or restarted itself in the last two minutes says nothing. */
     rigsRead(st: OpenRigState): void {

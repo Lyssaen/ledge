@@ -22,8 +22,10 @@ export function createWakes(d: WakeDeps): { onEvent(e: JournalEvent): void; star
   let cancel: (() => void) | null = null;
   let armedAt = Infinity;
   let running = false;
-  /** Set by an event during a run: the run arms the next wake when it ends (`immediate` when one of them was). */
-  let after: 'grouped' | 'immediate' | null = null;
+  /** Set by the events that come during a run: when the next wake is due (an immediate one now, a grouped one `DEBOUNCE_MS` after
+   *  itself); the run arms it when it ends. */
+  let dueAfter: number | null = null;
+  const due = (at: number) => { dueAfter = dueAfter === null ? at : Math.min(dueAfter, at); };
   let lastStart = -Infinity;
   let stopped = false;
   /** Set at start when requests still wait: the first wake covers them even with nothing new. */
@@ -40,7 +42,7 @@ export function createWakes(d: WakeDeps): { onEvent(e: JournalEvent): void; star
 
   async function fire(): Promise<void> {
     if (stopped) return;
-    if (running) { after ??= 'grouped'; return; }
+    if (running) { due(d.now()); return; }
     // Past the hourly cap the wake waits: it looks again each gap, and the events wait with it (one point covers them then).
     if (d.journal.wakesSince(iso(d.now() - HOUR_MS)) >= MAX_WAKES_PER_HOUR) { arm(MIN_WAKE_GAP_MS); return; }
     running = true;
@@ -58,20 +60,22 @@ export function createWakes(d: WakeDeps): { onEvent(e: JournalEvent): void; star
       log(`operator wake failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       running = false;
-      const next = after; after = null;
-      if (next) arm(next === 'immediate' ? 0 : DEBOUNCE_MS);
+      const next = dueAfter; dueAfter = null;
+      if (next !== null) arm(Math.max(0, next - d.now()));
     }
   }
 
   return {
     onEvent(e) {
       if (e.urgency === 'none') return;
-      if (running) { if (after !== 'immediate') after = e.urgency; return; }
+      if (running) { due(d.now() + (e.urgency === 'immediate' ? 0 : DEBOUNCE_MS)); return; }
       arm(e.urgency === 'immediate' ? 0 : DEBOUNCE_MS);
     },
     start() {
       stopped = false;
       const before = d.journal.lastWake();
+      // The gap counts from the last wake the journal holds, the one before a restart included.
+      if (before) lastStart = Date.parse(before.startedAt);
       const recovered = d.journal.recover(iso(d.now()));
       // A wake the daemon left unfinished is covered again; otherwise the next wake starts after the last one.
       floor = recovered.length > 0 ? Math.min(...recovered.map(w => w.firstEvent)) - 1 : before?.lastEvent ?? 0;

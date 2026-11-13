@@ -72,6 +72,32 @@ describe('createWakes', () => {
     wakes.stop();
   });
 
+  it('a grouped event during a run waits 60 s from its own time, not from the end of the run', async () => {
+    const gate = deferred();
+    let first = true;
+    const { runs, emit, wakes } = setup({ run: async () => { if (first) { first = false; await gate.promise; } } });
+    emit('immediate');
+    await vi.advanceTimersByTimeAsync(0);
+    emit();
+    await vi.advanceTimersByTimeAsync(50_000);
+    gate.resolve();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(runs).toHaveLength(2);
+    wakes.stop();
+  });
+
+  it('start keeps 60 s after the last wake the journal holds', async () => {
+    const { journal, runs, rec, wakes } = setup();
+    const a = rec(); const w = journal.startWake(a.id, a.id, iso()); journal.endWake(w.id, 'posted', [], iso());
+    rec('immediate');
+    wakes.start();
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(runs).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(runs).toHaveLength(1);
+    wakes.stop();
+  });
+
   it('keeps 60 s between two wakes, even for an immediate event', async () => {
     const { runs, emit, wakes } = setup();
     emit('immediate');
@@ -104,7 +130,8 @@ describe('createWakes', () => {
     journal.startWake(a.id, b.id, iso());
     wakes.start();
     expect(journal.lastWake()!.outcome).toBe('failed');
-    await vi.advanceTimersByTimeAsync(0);
+    // The unfinished wake started just now: the 60 s gap holds after a restart too.
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(runs.map(r => r.map(e => e.id))).toEqual([[a.id, b.id]]);
     wakes.stop();
   });

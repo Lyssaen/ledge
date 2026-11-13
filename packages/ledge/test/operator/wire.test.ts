@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { HumanAsk, OpenRigState, Task } from '@ledge/protocol';
+import type { Goal, HumanAsk, OpenRigState, Task } from '@ledge/protocol';
 import { Store } from '../../src/daemon/store.js';
 import type { ChatDeps } from '../../src/chat/service.js';
 import { wireOperator, type OperatorWired } from '../../src/operator/index.js';
@@ -56,6 +56,35 @@ describe('wireOperator', () => {
     expect(w.journal.open().map(e => e.subjectId)).toEqual(['q1', 'q2']);
     w.asksChanged({ asks: [ask('q2')] });
     expect(w.journal.open().map(e => e.subjectId)).toEqual(['q2']);
+  });
+
+  it('a list read while the channel is not ready neither settles nor re-records the asks', () => {
+    const { w } = setup([]);
+    w.asksChanged({ channel: { state: 'ready' }, asks: [] });
+    w.asksChanged({ channel: { state: 'ready' }, asks: [ask('q1')] });
+    w.asksChanged({ channel: { state: 'openrig_stopped' }, asks: [] });
+    w.asksChanged({ channel: { state: 'ready' }, asks: [ask('q1')] });
+    expect(w.journal.since(0).map(e => e.subjectId)).toEqual(['q1']);
+    expect(w.journal.open().map(e => e.subjectId)).toEqual(['q1']);
+  });
+
+  it('an ask answered through Ledge is settled where it was answered', () => {
+    const { w } = setup([]);
+    w.asksChanged({ asks: [] });
+    w.asksChanged({ asks: [ask('q1'), ask('q2')] });
+    w.askAnswered('q1', 'phone', { ok: true, outcome: 'answered' });
+    w.askAnswered('q2', 'desktop', { ok: true, outcome: 'recorded' });
+    expect(w.journal.since(0).find(e => e.subjectId === 'q1')!.payload.where).toBe('phone');
+    expect(w.journal.open().map(e => e.subjectId)).toEqual(['q2']);
+  });
+
+  it('goals: the first list is the baseline, a new proposal from Max is an event', () => {
+    const { w } = setup([]);
+    const goal = { goalId: 'g-12345678', qitemId: 'q', text: 'Port', folder: null, sentAt: AT, to: 'max@kernel', state: 'taken', proposal: null, question: null, trail: [], current: null } as Goal;
+    w.goalsChanged({ goals: [goal] });
+    expect(w.journal.since(0)).toEqual([]);
+    w.goalsChanged({ goals: [{ ...goal, state: 'proposed', proposal: { askId: 'a', team: null, text: 'Two devs', answer: null, answeredAt: null } }] });
+    expect(w.journal.since(0).map(e => `${e.kind}:${e.subjectId}`)).toEqual(['rig.goal_update:g-12345678']);
   });
 
   it('a rig Ledge stopped itself is not reported, another rig that falls is', () => {

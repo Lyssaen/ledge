@@ -1,5 +1,5 @@
 import {
-  contextNear, openDecision, pendingKey, taskClosed, type DecidedBy, type ForgeStateMessage, type HumanAsk, type OpenRigState, type Pending, type Session, type Task
+  contextNear, openDecision, pendingKey, taskClosed, type DecidedBy, type ForgeStateMessage, type Goal, type HumanAsk, type OpenRigState, type Pending, type Session, type Task
 } from '@ledge/protocol';
 import type { JournalEvent } from './journal.js';
 import { STALE_TASK_MS } from './constants.js';
@@ -13,6 +13,7 @@ import { STALE_TASK_MS } from './constants.js';
  *   - `rig.ask`: a row of OpenRig's human channel; subjectId is the qitem id;
  *   - `rig.seat`: a seat of a rig; subjectId `<rig>/<seat logical id>`;
  *   - `rig`: a whole rig; subjectId is the rig name;
+ *   - `rig.goal`: a goal given to Max; subjectId is its goal id;
  *   - `pr`: a pull or merge request; subjectId is its id (`prIdOf`).
  */
 
@@ -134,6 +135,23 @@ export function fromForge(before: ForgeStateMessage | undefined, after: ForgeSta
       ({ kind, subjectKind: 'pr', subjectId: pr.id, subjectName: pr.title, urgency: 'grouped', payload: { ref: pr.ref, repo: pr.repo, branch: pr.branch, url: pr.url, ...payload } });
     if (pr.pipeline === 'fail' && (prev?.pipeline !== 'fail' || prev.headSha !== pr.headSha)) out.push(e('forge.pipeline_failed', {}));
     if (prev && prev.state !== 'merged' && pr.state === 'merged') out.push(e('forge.merged', {}));
+  }
+  return out;
+}
+
+/** What Max did with a goal the user gave him: a new team proposal, a new question, or a new state; one event per goal and read. */
+export function fromGoals(before: readonly Goal[], after: readonly Goal[]): Draft[] {
+  const was = new Map(before.map(g => [g.goalId, g]));
+  const out: Draft[] = [];
+  for (const g of after) {
+    const prev = was.get(g.goalId);
+    if (!prev) continue;
+    const text = g.proposal && g.proposal.askId !== prev.proposal?.askId ? g.proposal.text
+      : g.question && g.question.askId !== prev.question?.askId ? g.question.text
+      : g.state !== prev.state ? `${prev.state} → ${g.state}` : null;
+    if (text === null) continue;
+    out.push({ kind: 'rig.goal_update', subjectKind: 'rig.goal', subjectId: g.goalId, subjectName: g.to, urgency: 'grouped',
+      payload: { goalId: g.goalId, goal: clip(g.text), state: g.state, text: clip(text) } });
   }
   return out;
 }

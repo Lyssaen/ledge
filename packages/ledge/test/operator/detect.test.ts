@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { pendingKey, type ForgeStateMessage, type HumanAsk, type OpenRigState, type Rig, type Session, type Task } from '@ledge/protocol';
-import { fromAsks, fromForge, fromRigs, fromSession, fromTasks, settledSession } from '../../src/operator/detect.js';
+import { pendingKey, type ForgeStateMessage, type Goal, type HumanAsk, type OpenRigState, type Rig, type Session, type Task } from '@ledge/protocol';
+import { fromAsks, fromForge, fromGoals, fromRigs, fromSession, fromTasks, settledSession } from '../../src/operator/detect.js';
 import { STALE_TASK_MS } from '../../src/operator/constants.js';
 
 const T0 = '2026-11-13T10:00:00.000Z';
@@ -137,5 +137,24 @@ describe('fromForge', () => {
   });
   it('a merge makes forge.merged', () => {
     expect(fromForge(forge('ok'), forge('ok', 'merged')).map(e => e.kind)).toEqual(['forge.merged']);
+  });
+});
+
+describe('fromGoals', () => {
+  const goal = (over: Partial<Goal> = {}): Goal => ({
+    goalId: 'g-12345678', qitemId: 'q', text: 'Port the TUI', folder: null, sentAt: '2026-11-13T10:00:00.000Z', to: 'max@kernel', state: 'taken',
+    proposal: null, question: null, trail: [], current: null, ...over
+  });
+  const proposal = (askId: string, text: string) => ({ askId, team: null, text, answer: null, answeredAt: null });
+  it('says a new proposal, a new question and a state change once each, by goal', () => {
+    expect(fromGoals([goal()], [goal()])).toEqual([]);
+    const proposed = fromGoals([goal()], [goal({ state: 'proposed', proposal: proposal('a1', 'Two developers') })]);
+    expect(proposed).toEqual([{ kind: 'rig.goal_update', subjectKind: 'rig.goal', subjectId: 'g-12345678', subjectName: 'max@kernel', urgency: 'grouped',
+      payload: { goalId: 'g-12345678', goal: 'Port the TUI', state: 'proposed', text: 'Two developers' } }]);
+    expect(fromGoals([goal()], [goal({ state: 'asking', question: { askId: 'k1', text: 'Which folder?' } })])[0]!.payload.text).toBe('Which folder?');
+    expect(fromGoals([goal({ state: 'running' })], [goal({ state: 'done' })])[0]!.payload.text).toBe('running → done');
+    // A goal the user just sent is no news, nor one that left the list.
+    expect(fromGoals([], [goal()])).toEqual([]);
+    expect(fromGoals([goal()], [])).toEqual([]);
   });
 });

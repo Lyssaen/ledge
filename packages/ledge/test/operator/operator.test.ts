@@ -20,27 +20,29 @@ const finished = (sid: string): Draft => ({ kind: 'session.finished', subjectKin
 const request: Draft = { kind: 'session.request', subjectKind: 'session.request', subjectId: `s1#${key}`, subjectName: 'Nova', urgency: 'immediate', payload: { session: 's1', key, kind: 'permission', text: 'Run ls', command: 'ls' } };
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r; }); return { promise, resolve }; };
 
-function setup(lead: (o: { events: readonly unknown[] }) => Promise<LeadResult> = async () => ({ lead: 'Agent lead.', suggestions: [], actions: [] })) {
+function setup(lead: (o: { events: readonly unknown[] }) => Promise<LeadResult> = async () => ({ lead: 'Agent lead.', suggestions: [], actions: [] }), devices: string[] = []) {
   const home = mkdtempSync(join(tmpdir(), 'ledge-op-'));
   const store = new Store({ journalPath: join(home, 'j.json') });
   const chatDeps: ChatDeps = { store, tmux: { async capture() { return null; } } as never, home, env: async () => ({ ...process.env }) };
   const desktop = createChat({ ...chatDeps, home: join(home, 'd') });
   const phone = createChat({ ...chatDeps, home: join(home, 'p') });
   const emitted: Record<string, ChatMessage[]> = { desktop: [], 'device:abc': [] };
-  const all = (): Array<[DeviceId, Chat]> => [['desktop', desktop], ['device:abc', phone]];
+  const others = new Map<string, Chat>();
+  const all = (): Array<[DeviceId, Chat]> => [['desktop', desktop], ['device:abc', phone], ...[...others].map(([id, c]): [DeviceId, Chat] => [`device:${id}`, c])];
+  const device = (id: string) => { if (id === 'abc') return phone; let c = others.get(id); if (!c) { c = createChat({ ...chatDeps, home: join(home, id) }); others.set(id, c); emitted[`device:${id}`] = []; } return c; };
   const journal = openJournal(':memory:');
   const pushes: Array<{ lead: string; qids: Map<DeviceId, string> }> = [];
   const leadCalls: Array<{ events: readonly unknown[] }> = [];
   const operator = createOperator({
     journal, machine: 'm',
-    threads: { all, emitterOf: id => (m: ChatMessage) => { emitted[id]!.push(m); } },
+    threads: { all, device, emitterOf: id => (m: ChatMessage) => { emitted[id]!.push(m); } }, devices: () => devices,
     live: () => ({ sessions: [session], asks: [], tasks: [], lang: 'fr' }),
     tool: () => 'claude', chatDeps,
     onNotices: () => {}, onPointPush: (l, qids) => { pushes.push({ lead: l, qids }); },
     runLead: async o => { leadCalls.push(o); return lead(o); }
   });
   operator.start();
-  return { journal, operator, desktop, phone, emitted, pushes, leadCalls };
+  return { journal, operator, desktop, phone, emitted, pushes, leadCalls, others };
 }
 
 const pointsOf = (c: Chat) => c.points().map(p => p.point);
@@ -124,6 +126,26 @@ describe('createOperator', () => {
     }
     expect(emitted.desktop!.length).toBe(before + 1);
     expect(emitted.desktop!.at(-1)!.type).toBe('chat.history');
+    operator.stop();
+  });
+
+  it('a wake whose events are all settled posts nothing', async () => {
+    const { operator, desktop, journal, leadCalls, pushes } = setup();
+    operator.record(request);
+    operator.settle('session.request', `s1#${key}`, 'terminal');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(pointsOf(desktop)).toHaveLength(0);
+    expect(leadCalls).toHaveLength(0);
+    expect(pushes).toHaveLength(0);
+    expect(journal.lastWake()).toMatchObject({ outcome: 'empty', qids: [] });
+    operator.stop();
+  });
+
+  it('posts into every paired device, even one whose thread was never opened', async () => {
+    const { operator, others } = setup(undefined, ['abc', 'xyz']);
+    operator.record(finished('a'));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(pointsOf(others.get('xyz')!)).toHaveLength(1);
     operator.stop();
   });
 
