@@ -499,7 +499,8 @@ export const PhoneClientMessageSchema = z.discriminatedUnion('type', [
   /** « Ignorer » the turn's cards, or `undo` (« Revoir »), as the local `chat.ignore`. */
   z.object({ type: z.literal('chat.ignore'), op: OperationIdSchema, qid: OperationIdSchema, undo: z.literal(true).optional() }),
   /** The operator's point: `point.act` answers a row, `point.later` sets the point aside, `operator.read` marks events read for this device. */
-  z.object({ type: z.literal('point.act'), op: OperationIdSchema, qid: OperationIdSchema, item: z.string().min(1).max(200), answer: PointAnswerSchema }),
+  z.object({ type: z.literal('point.act'), op: OperationIdSchema, qid: OperationIdSchema, item: z.string().min(1).max(200), answer: PointAnswerSchema,
+    /** A destructive answer says it was confirmed on the phone; the device check (`assertion`) is bound to this item and this answer. */ confirmed: z.literal(true).optional(), assertion: AssertionSchema.optional() }),
   z.object({ type: z.literal('point.later'), op: OperationIdSchema, qid: OperationIdSchema }),
   z.object({ type: z.literal('operator.read'), op: OperationIdSchema, eventId: z.number().int().min(0) }),
   /** The user's answer to a proposal about the notes (brain spec, lot 4): a `yes` carries an assertion of purpose `note` bound to the

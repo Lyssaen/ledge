@@ -11,7 +11,7 @@ import { PHONE_LAUNCH_MULTI, type OmpApproval, type PhoneLaunch, type RepoInfo }
 import { PHONE_FORGE_MESSAGE_MAX, PhoneForgeActErrorSchema, type ForgeStateMessage } from '@ledge/protocol';
 import { forgeSubject, phoneForgeDetail, phoneForgeState } from './forge.js';
 import { latestTodos, TODO_TOOLS, type PhoneChecklist, type PhoneChecklistSummary } from '@ledge/protocol';
-import { BROADCAST_SESSIONS_MAX, type DecidedBy, type DeviceKind } from '@ledge/protocol';
+import { BROADCAST_SESSIONS_MAX, type DecidedBy, type DeviceKind, type PointAnswer } from '@ledge/protocol';
 import { PHONE_ROW_SUMMARY_MAX } from '@ledge/protocol';
 import { folderSubject, normalizePath, FolderPathSchema, PHONE_FOLDER_ENTRIES_MAX, PHONE_RECENT_FOLDERS_MAX, projectNameKey, projectSubject, type BrainChoice, type PhoneFolderError, type PhoneServerMessage as PhoneOut, type Projects } from '@ledge/protocol';
 import { listFolder, resolveFolder } from '../daemon/folders.js';
@@ -31,6 +31,7 @@ import { ActRefused } from '../chat/act.js';
 import { AttachmentError, type AttachmentStore } from '../daemon/attachments.js';
 import { createOutbox } from './outbox.js';
 import { createTerminalHost, type SpawnControl, type TerminalHost } from './terminal.js';
+import { humanAnswerOf } from '../operator/act.js';
 import { fingerprint, OperationRegistry, type Outcome, type PhoneOperation, type Report } from './operations.js';
 import { capabilities, clip, forPhone, phoneTasks, toPhoneFullRequest, toPhoneItem, toPhoneSession, toPhoneTask, toPhoneThread } from './project.js';
 import { atelierOf, toPhoneProjects } from './project.js';
@@ -168,6 +169,15 @@ export function createPhoneGateway(deps: {
   /** Closes the sessions of a turn's close card, on that thread (its own emitter and marks). */
   closeChat?: (thread: ChatThreadId, qid: string, rows?: number[]) => Promise<{ closed: Array<{ row: number; id: string; how: CloseHow }>; failed: Array<{ row: number; message: string }> }>;
   /** Applies the rows of a turn's generic card, on that thread (its own emitter and marks); `rid` names the request. */
+  /**
+   * The operator's point, acted on from the phone. `device` is the device id (not a thread id); the daemon answers through the handlers the
+   * cards use, so the gateway only decides which device check an answer needs.
+   */
+  point?: {
+    act: (device: string, msg: { qid: string; item: string; answer: PointAnswer; confirmed?: true }, by: DecidedBy) => Promise<{ ok: true } | { ok: false; error: string; code?: string }>;
+    later: (device: string, qid: string) => void;
+    read: (device: string, eventId: number) => void;
+  };
   actChat?: (thread: ChatThreadId, qid: string, rid: string, rows?: number[], confirmed?: true, deny?: true, by?: DecidedBy) => Promise<{ done: number[]; failed: Array<{ row: number; message: string }> }>;
   /** A device's question ended (answered, or with a code). */
   onChatEnd?: (deviceId: string, end: { qid: string; code?: ChatErrorCode }) => void;
@@ -925,6 +935,60 @@ export function createPhoneGateway(deps: {
     return r.ok ? { status: 'applied', detail } : { status: 'failed', detail };
   };
 
+  /**
+   * A row of the operator's point answered from the phone. What the answer is about says which device check it needs, as the same answer
+   * does elsewhere: a request accepted (`decide`, never confirmed by the check alone: `confirmed` is the phone's), a decision (`act`), a proposal
+   * accepted (`note`), a rig ask (`rig`). A row that is gone or settled needs none: the daemon says so on it.
+   */
+  const pointAct = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'point.act' }>): Promise<Outcome> => {
+    const turn = ownTurn(deviceId, msg.qid);
+    if (!deps.point || !turn?.point) return { status: 'rejected', reason: 'unknown_session' };
+    const item = turn.point.items.find(i => i.id === msg.item);
+    const ref = item && !item.settled ? item.ref : undefined;
+    if (ref) {
+      // Each answer needs the check (and the subject) the same answer has elsewhere, so the phone asks for the same challenge.
+      let check: { purpose: 'decide' | 'act' | 'note' | 'rig'; subject: string | undefined } | undefined; let destructive = false;
+      const picked = 'id' in msg.answer ? msg.answer.id : undefined;
+      if (ref.kind === 'rig.ask') {
+        const ask = (await deps.openrig?.list())?.asks.find(a => a.id === ref.qitem);
+        const answer = ask && humanAnswerOf(ask, msg.answer);
+        check = { purpose: 'rig', subject: answer ? rigSubject(ref.qitem, answer) : undefined };
+      } else if (ref.kind === 'task') {
+        if (deps.tasks?.().find(t => t.id === ref.task)?.brain) { if (picked === 'accept') check = { purpose: 'note', subject: noteSubject(ref.task, { yes: true }) }; }
+        else { check = { purpose: 'act', subject: msg.qid }; destructive = true; }
+      } else {
+        const s = deps.session(ref.session);
+        if (s?.pending?.kind !== 'question' && picked === 'accept') { destructive = true; if (!s || riskOf(s)?.risk !== 'low') check = { purpose: 'decide', subject: subjectOf(ref.session, ref.key, s) }; }
+        else if (s?.pending?.kind === 'question' && s.pending.source === 'rpc' && riskOf(s)?.risk !== 'low') check = { purpose: 'decide', subject: subjectOf(ref.session, ref.key, s) };
+      }
+      if (destructive && !msg.confirmed) return { status: 'rejected', reason: 'confirm_required' };
+      if (check) {
+        if (deps.credential(deviceId) === null) return { status: 'rejected', reason: 'confirm_required' };
+        const refused = checkAssertion(deviceId, msg.assertion, check.purpose, check.subject);
+        if (refused) return refused;
+      }
+    }
+    try {
+      const r = await deps.point.act(deviceId, { qid: msg.qid, item: msg.item, answer: msg.answer, ...(msg.confirmed ? { confirmed: true as const } : {}) }, decidedBy(deviceId));
+      if (r.ok) return { status: 'applied' };
+      if (r.code === 'confirm_required') return { status: 'rejected', reason: 'confirm_required' };
+      if (r.code === 'changed' || r.code === 'settled') return { status: 'rejected', reason: 'stale' };
+      if (r.code === 'unknown_item') return { status: 'rejected', reason: 'unknown_session' };
+      if (r.code === 'invalid') return { status: 'rejected', reason: 'invalid' };
+      return { status: 'failed' };
+    } catch (e) { log(`phone point.act failed (${e instanceof Error ? e.name : 'error'})`); return { status: 'failed' }; }
+  };
+  const pointLater = (deviceId: string, msg: Extract<PhoneOperation, { type: 'point.later' }>): Outcome => {
+    if (!deps.point || !ownTurn(deviceId, msg.qid)?.point) return { status: 'rejected', reason: 'unknown_session' };
+    deps.point.later(deviceId, msg.qid);
+    return { status: 'applied' };
+  };
+  const operatorRead = (deviceId: string, msg: Extract<PhoneOperation, { type: 'operator.read' }>): Outcome => {
+    if (!deps.point) return { status: 'rejected', reason: 'not_offered' };
+    deps.point.read(deviceId, msg.eventId);
+    return { status: 'applied' };
+  };
+
   /** A proposal about the notes answered from « Le point »: a `yes` writes, so it needs the device's check over that exact choice. */
   const brainAnswer = async (deviceId: string, msg: Extract<PhoneOperation, { type: 'brain.answer' }>): Promise<Outcome> => {
     const t = deps.tasks?.().find(x => x.id === msg.task);
@@ -1276,8 +1340,9 @@ export function createPhoneGateway(deps: {
     if (msg.type === 'openrig.answer') return rigAnswer(deviceId, msg);
     if (msg.type === 'brain.answer') return brainAnswer(deviceId, msg);
     if (msg.type === 'rigs.act') return rigsAct(deviceId, msg);
-    // The operator's operations are wired by the daemon's operator task; until then the gateway refuses them.
-    if (msg.type === 'point.act' || msg.type === 'point.later' || msg.type === 'operator.read') return { status: 'rejected', reason: 'not_offered' };
+    if (msg.type === 'point.act') return pointAct(deviceId, msg);
+    if (msg.type === 'point.later') return pointLater(deviceId, msg);
+    if (msg.type === 'operator.read') return operatorRead(deviceId, msg);
     if (msg.type === 'forge.act') return forgeAct(deviceId, msg);
     if (msg.type === 'rigs.seats') return rigsSeats(deviceId, msg);
     if (msg.type === 'rigs.goal.send' || msg.type === 'rigs.goal.reply') return rigsGoal(deviceId, msg);

@@ -329,7 +329,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
    *  again (« Revoir »). Refused while one of them is under way. Every client gets the turn's `ignoredAt` through chat.history. */
   z.object({ type: z.literal('chat.ignore'), qid: z.string().min(1), undo: z.literal(true).optional() }),
   /** The operator's point: answer a row (`item` is its id), set the point aside, or mark events up to `eventId` read by the sender's device. */
-  z.object({ type: z.literal('point.act'), qid: z.string().min(1), item: z.string().min(1).max(200), answer: PointAnswerSchema }),
+  z.object({ type: z.literal('point.act'), qid: z.string().min(1), item: z.string().min(1).max(200), answer: PointAnswerSchema, /** The front's confirmation of a destructive answer (an accepted request, a decision), as `chat.act` takes it. */ confirmed: z.literal(true).optional() }),
   z.object({ type: z.literal('point.later'), qid: z.string().min(1) }),
   z.object({ type: z.literal('operator.read'), eventId: z.number().int().min(0) }),
   /** A registry action run outside the chat (#93, the CLI): the daemon resolves `args` as it does a generic card's row, then

@@ -226,11 +226,13 @@ export function daemonLead(point: Pick<ChatPoint, 'items' | 'since'>, lang: Lang
   return waiting > 0 ? `${head} · ${t.leadWaiting(waiting)}` : head;
 }
 
+const withoutError = ({ error: _e, ...rest }: PointItem): PointItem => rest;
+
 /** Marks the open item of a subject settled; null when no open item matches (an item already settled keeps its first answer). */
 export function settleItem(point: ChatPoint, ref: { subjectKind: string; subjectId: string }, settled: NonNullable<PointItem['settled']>): ChatPoint | null {
   const id = `${ref.subjectKind}:${ref.subjectId}`;
   if (!point.items.some(i => i.id === id && !i.settled)) return null;
-  return { ...point, items: point.items.map(i => (i.id === id && !i.settled ? { ...i, settled } : i)) };
+  return { ...point, items: point.items.map(i => (i.id === id && !i.settled ? { ...withoutError(i), settled } : i)) };
 }
 
 /** Folds the point once it holds « à toi » items and every one is settled. */

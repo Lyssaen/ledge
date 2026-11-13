@@ -51,7 +51,7 @@ import { launchFromChat, LaunchRefused, refuseTooWide } from '../chat/launch.js'
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
 import { actFromChat, ActRefused } from '../chat/act.js';
 import type { ChatMessage } from '../chat/service.js';
-import { actionMessage, resolveAction, resolveRun, runGuard, type Resolved, type ResolveCtx } from './actions.js';
+import { actionMessage, cardRefusal, resolveAction, resolveRun, runGuard, type Resolved, type ResolveCtx } from './actions.js';
 import { createMailbox, type MailboxDeps, type MailJournal } from './mailbox.js';
 import { broadcastFromSession, broadcastFromUser } from './broadcast.js';
 import { addFromUser, applyProposal, checkProposal, clearFlag, markChecked, noteInfos } from '../brain/write.js';
@@ -82,6 +82,7 @@ import type { ForgeService } from './forge/service.js';
 import { ForgeError, ForgeRefusal } from './forge/types.js';
 import { redact } from './forge/run.js';
 import { wireOperator, type OperatorWired } from '../operator/index.js';
+import { createPointActor, type Fail } from '../operator/act.js';
 import type { DeviceId } from '../operator/journal.js';
 
 /** A seat's session without what belonged to the harness it ran before: its request, its reply, its conversation, its model. */
@@ -1158,6 +1159,31 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     const r = tasks.run({ type: 'task.cmd', rid, by: LEDGE_GIVER, op: 'done', task, text: choice.yes ? 'oui' : 'non', choice });
     return r.reason !== undefined ? { reason: r.reason } : { ...(r.task?.result ? { result: r.task.result } : {}) };
   }
+  /**
+   * The operator's rows answered from a chat thread (`point.act`): each answer goes through the handler the daemon already has for what the
+   * row is about, so the guards are the cards' own. A destructive one (an accepted request, a decision) is refused unless `confirmed`.
+   */
+  const rowFail = async (id: 'session.decide' | 'task.answer', args: Record<string, unknown>, confirmed: boolean, by?: DecidedBy): Promise<Fail> => {
+    const r = resolveAction(id, actionById(id)!.args.parse(args), liveCtx());
+    if ('refused' in r) return { message: r.refused, code: r.code };
+    const cut = id === 'session.decide' && args.decision === 'accept' ? cardRefusal(r) : null;
+    if (cut) return { message: cut.refused, code: cut.code };
+    if (r.risk === 'destructive' && !confirmed) return { message: 'confirm before applying a destructive action', code: 'confirm_required' };
+    const { failure } = await applyRow(r, randomUUID(), by);
+    return failure !== undefined ? { message: failure } : undefined;
+  };
+  const pointActor = createPointActor({
+    chatOf: device => { const c = cardThreads.all().find(([id]) => id === device)?.[1]; return c ? { chat: c, emit: cardThreads.emitterOf(device) ?? (() => {}) } : undefined; },
+    session: id => store.get(id), asks: () => rigAsks ?? [],
+    decide: (session, decision, confirmed, by) => rowFail('session.decide', { session, decision }, confirmed, by),
+    reply: async (id, text, by) => { const r = await replyTo(id, text, by ? { by } : {}); return r ? { message: r.message, ...(r.code ? { code: r.code } : {}) } : undefined; },
+    // Not `askAnswered`: the point settles the row itself, with where `chat`.
+    answerAsk: (qitem, answer) => human.answer(qitem, answer),
+    answerTask: (task, answer, confirmed) => rowFail('task.answer', { task, answer }, confirmed),
+    answerBrain: (task, yes) => { const r = answerProposal(task, { yes }, randomUUID()); return r.reason !== undefined ? { message: r.reason } : undefined; },
+    isBrain: task => tasks.all().find(t => t.id === task)?.brain !== undefined,
+    operator: { settle: (...a) => { try { operator?.operator.settle(...a); } catch (e) { log(`operator: point not settled: ${(e as Error).message}`); } } }
+  });
   async function applyRow(row: Pick<ChatAction, 'action' | 'args'>, rid: string, by?: DecidedBy, card?: string): Promise<{ failure?: string }> {
     const made = actionMessage(row, rid, card);
     // A request answered from a device's card is that device's decision (`by`, the gateway's); from the PC's, none: the PC.
@@ -1371,6 +1397,14 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         if (done.error !== 'busy') broadcast({ type: 'openrig.state', state: await openrig.state(true) });
         return;
       }
+      // The operator's point (Task 10): a row answered, the point set aside, the events read by this front's device (the PC's: `desktop`).
+      case 'point.act': {
+        const r = await pointActor.act('desktop', msg);
+        if (!r.ok) reply({ type: 'error', message: r.error, request: msg.type, ...(r.code ? { code: r.code } : {}) });
+        return;
+      }
+      case 'point.later': operator?.operator.later('desktop', msg.qid); return;
+      case 'operator.read': operator?.operator.read('desktop', msg.eventId); return;
       case 'snapshot.request': return sendSnapshot(reply);
       case 'browser.watch': return browserLive.watch(msg.id, reply);
       case 'browser.unwatch': return browserLive.unwatch(msg.id, reply);
@@ -1840,6 +1874,11 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const card = cardOf(cardThreads, qid);
       if (!card || card.thread !== thread) return Promise.reject(new ActRefused('unknown action'));
       return actOnCard(card, qid, rid, rows, confirmed, deny, by);
+    },
+    point: {
+      act: (device, msg, by) => pointActor.act(`device:${device}`, msg, by),
+      later: (device, qid) => operator?.operator.later(`device:${device}`, qid),
+      read: (device, eventId) => operator?.operator.read(`device:${device}`, eventId)
     },
     onChatEnd: (deviceId, end) => notifyChatEnd?.(deviceId, end.code),
     version: opts.daemon?.version ?? 'unknown',
