@@ -32,11 +32,12 @@ export const hasLiveScreen = (s: Pick<Session, 'backend' | 'offline' | 'state' |
 
 /**
  * The view `s` opens on (docs/mockups/ledge-session-view-default.html, « Ordre de priorité »), the tab's own choice set aside: an OMP
- * seat keeps its rule (Terminal running, Fil stopped or archived); a session without a live screen, Fil; otherwise the setting.
+ * seat keeps its rule (Terminal running, Fil stopped or archived); a session without a live screen, or on a machine with no terminal
+ * backend (`backend` false: no pseudo-terminal here and its daemon streams no pane, AgentView's useHasBackend), Fil; else the setting.
  */
-export function startViewOf(s: Parameters<typeof viewShown>[0] & Parameters<typeof hasLiveScreen>[0], setting: SessionView = value): SessionView {
+export function startViewOf(s: Parameters<typeof viewShown>[0] & Parameters<typeof hasLiveScreen>[0], setting: SessionView = value, backend = true): SessionView {
   if (isOmpSeat(s)) return viewShown(s, setting, null);
-  return setting === 'terminal' && hasLiveScreen(s) ? 'terminal' : 'thread';
+  return setting === 'terminal' && backend && hasLiveScreen(s) ? 'terminal' : 'thread';
 }
 
 /** For tests: read the key again (a test that writes localStorage before mounting). */

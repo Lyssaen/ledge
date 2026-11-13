@@ -8,7 +8,7 @@ import { empty, focused, open } from '../src/workspace/model';
 
 /** « Vue par défaut d'une session » (#300, docs/mockups/ledge-session-view-default.html, validated 2026-11-13). */
 beforeEach(() => { localStorage.clear(); reloadDefaultView(); });
-afterEach(async () => { cleanup(); localStorage.clear(); reloadDefaultView(); vi.restoreAllMocks(); await closeDaemons(); });
+afterEach(async () => { cleanup(); localStorage.clear(); reloadDefaultView(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await closeDaemons(); });
 
 const shown = () => document.querySelector<HTMLElement>('.session-page')?.dataset.session;
 const ctx = (startView?: (id: string) => 'terminal' | undefined) => ({ isSeat: () => false, modalOpen: false, openSession: 'active' as const, ...(startView ? { startView } : {}) });
@@ -38,12 +38,20 @@ describe('the view a session starts on (review #300: Terminal only where there i
     expect(hasLiveScreen(base)).toBe(true);
     expect(startViewOf(base, 'terminal')).toBe('terminal');
     expect(startViewOf(base, 'thread')).toBe('thread');
+    expect(startViewOf(base, 'terminal', false)).toBe('thread');
     for (const s of [{ ...base, tool: 'omp' as const, backend: 'omp-rpc' as const, tmuxSession: null }, { ...base, offline: true }, { ...base, state: 'exited' as const },
       { ...base, archivedAt: new Date().toISOString() }, { ...base, tmuxSession: null }]) expect(startViewOf(s, 'terminal')).toBe('thread');
   });
 });
 
 describe('a new IDE tab starts on it; an open tab keeps its own', () => {
+  it('a machine with no terminal backend (no pseudo-terminal, its daemon streams no pane) opens on the Fil', async () => {
+    const { user } = await boot({ sessions: listSessions(), list: true, daemon: { version: '1', install: 'unknown', systemd: false, terminalStream: false } });
+    act(() => setDefaultView('terminal'));
+    await user.click(within(screen.getByRole('tree', { name: 'Projects, branches and sessions' })).getByRole('button', { name: /^Nova/ }));
+    await waitFor(() => expect(shown()).toBe('local:nova'));
+    expect(screen.queryByRole('region', { name: 'Terminal' })).toBeNull();
+  });
   it('an OMP native session (no screen of its own) opens on the Fil with the setting on Terminal', async () => {
     const sessions = listSessions().map(s => s.name === 'Nova' ? { ...s, tool: 'omp' as const, backend: 'omp-rpc' as const, tmuxSession: null } : s);
     const { user } = await boot({ sessions, list: true });
@@ -64,7 +72,9 @@ describe('a new IDE tab starts on it; an open tab keeps its own', () => {
   });
 
   it('in the app: on Terminal, a session opens on its Terminal view; a tab opened before the change stays on the thread', async () => {
-    const { user } = await boot({ sessions: listSessions(), list: true });
+    // A daemon that streams panes: the machine has a terminal backend (its xterm asks matchMedia, which jsdom lacks).
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: false, media: q, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false }));
+    const { user } = await boot({ sessions: listSessions(), list: true, daemon: { version: '1', install: 'unknown', systemd: false, terminalStream: true } });
     await user.click(screen.getByRole('button', { name: /^Otto,/ }));
     await waitFor(() => expect(shown()).toBe('local:otto'));
     expect(screen.queryByRole('region', { name: 'Terminal' })).toBeNull();
