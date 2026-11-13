@@ -34,7 +34,7 @@ import { LaunchModalPlace } from './launch/lazy';
 import type { LaunchWhere } from './launch/LaunchModal';
 import { openWhere } from './launch/modalModel';
 import { ChatPlace } from './chat/lazy';
-import { newestPointRead } from '@ledge/ui/chat/point';
+import { sendPointReads } from './chat/pointReads';
 import { SettingsPlace } from './settings/lazy';
 import type { SettingsContext } from './settings/SettingsPage';
 import { daemonTarget, useDaemonUpdates } from './update/daemon';
@@ -410,12 +410,12 @@ function Shell({ client, setLang }: { client?: DaemonClient; setLang(l: Lang): P
   // kept), Settings and the OpenRig page on the section and sub-place they were last left on.
   const front: Tab | undefined = focused(ws).tabs[focused(ws).active];
   const frontKey = front ? keyOf(front) : null;
-  // Opening « À toi » (its page, or the explorer's view) reads the newest local point (spec §5), as the chat does when it shows it.
+  // Opening « À toi » (its page, or the explorer's view) reads each ready machine's newest point on that machine (spec §5), as the
+  // chat does when it shows one.
   const atoiOpen = front?.kind === 'atoi' || (layout.sideOpen && layout.sideView === 'atoi');
   useEffect(() => {
     if (!atoiOpen) return;
-    const r = newestPointRead(daemonStore.getState().chat.filter(x => fleetView.fleet.turnMachine(x.qid)?.id === 'local'));
-    if (r) fleetClient.send({ type: 'operator.read', eventId: r.eventId });
+    sendPointReads(daemonStore.getState().chat, fleetView.fleet);
   }, [atoiOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   const lastOpenRig = useRef(new Map<string, { section?: OpenRigSection; role?: string; seat?: string }>());
   if (place.kind === 'settings') lastSettings.current = place.section;
