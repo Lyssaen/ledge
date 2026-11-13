@@ -7,6 +7,7 @@ import { Box, EmptyState } from '../ui/kit/Box';
 import { kitButtonClass } from '../ui/kit/Controls';
 import { useWide } from '../ui/layout';
 import { Mascot } from '../ui/MobileBot';
+import { PaneHead } from './Chat';
 
 /*
  * The tabs whose data the PC does not send to the phone yet (docs/mockups/ledge-mobile-refonte/m0-socle.html, §2 and §3,
@@ -47,8 +48,17 @@ export function Rigs() {
 }
 
 /** The Ledge tab of a PC that does not offer the chat: the same pattern, the mascot still in place of the glyph, no composer. */
-export function ChatUnavailable() {
+export function ChatUnavailable({ onClose }: { onClose?: () => void } = {}) {
   const { pc } = useShell();
+  // In the tablet's Ledge pane (m3-chat.html §7): the pane's head, then the same empty state.
+  if (onClose) return (
+    <>
+      <PaneHead frozen onClose={onClose} />
+      <section aria-label={copy.chat.title} className="pt-[34px]">
+        <EmptyState framed={false} glyph={<Mascot size={64} frozen />} title={copy.chat.unavailable.title(hostName(pc))} body={copy.chat.unavailable.body} action={seeAtoi(copy.chat.unavailable.seeAtoi)} />
+      </section>
+    </>
+  );
   return (
     <TabPage title={copy.chat.title}>
       <Frame label={copy.chat.title}>

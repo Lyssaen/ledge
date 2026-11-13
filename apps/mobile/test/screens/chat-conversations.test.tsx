@@ -77,6 +77,32 @@ describe('« Conversations » (m3-chat.html §6)', () => {
     expect(screen.getByLabelText('Question pour Ledge')).toBeInTheDocument();
   });
 
+  it('in the tablet\'s pane, a past conversation keeps Retour and its title and gains « Fermer le volet » on the right (Q96 A)', () => {
+    const t = setup();
+    const s = snapshot([session('a', { name: 'Nova', repo: 'ledge' })], 'Atelier', undefined, ON) as Extract<PhoneServerMessage, { type: 'snapshot' }>;
+    t.deliver({ ...s, daemon: { ...s.daemon, conversations: true } } as PhoneServerMessage);
+    let closed = 0;
+    render(<Chat store={t.store} onClose={() => { closed++; }} />);
+    fireEvent.click(clock());
+    act(() => t.deliver({ type: 'chat.conversations', past: [{ id: ID(4), startedAt: at(1, 11, 30), lastAt: at(1, 11, 31), first: 'Redémarre ledge-dev', count: 1 }] }));
+    fireEvent.click(screen.getByRole('button', { name: /Redémarre ledge-dev/ }));
+    const head = screen.getByRole('banner');
+    expect(head).toHaveTextContent(`${H.yesterday}, 11:30`);
+    const buttons = within(head).getAllByRole('button');
+    expect(buttons[0]).toHaveAccessibleName(copy.nav.backTo.chat!);
+    expect(buttons.at(-1)).toHaveAccessibleName(copy.chat.pane.close);
+    fireEvent.click(buttons.at(-1)!);
+    expect(closed).toBe(1);
+  });
+
+  it('on a phone, a past conversation\'s head has no « Fermer le volet »', () => {
+    const t = chatSetup(true);
+    fireEvent.click(clock());
+    act(() => t.deliver({ type: 'chat.conversations', past: [{ id: ID(4), startedAt: at(1, 11, 30), lastAt: at(1, 11, 31), first: 'Redémarre ledge-dev', count: 1 }] }));
+    fireEvent.click(screen.getByRole('button', { name: /Redémarre ledge-dev/ }));
+    expect(screen.queryByRole('button', { name: copy.chat.pane.close })).toBeNull();
+  });
+
   it('control: the same card in the current conversation keeps its buttons', () => {
     const t = setup();
     t.deliver(snapshot([session('a', { name: 'Nova', repo: 'ledge' })], 'Atelier', undefined, ON));

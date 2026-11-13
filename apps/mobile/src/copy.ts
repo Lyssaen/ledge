@@ -206,6 +206,8 @@ const fr = {
     placeholder: 'Demander à Ledge…',
     /** Under the focused field (Q86): « + Image », then « · Entrée envoie » from a physical keyboard. */
     plusImage: '+ Image', enterSends: 'Entrée envoie',
+    /** The tablet's Ledge pane, opened by the rail's button (m3-chat.html §7, Q36). */
+    pane: { close: 'Fermer le volet' },
     send: 'Envoyer la question',
     busy: 'Ledge répond déjà à d\'autres questions. Réessaie dans un instant.',
     timeout: 'Ledge n\'a pas répondu à temps.',

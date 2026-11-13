@@ -201,6 +201,7 @@ export const en: Copy = {
     field: 'Question for Ledge',
     placeholder: 'Ask Ledge…',
     plusImage: '+ Image', enterSends: 'Enter sends',
+    pane: { close: 'Close the pane' },
     send: 'Send the question',
     busy: 'Ledge is already answering other questions. Try again in a moment.',
     timeout: 'Ledge did not answer in time.',

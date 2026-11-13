@@ -1,6 +1,6 @@
 // The Ledge tab (m3-chat.html): the phone's own thread with Ledge. The turns are the PC's; this screen asks, stops, asks again
 // and starts over.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { copy } from '../copy';
 import { href } from '../router';
 import { useChat, useConversations, useMobile, type MobileStore } from '../state/store';
@@ -39,7 +39,28 @@ export function suggestionsOf(sessions: readonly Pick<PhoneSession, 'name' | 'ri
 
 const HEAD_BUTTON = 'grid size-11 flex-none place-items-center rounded-lg text-muted active:bg-raised disabled:opacity-40';
 
-export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }) {
+/** The head of the tablet's Ledge pane (§7): the mascot and Ledge, the conversation buttons, then Fermer. */
+export function PaneHead({ frozen, onClose, children }: { frozen: boolean; onClose: () => void; children?: ReactNode }) {
+  return (
+    <header className="bleed flex h-[58px] flex-none items-center gap-1.5 border-b border-line pr-1.5 pl-3.5">
+      <span aria-hidden="true" className="flex size-[22px] flex-none"><Mascot size={22} frozen={frozen} /></span>
+      <h2 className="text-base font-semibold">{copy.chat.title}</h2>
+      <span className="flex-1" />
+      {children}
+      <CloseButton onClose={onClose} />
+    </header>
+  );
+}
+
+/** « Fermer le volet », the pane's ✕. */
+function CloseButton({ onClose }: { onClose: () => void }) {
+  return <button type="button" onClick={onClose} aria-label={copy.chat.pane.close} title={copy.chat.pane.close} className={HEAD_BUTTON}><Icon name="close" /></button>;
+}
+
+/**
+ * The chat. `onClose`: it is the tablet's Ledge pane (§7, Q36), whose head closes it instead of naming the host and Réglages.
+ */
+export function Chat({ store, onClose }: { store: MobileStore; onReconnect?: () => void; onClose?: () => void }) {
   const state = useMobile(store);
   const wide = useWide();
   const chat = useChat(store);
@@ -118,15 +139,28 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
     : <SettledLines names={[...new Set([...(shownUnder.current.get(qid) ?? [])].filter(([id]) => !waitingIds.has(id)).map(([, n]) => n))]} />;
   const limitsOf = (at: string) => ({ at, usage: state.usage ?? [], alert: state.usageAlert, fresh: state.fresh });
   const openSheet = () => { store.askConversations(); setSheet(true); };
+  const headButtons = (
+    <>
+      <button type="button" onClick={openSheet} aria-haspopup="dialog" aria-label={kept ? copy.chat.history.title : copy.chat.history.today} title={kept ? copy.chat.history.title : copy.chat.history.today} className={HEAD_BUTTON}>
+        <Icon name="clock" />
+      </button>
+      {/* Off while Ledge answers: the answer would be put away half done. */}
+      <button type="button" disabled={running} onClick={reset} aria-label={copy.chat.reset} title={copy.chat.reset} className={HEAD_BUTTON}>
+        <Icon name="edit" />
+      </button>
+    </>
+  );
 
   if (past) {
     const shown = conversations.open[past.id];
     return (
       <>
         <DetailHeader name={titleOf(past, new Date())}
-          back={<button type="button" aria-label={copy.nav.backTo.chat} title={copy.nav.backTo.chat} onClick={() => setPast(null)} className={iconButtonClass({ className: 'text-muted' })}><Icon name="back" /></button>} />
+          back={<button type="button" aria-label={copy.nav.backTo.chat} title={copy.nav.backTo.chat} onClick={() => setPast(null)} className={iconButtonClass({ className: 'text-muted' })}><Icon name="back" /></button>}
+          // In the tablet's pane, the pane's own « Fermer » on the right too (Q96 A, the user 2026-11-13).
+          {...(onClose ? { more: <CloseButton onClose={onClose} /> } : {})} />
         <p className="bleed flex flex-none items-center gap-2 border-b border-line bg-raised px-3.5 py-2 text-small text-muted"><Icon name="clock" className="size-4 flex-none" />{copy.chat.history.pastBanner}</p>
-        <main data-tab-scroll="" className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain py-3 text-[14px]">
+        <main data-tab-scroll={onClose ? undefined : ''} className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain py-3 text-[14px]">
           {shown && 'gone' in shown && <p className="px-1 text-body text-muted">{copy.chat.history.gone}</p>}
           {shown && 'turns' in shown && shown.turns.map(t => {
             const read = shown.limits.find(r => r.qid === t.qid);
@@ -140,7 +174,9 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
 
   return (
     <>
-      {/* The tab's own head (§1): Ledge and the host, then Nouvelle conversation and, on a phone, Réglages. */}
+      {/* The tab's own head (§1): Ledge and the host, then Nouvelle conversation and, on a phone, Réglages. The pane's (§7):
+          Ledge, its conversation buttons and Fermer. */}
+      {onClose ? <PaneHead frozen={offline} onClose={onClose}>{headButtons}</PaneHead> : (
       <header className="bleed flex h-14 flex-none items-center gap-1 border-b border-line pr-1 pl-3.5">
         <span className="mr-1 flex items-center gap-2 text-[17px] font-semibold">
           <span aria-hidden="true" className="flex size-7 flex-none"><Mascot size={28} frozen={offline} /></span>
@@ -148,16 +184,12 @@ export function Chat({ store }: { store: MobileStore; onReconnect?: () => void }
         </span>
         <HostPill />
         <span className="flex-1" />
-        <button type="button" onClick={openSheet} aria-haspopup="dialog" aria-label={kept ? copy.chat.history.title : copy.chat.history.today} title={kept ? copy.chat.history.title : copy.chat.history.today} className={HEAD_BUTTON}>
-          <Icon name="clock" />
-        </button>
-        {/* Off while Ledge answers: the answer would be put away half done. */}
-        <button type="button" disabled={running} onClick={reset} aria-label={copy.chat.reset} title={copy.chat.reset} className={HEAD_BUTTON}>
-          <Icon name="edit" />
-        </button>
+        {headButtons}
         {!wide && <a href={href({ name: 'connection' })} aria-label={copy.nav.settings} title={copy.nav.settings} className={HEAD_BUTTON}><Icon name="gear" /></a>}
       </header>
-      <main data-tab-scroll="" className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain py-3 text-[14px]">
+      )}
+      {/* The pane's thread is not the tab's list: a tap on the current tab scrolls the list, never the pane. */}
+      <main data-tab-scroll={onClose ? undefined : ''} className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain py-3 text-[14px]">
         <LinkStrip />
         {/* The thread opens on « Le point » (ledge home spec §2.4), the suggestions under it; none offline (§3). */}
         {chat.turns.length === 0 && !refused && (
