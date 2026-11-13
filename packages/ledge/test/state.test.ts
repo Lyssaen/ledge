@@ -392,6 +392,23 @@ describe('reduce: post-tool events', () => {
     expect(riskOf(now)).toEqual(riskOf(before));
     expect(riskOf(now)).toEqual({ risk: 'low', reason: 'edit_inside_folder' });
   });
+  it('#302 Codex: a dialog for another file or command is not the held request: the screen\'s own waits, judged high', () => {
+    const codex = session('working', { tool: 'codex' });
+    const outside: SessionEvent = { name: 'PanePrompt', at: later(5500), source: 'pane', kind: 'diff', text: 'Edit /etc/critical.conf', options: ['Yes, proceed (y)', 'No (esc)'] };
+    const crossed = reduce(reduce(codex, ev('PermissionRequest', { tool: 'apply_patch', text: '/w/harness-assistant/safe.txt' })), outside);
+    expect(crossed.pending).toMatchObject({ kind: 'diff', text: 'Edit /etc/critical.conf', source: 'pane' });
+    expect(riskOf(crossed)?.risk).toBe('high');
+    // Read before the hook, the same.
+    const early = reduce(reduce(codex, outside), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/harness-assistant/safe.txt' }));
+    expect(early.pending).toMatchObject({ source: 'pane', text: 'Edit /etc/critical.conf' });
+    // A relative path in the patch is under the folder the agent works in.
+    const rel = reduce(reduce(codex, ev('PermissionRequest', { tool: 'apply_patch', text: 'README.md' })), editDialog(later(5500)));
+    expect(rel.pending).toMatchObject({ source: 'hook', text: 'README.md' });
+    // Another command: the screen's.
+    const cmd = reduce(reduce(codex, ev('PermissionRequest', { tool: 'Bash', text: 'ls' })), { name: 'PanePrompt', at: later(5500), source: 'pane', kind: 'permission', text: 'rm -rf /w', options: ['Yes, proceed (y)', 'No (esc)'] });
+    expect(cmd.pending).toMatchObject({ source: 'pane', text: 'rm -rf /w' });
+    expect(riskOf(cmd)?.risk).toBe('high');
+  });
   it('#302 Codex: a dialog read before its hook gives way to the hook\'s request; a held request ends with the turn', () => {
     const codex = session('working', { tool: 'codex' });
     const screenFirst = reduce(reduce(codex, editDialog(later(4000))), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/harness-assistant/README.md' }));

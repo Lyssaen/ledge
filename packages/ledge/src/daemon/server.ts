@@ -18,7 +18,7 @@ import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.j
 import { verifyGone } from '../adapters/verify.js';
 import { claudeGutter } from '../adapters/claude.js';
 import { DETECT_LINES } from './poller.js';
-import { answeredBy, endsCodexAsk, isCodexAsk, pendingTool } from './state.js';
+import { answeredBy, codexAskOf, endsCodexAsk, isCodexAsk, pendingTool, sameCodexAsk } from './state.js';
 import { claudeOpenCall, claudeToolAnswered, claudeVersion, labelTranscript, resumeLabel } from './transcript.js';
 import { pickName } from '../names.js';
 import { readPeers, type ClaudePeer } from './peers.js';
@@ -495,7 +495,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const s = store.get(id);
       if (isCodexAsk(s, ev)) {
         // Its dialog may already be on screen (the pane read before the hook came): then it does wait, and the row goes now.
-        const shown = s?.pending?.source === 'pane' && (s.pending.kind === 'permission' || s.pending.kind === 'diff');
+        const shown = s?.pending?.source === 'pane' && !s.pending.helperId && sameCodexAsk(codexAskOf(ev), s.pending, s.workdir ?? s.cwd);
         if (shown) history.record(id, ev); else codexAsks.set(id, ev);
         return;
       }
@@ -510,7 +510,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       }
       else if (asked && s?.codexAsk && ev.name === 'PanePrompt' && ev.source === 'pane') {
         codexAsks.delete(id);
-        if (!s.pending && s.codexAsk.kind === (ev.kind ?? 'permission')) history.record(id, { ...asked, at: ev.at });
+        if (!s.pending && sameCodexAsk(s.codexAsk, ev, s.workdir ?? s.cwd)) history.record(id, { ...asked, at: ev.at });
       } else if (asked && s?.codexAsk && endsCodexAsk(s.codexAsk, ev)) codexAsks.delete(id);
       history.record(id, ev);
     }),
@@ -719,7 +719,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           const shown = adapter.detectPrompt(before) ?? adapter.detectPrompt(await tmux.capture(s.tmuxSession!, CHECK_LINES) ?? '');
           // Claude Code 2.1.318 draws a gutter before a command's lines: its version, from the transcript, says whether `│ ` is one.
           const gutter = s.tool === 'claude' ? claudeGutter(s.transcriptPath ? claudeVersion(s.transcriptPath) : undefined) : undefined;
-          const refused = dialogMismatch(shown, decided, await tmux.width?.(s.tmuxSession!) ?? undefined, gutter);
+          const refused = dialogMismatch(shown, decided, await tmux.width?.(s.tmuxSession!) ?? undefined, gutter, s.workdir ?? s.cwd);
           // STALE, or a dialog it cannot read whole (UNCHECKED): the closest code is that no prompt it can read is there.
           if (refused) throw new Refusal(refused, refused === STALE ? 'stale' : 'no_prompt');
         }

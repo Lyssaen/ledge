@@ -562,6 +562,7 @@ describe('server', () => {
     store.upsert(mk('e', { tool: 'codex', state: 'working' }));
     store.apply('e', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /main' });
     store.apply('e', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Read', helperId: 'h1' });
+    store.apply('e', { name: 'Stop', at: T0, source: 'hook', helperId: 'h1' });
     store.apply('e', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Read' });
     store.apply('e', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /main', options: ['Yes, proceed (y)', 'No (esc)'] });
     expect(store.get('e')).toMatchObject({ state: 'waiting_permission', pending: { source: 'hook', tool: 'Bash', text: 'touch /main' } });

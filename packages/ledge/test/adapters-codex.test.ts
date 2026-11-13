@@ -34,6 +34,16 @@ describe('codex adapter: detection (Codex CLI 0.162 captures)', () => {
     expect(() => assertDialogIs({ kind: 'diff', text: 'x', source: 'pane' }, 'diff')).not.toThrow();
     expect(dialogMismatch(codexAdapter.detectPrompt(fx('codex-permission-exec')), { kind: 'question', text: 'x', source: 'pane' })).not.toBeNull();
   });
+  it('#302: a patch the hook named is answered only on the edit dialog of one of its files', () => {
+    const shown = codexAdapter.detectPrompt(fx('codex-permission-patch'))!;
+    const hook = (text: string) => ({ kind: 'diff' as const, text, tool: 'apply_patch', source: 'hook' as const });
+    expect(dialogMismatch(shown, hook('/home/dev/demo/README.md'))).toBeNull();
+    expect(dialogMismatch(shown, hook('/home/dev/demo/a.ts, /home/dev/demo/README.md'))).toBeNull();
+    expect(dialogMismatch(shown, hook('README.md'), undefined, undefined, '/home/dev/demo')).toBeNull();
+    expect(dialogMismatch(shown, hook('/home/dev/demo/safe.txt'))).not.toBeNull();
+    // Relative, and no folder to place it: uncertain, refused.
+    expect(dialogMismatch(shown, hook('README.md'))).not.toBeNull();
+  });
   it('detects a request_user_input question with its option labels and their descriptions', () => {
     expect(codexAdapter.detectPrompt(fx('codex-question'))).toEqual({
       kind: 'question', text: 'Which color should the banner be?',

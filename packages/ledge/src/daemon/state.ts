@@ -1,7 +1,7 @@
 import { cleanTopic, DOING_LABEL_MAX, RUNNING_MAX, pendingKey, parseRigPrompt, sessionTitle, type RunningCall, type Session, type SessionEvent, type Pending, type Helper, type SessionState, type TopicSource } from '@ledge/protocol';
 
 import { crossSession, crossSessionNotices, ledgeNotice, ledgeTask } from './crossSession.js';
-import { sameQuestion } from '../adapters/types.js';
+import { codexEditIs, sameQuestion } from '../adapters/types.js';
 import { ledgeTitleRest } from '../names.js';
 
 export const HOOK_PRIORITY_MS = 2000;
@@ -20,11 +20,22 @@ export function isCodexAsk(s: Pick<Session, 'tool' | 'tmuxSession' | 'paneUnread
 }
 
 const TURN_ENDS: ReadonlySet<SessionEvent['name']> = new Set(['Stop', 'StopFailure', 'SessionEnd', 'PaneGone']);
+const flat = (t: string) => t.replace(/\s+/g, ' ').trim();
+/** Whether the dialog on screen is the held Codex request (#302), not only one of its kind: the same command, or an edit of one of
+ *  the patch's files. Uncertain is no: the screen's own request (judged high on the phone) then waits instead. */
+export function sameCodexAsk(ask: Pending, shown: { kind?: Pending['kind']; text?: string }, cwd?: string): boolean {
+  if (ask.kind !== (shown.kind ?? 'permission')) return false;
+  const text = shown.text ?? '';
+  if (ask.kind === 'diff') return codexEditIs(ask.text, text, cwd);
+  return flat(text) !== '' && flat(text) === flat(ask.text);
+}
 /** Whether `ev` settles a held Codex request (Session.codexAsk) no dialog showed: the main agent's run of that very tool (a helper's
  *  or another parallel call's never does), or the end of the turn (a refusal by the automatic review sends only Stop). */
 export function endsCodexAsk(ask: Pending, ev: SessionEvent): boolean {
+  // A helper's events are its own, its Stop included.
+  if (ev.helperId) return false;
   if (TURN_ENDS.has(ev.name)) return true;
-  if (ev.helperId || (ev.name !== 'PostToolUse' && ev.name !== 'PostToolUseFailure')) return false;
+  if ((ev.name !== 'PostToolUse' && ev.name !== 'PostToolUseFailure')) return false;
   return !ask.tool || !ev.tool || ask.tool === ev.tool;
 }
 
@@ -44,6 +55,9 @@ const DIFF_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', '
 
 /** The options' descriptions travel with them, only when there are some. */
 const details = (ev: SessionEvent) => (ev.optionDetails?.some(Boolean) ? { optionDetails: ev.optionDetails } : {});
+
+/** The request a held Codex PermissionRequest describes (#302). */
+export const codexAskOf = (ev: SessionEvent): Pending => pendingFor(ev)!;
 
 function pendingFor(ev: SessionEvent): Pending | undefined {
   if (ev.name === 'PermissionRequest') {
@@ -336,7 +350,7 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
   if (isCodexAsk(s, ev)) {
     const ask = pendingFor(ev)!;
     // The dialog was read before its hook: the hook's request replaces the screen's, as a hook's always did.
-    if (s.pending?.source === 'pane' && !s.pending.helperId && s.pending.kind === ask.kind) {
+    if (s.pending?.source === 'pane' && !s.pending.helperId && sameCodexAsk(ask, s.pending, s.workdir ?? s.cwd)) {
       return { ...withoutCodexAsk(s), pending: ask, lastHookAt: at, lastActivityAt: at };
     }
     return { ...s, codexAsk: ask, lastHookAt: at, lastActivityAt: at };
@@ -422,7 +436,7 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
       if (s.codexAsk) {
         const ask = s.codexAsk;
         s = withoutCodexAsk(s);
-        if (!s.pending && ask.kind === incoming.kind) return { ...s, state: 'waiting_permission', pending: ask, lastActivityAt: at };
+        if (!s.pending && sameCodexAsk(ask, incoming, s.workdir ?? s.cwd)) return { ...s, state: 'waiting_permission', pending: ask, lastActivityAt: at };
       }
       // A hook question the pane has moved past (the next question of an AskUserQuestion, its review: the last one
       // answered in the terminal) gives way to what the pane asks. No hook reports the next one: only the end of all.

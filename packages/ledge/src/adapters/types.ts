@@ -1,3 +1,4 @@
+import { posix } from 'node:path';
 import type { Decision, Pending, RefusalCode, Tool } from '@ledge/protocol';
 
 /**
@@ -145,9 +146,23 @@ function commandMismatch(drawn: ShownCommand, asked: string, width: number | und
  *
  * `gutter`: whether the harness on screen draws a gutter before a command's lines (Claude Code 2.1.318 on), when known.
  */
-export function dialogMismatch(shown: PanePromptMatch | null, pending: Pending, width?: number, gutter?: boolean): string | null {
+/**
+ * Whether Codex's edit dialog (`Edit <path>`, its path joined back from the pane) is for a file of the patch its hook named
+ * (`a, b`, as written in the patch: relative ones are under `cwd`). Uncertain (no path, a relative one and no folder) is no.
+ */
+export function codexEditIs(hookText: string, shownText: string, cwd?: string): boolean {
+  if (!shownText.startsWith('Edit ')) return false;
+  const shown = shownText.slice(5).trim();
+  const paths = hookText.trim() === '' || hookText.trim() === 'patch' ? [] : hookText.split(', ').map(p => p.trim()).filter(Boolean);
+  if (!shown || paths.length === 0) return false;
+  return paths.some(p => (posix.isAbsolute(p) ? posix.normalize(p) : cwd ? posix.resolve(cwd, p) : null) === posix.normalize(shown));
+}
+
+export function dialogMismatch(shown: PanePromptMatch | null, pending: Pending, width?: number, gutter?: boolean, cwd?: string): string | null {
   if (!shown) return UNCHECKED;
   if (dialogKind(shown.kind) !== dialogKind(pending.kind)) return STALE;
+  // Codex's edit dialog names its file (#302): a patch the hook described is answered only on a dialog for one of its files.
+  if (pending.source === 'hook' && pending.tool === 'apply_patch' && shown.text.startsWith('Edit ')) return codexEditIs(pending.text, shown.text, cwd) ? null : STALE;
   if (pending.kind === 'question') return sameQuestion(shown.text, pending.text) ? null : STALE;
   if (pending.source === 'pane') return shown.text === pending.text ? null : STALE;
   if (pending.tool !== undefined && COMMAND_TOOLS.has(pending.tool)) return shown.command ? commandMismatch(shown.command, pending.text, width, gutter) : UNCHECKED;
