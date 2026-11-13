@@ -31,7 +31,7 @@ export const rigsFr = {
   /** §2: the list's states. */
   loading: 'Lecture d\'OpenRig…',
   empty: { title: 'Aucun rig pour l\'instant.', body: 'Un rig est une équipe d\'agents. Max, l\'opérateur du kernel, peut t\'aider à en composer un.', talk: 'Parler à Max' },
-  stopped: { title: 'OpenRig est arrêté.', body: 'Les rigs et le kernel repartent avec le daemon.', start: 'Démarrer OpenRig', note: 'Ces deux choix sont gardés sur ce téléphone, comme Desktop garde les siens.' },
+  stopped: { title: 'OpenRig est arrêté.', body: 'Les rigs et le kernel repartent avec le daemon.', start: 'Démarrer OpenRig', note: 'Ces deux choix sont gardés sur cet appareil, comme Desktop garde les siens.' },
   notInstalled: { title: 'OpenRig n\'est pas installé', body: (pc: string) => `La commande rig est introuvable sur ${pc}. Ledge n'installe rien lui-même.` },
   unavailable: { title: 'OpenRig n\'a pas répondu à temps.', body: (t: string) => `La liste ci-dessous est celle lue à ${t}.`, retry: 'Réessayer' },
   offlineBody: (t: string) => `Dernier état connu · ${t}. Rien ne peut être démarré ni arrêté tant que le PC ne répond pas.`,
@@ -247,7 +247,7 @@ export const rigsFr = {
     skippedTitle: 'Le daemon a démarré sans le kernel.', skippedBody: 'Désactive « Démarrer sans le kernel » puis redémarre le daemon, ou démarre le kernel seul.',
     /** The kernel's « ⋯ » (Q73). */
     menu: { refresh: 'Actualiser', restart: 'Redémarrer le kernel', stop: 'Arrêter le kernel' },
-    daemonNote: 'Arrêter le daemon arrête tous les rigs et le kernel. Ces deux choix vivent sur ce téléphone ; Desktop garde les siens.'
+    daemonNote: 'Arrêter le daemon arrête tous les rigs et le kernel. Ces deux choix vivent sur cet appareil ; Desktop garde les siens.'
   },
   /** §9: Max. */
   max: {
