@@ -18,7 +18,8 @@ export type KeyPlan = Array<{ text: string } | { keys: string[] } | { waitMs: nu
  */
 export type ShownCommand = { lines: string[]; ends: number[]; ungutter?: { lines: string[]; ends: number[] } };
 /** `command`: the shell command an approval dialog shows as such, when it shows one (to check the request it answers). */
-export type PanePromptMatch = { kind: 'permission' | 'question' | 'plan'; text: string; options?: string[]; optionDetails?: string[]; body?: string; command?: ShownCommand };
+/** `diff`: a permission that is a file change (Codex's edit dialog, #302); it answers like any permission. */
+export type PanePromptMatch = { kind: 'permission' | 'diff' | 'question' | 'plan'; text: string; options?: string[]; optionDetails?: string[]; body?: string; command?: ShownCommand };
 
 export interface Adapter {
   tool: Tool;
@@ -76,10 +77,11 @@ export const STALE = 'the request changed, look again';
  * permission: « always » would pick its auto mode). A diff is answered in a permission dialog. `shown` null (no dialog
  * read, a pane taller than the capture) keeps each adapter's own fallback.
  */
+/** A file change is a permission to answer: the two are one dialog for these checks. */
+const dialogKind = (k: PanePromptMatch['kind'] | Pending['kind']) => (k === 'diff' ? 'permission' : k);
 export function assertDialogIs(pending: Pending, shown: PanePromptMatch['kind'] | null): void {
   if (shown === null) return;
-  const want = pending.kind === 'diff' ? 'permission' : pending.kind;
-  if (shown !== want) throw new Refusal(STALE, 'stale');
+  if (dialogKind(shown) !== dialogKind(pending.kind)) throw new Refusal(STALE, 'stale');
 }
 /** The dialog on screen cannot be read whole (taller than the pane, a command cut with `…`): nothing is typed. */
 export const UNCHECKED = 'the request on screen cannot be checked, answer in the terminal';
@@ -145,7 +147,7 @@ function commandMismatch(drawn: ShownCommand, asked: string, width: number | und
  */
 export function dialogMismatch(shown: PanePromptMatch | null, pending: Pending, width?: number, gutter?: boolean): string | null {
   if (!shown) return UNCHECKED;
-  if (shown.kind !== (pending.kind === 'diff' ? 'permission' : pending.kind)) return STALE;
+  if (dialogKind(shown.kind) !== dialogKind(pending.kind)) return STALE;
   if (pending.kind === 'question') return sameQuestion(shown.text, pending.text) ? null : STALE;
   if (pending.source === 'pane') return shown.text === pending.text ? null : STALE;
   if (pending.tool !== undefined && COMMAND_TOOLS.has(pending.tool)) return shown.command ? commandMismatch(shown.command, pending.text, width, gutter) : UNCHECKED;

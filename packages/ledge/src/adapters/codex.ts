@@ -126,7 +126,9 @@ function detectPrompt(pane: string): PanePromptMatch | null {
   const cmd = d.header.findIndex(l => /^\s*\$\s/.test(l));
   const command = cmd >= 0 ? shownCommand(rawRun(d.header, cmd)) : undefined;
   if (command) command.lines[0] = command.lines[0]!.replace(/^\$\s+/, '');
-  return { kind: 'permission', text: approvalText(d.header), options: d.options, ...(command ? { command } : {}) };
+  // An edit approval is a file change, as Codex's apply_patch hook used to say: since #302 the dialog alone makes the request.
+  const edit = d.header.some(l => /^\s*Destination:\s*$/.test(l) || /^\s*Would you like to make the following edits\b/.test(l));
+  return { kind: edit ? 'diff' : 'permission', text: approvalText(d.header), options: d.options, ...(command ? { command } : {}) };
 }
 
 /** Works on the server's short capture: the footer is the last line of every dialog. */

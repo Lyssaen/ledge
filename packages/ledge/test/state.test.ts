@@ -364,9 +364,26 @@ describe('reduce: post-tool events', () => {
     expect(reduce(s, ev('PostToolUse', { tool: 'Bash', at: later(6000) })).pending).toBeDefined();
     expect(reduce(s, ev('PostToolUse', { tool: 'request_user_input', at: later(6000) })).pending).toBeUndefined();
   });
-  it('Codex: an apply_patch permission is a diff', () => {
-    const s = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/README.md' }));
-    expect(s.pending).toMatchObject({ kind: 'diff', text: '/w/README.md', tool: 'apply_patch' });
+  it('#302 Codex: its main agent\'s PermissionRequest is no request until the terminal shows one (« Approve for me » settles it alone)', () => {
+    const asked = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'Bash', text: 'touch /x' }));
+    expect(asked.state).toBe('working');
+    expect(asked.pending).toBeUndefined();
+    // The automatic review approved: the tool ran.
+    expect(reduce(asked, ev('PostToolUse', { tool: 'Bash', at: later(3000) }))).toMatchObject({ state: 'working' });
+    // It refused: the turn ended, no PostToolUse.
+    expect(reduce(asked, ev('Stop', { at: later(10000) }))).toMatchObject({ state: 'idle' });
+  });
+  it('#302 Codex: a request its terminal shows waits as today, its edit a diff, and the tool\'s run clears it', () => {
+    const asked = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'apply_patch', text: '/w/README.md' }));
+    const shown = reduce(asked, { name: 'PanePrompt', at: later(500), source: 'pane', kind: 'diff', text: 'Edit /w/README.md', options: ['Yes, proceed (y)', 'No (esc)'] });
+    expect(shown.state).toBe('waiting_permission');
+    expect(shown.pending).toMatchObject({ kind: 'diff', text: 'Edit /w/README.md', source: 'pane' });
+    expect(reduce(shown, ev('PostToolUse', { tool: 'apply_patch', at: later(4000) })).pending).toBeUndefined();
+  });
+  it('#302 unchanged: Claude Code\'s PermissionRequest and a Codex helper\'s still wait', () => {
+    expect(reduce(session('working'), ev('PermissionRequest', { tool: 'Bash', text: 'ls' })).state).toBe('waiting_permission');
+    const helper = reduce(session('working', { tool: 'codex' }), ev('PermissionRequest', { tool: 'Bash', text: 'ls', helperId: 'h1' }));
+    expect(helper.pending).toMatchObject({ helperId: 'h1' });
   });
   it('PostToolUse of ExitPlanMode clears a plan pending', () => {
     const s = reduce(session('working'), ev('PreToolUse', { tool: 'ExitPlanMode', text: 'plan' }));

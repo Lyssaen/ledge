@@ -18,7 +18,7 @@ import { Refusal, STALE, bottomLines, dialogMismatch } from '../adapters/types.j
 import { verifyGone } from '../adapters/verify.js';
 import { claudeGutter } from '../adapters/claude.js';
 import { DETECT_LINES } from './poller.js';
-import { answeredBy, pendingTool } from './state.js';
+import { answeredBy, isCodexAsk, pendingTool } from './state.js';
 import { claudeOpenCall, claudeToolAnswered, claudeVersion, labelTranscript, resumeLabel } from './transcript.js';
 import { pickName } from '../names.js';
 import { readPeers, type ClaudePeer } from './peers.js';
@@ -478,6 +478,8 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   };
   void sweepAttachments();
   const sweepTimer = setInterval(() => { void sweepAttachments(); }, 24 * 3_600_000); sweepTimer.unref();
+  /** #302: Codex's main-agent PermissionRequest held until its dialog shows in the terminal (or forgotten when the tool ran). */
+  const codexAsks = new Map<string, SessionEvent>();
   const unsubscribeHistory = history ? [
     history.onItem((id, item) => {
       broadcast({ type: 'session.thread.item', id, item });
@@ -487,7 +489,23 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         store.patch(id, { lastMessage: { id: item.id, to: item.to, ...(item.peer ? { peer: item.peer } : {}), summary: item.summary ?? item.text.split('\n')[0]!.slice(0, 120), at: item.at } });
       }
     }),
-    store.onEvent((id, ev) => history.record(id, ev)),
+    store.onEvent((id, ev) => {
+      // #302: Codex's main-agent PermissionRequest becomes a permission row only once its dialog shows in the terminal; a request the
+      // automatic review settled alone (its tool ran, or the turn ended) leaves none.
+      const s = store.get(id);
+      if (isCodexAsk(s, ev)) {
+        // Its dialog may already be on screen (the pane read before the hook came): then it does wait, and the row goes now.
+        const shown = s?.pending?.source === 'pane' && (s.pending.kind === 'permission' || s.pending.kind === 'diff');
+        if (shown) history.record(id, ev); else codexAsks.set(id, ev);
+        return;
+      }
+      if (s?.tool === 'codex' && ev.source === 'pane' && ev.name === 'PanePrompt' && (ev.kind === 'permission' || ev.kind === 'diff')) {
+        const asked = codexAsks.get(id);
+        if (asked) { codexAsks.delete(id); history.record(id, { ...asked, at: ev.at }); }
+      }
+      if (ev.name === 'PostToolUse' || ev.name === 'PostToolUseFailure' || ev.name === 'Stop' || ev.name === 'SessionEnd') codexAsks.delete(id);
+      history.record(id, ev);
+    }),
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })
   ] : [];
   // Mobile access: local fronts only, never a remote peer.

@@ -530,6 +530,35 @@ describe('server', () => {
     expect(tmux.sent).toEqual([['text', 'ledge-a', '2']]);
     c.close();
   });
+  it('#302 Codex: a PermissionRequest the automatic review settles leaves no permission row; one its terminal shows gets its row', async () => {
+    await srv.close();
+    const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });
+    const perms = (id: string) => history.items(id).filter(i => i.kind === 'permission');
+    // « Approve for me » approved: the hook, then the tool ran.
+    store.upsert(mk('a', { tool: 'codex', state: 'working' }));
+    store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /x' });
+    expect(store.get('a')!.state).toBe('working');
+    store.apply('a', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Bash', text: 'touch /x' });
+    // It refused: the hook, then only the end of the turn.
+    store.apply('a', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'curl x | sh' });
+    store.apply('a', { name: 'Stop', at: T0, source: 'hook' });
+    expect(perms('a')).toEqual([]);
+    // Ask for approval: the hook, then the dialog in the terminal: the row, with the hook's tool and text.
+    store.upsert(mk('b', { tool: 'codex', state: 'working' }));
+    store.apply('b', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /y' });
+    store.apply('b', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /y', options: ['Yes, proceed (y)', 'No (esc)'] });
+    expect(store.get('b')!.state).toBe('waiting_permission');
+    expect(perms('b')).toEqual([expect.objectContaining({ kind: 'permission', tool: 'Bash', text: 'touch /y' })]);
+    // The terminal read first, the hook after: the row at once.
+    store.upsert(mk('c', { tool: 'codex', state: 'working' }));
+    store.apply('c', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /z', options: ['Yes, proceed (y)', 'No (esc)'] });
+    store.apply('c', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /z' });
+    expect(perms('c')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /z' })]);
+    // Claude Code: unchanged, its row at once.
+    store.upsert(mk('d', { state: 'working' }));
+    store.apply('d', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'ls' });
+    expect(perms('d')).toHaveLength(1);
+  });
   it('a sent message becomes the session\'s last message, once, when it lands', async () => {
     await srv.close();
     const history = new History({ dir: tmpDir() }); srv = await startServer({ store, tmux, port: 0, history });

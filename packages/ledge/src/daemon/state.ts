@@ -12,6 +12,11 @@ export const HOOK_PRIORITY_MS = 2000;
  */
 const hooksReportPrompts = (s: Session) => s.tool === 'claude';
 
+/** Codex's main agent asking a permission through its hook (#302): not proof that it waits, the terminal's dialog is. */
+export function isCodexAsk(s: Pick<Session, 'tool'> | undefined, ev: SessionEvent): boolean {
+  return s?.tool === 'codex' && ev.name === 'PermissionRequest' && ev.source === 'hook' && !ev.helperId;
+}
+
 export function isPending(s: Session): boolean {
   return s.state === 'waiting_permission' || s.state === 'waiting_input';
 }
@@ -307,6 +312,11 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
   if (ev.helperId && ev.source === 'hook' && ev.name !== 'SessionEnd') return reduceHelper(s, { ...ev, helperId: ev.helperId });
   // The transcript a hook names is the live one (it follows /clear and --resume): it replaces the one the launch implied.
   if (ev.source === 'hook' && ev.transcriptPath && ev.transcriptPath !== s.transcriptPath) s = { ...s, transcriptPath: ev.transcriptPath };
+  // #302: Codex sends its main agent's PermissionRequest before it knows whether it will ask: with « Approve for me » (its
+  // approvals_reviewer auto_review) the automatic review settles it alone, and the same payload means no question at all. Only its
+  // dialog in the terminal (PanePrompt) says it waits on the person: the hook is activity, nothing more. Claude Code, OMP and Codex's
+  // helpers are unchanged.
+  if (isCodexAsk(s, ev)) return { ...s, lastHookAt: at, lastActivityAt: at };
 
   switch (ev.name) {
     case 'SessionEnd':
