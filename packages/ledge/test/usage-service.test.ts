@@ -97,14 +97,41 @@ describe('the usage service: Claude Code', () => {
     expect(m.svc.state().harnesses[0]!.status).toBe('ok');
   });
 
-  it('an expired token is never sent nor refreshed: « expired », no window; a 401 says the same', async () => {
+  it('#301: a token past its time is never sent nor refreshed, and with nothing read yet the harness is not listed; a 401 is expired, refused, no window', async () => {
     const expired = machine({ creds: JSON.stringify({ claudeAiOauth: { accessToken: 'old', expiresAt: T0 - 1 } }) });
     await expired.svc.tick();
     expect(expired.calls).toEqual([]);
-    expect(expired.svc.state().harnesses).toEqual([expect.objectContaining({ harness: 'claude', status: 'expired', windows: [] })]);
+    expect(expired.svc.state().harnesses).toEqual([]);
     const refused = machine({ answers: [{ status: 401 }] });
     await refused.svc.tick();
-    expect(refused.svc.state().harnesses[0]).toMatchObject({ status: 'expired', windows: [] });
+    expect(refused.svc.state().harnesses[0]).toMatchObject({ status: 'expired', windows: [], cause: 'refused' });
+  });
+
+  it('#301: a token past its time after a read keeps the last values as stale, said local_expired, then the harness leaves the list past an hour', async () => {
+    let t = T0, expiresAt = T0 + 60_000;
+    const calls: string[] = [];
+    const read = async (p: string) => {
+      if (p.endsWith('.credentials.json')) return JSON.stringify({ claudeAiOauth: { accessToken: 'tok', expiresAt } });
+      if (p.endsWith('.claude.json')) return JSON.stringify({ oauthAccount: { accountUuid: 'acc-A' } });
+      throw new Error('ENOENT');
+    };
+    const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
+      get: async (_u, h) => { calls.push(h.Authorization!); return { status: 200, body: JSON.stringify(API), headers: {} }; } });
+    await svc.tick();
+    const read1 = svc.state().harnesses[0]!;
+    expect(read1).toMatchObject({ status: 'ok' });
+    expect(read1).not.toHaveProperty('cause');
+    // Claude Code's short token is now past its time (it renews it at its next use): still signed in.
+    t += 2 * 60_000; await svc.tick();
+    const local = svc.state().harnesses[0]!;
+    expect(local).toMatchObject({ harness: 'claude', status: 'stale', cause: 'local_expired', windows: read1.windows });
+    expect(calls).toHaveLength(1); // the expired token is never sent
+    t = T0 + 61 * 60_000; await svc.tick();
+    expect(svc.state().harnesses).toEqual([]);
+    // Claude Code renews it: read again, ok, no cause.
+    expiresAt = t + 8 * 3_600_000; await svc.tick();
+    expect(svc.state().harnesses[0]).toMatchObject({ status: 'ok' });
+    expect(svc.state().harnesses[0]).not.toHaveProperty('cause');
   });
 
   it('not signed in: no Claude Code at all; stale after 5 minutes without a read', async () => {
@@ -225,7 +252,7 @@ describe('the usage service: another account signs in', () => {
     const svc = createUsage({ home: '/h', env: async () => ({}), file: join(mkdtempSync(join(tmpdir(), 'ledge-usage-')), 'usage.json'), now: () => t, read, version: async () => '2.1.318',
       get: async (_u, h) => { calls.push(h.Authorization!); return { status: 429, body: '', headers: {} }; } });
     await svc.tick();
-    expect(svc.state().harnesses[0]!.status).toBe('expired');
+    expect(svc.state().harnesses).toEqual([]); // past its time, nothing read: not listed (#301)
     expect(calls).toEqual([]);
     expiresAt = T0 + 30 * 24 * 3_600_000;
     t += 30_000; await svc.tick();
@@ -390,14 +417,14 @@ describe('the usage service: Cursor Agent', () => {
     s.advance(1000); expect(s.cursor()!.windows).toEqual([]);
   });
 
-  it('a token past its time: expired, no window, no POST; a 401 is expired and the next read that succeeds is ok', async () => {
+  it('#301: a token past its time with nothing read: not listed, no POST; a 401 is expired, refused, and the next read that succeeds is ok', async () => {
     const old = cursorMachine({ auth: JSON.stringify({ accessToken: jwt({ sub: 'x', exp: Math.floor(T0 / 1000) - 1 }) }) });
     await old.svc.tick();
     expect(old.posts).toEqual([]);
-    expect(old.cursor()).toMatchObject({ status: 'expired', windows: [] });
+    expect(old.cursor()).toBeUndefined();
     const m = cursorMachine({ answers: [{ status: 401, body: { code: 'unauthenticated' } }, { status: 200, body: CURSOR_BODY }] });
     await m.svc.tick();
-    expect(m.cursor()).toMatchObject({ status: 'expired', windows: [] });
+    expect(m.cursor()).toMatchObject({ status: 'expired', windows: [], cause: 'refused' });
     m.advance(CURSOR_READ_EVERY_MS); await m.svc.tick();
     expect(m.cursor()!.status).toBe('ok');
   });
@@ -541,7 +568,8 @@ describe('the usage service: Cursor Agent', () => {
     await svc.tick();
     auth = JSON.stringify({ accessToken: jwt({ sub: 'B', exp: Math.floor(T0 / 1000) - 5 }) });
     await svc.tick();
-    expect(svc.state().harnesses[0]).toMatchObject({ status: 'expired', windows: [] });
+    // B's token is past its time and B was never read: A's windows are not shown under it; nothing is listed.
+    expect(svc.state().harnesses).toEqual([]);
     auth = JSON.stringify({ accessToken: jwt({ sub: 'A', exp: Math.floor(T0 / 1000) + 99999 }) });
     await svc.tick();
     expect(svc.state().harnesses[0]!.windows).toEqual([]); // A's old windows were dropped; B's sign-in cleared them

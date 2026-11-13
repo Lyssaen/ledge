@@ -327,7 +327,8 @@ export function createPhoneGateway(deps: {
 
   /** What a phone may know of the limits: no account id (the token, the plan and the subscription never reach the daemon's state). */
   const usageOf = (u: { harnesses: readonly HarnessUsage[]; prefs: UsagePrefs }): PhoneServerMessage =>
-    ({ type: 'usage.state', harnesses: u.harnesses.map(({ account: _a, ...h }) => h), prefs: { alert: u.prefs.alert } });
+    ({ type: 'usage.state', // Never `cause` (#301): a phone's schema is strict and an older one would refuse the whole state; a refused harness is `expired`.
+    harnesses: u.harnesses.map(({ account: _a, cause: _c, ...h }) => h), prefs: { alert: u.prefs.alert } });
 
   const snapshot = (deviceId: string): PhoneServerMessage => {
     const push = pushStatus(deviceId);
