@@ -45,7 +45,7 @@ import { claudeSlashRefusal, createCommands, type Commands } from './commands.js
 import { createOpenRig, execRun, type OpenRig } from './openrig.js';
 import { createHumanChannel, type HumanChannelService } from './openrigHuman.js';
 import { createGoals, type GoalsService } from './openrigGoals.js';
-import type { OpenRigState, OperatorNotice } from '@ledge/protocol';
+import type { OpenRigState } from '@ledge/protocol';
 import { createRelay, free } from './relay.js';
 import { launchFromChat, LaunchRefused, refuseTooWide } from '../chat/launch.js';
 import { cardOf, closeFromChat, CloseRefused } from '../chat/close.js';
@@ -67,7 +67,7 @@ import { createPhoneGateway, type PhoneGateway } from '../mobile/gateway.js';
 import { phoneLaunch } from '../mobile/launch.js';
 import { createNotifier } from '../mobile/push/notifier.js';
 import { chatEndPayload, decisionPayload } from '../mobile/push/triggers.js';
-import { pointPush } from '../operator/notices.js';
+import { createNoticeFeed, pointPush } from '../operator/notices.js';
 import { pushFor, resolvedFor } from '../mobile/push/triggers.js';
 import { createChallengeStore } from '../mobile/challenges.js';
 import { rpOf } from '../mobile/webauthn.js';
@@ -476,7 +476,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
   /** The operator's point, pushed to each paired phone with the chat turn it got (set once the notifier is). */
   let notifyPoint: ((lead: string, qidByDevice: Map<DeviceId, string>) => void) | undefined;
   /** The notices the notch last got (`operator.state`), replayed after every snapshot; undefined while the operator is off. */
-  let lastNotices: OperatorNotice[] | undefined;
+  const notices = createNoticeFeed(n => broadcast({ type: 'operator.state', notices: n }));
   /** Every local front gets it; the phone gateway passes on only what it knows. */
   const broadcast = (msg: ServerMessage) => { for (const c of localClients) send(c, msg); gateway?.forward(msg); };
   // The browsers' states reach the local fronts only: neither a phone nor a remote peer.
@@ -654,7 +654,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
     reply({ type: 'chat.history', turns: chat.history() });
     reply(contextMsg()); // the context threshold (context handover spec §3.2)
     const u = usageMsg(); if (u) reply(u); // the harnesses' limits
-    if (lastNotices) reply({ type: 'operator.state', notices: lastNotices }); // what the notch should show of the operator
+    const on = notices.current(); if (on) reply({ type: 'operator.state', notices: on }); // what the notch should show of the operator
     if (forge) reply(forge.state()); // the pull and merge requests of the sessions' branches
     for (const m of browserLive.states()) reply(m); // last: the agents' browsers that are not `none`
   };
@@ -1900,7 +1900,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       const badge = store.all().filter(s => s.pending).length + tasks.all().filter(openDecision).length;
       for (const [device, qid] of qidByDevice) {
         if (!device.startsWith('device:')) continue;
-        void notifier.notify(pointPush(lead, qid, badge), undefined, device.slice('device:'.length)).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
+        void notifier.notify(pointPush(lead, badge), undefined, device.slice('device:'.length)).catch(e => log(`push failed (${e instanceof Error ? e.name : 'error'})`));
       }
     };
     /** Who answered each session's request, from its `Decided` (heard before the change it makes). */
@@ -1925,7 +1925,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
         devices: () => (mobile?.state().enabled ? mobile.state().devices.map(d => d.id) : []),
         contextNear: () => contextPrefs.near, tool: () => threads.deviceTool(), chatDeps: { ...chatDeps, thread: 'desktop' },
         // The notch hears the notices when they change; each paired phone gets its one push per point.
-        onNotices: n => { const j = JSON.stringify(n); if (j === JSON.stringify(lastNotices)) return; lastNotices = n; broadcast({ type: 'operator.state', notices: n }); },
+        onNotices: n => notices.tell(n),
         onPointPush: (lead, qidByDevice) => notifyPoint?.(lead, qidByDevice) });
       operator.start();
       // OpenRig's asks are followed for the journal too, where OpenRig is installed; the first list read is the baseline.

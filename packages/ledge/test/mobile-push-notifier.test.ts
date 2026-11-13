@@ -52,11 +52,11 @@ describe('point push', () => {
     expect(wanted({ kind: 'point' }, off, at)).toBe(false);
     expect(wanted({ kind: 'point' }, paused, at)).toBe(false);
     const t = setup();
-    await t.n.notify(pointPush('Two things wait for you', 'q1', 2), undefined, 'dev1');
+    await t.n.notify(pointPush('Two things wait for you', 2), undefined, 'dev1');
     expect(t.sent).toHaveLength(1);
     expect(t.sent[0]).toMatchObject({ urgency: 'normal', topic: 'point' });
     const held = setup({ prefs: new Map([['dev1', off]]) });
-    await held.n.notify(pointPush('x', 'q1', 0), undefined, 'dev1');
+    await held.n.notify(pointPush('x', 0), undefined, 'dev1');
     expect(held.sent).toHaveLength(0);
   });
 });

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Goal, HumanAsk, OpenRigState, Task } from '@ledge/protocol';
+import type { OperatorNotice, Goal, HumanAsk, OpenRigState, Task } from '@ledge/protocol';
 import { Store } from '../../src/daemon/store.js';
 import type { ChatDeps } from '../../src/chat/service.js';
 import { wireOperator, type OperatorWired } from '../../src/operator/index.js';
@@ -22,18 +22,30 @@ const rigState = (status: Record<string, string>): OpenRigState => ({
 let wired: OperatorWired | undefined;
 afterEach(() => { wired?.stop(); wired = undefined; });
 
-function setup(tasks: Task[]) {
+function setup(tasks: Task[], onNotices?: (n: OperatorNotice[]) => void) {
   const home = mkdtempSync(join(tmpdir(), 'ledge-wire-'));
   const store = new Store({ journalPath: join(home, 'j.json') });
   const chatDeps: ChatDeps = { store, tmux: { async capture() { return null; } } as never, home, env: async () => ({ ...process.env }) };
   let list = tasks;
   wired = wireOperator({
     journalPath: join(home, 'ledge.sqlite'), machine: 'm', threads: { all: () => [], emitterOf: () => undefined }, store,
-    tasks: () => list, contextNear: () => 0.9, tool: () => 'claude', chatDeps
+    tasks: () => list, contextNear: () => 0.9, tool: () => 'claude', chatDeps, ...(onNotices ? { onNotices } : {})
   });
   wired.start();
   return { w: wired, setTasks: (t: Task[]) => { list = t; } };
 }
+
+describe('wireOperator notices', () => {
+  it('tells the notices at start and again when the rig asks change', () => {
+    const told: OperatorNotice[][] = [];
+    const { w } = setup([], n => told.push(n));
+    expect(told).toEqual([[]]);
+    w.asksChanged({ asks: [{ ...ask('q1'), priority: 'urgent' }] });
+    expect(told.at(-1)!.map(n => n.id)).toEqual(['rig.ask:q1']);
+    w.asksChanged({ asks: [] });
+    expect(told.at(-1)).toEqual([]);
+  });
+});
 
 describe('wireOperator', () => {
   it('the first reads of tasks and asks are baselines, not events', () => {

@@ -299,6 +299,8 @@ export function wireOperator(w: OperatorWiring) {
       const stale = setInterval(tasksChanged, STALE_EVERY_MS); stale.unref?.();
       timers.push(daily, stale);
       operator.start();
+      // A point that stayed open across a restart reaches the notch now, not at the next event.
+      operator.refreshNotices();
     },
     stop(): void {
       stopped = true;
