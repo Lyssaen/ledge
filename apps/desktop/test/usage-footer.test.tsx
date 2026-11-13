@@ -99,12 +99,25 @@ describe('Cursor Agent in the footer', () => {
     expect(openUrl).toHaveBeenCalledWith('https://cursor.com/dashboard?tab=usage');
   });
 
-  it('expired: the message names the harness', () => {
-    draw([cursor({ status: 'expired', windows: [] })]);
-    expect(screen.getByText('session expirée : reconnectez-vous dans Cursor Agent')).toBeInTheDocument();
+  it('#301: a refused account (expired) shows no group and no « session expirée »; the others stay; none left, nothing', () => {
+    draw([claude({ status: 'expired', windows: [] }), cursor()]);
+    expect(screen.queryByText(/session expirée|reconnectez-vous/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Limites de Claude Code : détail' })).toBeNull();
+    expect(chip()).toHaveTextContent('12 %');
     cleanup();
-    draw([claude({ status: 'expired', windows: [] })]);
-    expect(screen.getByText('session expirée : reconnectez-vous dans Claude Code')).toBeInTheDocument();
+    const { container } = draw([cursor({ status: 'expired', windows: [] })]);
+    expect(container.querySelector('.usage-foot')).toBeNull();
+  });
+
+  it('#301: an old read keeps its values dimmed with « il y a … » within the hour; with nothing left to show, its group goes', () => {
+    draw([claude({ status: 'stale', readAt: min(12) })]);
+    const g = screen.getByRole('button', { name: 'Limites de Claude Code : détail' });
+    expect(g).toHaveClass('dim');
+    expect(g).toHaveTextContent('40 %');
+    expect(g).toHaveTextContent('il y a 12 min');
+    cleanup();
+    const { container } = draw([claude({ status: 'stale', readAt: min(75), windows: [] })]);
+    expect(container.querySelector('.usage-foot')).toBeNull();
   });
 
   it('unreachable names api2.cursor.sh in the detail', () => {

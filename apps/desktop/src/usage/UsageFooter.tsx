@@ -16,6 +16,10 @@ export function HarnessLogo({ harness, size = 15 }: { harness: UsageHarness; siz
   );
 }
 
+/** The groups the bar shows (#301): not a refused account, not an old read with no window left (read more than an hour ago). */
+export const shownGroups = (groups: readonly UsageGroup[]): UsageGroup[] =>
+  groups.filter(g => g.status !== 'expired' && !(g.status === 'stale' && g.windows.length === 0));
+
 /** What a hot window is called in the chip: a model's name, or for a Cursor pool its short name. */
 const hotLabel = (w: UsageWindow, poolShort: Record<string, string>) => (w.kind === 'pool' ? (w.pool && poolShort[w.pool]) || '' : w.model ?? '');
 
@@ -65,13 +69,16 @@ export function UsageFooter(p: UsageFooterProps): JSX.Element | null {
     window.addEventListener('keydown', escape, true);
     return () => { document.removeEventListener('mousedown', outside); window.removeEventListener('keydown', escape, true); };
   }, [open]);
-  if (!p.groups.length) return null;
+  // docs/mockups/ledge-usage-sign-in.html (#301, validated 2026-11-13): no « session expirée » in the bar any more. A refused
+  // account (expired) shows no group, as one never signed in; an old read with nothing left to show (past an hour) goes too.
+  const groups = shownGroups(p.groups);
+  if (!groups.length) return null;
 
-  const harnesses = p.groups.map(g => g.harness);
+  const harnesses = groups.map(g => g.harness);
   // The machine's name when one harness shows two groups; always for Codex, which has one group per machine (N2, decided
   // by the user over the mockup: its account cannot be told without reading auth.json).
   const multi = (g: UsageGroup) => g.harness === 'codex' || harnesses.filter(h => h === g.harness).length > 1;
-  const two = p.groups.length > 1;
+  const two = groups.length > 1;
   const where = (g: UsageGroup) => g.machines.map(p.label).join(u.and);
 
   const group = (g: UsageGroup) => {
@@ -87,9 +94,6 @@ export function UsageFooter(p: UsageFooterProps): JSX.Element | null {
           <span className="umini"><span className="ulb">{u.week}</span><span className="uskel" /></span>
         </span>
       );
-    }
-    if (g.status === 'expired') {
-      return <span className="ugroup" title={name}>{who}<span className="umsg"><span className="wide">{u.expired(name)}</span><span className="narrow">{u.expiredShort(name)}</span></span></span>;
     }
     const s = shownWindows(g, p.threshold);
     const total = s.month ?? (g.harness === 'cursor' ? s.week : undefined);
@@ -109,10 +113,10 @@ export function UsageFooter(p: UsageFooterProps): JSX.Element | null {
     );
   };
 
-  const shown = p.groups.find(g => g.key === open);
+  const shown = groups.find(g => g.key === open);
   return (
     <div className="usage-foot" ref={box}>
-      {p.groups.map((g, i) => <span key={g.key} className="ugroup-wrap">{i > 0 && <span className="usep" aria-hidden="true" />}{group(g)}</span>)}
+      {groups.map((g, i) => <span key={g.key} className="ugroup-wrap">{i > 0 && <span className="usep" aria-hidden="true" />}{group(g)}</span>)}
       {shown && <UsageDetail g={shown} threshold={p.threshold} alertAt={p.alertAt ?? p.threshold} where={where(shown)} now={p.now} onSettings={() => { setOpen(null); p.onSettings(); }} />}
     </div>
   );

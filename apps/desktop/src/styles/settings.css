@@ -362,3 +362,15 @@ input[type=color]{width:34px;height:32px;padding:2px;border-radius:var(--radius-
 .set-dispositions{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,max-content);align-items:center;gap:8px 10px}
 .set-dispositions li{display:contents;font-size:13px}
 .set-disp-shape{color:var(--muted-foreground);font-size:12px}
+
+/* « Comptes lus » (docs/mockups/ledge-usage-sign-in.html, #301): one account per row, its machine, its state. Grey, except a
+   refused sign-in and its sub-line in --warning. Read only. */
+.set-accounts { list-style: none; margin: 6px 0 0; padding: 0; width: 100%; }
+.set-account { display: grid; grid-template-columns: minmax(150px, 220px) 120px 1fr; align-items: center; gap: 12px; min-height: 44px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.set-account:first-child { border-top: 0; }
+.set-account-name { display: inline-flex; align-items: center; gap: 10px; color: var(--foreground); }
+.set-account-machine { font: 12px 'Geist Mono', monospace; color: var(--muted-foreground); }
+.set-account-state { display: flex; flex-direction: column; gap: 2px; color: var(--muted-foreground); }
+.set-account-state.warn > span { color: var(--warning); }
+.set-account-state.warn small { font-size: 12px; color: var(--muted-foreground); }
+@media (max-width: 700px) { .set-account { grid-template-columns: 1fr auto; } .set-account-state { grid-column: 1 / -1; } }
