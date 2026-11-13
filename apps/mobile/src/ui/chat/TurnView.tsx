@@ -12,6 +12,7 @@ import { TaskCards } from './TaskCard';
 import { kitButtonClass } from '../kit/Controls';
 import type { PhoneHarnessUsage } from '@ledge/protocol';
 import { CompactLimits } from './Limits';
+import { StorePoint } from './PointTurn';
 
 /** Under an answer, the edge that sets what it shows apart from Ledge's text (m3-chat.html `.inans`). */
 export const IN_ANSWER = 'flex flex-col gap-1.5 border-l-2 border-line pl-2.5';
@@ -70,6 +71,8 @@ export function TurnView({ store, turn, live, sessions, list, canConfirm, onAskA
   limits?: { at: string; usage: readonly PhoneHarnessUsage[]; alert: number | null; fresh: boolean } | undefined;
   /** Under « Sources » (Q30): the requests waiting in them, or the lines of those settled since. */
   inAnswer?: ReactNode }) {
+  // A point Ledge wrote on its own (board 7): its rows, nothing else of the turn.
+  if (turn.point) return <StorePoint store={store} turn={{ ...turn, point: turn.point }} readOnly={readOnly} />;
   const steps = live?.steps ?? turn.steps;
   const text = live ? live.text : turn.answer;
   // A name two sessions share says nothing about which one is meant: it is not linked.

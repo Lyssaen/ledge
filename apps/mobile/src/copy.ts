@@ -171,6 +171,22 @@ const fr = {
         failed: 'Pas envoyé : réessaie.', confirmRequired: 'Protège d’abord tes accords depuis Réglages : ajouter demande la passkey de cet appareil.', cancelled: 'Vérification annulée. Rien n’a été écrit.', expired: 'La vérification a expiré. Recommence.', stale: 'Déjà traitée ailleurs.'
       }
     },
+    /** The point Ledge writes on its own, compact (docs/mockups/ledge-operator.html, board 7): its rows answered in place. */
+    operator: {
+      title: 'Le point',
+      ongoing: (n: number) => (n === 1 ? '1 tâche en cours' : `${n} tâches en cours`),
+      folded: (at: string) => `Tout est réglé depuis ${at}`,
+      settled: { terminal: 'réglé dans le terminal', phone: 'réglé sur le téléphone', desktop: 'réglé dans Ledge Desktop', chat: 'réglé dans le chat', elsewhere: 'réglé ailleurs' },
+      reply: 'Répondre…', answer: { label: 'Ta réponse', placeholder: 'Ta réponse…', send: 'Envoyer', cancel: 'Annuler' },
+      /** A suggestion's button in the point's own words, when it has them (as the Desktop's point). */
+      suggest: {
+        'session.archive': (v: Record<string, string>) => (v.session ? `Archiver ${v.session}` : undefined),
+        'session.handover': () => 'Passer le relais',
+        'rig.send': (v: Record<string, string>) => (v.seat ? `Écrire à ${v.seat}` : undefined)
+      } as Record<string, (v: Record<string, string>) => string | undefined>,
+      error: (why: string) => `Pas envoyé : ${why}`,
+      notSent: 'Pas envoyé : réessaie.', setup: 'Protège d’abord tes accords depuis Réglages : cette réponse demande la passkey de cet appareil.', stale: 'Déjà réglé ailleurs.'
+    },
     task: {
       label: 'Tâche à confier', give: 'Confier',
       given: (name: string, id: string, state: string) => `Confiée à ${name} · ${id} · ${state}`, notGiven: 'Pas confiée.'
@@ -755,12 +771,12 @@ const fr = {
     motion: 'Réduire les animations', motionHint: 'Désactivé, le réglage de l’appareil s’applique.',
     notifications: 'Notifications sur cet appareil',
     notify: {
-      finished: 'Agent terminé', finishedHint: 'Quand un agent a fini son tour.',
+      finished: 'Le point de Ledge', finishedHint: 'Quand Ledge fait le point : sessions finies, tâches, nouvelles des rigs.',
       chat: 'Réponse de Ledge', chatHint: 'Quand Ledge a répondu à une question posée d’ici.',
       decision: 'Décision à prendre', decisionHint: 'Quand une session te demande de trancher.',
       always: 'Les demandes d’accord et les questions des agents préviennent toujours, sauf pendant une pause.'
     },
-    pause: 'Pause', pauseHint: 'Aucune notification sur cet appareil pendant ce temps.',
+    pause: 'Pause', pauseHint: 'Aucune notification sur cet appareil pendant ce temps, le point compris.',
     pauseFor: { hour: '1 h', four: '4 h', morning: 'Jusqu’à demain 8 h' },
     pauseLabel: { hour: 'Pause d’une heure', four: 'Pause de quatre heures', morning: 'Pause jusqu’à demain 8 h' },
     pausedUntil: (when: string) => `En pause jusqu’à ${when}`,

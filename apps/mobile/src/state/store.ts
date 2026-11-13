@@ -3,11 +3,12 @@
 import { useSyncExternalStore } from 'react';
 import {
   PhoneClientMessageSchema, type Assertion, type DeviceKind, type DevicePrefs, type PcAction, type PhoneFolder, type PhoneLaunch, type OperationReason, type ProjectColor, type AttachmentRef, type CapabilitiesByTool, type Credential, type ImageUpload, type PhoneClientMessage, type PhonePending, type PhoneServerMessage,
-  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice, type PhoneHarnessUsage, type HumanAsk, type HumanAnswer, type HumanChannel, type OpenRigAction, type ForgeAction
+  type ModelRefusal, type PhoneChecklist, type PhoneModelChoice, type PhoneProject, type PhoneRigRow, type PhoneSlashCommand, type PhoneSession, type PhoneTask, type PushSubscription, type ThreadItem, type BrainChoice, type PhoneHarnessUsage, type HumanAsk, type HumanAnswer, type HumanChannel, type OpenRigAction, type ForgeAction, type PointAnswer
 } from '@ledge/protocol';
 import type { PhoneLink } from '../link/link';
 import { getAssertion } from '../link/webauthn';
 import { actionChecked } from '../model/actionCard';
+import { pointCheck } from '../model/point';
 import { adoptRuns } from '../model/sessionEnd';
 import { createImages } from './images';
 import { asked, emptyChat, noConversations, reduceChat, type ChatAction, type ChatState, type Conversations } from './chat';
@@ -88,6 +89,8 @@ export type ConfirmChallenge = Extract<PhoneServerMessage, { type: 'confirm.chal
 export type ConfirmRequest = { purpose: 'register' } | { purpose: 'decide'; id: string; expect: PhoneExpect } | { purpose: 'launch'; qid: string } | { purpose: 'launch'; launch: PhoneLaunch } | { purpose: 'close'; qid: string }
   /** A turn's generic card (`chat.act`). */
   | { purpose: 'act'; qid: string }
+  /** A row of the operator's point (`point.act`): bound to the row and its exact answer, or to its suggestion. */
+  | { purpose: 'act'; qid: string; item: string; pointAnswer: PointAnswer } | { purpose: 'act'; qid: string; item: string; suggest: true }
   /** A session's own close (`session.close`) or resume (`session.resume`). */
   | { purpose: 'close' | 'act'; id: string }
   /** Taking the hand on a session's terminal (`term.hold`). */
@@ -269,6 +272,15 @@ export interface MobileStore {
   seeTask(task: string): Promise<ChatAction>;
   /** Answers a proposal about the notes from « Le point »: a « yes » asks for the device's check over that exact choice. */
   answerNote(task: string, choice: BrainChoice): Promise<ChatAction>;
+  /**
+   * Answers a row of the operator's point (`point.act`), or applies its suggestion (`'suggest'`): confirmed when the PC asks it, after the
+   * device's check when the answer needs one (`pointCheck`). Resolves when the operation is final.
+   */
+  pointAct(qid: string, item: string, answer: PointAnswer | 'suggest'): Promise<ChatAction>;
+  /** Sets the point aside until its next wake (`point.later`). Resolves when the operation is final. */
+  pointLater(qid: string): Promise<ChatAction>;
+  /** Marks the operator's journal read up to `eventId` for this device (`operator.read`): sent once per higher event, when ready. */
+  operatorRead(eventId: number): void;
   /** Stops listening to the link and every timer. */
   close(): void;
 }
@@ -355,6 +367,8 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
   let convState: Conversations = noConversations();
   /** `chat.history` was asked since the last ready; the snapshot of a first connection asks it when the ready could not. */
   let historyAsked = false;
+  /** The highest operator event this device marked read (`operator.read`) since the store started. */
+  let readEvent = -1;
   /** The questions asked since the last ready: only these may be newer than a history reply. */
   const askedSinceReady = new Set<string>();
   const expirers = new Set<() => void>();
@@ -750,6 +764,7 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
     threadAsks = [];
     historyAsked = false;
     asksAsked = false;
+    readEvent = -1;
     chatState = emptyChat();
     convState = noConversations();
     settle(new Error('lost'));
@@ -1201,6 +1216,35 @@ export function createStore(link: PhoneLink, storage?: Storage): MobileStore {
         if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
         return signedOperation({ purpose: 'note', task, choice }, (w, assertion) => ({ type: 'brain.answer', op: w, task, choice, assertion }));
       });
+    },
+
+    pointAct(qid, item, answer) {
+      return chatAction(`point:${qid}:${item}`, async () => {
+        const row = chatState.turns.find(t => t.qid === qid)?.point?.items.find(i => i.id === item);
+        if (!row) return { status: 'rejected', reason: 'invalid' };
+        const need = pointCheck(qid, row, answer, { asks: state.asks, sessions: state.sessions, tasks: state.tasks });
+        if (!need) return { status: 'failed' };
+        const body = { qid, item, ...(answer === 'suggest' ? { suggest: true as const } : { answer }), ...(need.confirmed ? { confirmed: true as const } : {}) };
+        if (!need.check) {
+          const op = write(o => ({ type: 'point.act', op: o, ...body }));
+          return op === null ? { status: 'failed' } : finalOf(op);
+        }
+        // A phone without a passkey cannot sign: the PC would refuse, and no prompt is worth showing.
+        if (!state.device?.confirm) return { status: 'rejected', reason: 'confirm_required' };
+        return signedOperation(need.check, (o, assertion) => ({ type: 'point.act', op: o, ...body, assertion }));
+      });
+    },
+
+    pointLater(qid) {
+      return chatAction(`later:${qid}`, async () => {
+        const op = write(o => ({ type: 'point.later', op: o, qid }));
+        return op === null ? { status: 'failed' } : finalOf(op);
+      });
+    },
+
+    operatorRead(eventId) {
+      if (eventId <= readEvent || !ready()) return;
+      if (write(o => ({ type: 'operator.read', op: o, eventId })) !== null) readEvent = eventId;
     },
 
     seeTask(task) {

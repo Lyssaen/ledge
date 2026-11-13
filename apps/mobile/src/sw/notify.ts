@@ -10,8 +10,8 @@ type Titles = Record<Exclude<PushPayload['kind'], 'chat'>, (name: string) => str
 export const NOTIFY: Record<NotifyLang, { title: Titles; fallbackTitle: string; fallbackBody: string; chatTap: string }> = {
   fr: {
     title: {
-      request: (name) => `${name} attend ton accord`,
-      question: (name) => `${name} a une question`,
+      request: () => 'Ledge',
+      question: () => 'Ledge',
       finished: (name) => `${name} a terminé`,
       resolved: (name) => `${name} · traitée`,
       decision: (name) => `${name} attend ta décision`,
@@ -24,8 +24,8 @@ export const NOTIFY: Record<NotifyLang, { title: Titles; fallbackTitle: string; 
   },
   en: {
     title: {
-      request: (name) => `${name} needs your approval`,
-      question: (name) => `${name} has a question`,
+      request: () => 'Ledge',
+      question: () => 'Ledge',
       finished: (name) => `${name} has finished`,
       resolved: (name) => `${name} · handled`,
       decision: (name) => `${name} needs your decision`,
@@ -46,11 +46,14 @@ export const notifyLang = (v: unknown): NotifyLang => (v === 'en' ? 'en' : 'fr')
 
 /**
  * A push's title and body in `lang`: the phone's title from `kind` and `name`; without `name` (an older PC), the PC's title as
- * is. The body stays the PC's, except the chat's fixed one.
+ * is. The body stays the PC's, except the chat's fixed one. Ledge speaks for the sessions (docs/mockups/ledge-operator.html,
+ * board 7): a request, a question and a point are titled « Ledge », and a session is named once, at the head of the body.
  */
 export function notifyText(p: Pick<PushPayload, 'kind' | 'name' | 'title' | 'body'>, lang: NotifyLang): { title: string; body: string } {
   const t = NOTIFY[lang];
+  if (p.kind === 'point') return { title: t.title.point(''), body: p.body };
   const title = p.kind === 'chat' ? t.title.chat : p.name ? t.title[p.kind](p.name) : p.title;
-  const body = p.kind === 'chat' && p.body === PC_CHAT_TAP ? t.chatTap : p.body;
+  const named = (p.kind === 'request' || p.kind === 'question') && p.name && !p.body.startsWith(`${p.name} · `) ? `${p.name} · ${p.body}` : p.body;
+  const body = p.kind === 'chat' && p.body === PC_CHAT_TAP ? t.chatTap : named;
   return { title, body };
 }

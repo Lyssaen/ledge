@@ -363,7 +363,7 @@ export type TermExitWhy = z.infer<typeof TermExitWhySchema>;
  */
 export const DevicePrefsSchema = z.object({
   notify: z.object({
-    /** « Agent terminé ». */ finished: z.boolean(),
+    /** « Le point de Ledge » (the key keeps its first name, « Agent terminé »): the operator's point. */ finished: z.boolean(),
     /** « Réponse de Ledge »: the end of a question asked from this device. */ chat: z.boolean(),
     /** « Décision à prendre »: a session puts a decision to the user. */ decision: z.boolean()
   }),

@@ -23,6 +23,7 @@ import { SessionCard } from './atoi/SessionCard';
 import { usePlatform } from './device';
 import { UpdateCard } from './Enroll';
 import { AtoiPrs } from './prs/forgeMarks';
+import { useOperatorRead } from '../ui/chat/PointTurn';
 
 export const clock = (iso: string | null): string => iso ? new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
 
@@ -101,6 +102,8 @@ export function Inbox({ store, onReconnect, forge }: { store: MobileStore; onRec
   const wide = useWide();
   const platform = usePlatform();
   const now = useNow();
+  // « À toi » shows what the point says: seen here, the point is read (operator spec §5).
+  useOperatorRead(store);
   const [filter, setFilter] = useState<AtoiFilter>('all');
   const [changed, setChanged] = useState<ReadonlySet<string>>(new Set());
 
