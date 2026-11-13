@@ -71,6 +71,8 @@ describe('a list with nothing to choose, in two panes (Q94 B)', () => {
     expect(emptyDetail()).toBeTruthy();
     act(() => t.deliver({ type: 'rigs.state', state: { ...openrig(), rigs: [], daemon: { state: 'stopped' }, kernel: { state: 'stopped' } } }));
     expect(screen.getByText(copy.rigs.stopped.title)).toBeTruthy();
+    // Its daemon row under « OpenRig », as M4 §2 draws it (t-tablette.html §5, af22c520).
+    expect(screen.getByText(copy.rigs.openrig, { exact: true })).toBeTruthy();
     expect(listState()).toBeTruthy();
   });
 

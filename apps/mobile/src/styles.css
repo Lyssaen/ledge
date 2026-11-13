@@ -143,6 +143,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) { grid-template-columns: minmax(0, 1fr); }
   .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-detail { display: none; }
   .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-list { border-right: 0; }
+  .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-list .pane-head { padding-right: max(10px, env(safe-area-inset-right)); }
   .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-list .tab-main { justify-content: safe center; padding: 24px; }
   .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-list .tab-main > * { width: 100%; max-width: 420px; margin-inline: auto; }
 }

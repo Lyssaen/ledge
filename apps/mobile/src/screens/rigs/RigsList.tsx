@@ -71,7 +71,7 @@ function Stopped({ state, rigs, store, pc }: { state: PhoneOpenRigState | null; 
   const run = lastRun(r.runs, x => x.subject.kind === 'act' && x.subject.action.kind === 'daemon.start');
   return (
     <>
-      {state && <Frame><DaemonRow state={state} /></Frame>}
+      {state && <><Lbl>{C.openrig}</Lbl><Frame><DaemonRow state={state} /></Frame></>}
       <Frame>
         <Empty glyph={<Icon name="power" />} title={C.stopped.title} body={C.stopped.body} />
         <div className="border-t border-line"><DaemonChoices disabled={!fresh} /></div>
