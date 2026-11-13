@@ -511,7 +511,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
       else if (asked && s?.codexAsk && ev.name === 'PanePrompt' && ev.source === 'pane') {
         codexAsks.delete(id);
         if (!s.pending && sameCodexAsk(s.codexAsk, ev, s.workdir ?? s.cwd)) history.record(id, { ...asked, at: ev.at });
-      } else if (asked && s?.codexAsk && endsCodexAsk(s.codexAsk, ev)) codexAsks.delete(id);
+      } else if (asked && s && endsCodexAsk(s, ev)) codexAsks.delete(id);
       history.record(id, ev);
     }),
     store.onChange(c => { if (c.type === 'removed') history.forget(c.id); })

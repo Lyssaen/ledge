@@ -573,6 +573,23 @@ describe('server', () => {
     store.apply('g', { name: 'PaneUnreadable', at: T0, source: 'daemon' });
     expect(store.get('g')!.state).toBe('waiting_permission');
     expect(perms('g')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /g' })]);
+    // Two calls of the same tool at once: the other call's end does not settle this one's request.
+    store.upsert(mk('h', { tool: 'codex', state: 'working' }));
+    store.apply('h', { name: 'PreToolUse', at: T0, source: 'hook', tool: 'Bash', text: 'touch /main', toolUseId: 'main-call' });
+    store.apply('h', { name: 'PreToolUse', at: T0, source: 'hook', tool: 'Bash', text: 'ls', toolUseId: 'other-call' });
+    store.apply('h', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /main' });
+    expect(store.get('h')!.codexAskCall).toBe('main-call');
+    store.apply('h', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Bash', toolUseId: 'other-call' });
+    store.apply('h', { name: 'PanePrompt', at: T0, source: 'pane', kind: 'permission', text: 'touch /main', options: ['Yes, proceed (y)', 'No (esc)'] });
+    expect(store.get('h')!.pending).toMatchObject({ source: 'hook', text: 'touch /main' });
+    expect(perms('h')).toEqual([expect.objectContaining({ tool: 'Bash', text: 'touch /main' })]);
+    // Its own call's end does.
+    store.upsert(mk('i', { tool: 'codex', state: 'working' }));
+    store.apply('i', { name: 'PreToolUse', at: T0, source: 'hook', tool: 'Bash', text: 'touch /i', toolUseId: 'c1' });
+    store.apply('i', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /i' });
+    store.apply('i', { name: 'PostToolUse', at: T0, source: 'hook', tool: 'Bash', toolUseId: 'c1' });
+    expect(store.get('i')!.codexAsk).toBeUndefined();
+    expect(perms('i')).toEqual([]);
     // A session Ledge only hears through hooks (no terminal to read): its request waits at once, as before.
     store.upsert(mk('f', { tool: 'codex', state: 'working', tmuxSession: null, source: 'hook_only' }));
     store.apply('f', { name: 'PermissionRequest', at: T0, source: 'hook', tool: 'Bash', text: 'touch /f' });

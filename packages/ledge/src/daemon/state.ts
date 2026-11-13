@@ -29,18 +29,32 @@ export function sameCodexAsk(ask: Pending, shown: { kind?: Pending['kind']; text
   if (ask.kind === 'diff') return codexEditIs(ask.text, text, cwd);
   return flat(text) !== '' && flat(text) === flat(ask.text);
 }
-/** Whether `ev` settles a held Codex request (Session.codexAsk) no dialog showed: the main agent's run of that very tool (a helper's
- *  or another parallel call's never does), or the end of the turn (a refusal by the automatic review sends only Stop). */
-export function endsCodexAsk(ask: Pending, ev: SessionEvent): boolean {
+/** Whether `ev` settles a held Codex request (Session.codexAsk) no dialog showed: the end of the very call it is for (a helper's, or
+ *  another call, never), or the end of the turn (a refusal by the automatic review sends only Stop). Codex's PermissionRequest names
+ *  no call: it is the one its PreToolUse named (codexAskCall). When that is not known (no id, or several calls it could be), the
+ *  end of any call of its tool settles it: if its dialog still shows, it is then the screen's own request, judged high. */
+export function endsCodexAsk(s: Pick<Session, 'codexAsk' | 'codexAskCall'>, ev: SessionEvent): boolean {
+  const ask = s.codexAsk;
+  if (!ask) return false;
   // A helper's events are its own, its Stop included.
   if (ev.helperId) return false;
   if (TURN_ENDS.has(ev.name)) return true;
-  if ((ev.name !== 'PostToolUse' && ev.name !== 'PostToolUseFailure')) return false;
+  if (ev.name !== 'PostToolUse' && ev.name !== 'PostToolUseFailure') return false;
+  if (s.codexAskCall && ev.toolUseId) return ev.toolUseId === s.codexAskCall;
   return !ask.tool || !ev.tool || ask.tool === ev.tool;
 }
 
+/** The main agent's call a Codex PermissionRequest is for: the only running call of its tool, or the only one whose label is its text. */
+function callOf(s: Session, ask: Pending): string | undefined {
+  const calls = (s.running ?? []).filter(c => c.id && c.tool === ask.tool);
+  if (calls.length === 1) return calls[0]!.id;
+  const text = flat(ask.text);
+  const same = calls.filter(c => { const l = flat(c.label).replace(/…$/, ''); return l !== '' && (text === l || text.startsWith(l)); });
+  return same.length === 1 ? same[0]!.id : undefined;
+}
+
 function withoutCodexAsk(s: Session): Session {
-  const { codexAsk: _held, ...rest } = s;
+  const { codexAsk: _held, codexAskCall: _call, ...rest } = s;
   return rest;
 }
 
@@ -353,10 +367,11 @@ function reduceEvent(s: Session, ev: SessionEvent): Session {
     if (s.pending?.source === 'pane' && !s.pending.helperId && sameCodexAsk(ask, s.pending, s.workdir ?? s.cwd)) {
       return { ...withoutCodexAsk(s), pending: ask, lastHookAt: at, lastActivityAt: at };
     }
-    return { ...s, codexAsk: ask, lastHookAt: at, lastActivityAt: at };
+    const call = ev.toolUseId ?? callOf(s, ask);
+    return { ...withoutCodexAsk(s), codexAsk: ask, ...(call ? { codexAskCall: call } : {}), lastHookAt: at, lastActivityAt: at };
   }
   // The held request was settled without a dialog (the automatic review: the tool ran, or the turn ended on a refusal).
-  if (s.codexAsk && endsCodexAsk(s.codexAsk, ev)) s = withoutCodexAsk(s);
+  if (endsCodexAsk(s, ev)) s = withoutCodexAsk(s);
 
   switch (ev.name) {
     case 'SessionEnd':

@@ -162,7 +162,8 @@ export function dialogMismatch(shown: PanePromptMatch | null, pending: Pending, 
   if (!shown) return UNCHECKED;
   if (dialogKind(shown.kind) !== dialogKind(pending.kind)) return STALE;
   // Codex's edit dialog names its file (#302): a patch the hook described is answered only on a dialog for one of its files.
-  if (pending.source === 'hook' && pending.tool === 'apply_patch' && shown.text.startsWith('Edit ')) return codexEditIs(pending.text, shown.text, cwd) ? null : STALE;
+  // Any other dialog (a command, an edit of another file) is not that patch: refused, whatever its kind.
+  if (pending.source === 'hook' && pending.tool === 'apply_patch') return codexEditIs(pending.text, shown.text, cwd) ? null : STALE;
   if (pending.kind === 'question') return sameQuestion(shown.text, pending.text) ? null : STALE;
   if (pending.source === 'pane') return shown.text === pending.text ? null : STALE;
   if (pending.tool !== undefined && COMMAND_TOOLS.has(pending.tool)) return shown.command ? commandMismatch(shown.command, pending.text, width, gutter) : UNCHECKED;

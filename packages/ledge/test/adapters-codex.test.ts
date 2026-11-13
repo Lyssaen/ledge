@@ -43,6 +43,8 @@ describe('codex adapter: detection (Codex CLI 0.162 captures)', () => {
     expect(dialogMismatch(shown, hook('/home/dev/demo/safe.txt'))).not.toBeNull();
     // Relative, and no folder to place it: uncertain, refused.
     expect(dialogMismatch(shown, hook('README.md'))).not.toBeNull();
+    // A command dialog is not that patch, though both are file or command approvals.
+    expect(dialogMismatch(codexAdapter.detectPrompt(fx('codex-permission-exec')), hook('/home/dev/demo/README.md'))).not.toBeNull();
   });
   it('detects a request_user_input question with its option labels and their descriptions', () => {
     expect(codexAdapter.detectPrompt(fx('codex-question'))).toEqual({

@@ -117,6 +117,8 @@ export const SessionSchema =z.object({
    *  shows its dialog, which proves it waits: it then becomes `pending`, as a hook's request always did. Dropped when the tool ran,
    *  the turn ended, or the dialog asks another kind of request. Never sent to the phone. */
   codexAsk: PendingSchema.optional(),
+  /** The call that held request is for, when its PreToolUse named it (its tool_use_id): only that call's end settles it. */
+  codexAskCall: z.string().optional(),
   /** Codex (#302): its terminal cannot be captured now; its hook's requests wait at once, as before #302, until it can again. */
   paneUnreadable: z.literal(true).optional(),
   helpers: z.array(HelperSchema).default([]),
