@@ -10,6 +10,10 @@ import { TERM_OUTPUT_MAX, TERM_SCREEN_MAX, type PhoneServerMessage, type TermExi
 export const TICK_MS = 100;
 /** Past either, the waiting output is dropped and a fresh screen sent instead. */
 export const BEHIND_CHARS = 262_144;
+/** #298: the history lines a phone screen carries above the visible ones, outside the alternate screen. Fewer than Desktop's: every
+ *  open and every resync sends them again through the relay, on a phone link, within its frame budget; 200 lines of a narrow pane
+ *  stay near 16 KB, far under TERM_SCREEN_MAX. */
+export const PHONE_HISTORY_LINES = 200;
 export const BEHIND_MS = 2_000;
 /** A hold ends after this long without a key, and this long after it began. */
 export const HOLD_IDLE_MS = 5 * 60_000;
@@ -324,12 +328,12 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
     // Written together, the capture first, so tmux runs both before reading the pane again: the cursor is the captured screen's. The
     // capture's reply is the boundary (#296): from it, output is after the screen and kept, not dropped.
     const [cap, info] = await Promise.all([
-      t.client.command(`capture-pane -p -e -t ${target}`, () => { if (t.state === 'capturing') t.state = 'pending'; }),
-      command(t, `display-message -p -t ${target} '#{pane_id} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y}'`)
+      t.client.command(`capture-pane -p -e -S -${PHONE_HISTORY_LINES} -t ${target}`, () => { if (t.state === 'capturing') t.state = 'pending'; }),
+      command(t, `display-message -p -t ${target} '#{pane_id} #{pane_width} #{pane_height} #{cursor_x} #{cursor_y} #{alternate_on}'`)
     ]);
     // Ended while it waited: the awaits above widen nothing for TypeScript.
     if ((t.state as Term['state']) === 'closed') return;
-    const m = info.ok ? /^(%\d+) (\d+) (\d+) (\d+) (\d+)$/.exec(info.lines[0] ?? '') : null;
+    const m = info.ok ? /^(%\d+) (\d+) (\d+) (\d+) (\d+)(?: ([01]))?$/.exec(info.lines[0] ?? '') : null;
     if (!m || !cap.ok) return end(t, 'failed');
     t.pane = m[1]!; t.cols = Number(m[2]); t.rows = Number(m[3]);
     // The output kept before the pane was known: only the watched pane's, in the order it came.
@@ -339,7 +343,8 @@ export function createTerminalHost(deps: TerminalDeps): TerminalHost {
     if (t.openTimer) { clearTimeout(t.openTimer); t.openTimer = null; }
     send(t, {
       type: 'term.opened', ...(op ? { op } : {}), tid: t.tid, id: t.sessionId, cols: t.cols, rows: t.rows,
-      screen: fitScreen(cap.lines), cursor: { x: Number(m[4]), y: Number(m[5]) }, seq: t.seq, ...(t.readOnly ? { readOnly: true as const } : {})
+      // The history (#298) only outside the alternate screen; the cursor stays the visible screen's (the text's last `rows` lines).
+      screen: fitScreen(m[6] === '0' ? cap.lines : cap.lines.slice(-t.rows)), cursor: { x: Number(m[4]), y: Number(m[5]) }, seq: t.seq, ...(t.readOnly ? { readOnly: true as const } : {})
     });
   };
 
