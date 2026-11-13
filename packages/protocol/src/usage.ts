@@ -69,7 +69,14 @@ export const HarnessUsageSchema = z.object({
   /** The last read that succeeded; null when none did. */
   readAt: z.string().datetime().nullable(),
   /** The 5 hours and the week first, then one window per model. Empty while loading, expired, or read more than an hour ago. */
-  windows: z.array(UsageWindowSchema).max(20)
+  windows: z.array(UsageWindowSchema).max(20),
+  /**
+   * Why the account cannot be read now (#301), absent when it can. `local_expired`: the token on this machine is past its time, which
+   * the harness renews itself at its next use (Claude Code's access token is short): still signed in, so the last values are kept
+   * as `stale` while under an hour old, then the harness is no longer listed. `refused`: the provider refused the token (401):
+   * status `expired`, no window. A refusal wins over a local expiry.
+   */
+  cause: z.enum(['local_expired', 'refused']).optional()
 });
 export type HarnessUsage = z.infer<typeof HarnessUsageSchema>;
 
