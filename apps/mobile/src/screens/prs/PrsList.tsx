@@ -60,7 +60,7 @@ export function ForgeStrip({ status, pc }: { status: PhoneForgeStatus; pc: strin
 function Reading() {
   const sk = 'block animate-[ledge-pulse_1.6s_ease-in-out_infinite] rounded-[5px] bg-raised';
   return (
-    <div role="status" className="flex flex-col gap-3">
+    <div role="status" data-list-state="" className="flex flex-col gap-3">
       <Frame><div aria-hidden="true" className="flex flex-col gap-2.5 p-2.5"><span className={`${sk} h-3.5 w-[70%]`} /><span className={`${sk} h-3 w-[45%]`} /><span className={`${sk} h-3.5 w-[60%]`} /><span className={`${sk} h-3 w-1/2`} /></div></Frame>
       <span className="text-[12px] text-muted">{C.loading}</span>
     </div>
@@ -100,8 +100,8 @@ export function PrsList({ forge, store }: { forge: ForgeStore; store: MobileStor
           {open.length === 0 ? (
             <Frame>
               {none
-                ? <EmptyState framed={false} glyph={null} title={C.emptyTitle} body={C.emptyUnread} />
-                : <EmptyState glyph={<Icon name="pr" className="size-[22px]" />} title={C.emptyTitle} body={C.emptyBody} />}
+                ? <EmptyState framed={false} glyph={null} title={C.emptyTitle} body={C.emptyUnread} list={closed.length === 0} />
+                : <EmptyState glyph={<Icon name="pr" className="size-[22px]" />} title={C.emptyTitle} body={C.emptyBody} list={closed.length === 0} />}
             </Frame>
           ) : (
             <>

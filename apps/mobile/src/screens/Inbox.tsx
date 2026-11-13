@@ -171,7 +171,7 @@ export function Inbox({ store, onReconnect, forge }: { store: MobileStore; onRec
   const empty = nothing && (
     <Box label={copy.atoi.noRequest}>
       <EmptyState
-        framed={false} glyph={<Mascot size={96} frozen={offline} />} title={copy.atoi.noRequest}
+        framed={false} glyph={<Mascot size={96} frozen={offline} />} title={copy.atoi.noRequest} list={working.length === 0}
         body={working.length ? copy.atoi.calmHint : copy.atoi.nothingRunning}
         {...(working.length ? {} : { action: <a href={href({ name: 'sessions' })} className={kitButtonClass({ size: 'sm' })}>{copy.atoi.seeSessions}<Icon name="chevron" className="size-4" /></a> })}
       />
@@ -187,7 +187,7 @@ export function Inbox({ store, onReconnect, forge }: { store: MobileStore; onRec
   if (wide) return <WideList update={update} state={state} items={shownItems} asks={showRigs ? shownAsks : []} working={working} showRigs={showRigs} chipBar={chipBar} empty={empty || filteredEmpty} subtitle={subtitle} threshold={threshold} now={now} machine={machine} />;
 
   return (
-    <TabPage title={copy.inbox.title} subtitle={subtitle}>
+    <TabPage title={copy.inbox.title} subtitle={subtitle} offlinePill={false}>
       {update}
       {chipBar}
       {empty}
@@ -239,7 +239,7 @@ function WideList({ update, state, items, asks, working, showRigs, chipBar, empt
   const route = useRoute();
   const offline = !state.fresh;
   return (
-    <TabPage title={copy.inbox.title} subtitle={subtitle} wideSubtitle={subtitle}>
+    <TabPage title={copy.inbox.title} subtitle={subtitle} wideSubtitle={subtitle} offlinePill={false}>
       {update}
       {chipBar}
       {empty}

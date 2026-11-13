@@ -134,6 +134,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .tabbar .tab { min-height: 54px; font-size: 10px; line-height: 12px; }
 }
 
+/* Two panes (t-tablette.html §5, §6). Above them, the band of a PC that does not answer, across both (Q95 A). A list with nothing
+   to choose, and nothing opened beside it, joins both panes: its head across, its state centred in a column of 420 px (Q94 B). */
+@media (min-width: 768px) and (min-height: 501px) {
+  .split-banner { grid-column: 1 / -1; padding: 10px 12px 0; }
+  .split-banner:empty { display: none; }
+  .split:has(> .split-banner:not(:empty)) { grid-template-rows: auto minmax(0, 1fr); }
+  .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) { grid-template-columns: minmax(0, 1fr); }
+  .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-detail { display: none; }
+  .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-list { border-right: 0; }
+  .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-list .pane-head { padding-right: max(10px, env(safe-area-inset-right)); }
+  .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-list .tab-main { justify-content: safe center; padding: 24px; }
+  .split:has(> .split-list [data-list-state]):has(> .split-detail > [data-split-empty]) > .split-list .tab-main > * { width: 100%; max-width: 420px; margin-inline: auto; }
+}
+
 /* A wide screen (m0-socle.html, §2): the rail of 76 px on the left, then the list (380 px, 330 upright) and, beside it, what
    it opened, its content 720 px at most. A screen with no list (the chat, Réglages) keeps one column of that width, centred. */
 @media (min-width: 768px) and (min-height: 501px) {

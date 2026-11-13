@@ -71,7 +71,7 @@ export function ChatUnavailable({ onClose }: { onClose?: () => void } = {}) {
 /** The right pane of a tab on a wide screen, before anything opens there (§2): its glyph, « Rien à afficher », what will open. */
 export function EmptyPane({ icon, title, body }: { icon: 'pr' | 'rigs'; title: string; body: string }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-1 text-center text-muted">
+    <div data-split-empty="" className="flex flex-1 flex-col items-center justify-center gap-1 text-center text-muted">
       <Icon name={icon} className="size-[18px]" />
       <h2 className="mt-2.5 text-[17px] font-semibold text-fg">{title}</h2>
       <p className="max-w-[320px] text-small">{body}</p>

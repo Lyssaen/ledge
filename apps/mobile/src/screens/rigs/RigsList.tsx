@@ -48,10 +48,13 @@ export function DaemonChoices({ disabled, next = false }: { disabled: boolean; n
   );
 }
 
-/** A framed empty state of the list: its glyph, title and line, then what it offers. */
-function Empty({ glyph, title, body, children }: { glyph?: ReactNode; title: string; body: string; children?: ReactNode }) {
+/**
+ * A framed empty state of the list: its glyph, title and line, then what it offers. In two panes, both join around it when the
+ * list has nothing else to choose (Q94 B); `list={false}` under OpenRig's rows, which stay choosable (t-tablette.html §5).
+ */
+function Empty({ glyph, title, body, list = true, children }: { glyph?: ReactNode; title: string; body: string; list?: boolean; children?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-1.5 px-4 pt-[26px] pb-[22px] text-center">
+    <div data-list-state={list ? '' : undefined} className="flex flex-col items-center gap-1.5 px-4 pt-[26px] pb-[22px] text-center">
       {glyph && <div aria-hidden="true" className="grid size-12 place-items-center rounded-[10px] border border-line text-muted">{glyph}</div>}
       <h2 className="mt-1.5 text-[17px] leading-6 font-semibold">{title}</h2>
       <p className="max-w-[300px] text-[13.5px] text-muted">{body}</p>
@@ -68,7 +71,7 @@ function Stopped({ state, rigs, store, pc }: { state: PhoneOpenRigState | null; 
   const run = lastRun(r.runs, x => x.subject.kind === 'act' && x.subject.action.kind === 'daemon.start');
   return (
     <>
-      {state && <Frame><DaemonRow state={state} /></Frame>}
+      {state && <><Lbl>{C.openrig}</Lbl><Frame><DaemonRow state={state} /></Frame></>}
       <Frame>
         <Empty glyph={<Icon name="power" />} title={C.stopped.title} body={C.stopped.body} />
         <div className="border-t border-line"><DaemonChoices disabled={!fresh} /></div>
@@ -88,7 +91,7 @@ function Stopped({ state, rigs, store, pc }: { state: PhoneOpenRigState | null; 
 function Reading() {
   const sk = 'block animate-[ledge-pulse_1.6s_ease-in-out_infinite] rounded-[5px] bg-raised';
   return (
-    <div role="status" className="flex flex-col gap-3">
+    <div role="status" data-list-state="" className="flex flex-col gap-3">
       <Frame><div aria-hidden="true" className="flex flex-col gap-2.5 p-2.5"><span className={`${sk} h-3.5 w-[60%]`} /><span className={`${sk} h-3 w-[40%]`} /></div></Frame>
       <Frame><div aria-hidden="true" className="flex flex-col gap-2.5 p-2.5"><span className={`${sk} h-3.5 w-1/2`} /><span className={`${sk} h-3 w-[70%]`} /><span className={`${sk} h-3.5 w-[45%]`} /><span className={`${sk} h-3 w-[65%]`} /></div></Frame>
       <span className="text-[12px] text-muted">{C.loading}</span>
@@ -123,7 +126,7 @@ function Listing({ state, at, store, offline }: { state: PhoneOpenRigState; at: 
       </Frame>
       {daemonUp && listed.length === 0 ? (
         <Frame>
-          <Empty title={C.empty.title} body={C.empty.body}>
+          <Empty title={C.empty.title} body={C.empty.body} list={false}>
             <a href={href({ name: 'max' })} className={rigButtonClass({ size: 'sm', className: 'mt-1.5' })}>{C.empty.talk}</a>
           </Empty>
         </Frame>
@@ -172,10 +175,12 @@ export function RigsList({ rigs, store }: { rigs: RigsStore; store: MobileStore 
       if (r.error === 'daemon_stopped') return <Stopped state={null} rigs={rigs} store={store} pc={name} />;
       if (r.error) {
         return (
-          <Strip warn role="alert" lead={<Icon name="warning" className="mt-px size-4 text-attention" />}>
-            <b className="font-semibold">{C.unavailable.title}</b>
-            <button type="button" onClick={() => rigs.retry()} className={rigButtonClass({ size: 'sm', className: 'self-start' })}><IconLabel icon="refresh">{C.unavailable.retry}</IconLabel></button>
-          </Strip>
+          <div data-list-state="" className="flex flex-col">
+            <Strip warn role="alert" lead={<Icon name="warning" className="mt-px size-4 text-attention" />}>
+              <b className="font-semibold">{C.unavailable.title}</b>
+              <button type="button" onClick={() => rigs.retry()} className={rigButtonClass({ size: 'sm', className: 'self-start' })}><IconLabel icon="refresh">{C.unavailable.retry}</IconLabel></button>
+            </Strip>
+          </div>
         );
       }
       return <Reading />;

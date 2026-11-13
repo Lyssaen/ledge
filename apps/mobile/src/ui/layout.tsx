@@ -1,4 +1,4 @@
-import { useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from 'react';
 
 /**
  * A wide screen (an iPad either way up, a desktop window): at least 768 px wide and taller than a phone on its side. The
@@ -36,17 +36,29 @@ export function useAtelierTab(daemon: { atelier?: true } | null): boolean {
 }
 
 /**
+ * Where the banner of a PC that does not answer goes in two panes (t-tablette.html §6, Q95 A): a band across both, right of the
+ * rail. `undefined` outside two panes; `null` until the band is mounted.
+ */
+const BannerSlot = createContext<HTMLElement | null | undefined>(undefined);
+export const useBannerSlot = (): HTMLElement | null | undefined => useContext(BannerSlot);
+
+/**
  * Two panes: `list` (the inbox or the agents, with the tabs) and `detail` (what it opened, or `empty`). `tab` names the tab whose
  * panes differ from the others' (`data-split`, read by styles.css): the MR/PR tab's list is narrower and its detail edge to edge;
  * upright, Sessions' detail keeps 18 px on each side (t-tablette.html §2).
  * `fold`: upright, the list folds and the detail takes the whole width, its « Retour » reopening the list (the terminal,
- * t-tablette.html §3, Q93).
+ * t-tablette.html §3, Q93). Above the panes, the band the list's offline banner goes to; a list with nothing to choose and
+ * nothing opened joins both panes (styles.css, Q94 B).
  */
 export function Split({ list, detail, tab, fold = false }: { list: ReactNode; detail: ReactNode; tab?: 'prs' | 'sessions'; fold?: boolean }) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
   return (
     <div className="split" data-split={tab} data-fold={fold ? '' : undefined}>
-      <section className="split-list">{list}</section>
-      <section className="split-detail">{detail}</section>
+      <div ref={setSlot} className="split-banner" />
+      <BannerSlot.Provider value={slot}>
+        <section className="split-list">{list}</section>
+        <section className="split-detail">{detail}</section>
+      </BannerSlot.Provider>
     </div>
   );
 }
@@ -54,7 +66,7 @@ export function Split({ list, detail, tab, fold = false }: { list: ReactNode; de
 /** The detail pane before anything was chosen in the list. */
 export function SplitEmpty({ title, body }: { title: string; body: string }) {
   return (
-    <div className="flex flex-1 items-center justify-center px-6 text-center">
+    <div data-split-empty="" className="flex flex-1 items-center justify-center px-6 text-center">
       <div className="max-w-[280px]">
         <h2 className="text-base font-semibold">{title}</h2>
         <p className="mt-1 text-body text-muted">{body}</p>
