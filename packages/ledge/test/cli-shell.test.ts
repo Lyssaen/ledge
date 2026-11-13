@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { shellLine } from '../src/cli/shell.js';
+import { MARK, shellLine } from '../src/cli/shell.js';
 
 const NONCE = '0123456789abcdef0123456789abcdef';
 const dir = () => mkdtempSync(join(tmpdir(), 'ledge-cli-shell-'));
@@ -18,7 +18,9 @@ describe('#299: ledge shell, the line it prints', () => {
   it('bash: cd, the exports, exec of a login shell, all quoted', () => {
     const d = dir();
     const l = line(shellLine(['--nonce', NONCE, "/w/it's here"], { env: { HOME: '/h', PATH: '/bin' }, shell: '/bin/bash', dir: d }));
-    expect(l.startsWith(`cd '/w/it'\\''s here' 2>/dev/null || cd; `)).toBe(true);
+    expect(MARK).toBe(': ledge-shell; ');
+    expect(l.startsWith(`${MARK}cd '/w/it'\\''s here' 2>/dev/null || cd; `)).toBe(true);
+    expect(l).not.toContain('\n');
     expect(l).toContain(`export LEDGE_SHELL_NONCE='${NONCE}'`);
     expect(l).toContain(`export LEDGE_SHELL_BOOT='__ledge_ut=$(builtin trap -p DEBUG); . '\\''${join(d, 'bash.sh')}'\\'''`);
     // No file of its own in a shared folder (a link placed there would be written through).
@@ -29,14 +31,14 @@ describe('#299: ledge shell, the line it prints', () => {
 
   it('~ is the home folder', () => {
     const d = dir();
-    expect(line(shellLine(['~'], { env: { HOME: '/h' }, shell: '/bin/bash', dir: d })).startsWith(`cd '/h' 2>/dev/null`)).toBe(true);
-    expect(line(shellLine(['~/src'], { env: { HOME: '/h' }, shell: '/bin/bash', dir: d })).startsWith(`cd '/h/src' 2>/dev/null`)).toBe(true);
+    expect(line(shellLine(['~'], { env: { HOME: '/h' }, shell: '/bin/bash', dir: d })).startsWith(`${MARK}cd '/h' 2>/dev/null`)).toBe(true);
+    expect(line(shellLine(['~/src'], { env: { HOME: '/h' }, shell: '/bin/bash', dir: d })).startsWith(`${MARK}cd '/h/src' 2>/dev/null`)).toBe(true);
   });
 
   it('another shell, or the integration turned off: the plain login shell', () => {
     const d = dir();
-    expect(line(shellLine(['/w'], { env: {}, shell: '/usr/bin/nu', dir: d }))).toBe(`cd '/w' 2>/dev/null || cd; exec '/usr/bin/nu' -l`);
-    expect(line(shellLine(['/w'], { env: { LEDGE_SHELL_INTEGRATION: '0' }, shell: '/bin/bash', dir: d }))).toBe(`cd '/w' 2>/dev/null || cd; exec '/bin/bash' -l`);
+    expect(line(shellLine(['/w'], { env: {}, shell: '/usr/bin/nu', dir: d }))).toBe(`${MARK}cd '/w' 2>/dev/null || cd; exec '/usr/bin/nu' -l`);
+    expect(line(shellLine(['/w'], { env: { LEDGE_SHELL_INTEGRATION: '0' }, shell: '/bin/bash', dir: d }))).toBe(`${MARK}cd '/w' 2>/dev/null || cd; exec '/bin/bash' -l`);
   });
 
   it('no nonce: one of its own', () => {
@@ -57,7 +59,8 @@ describe('#299: the printed line, run as Desktop runs it', () => {
     const d = dir();
     const l = line(shellLine(['--nonce', NONCE, home], { env: { HOME: home, ...extra }, shell, dir: d }));
     const file = join(d, 'line'); writeFileSync(file, l);
-    const inner = `eval "$(cat '${file}')"; exec ${shell} -l`;
+    // Desktop's form (dev-front, #299): only a line with the mark is evaluated, then the plain shell if nothing exec'd.
+    const inner = `set -f; IFS=; l=$(cat '${file}' 2>/dev/null); case $l in '${MARK}'*) eval $l;; esac; unset IFS; set +f; exec ${shell} -l`;
     return spawnSync('sh', ['-c', `(sleep 1.2; ${keys}; sleep 0.3; printf 'exit\\r'; sleep 0.4) | script -qfec "$0" /dev/null`, `sh -c '${inner.replace(/'/g, `'\\''`)}'`], {
       cwd: tmpdir(), encoding: 'utf8', timeout: 12_000,
       env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: home, TERM: 'dumb', ...extra }
@@ -84,9 +87,10 @@ describe('#299: the printed line, run as Desktop runs it', () => {
     expect(m).toContain('D;1');
   }, 15_000);
 
-  it.runIf(has('sh') && has('script'))('a failing ledge shell prints nothing: the plain shell of the second half starts', () => {
-    const home = dir();
-    const out = spawnSync('sh', ['-c', `eval "$(sh -c 'echo nope >&2; exit 2')"; echo PLAIN-SHELL-REACHED`], { encoding: 'utf8', env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: home } }).stdout;
-    expect(out).toContain('PLAIN-SHELL-REACHED');
+  it('noise, an error or an older ledge\'s output is never evaluated: the plain shell of the second half starts', () => {
+    for (const printed of ['echo nope >&2; exit 2', 'echo PWNED; exit 0', 'echo "usage: ledge …"']) {
+      const out = spawnSync('sh', ['-c', `set -f; IFS=; l=$(sh -c '${printed}' 2>/dev/null); case $l in '${MARK}'*) eval $l;; esac; unset IFS; set +f; echo PLAIN-SHELL-REACHED`], { encoding: 'utf8' }).stdout;
+      expect(out.trim()).toBe('PLAIN-SHELL-REACHED');
+    }
   });
 });

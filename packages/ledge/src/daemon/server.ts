@@ -1327,6 +1327,7 @@ export async function startServer(opts: { store: Store; tmux: Tmux; port?: numbe
           watch: (session, size) => panes.watch(reply, session, size), reply,
           alive: () => shellReplies.has(reply), gone: () => store.get(s.id) === undefined,
           killSession: name => { void opts.tmux.killSession(name).catch(() => log('shell kill failed')); },
+          // A session's shell tab gets the marks too (its `term.opened` carries the nonce); today only Desktop's free shells draw them.
           integration: (shell, env) => withIntegration(shell, env, join(paths().dir, 'shell-integration')),
           log
         });
