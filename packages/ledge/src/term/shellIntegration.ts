@@ -101,19 +101,14 @@ fi
 # Ledge's PROMPT_COMMAND names its own functions: a child shell must not inherit it.
 export -n PROMPT_COMMAND
 # The person's DEBUG trap, if any, runs first, as it did; Ledge's after it, returning its status (extdebug keeps its meaning). The
-# boot wrote it to a file before sourcing this one: a sourced file, a function or a subshell does not see the DEBUG trap.
-__ledge_f="\${TMPDIR:-/tmp}/.ledge-trap-$$"
-if [ -r "$__ledge_f" ]; then
-  __ledge_t="$(< "$__ledge_f")"
-  if [ -n "$__ledge_t" ]; then
-    __ledge_t="\${__ledge_t#trap -- }"; __ledge_t="\${__ledge_t% DEBUG}"; eval "__ledge_t=$__ledge_t"
-    trap "$__ledge_t"$'\n''__ledge_preexec "$?"' DEBUG
-  else
-    trap '__ledge_preexec "$?"' DEBUG
-  fi
+# boot read it (__ledge_ut) where the shell itself runs it: a sourced file, a function or a subshell does not see the DEBUG trap.
+if [ -n "$__ledge_ut" ]; then
+  __ledge_ut="\${__ledge_ut#trap -- }"; __ledge_ut="\${__ledge_ut% DEBUG}"; eval "__ledge_ut=$__ledge_ut"
+  trap "$__ledge_ut"$'\\n''__ledge_preexec "$?"' DEBUG
+else
+  trap '__ledge_preexec "$?"' DEBUG
 fi
-rm -f "$__ledge_f"
-unset __ledge_f __ledge_t
+unset __ledge_ut
 # This first prompt is already under way: it gets its marks now; the rest of its PROMPT_COMMAND is not a command of the person's.
 __ledge_status=0
 __ledge_precmd
@@ -241,7 +236,7 @@ export function withIntegration(shell: string, env: Record<string, string>, dir:
   const keyed = { ...env, LEDGE_SHELL_NONCE: nonce };
   if (kind === 'bash') {
     // The DEBUG trap is read where the shell itself runs the boot: the sourced file would not see it.
-    const boot = `builtin trap -p DEBUG > "\${TMPDIR:-/tmp}/.ledge-trap-$$"; . ${quote(join(dir, 'bash.sh'))}`;
+    const boot = `__ledge_ut=$(builtin trap -p DEBUG); . ${quote(join(dir, 'bash.sh'))}`;
     const prompt = env.PROMPT_COMMAND ? `${boot};${env.PROMPT_COMMAND}` : boot;
     return { command: [shell, '-l'], env: { ...keyed, PROMPT_COMMAND: prompt, LEDGE_SHELL_BOOT: boot }, nonce };
   }
