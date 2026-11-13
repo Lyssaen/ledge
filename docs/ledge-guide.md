@@ -42,7 +42,7 @@ Ledge n'attend pas qu'on l'interroge : il écrit « le point » dans le chat, de
 - groupé, au plus une fois par minute : une session terminée ou en erreur, des tâches, une PR, des rigs, la réponse de Max ;
 - jamais : les outils, la réflexion, les sous-agents.
 
-Un plafond évite que Ledge parle trop. Il lit un journal de ce qui s'est passé (`~/.ledge/ledge.sqlite`) et n'agit jamais seul : répondre, archiver, passer un relais, écrire à un siège ou réparer une PR est toujours un clic. Une réponse irréversible demande une confirmation.
+Un plafond évite que Ledge parle trop. Le daemon tient un journal des événements et écrit ce dont le chat a besoin dans ses fichiers (`journal.md`, `attentes.md`) ; Ledge n'agit jamais seul : répondre, archiver, passer un relais, écrire à un siège ou réparer une PR est toujours un clic. Une réponse irréversible demande une confirmation.
 
 **L'encoche n'a qu'une voix : Ledge.** Les bulles « session terminée » et « erreur » n'existent plus ; Ledge dit le point, ou la question d'un rig, dans une bulle courte. « Plus tard » met la bulle de côté : elle revient avec un point plus récent, ou quand la conversation est lue. Le réglage « Bulle quand un agent a terminé » ne commande plus que le son.
 

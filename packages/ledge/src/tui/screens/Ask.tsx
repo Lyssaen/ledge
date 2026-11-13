@@ -57,8 +57,13 @@ export function Ask() {
   const [pointConfirm, setPointConfirm] = useState<PointAsk | null>(null);
   const lastPoint = useRef<PointAsk | null>(null);
   useEffect(() => client.onMessage(m => {
-    if (m.type === 'error' && m.request === 'point.act' && m.code === 'confirm_required' && lastPoint.current) setPointConfirm(lastPoint.current);
-  }), []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (m.type === 'error' && m.request === 'point.act' && m.code === 'confirm_required' && lastPoint.current) { setPointConfirm(lastPoint.current); lastPoint.current = null; }
+  }), []);
+  // An answer that settled (or whose row went) can no longer be asked again by a late error.
+  useEffect(() => {
+    const a = lastPoint.current;
+    if (a && !d.chat.find(x => x.qid === a.qid)?.point?.items.some(i => i.id === a.item && !i.settled)) lastPoint.current = null;
+  }, [d.chat]); // eslint-disable-line react-hooks/exhaustive-deps
   useEditing(focus === -1 && !confirm);
   // What the last question carried: given back if the daemon refuses it, as a session reply does.
   const sentAsk = useRef<{ qid: string; taken: Chip[]; text: string } | null>(null);
@@ -199,7 +204,7 @@ export function Ask() {
     const rows = turn?.point ? pointRows(turn.point) : [];
     if (!turn?.point || !rows.length) return false;
     if (pointConfirm?.qid === qid) {
-      if (input === 'y') { const a = pointConfirm; setPointConfirm(null); sendPoint(a, true); }
+      if (input === 'y') { const a = pointConfirm; setPointConfirm(null); sendPoint(a, true); lastPoint.current = null; }
       else if (key.escape) setPointConfirm(null);
       return true;
     }
@@ -403,7 +408,7 @@ function PointBox({ turn, ids, sel, focused, busy, confirming }: { turn: ChatTur
           {focused && i === chosen && !asked ? <Text wrap="truncate" color={C.faint}>    {[...(r.answers ?? []).map((a, k) => `${k + 1} ${a.label}`), ...(r.suggestion && r.suggestion.state !== 'done' ? [`s ${r.suggestion.summary.replace(/\*\*/g, '')}`] : [])].join('   ')}{busy ? `   ${t.ask.pointSending}` : ''}</Text> : null}
         </Box>
       ))}
-      <Text color={C.faint}>{asked ? t.ask.pointHint : ''}</Text>
+      {asked ? <Text color={C.faint}>{t.ask.pointHint}</Text> : null}
     </TitledBox>
   );
 }

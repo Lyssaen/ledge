@@ -489,6 +489,32 @@ describe('ledge tui: the action card (#94, docs/mockups/ledge-action-card.html, 
     } finally { await tui.cleanup(); }
   });
 
+  it('the point card: an answer asks for confirmation when the daemon says confirm_required; y resends it confirmed, once', async () => {
+    const item = { id: 'session.request:a', event: 1, group: 'atoi', tone: 'perm', who: 'Otto', text: 'veut lancer rm -rf coverage', at: AT,
+      answers: [{ id: 'allow', label: 'Autoriser', style: 'danger' }, { id: 'deny', label: 'Refuser', style: 'plain' }] };
+    const point: ChatTurn = { qid: 'p1', question: '', askedAt: AT, answeredAt: AT, answer: '', steps: [], by: 'ledge', point: { since: AT, lead: 'Otto attend toi.', leadBy: 'daemon', items: [item] } } as ChatTurn;
+    const tui = await startTui();
+    try {
+      await tui.press('/');
+      await until(() => tui.frame().includes('LEDGE · OPÉRATEUR'));
+      tui.daemon.push({ type: 'chat.history', turns: [point] });
+      await until(() => tui.frame().includes('LEDGE · LE POINT'));
+      await tui.press('\t');
+      await tui.press('1');
+      await until(() => sent(tui.daemon.received, 'point.act').length === 1);
+      expect(sent(tui.daemon.received, 'point.act')[0]).toEqual({ type: 'point.act', qid: 'p1', item: item.id, answer: { id: 'allow' } });
+      tui.daemon.push({ type: 'error', message: 'confirmation needed', request: 'point.act', code: 'confirm_required' } as never);
+      await until(() => tui.frame().includes('CONFIRMER'));
+      await tui.press('y');
+      await until(() => sent(tui.daemon.received, 'point.act').length === 2);
+      expect(sent(tui.daemon.received, 'point.act')[1]).toEqual({ type: 'point.act', qid: 'p1', item: item.id, answer: { id: 'allow' }, confirmed: true });
+      // A late error no longer re-asks the answer that was sent.
+      tui.daemon.push({ type: 'error', message: 'late', request: 'point.act', code: 'confirm_required' } as never);
+      await new Promise(r => setTimeout(r, 100));
+      expect(tui.frame()).not.toContain('CONFIRMER');
+    } finally { await tui.cleanup(); }
+  });
+
   it('esc ignores the card everywhere; a faded line stays; ctrl+r opens it again, focused', async () => {
     const tui = await ask(turn(plan()));
     try {
