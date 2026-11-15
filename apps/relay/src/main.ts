@@ -37,8 +37,10 @@ if (cfg.mode === 'dev') {
   listening(relay.server);
   onSignals(() => relay.close());
 } else {
+  // Only Postgres is reachable from here: `main.ts` passes no pglite directory to `loadConfig`.
+  if (cfg.database.kind !== 'postgres') throw new Error('the embedded database is not wired into main.ts');
   const pool = new pg.Pool({
-    connectionString: cfg.databaseUrl,
+    connectionString: cfg.database.url,
     // An unreachable or hanging database must fail calls (500 / auth_error), not queue them forever.
     connectionTimeoutMillis: 5_000,
     query_timeout: 10_000
