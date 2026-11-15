@@ -266,6 +266,9 @@ importers:
 
   apps/relay:
     dependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.10
+        version: 0.5.10
       pg:
         specifier: ^8.23.1
         version: 8.23.1
@@ -276,9 +279,6 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
-      '@electric-sql/pglite':
-        specifier: ^0.5.10
-        version: 0.5.10
       '@ledge/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

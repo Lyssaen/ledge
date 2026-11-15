@@ -14,12 +14,12 @@
     "vapid-keys": "node scripts/vapid-keys.mjs"
   },
   "dependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "pg": "^8.23.1",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.10",
     "@ledge/protocol": "workspace:*",
     "@ledge/seal": "workspace:*",
     "@types/node": "^22.7.0",
