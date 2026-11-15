@@ -93,6 +93,18 @@ describe('runSetup', () => {
     expect(out.vapid).toEqual({ publicKey: 'pub', privateKey: 'priv', subject: 'mailto:new@x.y' });
   });
 
+  it('keeps the other allowed ids, the answered one first, and says so', async () => {
+    const current: LaunchFile = { publicUrl: 'https://relay.example', githubClientId: 'cid', githubClientSecret: 's', allowedGithubIds: ['1', '2', '3'] };
+    const { io, said } = scripted(['', '', '', '2', '']);
+    const out = await runSetup(io, current, { resolveId: async (i) => ({ id: i }) });
+    expect(out.allowedGithubIds).toEqual(['2', '1', '3']);
+    expect(said.join('\n')).toContain('2 other allowed GitHub accounts are kept');
+    expect(said.join('\n')).toContain('GitHub account id 2');
+    const { io: io2 } = scripted(['', '', '', '9', '']);
+    const out2 = await runSetup(io2, current, { resolveId: async (i) => ({ id: i }) });
+    expect(out2.allowedGithubIds).toEqual(['9', '1', '2', '3']);
+  });
+
   it('rejects when the input ends in the middle of the questions', async () => {
     const { io } = scripted(['https://relay.example', 'cid', new Error('input ended')]);
     await expect(runSetup(io, {}, { resolveId: resolveOk })).rejects.toThrow('input ended');

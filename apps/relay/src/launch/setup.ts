@@ -55,7 +55,7 @@ export async function runSetup(
     try {
       const r = await resolveId(login);
       githubId = r.id;
-      io.say(`GitHub account ${r.login ?? login} = id ${r.id}`);
+      io.say(r.login ? `GitHub account ${r.login} = id ${r.id}` : `GitHub account id ${r.id}`);
       break;
     } catch (e) {
       if (!(e instanceof GithubIdError)) throw e;
@@ -71,7 +71,13 @@ export async function runSetup(
     io.say('The contact must be an email address, a mailto: address or an https:// URL.');
   }
 
+  // Accounts added by hand in config.json stay allowed: only the answered one moves to the front.
+  const others = (current.allowedGithubIds ?? []).filter((x, i, all) => x !== githubId && all.indexOf(x) === i);
+  if (others.length > 0) {
+    io.say(`${others.length} other allowed GitHub account${others.length === 1 ? ' is' : 's are'} kept (edit allowedGithubIds in config.json to change ${others.length === 1 ? 'it' : 'them'}).`);
+  }
+
   // Phones' push subscriptions are bound to the public key, so a new subject never regenerates the keys.
   const vapid = current.vapid ? { ...current.vapid, subject } : generateVapid(subject);
-  return { publicUrl, githubClientId, githubClientSecret, allowedGithubIds: [githubId], vapid };
+  return { publicUrl, githubClientId, githubClientSecret, allowedGithubIds: [githubId, ...others], vapid };
 }
