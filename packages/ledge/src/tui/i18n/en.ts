@@ -350,6 +350,7 @@ export const en: Messages = {
     approvedL: label => ['Approved on this PC.', `Confirm on ${label} now.`], linkedL: label => [`${label} is linked.`, 'It shows in Settings › Mobile access.'], expiredL: ['The request expired.', 'Start again from the phone.'], close: 'close',
     copiedT: 'Copied', revokedT: n => `${n} is revoked.`, recToast: d => `${upFirst(theDevice(d))} reconnected with its passkey`,
     refusedToast: d => `Passkey reconnection as ${theDevice(d)} refused: it’s connected`,
+    someDevice: 'device',
     refusedOffline: 'The local daemon is offline: nothing changed.', refusedOutdated: 'The local daemon is too old for mobile access: update it.',
     keys: { move: 'move', change: 'change', open: 'open', back: 'back', rename: 'rename', revoke: 'revoke', save: 'save', cancel: 'cancel', copy: 'copy the code', yes: 'yes', no: 'no', settings: 'settings', help: 'help', pair: 'link' }
   },

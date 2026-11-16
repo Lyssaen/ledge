@@ -183,6 +183,12 @@ describe('recovery toasts and daemon refusals', () => {
     await until(() => tui!.frame().includes('Reconnexion avec la passkey de l’iPhone refusée'));
   });
 
+  it('names « l’appareil » when the device is not in the state', async () => {
+    tui = await startTui({ mobile: devices() });
+    tui.daemon.push({ type: 'mobile.recovery', event: 'refused', id: 'zz', at: new Date().toISOString() } as never);
+    await until(() => tui!.frame().includes('Reconnexion avec la passkey de l’appareil refusée'));
+  });
+
   it('shows no toast for a blocked recovery', async () => {
     tui = await startTui({ mobile: devices() });
     tui.daemon.push({ type: 'mobile.recovery', event: 'blocked', at: new Date().toISOString() } as never);

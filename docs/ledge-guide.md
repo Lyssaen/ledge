@@ -50,7 +50,7 @@ Un plafond évite que Ledge parle trop. Le daemon tient un journal des événeme
 
 **Dans `ledge tui`**, le point est affiché dans « Demander à Ledge », avec ses groupes et ses reçus ; ses lignes à traiter forment une carte : `1`-`4` choisissent une réponse, `s` applique la suggestion, `l` dit « Plus tard », `y` confirme une réponse irréversible.
 
-**Dans `ledge tui`**, l'accès mobile se règle dans Réglages › Accès mobile (activer, relais, compte GitHub, appareils à renommer ou révoquer) ; `L`, depuis n'importe quel écran, ouvre « Lier un appareil » pour approuver ou refuser une demande de lien.
+**Dans `ledge tui`**, l'accès mobile se règle dans Réglages › Accès mobile (activer, relais, compte GitHub, appareils à renommer ou révoquer) ; `L` agit quand un téléphone demande à se lier : il ouvre « Lier un appareil », pour approuver ou refuser la demande.
 
 ## Ledge Desktop
 
@@ -332,7 +332,7 @@ Une application web pour le téléphone et la tablette. Sur le téléphone, cinq
 2. Sur le téléphone, ouvrir l'adresse du relais et se connecter avec le même compte.
 3. Comparer le code affiché sur les deux appareils et approuver sur le PC.
 
-Le côté PC se fait aussi depuis `ledge tui` › Réglages › Accès mobile ; `L` y ouvre « Lier un appareil » quand un téléphone demande à se lier.
+Le côté PC se fait aussi depuis `ledge tui` › Réglages › Accès mobile ; `L` ouvre « Lier un appareil » quand un téléphone demande à se lier.
 
 Le relais peut être le tien : `ledge-relay launch` le lance sur ton serveur (voir `apps/relay/README.md`), et son adresse se saisit dans Réglages › Accès mobile.
 

@@ -366,6 +366,7 @@ export const fr = {
     approvedL: (label: string) => ['Approuvé sur ce PC.', `Confirme maintenant sur ${label}.`], linkedL: (label: string) => [`${label} est lié.`, 'Il apparaît dans Réglages › Accès mobile.'], expiredL: ['La demande a expiré.', 'Recommence depuis le téléphone.'], close: 'fermer',
     copiedT: 'Copié', revokedT: (n: string) => `${n} est révoqué.`, recToast: (d: DeviceWord) => `${upFirst(theDevice(d))} s’est reconnecté avec sa passkey`,
     refusedToast: (d: DeviceWord) => `Reconnexion avec la passkey ${ofDevice(d)} refusée : il est connecté`,
+    someDevice: 'appareil',
     refusedOffline: 'Le daemon local est hors ligne : rien n’a changé.', refusedOutdated: 'Le daemon local est trop ancien pour l’accès mobile : mets-le à jour.',
     keys: { move: 'naviguer', change: 'changer', open: 'ouvrir', back: 'retour', rename: 'renommer', revoke: 'révoquer', save: 'enregistrer', cancel: 'annuler', copy: 'copier le code', yes: 'oui', no: 'non', settings: 'réglages', help: 'aide', pair: 'lier' }
   },

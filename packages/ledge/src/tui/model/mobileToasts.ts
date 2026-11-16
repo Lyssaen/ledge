@@ -16,9 +16,8 @@ export function useMobileToasts(tui: Pick<Tui, 'fleet' | 'client' | 't' | 'toast
     const { t, toast } = live.current;
     const id = m.id;
     // The fleet's state, not the last render's: the `mobile` that came just before this message may not be drawn yet.
-    const word = deviceWord(fleet.mobile()?.devices.find(d => d.id === id));
-    // A device the daemon never listed has no name to say: the catalogue has no wording for it, so no toast.
-    if (!word) return;
+    // A device the daemon does not list is still worth a toast, said as « l'appareil ».
+    const word = deviceWord(fleet.mobile()?.devices.find(d => d.id === id)) ?? { text: t.mobile.someDevice, named: false };
     if (m.event === 'recovered') toast({ text: t.mobile.recToast(word), tone: 'ok' });
     else toast({ text: t.mobile.refusedToast(word), tone: 'info' });
   }), [fleet]);
