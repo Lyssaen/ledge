@@ -1,11 +1,12 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DevicePollResponseSchema, DeviceStartResponseSchema } from '@ledge/protocol';
 import type { AccountsConfig } from '../src/config.js';
-import { DatabaseOpenError } from '../src/database.js';
-import { ListenError, startRelay } from '../src/run.js';
+import { ConfigError } from '../src/config.js';
+import { DatabaseOpenError, DirectoryAccessError } from '../src/database.js';
+import { DatabaseUnreachableError, ListenError, startRelay, startupErrorLine } from '../src/run.js';
 import { fakeGitHub } from './fakeGithub.js';
 
 const dirs: string[] = [];
@@ -70,4 +71,29 @@ describe('startRelay', () => {
     );
     await first.close();
   }, 60_000);
+
+  it.skipIf(process.platform === 'win32')('names a database directory it is not allowed to create', async () => {
+    const parent = await tmp();
+    await chmod(parent, 0o500);
+    const dir = join(parent, 'db');
+    try {
+      await expect(startRelay(configFor(dir), { ...quiet, github: fakeGitHub() })).rejects.toSatisfy(
+        (e) => e instanceof DirectoryAccessError && e.dir === dir
+      );
+    } finally {
+      await chmod(parent, 0o700);
+    }
+  });
+});
+
+describe('startupErrorLine', () => {
+  it('gives the one line of each startup failure it explains, and null otherwise', () => {
+    expect(startupErrorLine(new ConfigError('GITHUB_CLIENT_ID is required'))).toBe('GITHUB_CLIENT_ID is required');
+    expect(startupErrorLine(new ListenError(8080, 'EADDRINUSE'))).toBe('cannot listen on port 8080: EADDRINUSE');
+    expect(startupErrorLine(new DatabaseUnreachableError('ECONNREFUSED'))).toBe('cannot start: the database is unreachable or its migration failed (ECONNREFUSED)');
+    expect(startupErrorLine(new DatabaseUnreachableError())).toBe('cannot start: the database is unreachable or its migration failed');
+    expect(startupErrorLine(new DatabaseOpenError('/d/db'))).toBe('cannot open the embedded database at /d/db: move this directory aside to start a fresh one (accounts, sessions, linked phones and push subscriptions are then lost)');
+    expect(startupErrorLine(new DirectoryAccessError('/d'))).toBe('cannot use /d: permission denied');
+    expect(startupErrorLine(new Error('boom'))).toBeNull();
+  });
 });

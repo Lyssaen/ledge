@@ -1,6 +1,5 @@
-import { ConfigError, loadConfig } from './config.js';
-import { DatabaseOpenError } from './database.js';
-import { DatabaseUnreachableError, ListenError, startRelay } from './run.js';
+import { loadConfig } from './config.js';
+import { startRelay, startupErrorLine } from './run.js';
 
 function die(msg: string): never {
   process.stderr.write(`ledge-relay: ${msg}\n`);
@@ -10,12 +9,12 @@ function die(msg: string): never {
 try {
   const cfg = loadConfig(process.env);
   const relay = await startRelay(cfg);
+  // A server error after listening ends the relay with one line, as it did before the shared start-up, not a stack.
+  relay.server.on('error', (e: NodeJS.ErrnoException) => die(`cannot listen on port ${cfg.port}: ${e.code ?? 'error'}`));
   process.stdout.write(JSON.stringify({ at: new Date().toISOString(), ev: 'listening', port: relay.port, mode: cfg.mode }) + '\n');
   for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => { void relay.close().then(() => process.exit(0), () => process.exit(1)); });
 } catch (e) {
-  if (e instanceof ConfigError) die(e.message);
-  if (e instanceof ListenError) die(`cannot listen on port ${e.port}: ${e.code}`);
-  if (e instanceof DatabaseUnreachableError) die(`cannot start: the database is unreachable or its migration failed${e.code ? ` (${e.code})` : ''}`);
-  if (e instanceof DatabaseOpenError) die(`cannot open the embedded database at ${e.dir}: move this directory aside to start a fresh one (accounts, sessions, linked phones and push subscriptions are then lost)`);
-  throw e;
+  const line = startupErrorLine(e);
+  if (line === null) throw e;
+  die(line);
 }

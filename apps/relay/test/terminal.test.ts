@@ -1,5 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
+import { SetupInterrupted } from '../src/launch/setup.js';
 import { terminalIo } from '../src/launch/terminal.js';
 
 function streams() {
@@ -68,14 +69,14 @@ describe('terminalIo', () => {
     const t = streams();
     const a = t.io.ask('Name');
     t.input.write('\x03');
-    await expect(a).rejects.toThrow();
+    await expect(a).rejects.toBeInstanceOf(SetupInterrupted);
   });
 
   it('rejects a pending ask when the input ends, and any later one', async () => {
     const t = streams();
     const a = t.io.ask('Name');
     t.input.end();
-    await expect(a).rejects.toThrow();
-    await expect(t.io.ask('Again')).rejects.toThrow();
+    await expect(a).rejects.toBeInstanceOf(SetupInterrupted);
+    await expect(t.io.ask('Again')).rejects.toBeInstanceOf(SetupInterrupted);
   });
 });

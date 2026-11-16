@@ -1,8 +1,8 @@
 import type http from 'node:http';
 import { startAccountsRelay } from './app.js';
 import { devTokens } from './auth.js';
-import type { Config } from './config.js';
-import { openDatabase } from './database.js';
+import { ConfigError, type Config } from './config.js';
+import { DatabaseOpenError, DirectoryAccessError, openDatabase } from './database.js';
 import { githubHttp, type GitHub } from './github.js';
 import { jsonLog, type RelayLog } from './log.js';
 import { createRelay } from './server.js';
@@ -22,6 +22,15 @@ export class DatabaseUnreachableError extends Error {
     super('the database is unreachable or its migration failed');
     this.name = 'DatabaseUnreachableError';
   }
+}
+
+/** The one line a known startup failure prints after `ledge-relay: `, or null when the error is not one it explains. */
+export function startupErrorLine(e: unknown): string | null {
+  if (e instanceof ConfigError || e instanceof DirectoryAccessError) return e.message;
+  if (e instanceof ListenError) return `cannot listen on port ${e.port}: ${e.code}`;
+  if (e instanceof DatabaseUnreachableError) return `cannot start: the database is unreachable or its migration failed${e.code ? ` (${e.code})` : ''}`;
+  if (e instanceof DatabaseOpenError) return `cannot open the embedded database at ${e.dir}: move this directory aside to start a fresh one (accounts, sessions, linked phones and push subscriptions are then lost)`;
+  return null;
 }
 
 /** Builds the relay for `cfg`, opens its database and listens; shared by the env entry and the launcher. */

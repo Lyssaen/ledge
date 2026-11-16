@@ -1,5 +1,5 @@
-import { mkdir } from 'node:fs/promises';
-import { PGlite } from '@electric-sql/pglite';
+import { constants } from 'node:fs';
+import { access, chmod, mkdir } from 'node:fs/promises';
 import pg from 'pg';
 import type { DatabaseConfig } from './config.js';
 import type { Db } from './db.js';
@@ -9,6 +9,14 @@ export class DatabaseOpenError extends Error {
   constructor(readonly dir: string) {
     super('cannot open the embedded database');
     this.name = 'DatabaseOpenError';
+  }
+}
+
+/** A directory the relay needs cannot be created or used by this user; nothing in it was changed. */
+export class DirectoryAccessError extends Error {
+  constructor(readonly dir: string) {
+    super(`cannot use ${dir}: permission denied`);
+    this.name = 'DirectoryAccessError';
   }
 }
 
@@ -25,11 +33,27 @@ export async function openDatabase(c: DatabaseConfig): Promise<{ db: Db; close()
     pool.on('error', () => {});
     return { db: pool, close: () => pool.end() };
   }
+  // The directory is private like the data directory around it, since pglite creates its own files readable by all.
   try {
-    await mkdir(c.dir, { recursive: true });
+    await mkdir(c.dir, { recursive: true, mode: 0o700 });
+    await chmod(c.dir, 0o700);
+    await access(c.dir, constants.R_OK | constants.W_OK | constants.X_OK);
+  } catch (e) {
+    if (isPermissionError(e)) throw new DirectoryAccessError(c.dir);
+    throw new DatabaseOpenError(c.dir);
+  }
+  // Loaded here so that the Postgres entry never loads the embedded database.
+  const { PGlite } = await import('@electric-sql/pglite');
+  try {
     const lite = await PGlite.create(c.dir);
     return { db: lite, close: () => lite.close() };
   } catch {
     throw new DatabaseOpenError(c.dir);
   }
+}
+
+/** Whether a file system error means this user may not create or use the path. */
+export function isPermissionError(e: unknown): boolean {
+  const code = (e as NodeJS.ErrnoException | undefined)?.code;
+  return code === 'EACCES' || code === 'EPERM';
 }

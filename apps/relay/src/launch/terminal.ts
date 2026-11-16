@@ -1,8 +1,8 @@
 import { createInterface } from 'node:readline';
 import { Writable } from 'node:stream';
-import type { SetupIo } from './setup.js';
+import { SetupInterrupted, type SetupIo } from './setup.js';
 
-/** The dialogue on a real terminal; a secret answer is not echoed, and Ctrl-C or end of input rejects the pending question. */
+/** The dialogue on a real terminal; a secret answer is not echoed, and Ctrl-C or end of input rejects the pending question with `SetupInterrupted`. */
 export function terminalIo(input: NodeJS.ReadStream, output: NodeJS.WriteStream): SetupIo & { close(): void } {
   let muted = false;
   const sink = new Writable({
@@ -16,7 +16,9 @@ export function terminalIo(input: NodeJS.ReadStream, output: NodeJS.WriteStream)
   let ended = false;
   const end = () => {
     ended = true;
-    rejectPending?.(new Error('input ended'));
+    // The line that follows an interrupted question starts on a line of its own.
+    if (rejectPending) output.write('\n');
+    rejectPending?.(new SetupInterrupted());
     rejectPending = null;
   };
   rl.on('close', end);
@@ -24,7 +26,7 @@ export function terminalIo(input: NodeJS.ReadStream, output: NodeJS.WriteStream)
 
   return {
     ask(question, o) {
-      if (ended) return Promise.reject(new Error('input ended'));
+      if (ended) return Promise.reject(new SetupInterrupted());
       return new Promise<string>((resolve, reject) => {
         rejectPending = reject;
         // The question is readline's own prompt: in terminal mode readline redraws its prompt line, so text written

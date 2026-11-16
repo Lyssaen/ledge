@@ -3,7 +3,15 @@ import { GithubIdError, resolveGithubId } from './github-id.js';
 import type { LaunchFile } from './home.js';
 import { generateVapid } from './vapid.js';
 
-/** The terminal as the dialogue sees it; `ask` rejects on end of input or Ctrl-C so that nothing is saved. */
+/** The person left the dialogue (Ctrl-C or end of input); nothing is saved. */
+export class SetupInterrupted extends Error {
+  constructor() {
+    super('setup interrupted');
+    this.name = 'SetupInterrupted';
+  }
+}
+
+/** The terminal as the dialogue sees it; `ask` rejects with `SetupInterrupted` on end of input or Ctrl-C so that nothing is saved. */
 export interface SetupIo {
   ask(question: string, o?: { secret?: boolean; default?: string }): Promise<string>;
   say(line: string): void;

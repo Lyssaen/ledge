@@ -1,10 +1,12 @@
-import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { existsSync, statSync } from 'node:fs';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { main, type CliDeps } from '../src/cli.js';
-import type { SetupIo } from '../src/launch/setup.js';
+import { SetupInterrupted, type SetupIo } from '../src/launch/setup.js';
+import { generateVapid } from '../src/launch/vapid.js';
 import { fakeGitHub } from './fakeGithub.js';
 
 const dirs: string[] = [];
@@ -58,8 +60,8 @@ async function harness(env: NodeJS.ProcessEnv, o: { isTTY?: boolean; io?: () => 
 }
 
 /** Runs `launch`, waits for the listening line, then stops it and returns the exit code. */
-async function launchAndStop(h: Awaited<ReturnType<typeof harness>>): Promise<number> {
-  const run = main(['launch', '--port', '0'], h.deps());
+async function launchAndStop(h: Awaited<ReturnType<typeof harness>>, extra: string[] = []): Promise<number> {
+  const run = main(['launch', '--port', '0', ...extra], h.deps());
   const until = Date.now() + 20_000;
   while (!h.out.some((l) => l.includes('"ev":"listening"')) && !h.err.length && Date.now() < until) await new Promise((r) => setTimeout(r, 20));
   h.stop();
@@ -112,9 +114,16 @@ describe('ledge-relay', { timeout: 60_000 }, () => {
     expect(existsSync(h.configPath)).toBe(false);
   });
 
-  it('writes nothing when the dialogue is interrupted', async () => {
-    const h = await harness({}, { isTTY: true, io: () => scripted(['https://relay.example', new Error('ctrl-c')]) });
+  it('says so and writes nothing when the dialogue is interrupted', async () => {
+    const h = await harness({}, { isTTY: true, io: () => scripted(['https://relay.example', new SetupInterrupted()]) });
     expect(await main(['launch', '--port', '0'], h.deps())).toBe(1);
+    expect(h.err).toEqual(['ledge-relay: setup interrupted, nothing saved']);
+    expect(existsSync(h.configPath)).toBe(false);
+  });
+
+  it('lets an unexpected error of the dialogue through, and writes nothing', async () => {
+    const h = await harness({}, { isTTY: true, io: () => scripted(['https://relay.example', new Error('boom')]) });
+    await expect(main(['launch', '--port', '0'], h.deps())).rejects.toThrow('boom');
     expect(existsSync(h.configPath)).toBe(false);
   });
 
@@ -145,6 +154,68 @@ describe('ledge-relay', { timeout: 60_000 }, () => {
   it('refuses an http public URL even with NODE_ENV unset', async () => {
     const h = await harness({ ...COMPLETE_ENV, LEDGE_RELAY_PUBLIC_URL: 'http://relay.example' });
     expect(await main(['launch', '--port', '0'], h.deps())).toBe(1);
-    expect(h.err[0]).toMatch(/^ledge-relay: .*https/);
+    expect(h.err).toEqual(['ledge-relay: LEDGE_RELAY_PUBLIC_URL must be https when NODE_ENV=production']);
+    expect(existsSync(h.configPath)).toBe(false);
+  });
+
+  const modeOf = (p: string) => (statSync(p).mode & 0o777).toString(8);
+
+  it.skipIf(process.platform === 'win32')('keeps the data directory and its database private when the env provides everything', async () => {
+    const v = generateVapid('mailto:ops@relay.example');
+    const h = await harness({ ...COMPLETE_ENV, LEDGE_RELAY_VAPID_PUBLIC_KEY: v.publicKey, LEDGE_RELAY_VAPID_PRIVATE_KEY: v.privateKey, LEDGE_RELAY_VAPID_SUBJECT: v.subject });
+    expect(await launchAndStop(h)).toBe(0);
+    expect(existsSync(h.configPath)).toBe(false);
+    expect(modeOf(join(h.home, '.ledge-relay'))).toBe('700');
+    expect(modeOf(join(h.home, '.ledge-relay', 'db'))).toBe('700');
+  });
+
+  it.skipIf(process.platform === 'win32')('tightens an existing --data directory to 0700', async () => {
+    const h = await harness(COMPLETE_ENV);
+    const data = join(await tmp(), 'state');
+    await mkdir(data);
+    await chmod(data, 0o755);
+    expect(await launchAndStop(h, ['--data', data])).toBe(0);
+    expect(modeOf(data)).toBe('700');
+    expect(modeOf(join(data, 'db'))).toBe('700');
+  });
+
+  it.skipIf(process.platform === 'win32')('names a data directory it is not allowed to use', async () => {
+    const h = await harness(COMPLETE_ENV);
+    const locked = await tmp();
+    await chmod(locked, 0o500);
+    const data = join(locked, 'state');
+    try {
+      expect(await main(['launch', '--port', '0', '--data', data], h.deps())).toBe(1);
+    } finally {
+      await chmod(locked, 0o700);
+    }
+    expect(h.err).toEqual([`ledge-relay: cannot use ${data}: permission denied`]);
+  });
+
+  it('refuses a second launcher on the same data directory, and the first keeps working', async () => {
+    const h = await harness(COMPLETE_ENV);
+    let stopFirst!: () => void;
+    const firstStopped = new Promise<void>((r) => { stopFirst = r; });
+    const first = main(['launch', '--port', '0'], { ...h.deps(), waitForStop: () => firstStopped });
+    const until = Date.now() + 20_000;
+    while (!h.out.some((l) => l.includes('"ev":"listening"')) && !h.err.length && Date.now() < until) await new Promise((r) => setTimeout(r, 20));
+    const port = (JSON.parse(h.out.find((l) => l.includes('"ev":"listening"')) as string) as { port: number }).port;
+
+    expect(await main(['launch', '--port', '0'], h.deps())).toBe(1);
+    expect(h.err).toEqual([`ledge-relay: another ledge-relay is using ${join(h.home, '.ledge-relay')}`]);
+    expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
+
+    stopFirst();
+    expect(await first).toBe(0);
+    expect(existsSync(join(h.home, '.ledge-relay', 'ledge-relay.lock'))).toBe(false);
+  });
+
+  it('takes over the lock of a launcher that is gone', async () => {
+    const h = await harness(COMPLETE_ENV);
+    const dead = spawnSync(process.execPath, ['-e', '']).pid as number;
+    await mkdir(join(h.home, '.ledge-relay'), { mode: 0o700 });
+    await writeFile(join(h.home, '.ledge-relay', 'ledge-relay.lock'), `${dead}\n`);
+    expect(await launchAndStop(h)).toBe(0);
+    expect(h.err).toEqual([]);
   });
 });
