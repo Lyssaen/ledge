@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { replaceable, useMobile } from '@ledge/fleet';
 import type { MobilePairing } from '@ledge/protocol';
@@ -35,7 +35,10 @@ export function PairingDialog() {
   const shown = p && (p.state === 'confirm' || p.state === 'approved' || p.state === 'linked' || p.state === 'expired') ? p : undefined;
   const [, tick] = useState(0);
   const [keep, setKeep] = useState<string | null>(null);
-  const counting = shown?.state === 'confirm' || shown?.state === 'approved';
+  const counting = shown?.state === 'confirm';
+  // The pairing y or n was sent for: a second press waits for the daemon's answer, so nothing is approved twice.
+  const answered = useRef<string | null>(null);
+  if (shown?.state !== 'confirm') answered.current = null;
   useEffect(() => {
     if (!counting) return;
     const id = setInterval(() => tick(n => n + 1), 1000);
@@ -52,10 +55,10 @@ export function PairingDialog() {
     if (!shown) return;
     if (key.escape) { dialog.close(); return; }
     if (shown.state !== 'confirm') return;
-    if (input === 'y') {
-      sendMobile(tui, { type: 'mobile.pairing.approve', id: shown.id, ...(replacing && old ? { replaces: old.id } : {}) });
-    } else if (input === 'n') {
-      sendMobile(tui, { type: 'mobile.pairing.deny', id: shown.id });
+    if (input === 'y' || input === 'n') {
+      if (answered.current === shown.id) return;
+      const sent = sendMobile(tui, input === 'y' ? { type: 'mobile.pairing.approve', id: shown.id, ...(replacing && old ? { replaces: old.id } : {}) } : { type: 'mobile.pairing.deny', id: shown.id });
+      if (sent) answered.current = shown.id;
     } else if (input === 'r' && old) setKeep(keep === shown.id ? null : shown.id);
   }, { isActive: shown !== undefined });
 
@@ -72,35 +75,30 @@ export function PairingDialog() {
   );
 
   let body: ReactNode[];
-  if (shown.state === 'confirm' || shown.state === 'approved') {
+  if (shown.state === 'confirm') {
     const [intro1 = '', intro2 = ''] = c.pairIntro(m?.account?.login ?? '');
     const [check1 = '', check2 = ''] = c.pairCheck(shown.label);
     const expires = c.expires(mmss(left));
     const code = spacedCode(shown.code);
     body = [
       line([intro1, C.fg]), line([intro2, C.fg]), blank(1),
-      line([c.pairCode, C.dim]), line([' '.repeat(Math.max(0, Math.floor((inner - cells(code)) / 2))) + code, shown.state === 'approved' ? C.dim : C.yellow, true]), blank(2)
+      line([c.pairCode, C.dim]), line([' '.repeat(Math.max(0, Math.floor((inner - cells(code)) / 2))) + code, C.yellow, true]), blank(2)
     ];
-    if (shown.state === 'confirm') {
+    body.push(
+      line([check1, C.dim]), line([check2, C.dim]),
+      line([c.pairWarn[0] ?? '', C.red]),
+      line([c.pairWarn[1] ?? '', C.red], [' '.repeat(Math.max(1, inner - cells(c.pairWarn[1] ?? '') - cells(expires))), C.fg], [expires, C.faint]), blank(3)
+    );
+    if (old) {
+      const seen = seenText(old, Date.now(), c, t.time) || t.mobile.seenAgo('');
       body.push(
-        line([check1, C.dim]), line([check2, C.dim]),
-        line([c.pairWarn[0] ?? '', C.red]),
-        line([c.pairWarn[1] ?? '', C.red], [' '.repeat(Math.max(1, inner - cells(c.pairWarn[1] ?? '') - cells(expires))), C.fg], [expires, C.faint]), blank(3)
+        line([replacing ? '[x] ' : '[ ] ', C.fg, true], [c.replaceL(deviceName(old)), C.fg]),
+        line(['    ' + c.replaceH(seen, c.linkedOn(shortDate(old.approvedAt, lang))), C.faint]), blank(4)
       );
-      if (old) {
-        const seen = seenText(old, Date.now(), c, t.time) || t.mobile.seenAgo('');
-        body.push(
-          line([replacing ? '[x] ' : '[ ] ', C.fg, true], [c.replaceL(deviceName(old)), C.fg]),
-          line(['    ' + c.replaceH(seen, c.linkedOn(shortDate(old.approvedAt, lang))), C.faint]), blank(4)
-        );
-      }
-      body.push(caps([['y', c.approve, C.green], ['n', c.deny, C.red], ...(old ? [['r', c.untick, C.dim] as [string, string, string]] : []), ['esc', c.later, C.dim]]));
-    } else {
-      const [a = '', b = ''] = c.approvedL(shown.label);
-      body.push(line([g.ok + ' ', C.green], [a, C.green, true]), line(['  ' + b, C.fg]), blank(5), line([expires, C.faint]), blank(6), caps([['esc', c.close, C.dim]]));
     }
+    body.push(caps([['y', c.approve, C.green], ['n', c.deny, C.red], ...(old ? [['r', c.untick, C.dim] as [string, string, string]] : []), ['esc', c.later, C.dim]]));
   } else {
-    const [a = '', b = ''] = shown.state === 'linked' ? c.linkedL(shown.label) : c.expiredL;
+    const [a = '', b = ''] = shown.state === 'approved' ? c.approvedL(shown.label) : shown.state === 'linked' ? c.linkedL(shown.label) : c.expiredL;
     const color = shown.state === 'expired' ? C.yellow : C.green;
     body = [line([(shown.state === 'expired' ? '⊘ ' : g.ok + ' '), color], [a, color, true]), line(['  ' + b, C.fg]), blank(1), caps([['esc', c.close, C.dim]])];
   }

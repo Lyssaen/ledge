@@ -47,10 +47,16 @@ describe('the pairing alert and « Lier un appareil »', () => {
     await until(() => tui!.frame().includes('[x] Remplacer l’ancien « iPhone perso »'));
     await tui.press('y');
     expect(tui.sentMobile()).toEqual([{ type: 'mobile.pairing.approve', id: 'p1', replaces: 'd1' }]);
+  });
+
+  it('r unticks the replacement: y then sends no replaces', async () => {
+    tui = await startTui({ mobile: base({ devices: [iphone], pairings: [{ id: 'p1', label: 'iPhone', code: '472 915 308', expiresAt: at(5), state: 'confirm' }] }) });
+    await tui.press('L');
+    await until(() => tui!.frame().includes('[x] Remplacer'));
     await tui.press('r');
     await until(() => tui!.frame().includes('[ ] Remplacer'));
     await tui.press('y');
-    expect(tui.sentMobile()[1]).toEqual({ type: 'mobile.pairing.approve', id: 'p1' });
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.pairing.approve', id: 'p1' }]);
   });
 
   it('denies on n', async () => {
@@ -90,7 +96,10 @@ describe('the pairing alert and « Lier un appareil »', () => {
     await tui.press('/');
     await tui.press('L');
     expect(tui.frame()).not.toContain('LIER UN APPAREIL');
-    expect(tui.frame()).toContain('L');
+    // The composer's own line holds the draft; the alert line and the key bar say « L » too, so they cannot tell.
+    expect(tui.frame()).toMatch(/❯ L/);
+    await tui.press('y');
+    expect(tui.sentMobile()).toEqual([]);
   });
 
   it('closes on esc and the alert line stays', async () => {
@@ -101,5 +110,59 @@ describe('the pairing alert and « Lier un appareil »', () => {
     await until(() => !tui!.frame().includes('LIER UN APPAREIL'));
     expect(tui.frame()).toContain('Pixel 8 demande à se lier à ton PC');
     expect(tui.frame()).toContain('À TOI');
+  });
+
+  it('gives approved the short body: no code, no countdown', async () => {
+    tui = await startTui({ mobile: base() });
+    await tui.press('L');
+    await until(() => tui!.frame().includes('LIER UN APPAREIL'));
+    tui.daemon.push({ type: 'mobile', state: base({ pairings: [{ id: 'p1', label: 'Pixel 8', code: '472 915 308', expiresAt: at(5), state: 'approved' }] }) });
+    await until(() => tui!.frame().includes('Confirme maintenant sur Pixel 8.'));
+    expect(tui.frame()).not.toContain('4 7 2');
+    expect(tui.frame()).not.toContain('expire dans');
+  });
+
+  it('takes y and n before the screen: no session answer is sent', async () => {
+    tui = await startTui({ mobile: base() });
+    await tui.press('L');
+    await until(() => tui!.frame().includes('LIER UN APPAREIL'));
+    await tui.press('y');
+    await tui.press('n');
+    const sessionMsgs = () => tui!.daemon.received.filter(m => !m.type.startsWith('mobile.') && m.type.startsWith('session.'));
+    expect(sessionMsgs()).toEqual([]);
+    // Without the dialog the same key does answer the pending request (the control).
+    await tui.press('\x1b');
+    await until(() => !tui!.frame().includes('LIER UN APPAREIL'));
+    await tui.press('y');
+    await until(() => tui!.daemon.received.some(m => !m.type.startsWith('mobile.') && /session|decision|answer|approve/.test(m.type)));
+  });
+
+  it('sends one approval however many times y is pressed', async () => {
+    tui = await startTui({ mobile: base() });
+    await tui.press('L');
+    await until(() => tui!.frame().includes('LIER UN APPAREIL'));
+    await tui.press('y');
+    await tui.press('y');
+    await tui.press('n');
+    expect(tui.sentMobile()).toHaveLength(1);
+  });
+
+  it('closes when the pairing leaves the state', async () => {
+    tui = await startTui({ mobile: base() });
+    await tui.press('L');
+    await until(() => tui!.frame().includes('LIER UN APPAREIL'));
+    tui.daemon.push({ type: 'mobile', state: base({ pairings: [] }) });
+    await until(() => !tui!.frame().includes('LIER UN APPAREIL'));
+  });
+
+  it('counts down, and shows expired when the daemon says so', async () => {
+    tui = await startTui({ mobile: base({ pairings: [{ id: 'p1', label: 'Pixel 8', code: '472 915 308', expiresAt: new Date(Date.now() + 61_500).toISOString(), state: 'confirm' }] }) });
+    await tui.press('L');
+    const left = () => /expire dans (\d+):(\d\d)/.exec(tui!.frame());
+    await until(() => left() !== null);
+    const first = Number(left()![1]) * 60 + Number(left()![2]);
+    await until(() => { const m = left(); return m !== null && Number(m[1]) * 60 + Number(m[2]) < first; }, 3000);
+    tui.daemon.push({ type: 'mobile', state: base({ pairings: [{ id: 'p1', label: 'Pixel 8', code: '472 915 308', expiresAt: at(-1), state: 'expired' }] }) });
+    await until(() => tui!.frame().includes('La demande a expiré.'));
   });
 });
