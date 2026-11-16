@@ -16,6 +16,7 @@ import { SessionScreen } from './screens/Session.js';
 import { Ask } from './screens/Ask.js';
 import { Launch } from './screens/Launch.js';
 import { Settings } from './screens/Settings.js';
+import { Mobile } from './screens/Mobile.js';
 import { Help } from './screens/Help.js';
 import { OpenRigScreen } from './screens/OpenRig.js';
 import { RigLaunchScreen } from './screens/RigLaunch.js';
@@ -107,7 +108,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const actions = useActions({ client, sessions: d.sessions, errors: d.errors, t, toast });
 
   const go = useCallback((next: Screen) => {
-    setScreen(cur => { if (next === 'help' || next === 'settings') setBack(cur === 'help' || cur === 'settings' ? 'overview' : cur); return next; });
+    // Back from « Accès mobile » to Réglages keeps where Réglages itself goes back to.
+    setScreen(cur => { if (cur === 'mobile' && next === 'settings') return next; if (next === 'help' || next === 'settings') setBack(cur === 'help' || cur === 'settings' ? 'overview' : cur); return next; });
   }, []);
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
@@ -164,7 +166,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (small && !key.escape && input !== 'q') return;
     if (keys.current?.(input, key)) return;
     if (input === 'q') { exit(); return; }
-    if (key.escape) { go(screen === 'help' || screen === 'settings' ? back : 'overview'); return; }
+    if (key.escape) { go(screen === 'mobile' ? 'settings' : screen === 'help' || screen === 'settings' ? back : 'overview'); return; }
     if (input === '?') { go('help'); return; }
     if (input === ',') { go('settings'); return; }
     if (input === '/') { go('ask'); return; }
@@ -172,6 +174,6 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (/^[1-6]$/.test(input)) { go(SCREENS[Number(input) - 1]!); return; }
   });
 
-  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, openrig: OpenRigScreen, rigLaunch: RigLaunchScreen, help: Help }[screen];
+  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, mobile: Mobile, openrig: OpenRigScreen, rigLaunch: RigLaunchScreen, help: Help }[screen];
   return <TuiContext.Provider value={tui}><Body /></TuiContext.Provider>;
 }

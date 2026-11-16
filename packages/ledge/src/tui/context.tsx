@@ -9,8 +9,8 @@ import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
 import type { ThemeChoice, Tone } from './theme.js';
 
-export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'openrig' | 'rigLaunch' | 'help';
-/** The screens `1`…`6` go to, in order. */
+export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'mobile' | 'openrig' | 'rigLaunch' | 'help';
+/** The screens `1`…`6` go to, in order (`mobile` is reached from Réglages, not by a number). */
 export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch', 'settings', 'openrig'];
 
 /** What the fields keep while the TUI runs, a screen left or not: each one's draft and what it sent, by field (`ask`, or a
