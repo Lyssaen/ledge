@@ -60,7 +60,7 @@ export function Frame({ crumb, crumbShort, keys, kept, noHelp, children }: {
       <Box flexGrow={1} flexDirection="column" overflow="hidden">{children}<PairingDialog /></Box>
       {lastToast ? <Box paddingX={1} height={1}><Text wrap="truncate" color={lastToast.tone === 'error' ? C.red : lastToast.tone === 'ok' ? C.green : lastToast.tone === 'quiet' ? C.dim : C.yellow}>{lastToast.text}</Text></Box> : null}
       <UsageLine columns={columns} />
-      <KeyBar keys={fitKeys(linking > 0 && screen !== 'mobile' && !keys.some(k => k[0] === 'L') ? [...keys.slice(0, 2), ['L', t.mobile.keys.pair], ...keys.slice(2)] : keys, columns, editing || noHelp ? null : ['?', t.keys.help])} />
+      <KeyBar keys={fitKeys(linking > 0 && !editing && screen !== 'mobile' && !keys.some(k => k[0] === 'L') ? [...keys.slice(0, 2), ['L', t.mobile.keys.pair], ...keys.slice(2)] : keys, columns, editing || noHelp ? null : ['?', t.keys.help])} />
     </Box>
   );
 }

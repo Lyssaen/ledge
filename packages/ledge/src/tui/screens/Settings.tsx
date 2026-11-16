@@ -24,7 +24,8 @@ export function Settings() {
   const limits = useUsageGroups();
   const rows = [{ id: 'lang', label: t.settings.language }, { id: 'theme', label: t.settings.theme }, { id: 'context', label: t.settings.context }, { id: 'usage', label: t.usage.setting }, { id: 'mobile', label: t.mobile.row }] as const;
   const summary = mobileSummary(useMobile(tui.client));
-  const [at, setAt] = useState(0);
+  // Back from « Accès mobile », the cursor is where it left, on its row; else it opens on the first.
+  const [at, setAt] = useState(() => { const i = tui.kept.settingsAt ?? 0; delete tui.kept.settingsAt; return i; });
   useScreenKeys((input, key) => {
     if (key.upArrow || input === 'k') { setAt(i => (i - 1 + rows.length) % rows.length); return true; }
     if (key.downArrow || input === 'j') { setAt(i => (i + 1) % rows.length); return true; }
@@ -32,7 +33,7 @@ export function Settings() {
     if (!by) return false;
     if (rows[at]!.id === 'lang') setLang(LANGS[(LANGS.indexOf(lang) + by + LANGS.length) % LANGS.length]!);
     else if (rows[at]!.id === 'theme') setTheme(THEMES[(THEMES.indexOf(theme) + by + THEMES.length) % THEMES.length]!);
-    else if (rows[at]!.id === 'mobile') { if (by > 0 || key.return) tui.go('mobile'); }
+    else if (rows[at]!.id === 'mobile') { if (by > 0 || key.return) { tui.kept.settingsAt = at; tui.go('mobile'); } }
     else if (rows[at]!.id === 'usage') {
       if (!usage.size) return true;
       const pct = Math.min(USAGE_ALERT_MAX * 100, Math.max(USAGE_ALERT_MIN * 100, Math.round(limits.threshold * 100) + by * 5));
@@ -57,7 +58,7 @@ export function Settings() {
               : r.id === 'theme'
               ? <Text>{THEMES.map(x => <Text key={x} color={x === theme ? C.fg : C.dim} bold={x === theme}>{x === theme ? `${g.radioOn} ` : `${g.radioOff} `}{x === 'auto' && background ? t.settings.themeAuto(background) : t.settings.themes[x]}{'     '}</Text>)}</Text>
               : r.id === 'mobile'
-              ? <Text><Text color={summary.kind === 'online' ? C.green : summary.kind === 'off' || summary.kind === 'offline' || summary.kind === 'signedOut' ? C.dim : C.faint}>{summaryText(summary, t.mobile)}</Text>{i === at ? <Text color={C.faint}>{'  ↵'}</Text> : null}</Text>
+              ? <Text>{summary.kind === 'online' ? <><Text color={C.green}>{g.linkOn} </Text><Text color={C.fg}>{summaryText(summary, t.mobile)}</Text></> : <Text color={summary.kind === 'off' || summary.kind === 'offline' || summary.kind === 'signedOut' ? C.dim : C.faint}>{summaryText(summary, t.mobile)}</Text>}{i === at ? <Text color={C.faint}>{'  ↵'}</Text> : null}</Text>
               : r.id === 'usage'
               ? <Text><Text color={usage.size ? C.fg : C.faint} bold={!!usage.size}>◂ {Math.round(limits.threshold * 100)} % ▸</Text><Text color={C.faint}>   {usage.size ? t.usage.settingHint : t.usage.settingUnknown}</Text></Text>
               : <Text><Text color={C.fg} bold>◂ {Math.round(near * 100)} % ▸</Text><Text color={C.faint}>   {known ? t.settings.contextHint : t.settings.contextUnknown}</Text></Text>}
@@ -98,8 +99,8 @@ function UsageDetail({ x, o }: { x: UsageGroup; o: { threshold: number; now: num
   );
 }
 
-/** The Réglages row's value for mobile access: « ● En ligne · 2 appareils · 1 demande », or the state's word. */
+/** The Réglages row's value for mobile access: « En ligne · 2 appareils · 1 demande » (its mark is drawn before it), or the state's word. */
 function summaryText(s: ReturnType<typeof mobileSummary>, m: Messages['mobile']): string {
-  return s.kind === 'online' ? `● ${m.sumOnline(s.devices, s.requests)}` : s.kind === 'off' ? m.offW : s.kind === 'offline' ? m.sumOffline
+  return s.kind === 'online' ? m.sumOnline(s.devices, s.requests) : s.kind === 'off' ? m.offW : s.kind === 'offline' ? m.sumOffline
     : s.kind === 'signedOut' ? m.idle : m.sumUnavailable;
 }

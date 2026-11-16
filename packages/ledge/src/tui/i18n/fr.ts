@@ -10,6 +10,8 @@ const theDevice = (d: DeviceWord) => (d.named ? d.text : vowel(d.text) ? `l’${
 const thisDevice = (d: DeviceWord) => (d.named ? d.text : vowel(d.text) ? `cet ${d.text}` : `ce ${d.text}`);
 const ofDevice = (d: DeviceWord) => (d.named ? (vowel(d.text) ? `d’${d.text}` : `de ${d.text}`) : vowel(d.text) ? `de l’${d.text}` : `du ${d.text}`);
 const upFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** A device said at the start of a sentence: a model takes a capital, a name the user gave stays as written. */
+const startOf = (d: DeviceWord, s: string) => (d.named ? s : upFirst(s));
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 
@@ -356,7 +358,7 @@ export const fr = {
     asks: 'demande l’accès', compare: 'comparer le code',
     seenNow: 'vu à l’instant', seenYesterday: 'vu hier', seenAgo: (a: string) => `vu il y a ${a}`, linkedOn: (d: string) => `lié le ${d}`,
     nameLabel: 'Nom', revokeAsk: (n: string) => `Révoquer ${n} ? Il perd l’accès tout de suite.`,
-    recTag: 'Reconnecté', recWell: (d: DeviceWord) => [`${upFirst(thisDevice(d))} s’est reconnecté sans code, avec sa passkey, après`, 'une réinstallation de l’app. Si ce n’était pas toi, révoque-le.'], recAck: 'C’était bien moi',
+    recTag: 'Reconnecté', recWell: (d: DeviceWord) => [`${startOf(d, thisDevice(d))} s’est reconnecté sans code, avec sa passkey, après`, 'une réinstallation de l’app. Si ce n’était pas toi, révoque-le.'], recAck: 'C’était bien moi',
     attTag: 'Tentative refusée', attWell: (at: string, d: DeviceWord) => [`${at}, un autre appareil a tenté de prendre la place`, `${ofDevice(d)} avec sa passkey. Refusé : ${theDevice(d)} était connecté.`, `Si ce n’était pas toi, révoque ${thisDevice(d)}.`], attAck: 'Compris',
     blocked: (n: number, since: string) => [`Reconnexion par passkey bloquée : ${n} vérifications`, `ont échoué depuis ${since}. Les appareils liés marchent,`, 'la liaison par code aussi.'], unblock: 'Débloquer',
     alert: (n: string) => `${n} demande à se lier à ton PC`, alertCompare: 'comparer le code',
@@ -365,7 +367,7 @@ export const fr = {
     replaceL: (n: string) => `Remplacer l’ancien « ${n} »`, replaceH: (seen: string, linked: string) => `${seen} · ${linked} · il sera révoqué`,
     approve: 'approuver', deny: 'refuser', later: 'fermer', untick: 'décocher',
     approvedL: (label: string) => ['Approuvé sur ce PC.', `Confirme maintenant sur ${theDevice({ text: label, named: false })}.`], linkedL: (label: string) => [`${label} est lié.`, 'Il apparaît dans Réglages › Accès mobile.'], expiredL: ['La demande a expiré.', 'Recommence depuis le téléphone.'], close: 'fermer',
-    copiedT: 'Copié', revokedT: (n: string) => `${n} est révoqué.`, recToast: (d: DeviceWord) => `${upFirst(theDevice(d))} s’est reconnecté avec sa passkey`,
+    copiedT: 'Copié', revokedT: (n: string) => `${n} est révoqué.`, recToast: (d: DeviceWord) => `${startOf(d, theDevice(d))} s’est reconnecté avec sa passkey`,
     refusedToast: (d: DeviceWord) => `Reconnexion avec la passkey ${ofDevice(d)} refusée : il est connecté`,
     someDevice: 'appareil',
     refusedOffline: 'Le daemon local est hors ligne : rien n’a changé.', refusedOutdated: 'Le daemon local est trop ancien pour l’accès mobile : mets-le à jour.',

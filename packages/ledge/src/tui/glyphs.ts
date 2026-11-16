@@ -15,6 +15,9 @@ const UNICODE = {
   task: '▤',
   /** A linked device in Mobile access: a phone, a tablet. */
   phone: '▯', tablet: '▭',
+  /** Mobile access's marks (docs/mockups/ledge-mobile-access-tui.html): on or online, off or not connected, connecting, a
+   *  blocked recovery or an expired pairing, a pairing that asks. */
+  linkOn: '●', linkOff: '○', linkWait: '◌', linkBlocked: '⊘', linkAsks: '!',
   /** A role's value: written here, inherited, not declared, unknown; the margin's rail (docs/mockups/ledge-openrig-roles-tui.html). */
   pvHere: '●', pvInh: '↳', pvAbs: '○', pvUnk: '?', rail: '▎',
   /** OpenRig's blocks in a thread (docs/mockups/openrig-messages): a message, a queue row, a notice; the raw's box. */
@@ -33,6 +36,7 @@ const ASCII: Glyphs = {
   running: '~', held: '.', stale: '!',
   task: '[=]',
   phone: '[]', tablet: '[=]',
+  linkOn: '*', linkOff: 'o', linkWait: '.', linkBlocked: 'x', linkAsks: '!',
   pvHere: '*', pvInh: '>', pvAbs: 'o', pvUnk: '?', rail: '|',
   markClaude: '*', markCodex: '>_', markCursor: '<>', barFull: '#', barEmpty: '.', reset: '@', gauge: '%',
   rigMessage: '@', rigRow: '=', rigNotice: '-', boxTL: '+', boxTR: '+', boxBL: '+', boxBR: '+', boxH: '-', boxV: '|',

@@ -245,3 +245,26 @@ describe('« Lier un appareil » over a screen with its own keys', () => {
     expect(tui.frame()).not.toMatch(/❯ y/);
   });
 });
+
+describe('« Lier un appareil » › minors of the final review', () => {
+  it('says « Hors ligne » for an old device never seen, not an empty « vu il y a »', async () => {
+    tui = await startTui({ mobile: base({ devices: [{ ...iphone, lastSeenAt: undefined }], pairings: [{ id: 'p1', label: 'iPhone', code: '472 915 308', expiresAt: at(5), state: 'confirm' }] } as Partial<MobileState>) });
+    await tui.press('L');
+    await until(() => tui!.frame().includes('[x] Remplacer'));
+    expect(tui.frame()).toContain('Hors ligne · lié le 3 nov · il sera révoqué');
+    expect(tui.frame()).not.toContain('vu il y a  ·');
+  });
+
+  it('toasts a named device as written, without a capital it does not have', async () => {
+    tui = await startTui({ mobile: base({ pairings: [], devices: [{ ...iphone, name: 'iPhone perso' }] } as Partial<MobileState>) });
+    tui.daemon.push({ type: 'mobile.recovery', event: 'recovered', id: 'd1', at: new Date().toISOString() } as never);
+    await until(() => tui!.frame().includes('iPhone perso s’est reconnecté avec sa passkey'));
+    expect(tui.frame()).not.toContain('IPhone perso');
+  });
+
+  it('toasts a named device as written in English too', async () => {
+    tui = await startTui({ lang: 'en', mobile: base({ pairings: [], devices: [{ ...iphone, name: 'iPhone perso' }] } as Partial<MobileState>) });
+    tui.daemon.push({ type: 'mobile.recovery', event: 'recovered', id: 'd1', at: new Date().toISOString() } as never);
+    await until(() => tui!.frame().includes('iPhone perso reconnected with its passkey'));
+  });
+});

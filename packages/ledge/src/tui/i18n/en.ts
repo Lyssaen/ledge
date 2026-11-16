@@ -8,6 +8,8 @@ import type { DeviceWord } from '@ledge/fleet';
 const theDevice = (d: DeviceWord) => (d.named ? d.text : `the ${d.text}`);
 const thisDevice = (d: DeviceWord) => (d.named ? d.text : `this ${d.text}`);
 const upFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** A device said at the start of a sentence: a model takes a capital, a name the user gave stays as written. */
+const startOf = (d: DeviceWord, s: string) => (d.named ? s : upFirst(s));
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 
@@ -340,7 +342,7 @@ export const en: Messages = {
     asks: 'asks for access', compare: 'compare the code',
     seenNow: 'seen just now', seenYesterday: 'seen yesterday', seenAgo: a => `seen ${a} ago`, linkedOn: d => `linked ${d}`,
     nameLabel: 'Name', revokeAsk: n => `Revoke ${n}? It loses access at once.`,
-    recTag: 'Reconnected', recWell: d => [`${upFirst(thisDevice(d))} reconnected without a code, with its passkey, after`, 'the app was reinstalled. If it was not you, revoke it.'], recAck: 'That was me',
+    recTag: 'Reconnected', recWell: d => [`${startOf(d, thisDevice(d))} reconnected without a code, with its passkey, after`, 'the app was reinstalled. If it was not you, revoke it.'], recAck: 'That was me',
     attTag: 'Attempt refused', attWell: (at, d) => [`${at}, another device tried to take ${thisDevice(d)}’s place`, `with its passkey. Refused: ${theDevice(d)} was connected.`, `If it was not you, revoke ${thisDevice(d)}.`], attAck: 'Got it',
     blocked: (n, since) => [`Passkey reconnection blocked: ${n} checks failed`, `since ${since}. Linked devices keep working, and so`, 'does linking with a code.'], unblock: 'Unblock',
     alert: n => `${n} asks to link to your PC`, alertCompare: 'compare the code',
@@ -349,7 +351,7 @@ export const en: Messages = {
     replaceL: n => `Replace the old “${n}”`, replaceH: (seen, linked) => `${seen} · ${linked} · will be revoked`,
     approve: 'approve', deny: 'deny', later: 'close', untick: 'untick',
     approvedL: label => ['Approved on this PC.', `Confirm on the ${label} now.`], linkedL: label => [`${label} is linked.`, 'It shows in Settings › Mobile access.'], expiredL: ['The request expired.', 'Start again from the phone.'], close: 'close',
-    copiedT: 'Copied', revokedT: n => `${n} is revoked.`, recToast: d => `${upFirst(theDevice(d))} reconnected with its passkey`,
+    copiedT: 'Copied', revokedT: n => `${n} is revoked.`, recToast: d => `${startOf(d, theDevice(d))} reconnected with its passkey`,
     refusedToast: d => `Passkey reconnection as ${theDevice(d)} refused: it’s connected`,
     someDevice: 'device',
     refusedOffline: 'The local daemon is offline: nothing changed.', refusedOutdated: 'The local daemon is too old for mobile access: update it.',

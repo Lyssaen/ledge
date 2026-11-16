@@ -161,7 +161,8 @@ function AccessBox({ m, now, sel, relay, setRelay, submitRelay }: {
   m: MobileState; now: number; sel(id: string): boolean;
   relay: { value: string; bad: boolean } | null; setRelay(r: { value: string; bad: boolean } | null): void; submitRelay(v: string): void;
 }) {
-  const c = useTui().t.mobile;
+  const { t, g } = useTui();
+  const c = t.mobile;
   const v = m.enabled ? C.fg : C.faint;
   const faint = (s: string) => <Text color={C.faint}>{s}</Text>;
   const ended = m.signinError && m.signinError !== 'not_allowed' ? c.signinEnded[m.signinError] : undefined;
@@ -192,16 +193,16 @@ function AccessBox({ m, now, sel, relay, setRelay, submitRelay }: {
 
   const offline = m.enabled && m.link.state === 'offline';
   const secs = m.link.state === 'offline' ? Math.max(0, Math.ceil((Date.parse(m.link.retryAt) - now) / 1000)) : 0;
-  const status = !m.enabled ? <><Text color={C.faint}>○ </Text><Text color={C.faint}>{c.offW}</Text></>
-    : m.link.state === 'online' ? <><Text color={C.green}>● </Text><Text color={C.fg}>{c.online}</Text></>
-    : m.link.state === 'connecting' ? <><Text color={C.yellow}>◌ </Text><Text color={C.fg}>{c.connecting}</Text></>
-    : offline ? <><Text color={C.yellow}>● </Text><Text color={C.fg}>{c.retryIn(secs)}</Text>{faint(`  ↵ ${c.retry}`)}</>
-    : <><Text color={C.faint}>○ </Text><Text color={C.fg}>{c.idle}</Text>{!m.signin && !m.signinError && !m.account && m.link.state !== 'signed_out' ? faint(`  ${c.idleH}`) : null}</>;
+  const status = !m.enabled ? <><Text color={C.faint}>{g.linkOff} </Text><Text color={C.faint}>{c.offW}</Text></>
+    : m.link.state === 'online' ? <><Text color={C.green}>{g.linkOn} </Text><Text color={C.fg}>{c.online}</Text></>
+    : m.link.state === 'connecting' ? <><Text color={C.yellow}>{g.linkWait} </Text><Text color={C.fg}>{c.connecting}</Text></>
+    : offline ? <><Text color={C.yellow}>{g.linkOn} </Text><Text color={C.fg}>{c.retryIn(secs)}</Text>{faint(`  ↵ ${c.retry}`)}</>
+    : <><Text color={C.faint}>{g.linkOff} </Text><Text color={C.fg}>{c.idle}</Text>{!m.signin && !m.signinError && !m.account && m.link.state !== 'signed_out' ? faint(`  ${c.idleH}`) : null}</>;
 
   return (
     <>
       <Row selected={sel('access')} label={c.access}>
-        {m.enabled ? <><Text color={C.green}>● </Text><Text color={C.fg}>{c.on}</Text></> : <><Text color={C.faint}>○ </Text><Text color={C.fg}>{c.offW}</Text></>}{faint(`  ${c.accessH}`)}
+        {m.enabled ? <><Text color={C.green}>{g.linkOn} </Text><Text color={C.fg}>{c.on}</Text></> : <><Text color={C.faint}>{g.linkOff} </Text><Text color={C.fg}>{c.offW}</Text></>}{faint(`  ${c.accessH}`)}
       </Row>
       <Row selected={sel('relay')} label={c.relay} raw={relay !== null}>
         {relay

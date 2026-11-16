@@ -96,14 +96,14 @@ export function DevicesBox({ m, now, sel, rename, setRename, submitRename, revok
     <TitledBox title={title} flexGrow={1} paddingX={0}>
       {blocked ? (
         <>
-          <Line selected={sel('blocked')}><Text color={C.red} wrap="truncate">⊘ {c.blocked(blocked.failures, when(blocked.since))[0]}</Text></Line>
+          <Line selected={sel('blocked')}><Text color={C.red} wrap="truncate">{g.linkBlocked} {c.blocked(blocked.failures, when(blocked.since))[0]}</Text></Line>
           {c.blocked(blocked.failures, when(blocked.since)).slice(1).map(l => <Under key={l} color={C.red}>{l}</Under>)}
           <Text wrap="truncate"><Text color={C.faint}>{'   ↵ '}</Text><Text color={C.fg} underline>{c.unblock}</Text></Text>
         </>
       ) : null}
       {pairings.map(p => (
         <Line key={p.id} selected={sel(`pair:${p.id}`)}>
-          <Text color={C.yellow}>! </Text>
+          <Text color={C.yellow}>{g.linkAsks} </Text>
           <Text color={sel(`pair:${p.id}`) ? C.fg : C.yellow} bold={sel(`pair:${p.id}`)} wrap="truncate">{`${p.label} ${c.asks}`}</Text>
           <Box flexShrink={0}>{faint(`   ↵ ${c.compare}`)}</Box>
         </Line>

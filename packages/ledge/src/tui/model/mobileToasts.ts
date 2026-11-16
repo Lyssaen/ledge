@@ -18,8 +18,8 @@ export function useMobileToasts(tui: Pick<Tui, 'fleet' | 'client' | 't' | 'toast
     // The fleet's state, not the last render's: the `mobile` that came just before this message may not be drawn yet.
     // A device the daemon does not list is still worth a toast, said as « l'appareil ».
     const word = deviceWord(fleet.mobile()?.devices.find(d => d.id === id)) ?? { text: t.mobile.someDevice, named: false };
-    if (m.event === 'recovered') toast({ text: t.mobile.recToast(word), tone: 'ok' });
-    else toast({ text: t.mobile.refusedToast(word), tone: 'info' });
+    // Both are news to check, not a success: the mockup draws them in the yellow of information.
+    toast({ text: m.event === 'recovered' ? t.mobile.recToast(word) : t.mobile.refusedToast(word), tone: 'info' });
   }), [fleet]);
 
   const error = useMobileError(tui.client);

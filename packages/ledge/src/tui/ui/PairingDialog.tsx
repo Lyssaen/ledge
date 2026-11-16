@@ -91,7 +91,8 @@ export function PairingDialog() {
       line([c.pairWarn[1] ?? '', C.red], [' '.repeat(Math.max(1, inner - cells(c.pairWarn[1] ?? '') - cells(expires))), C.fg], [expires, C.faint]), blank(3)
     );
     if (old) {
-      const seen = seenText(old, Date.now(), c, t.time) || t.mobile.seenAgo('');
+      // Never seen, the old device is said offline, as Desktop says it, not with an empty « vu il y a ».
+      const seen = seenText(old, Date.now(), c, t.time) || c.sumOffline;
       body.push(
         line([replacing ? '[x] ' : '[ ] ', C.fg, true], [c.replaceL(deviceName(old)), C.fg]),
         line(['    ' + c.replaceH(seen, c.linkedOn(shortDate(old.approvedAt, lang))), C.faint]), blank(4)
@@ -101,7 +102,7 @@ export function PairingDialog() {
   } else {
     const [a = '', b = ''] = shown.state === 'approved' ? c.approvedL(shown.label) : shown.state === 'linked' ? c.linkedL(shown.label) : c.expiredL;
     const color = shown.state === 'expired' ? C.yellow : C.green;
-    body = [line([(shown.state === 'expired' ? '⊘ ' : g.ok + ' '), color], [a, color, true]), line(['  ' + b, C.fg]), blank(1), caps([['esc', c.close, C.dim]], 2)];
+    body = [line([(shown.state === 'expired' ? g.linkBlocked : g.ok) + ' ', color], [a, color, true]), line(['  ' + b, C.fg]), blank(1), caps([['esc', c.close, C.dim]], 2)];
   }
   return (
     <Box position="absolute" marginLeft={x} marginTop={1} width={w}>

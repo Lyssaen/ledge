@@ -374,7 +374,8 @@ describe('Accès mobile › the devices box', () => {
     const d = two(); d[0] = { ...d[0]!, recovered: { at: ago(1), pending: true } } as never;
     tui = await openAt(d, 4);
     expect(tui.frame()).toContain('Reconnecté');
-    expect(tui.frame()).toContain('IPhone perso s’est reconnecté sans code');
+    // A name the user gave is said as written: only a model takes a capital at the start of the sentence.
+    expect(tui.frame()).toContain('iPhone perso s’est reconnecté sans code');
     expect(tui.frame()).toContain('C’était bien moi');
     await tui.press('\r');
     expect(tui.sentMobile()).toEqual([{ type: 'mobile.device.ack', id: 'd1', what: 'recovered' }]);
@@ -625,5 +626,39 @@ describe('Accès mobile › the cursor after its row vanishes', () => {
     await tui.press('r');
     expect(tui.sentMobile()).toEqual([]);
     await until(() => tui!.frame().includes('Nom [ iPad · Safari'));
+  });
+});
+
+describe('Accès mobile › minors of the final review', () => {
+  it('lands back on the « Accès mobile » row of Réglages after esc', async () => {
+    tui = await startTui({ mobile: state({ devices: two() }) });
+    await open(tui);
+    await until(() => tui!.frame().includes('ACCÈS MOBILE'));
+    await tui.press('\x1b');
+    await until(() => tui!.frame().includes('Langue'));
+    expect(tui.frame()).toMatch(/Accès mobile\s+● En ligne · 2 appareils\s+↵/);
+  });
+
+  it('draws its marks in ASCII when the terminal asks for it', async () => {
+    tui = await startTui({ ascii: true, mobile: state({ devices: two(), pairings: online().pairings, recovery: { blocked: { since: ago(5), failures: 3 } } }) });
+    await tui.press(',');
+    await until(() => tui!.frame().includes('* En ligne · 2 appareils · 1 demande'));
+    await down(tui, 4);
+    await tui.press('\r');
+    await until(() => tui!.frame().includes('ACCÈS MOBILE'));
+    const f = tui.frame();
+    expect(f).toContain('* Activé');
+    expect(f).toContain('* Connecté au relais');
+    expect(f).toContain('x Reconnexion par passkey bloquée');
+    expect(f).toContain('! Pixel 8 demande l’accès');
+    expect(f).not.toMatch(/[●○◌⊘]/);
+  });
+
+  it('keeps « L lier » off the key bar while a field has the keys', async () => {
+    tui = await startTui({ mobile: online() });
+    await until(() => /L\s+lier/.test(tui!.frame()));
+    await tui.press('/');
+    await until(() => tui!.frame().includes('QUESTION'));
+    expect(tui.frame()).not.toMatch(/L\s+lier/);
   });
 });
