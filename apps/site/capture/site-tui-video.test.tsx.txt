@@ -1,0 +1,126 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { describe, it } from 'vitest';
+import { fakeSession } from '@ledge/fleet/test/mockDaemon';
+import type { ClientMessage } from '@ledge/protocol';
+import { until } from './helpers.js';
+import { mockupSessions, startTui } from './tui-fixture.js';
+
+const OUT = process.env.SHOT_DIR!;
+const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
+const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+const T = (s: number) => new Date(Date.now() - 600_000 + s * 1000).toISOString();
+const sent = <K extends ClientMessage['type']>(received: ClientMessage[], type: K) => received.filter((m): m is Extract<ClientMessage, { type: K }> => m.type === type);
+
+describe('site video', () => {
+  it('plays the story and dumps a frame per step', async () => {
+    mkdirSync(OUT, { recursive: true });
+    const started = (i: number) => new Date(Date.now() - (134 - i) * 60_000).toISOString();
+    const sessions = [...mockupSessions().map((x, i) => ({ ...x, startedAt: started(i), ...(x.id === 'nova' ? { lastMessage: { id: 'x1', to: 'Otto', peer: 'otto', summary: 'Le fleet se reconnecte, tu peux rebaser', at: ago(3) } } : {}), ...(x.id === 'luna' ? { lastMessage: { id: 'x2', to: 'Iris', peer: 'iris', summary: 'Les images de la page d’accueil sont prêtes', at: ago(9) } } : {}) })),
+      { ...fakeSession('milo', { name: 'Milo', cwd: '/w/ledge', repo: 'ledge', repoPath: '/w/ledge', project: 'ledge', branch: 'feat/LEDGE-57-broadcast', topic: 'Diffuser un message à la flotte', state: 'working', model: 'sonnet', effort: 'medium', lastActivityAt: ago(0) }), startedAt: started(4) },
+      { ...fakeSession('iris', { name: 'Iris', tool: 'codex', cwd: '/w/website', repo: 'website', repoPath: '/w/website', project: 'website', branch: 'fix/WEB-21-lighthouse', topic: 'Passer Lighthouse au vert', state: 'working', model: 'gpt-5.5', effort: 'high', lastActivityAt: ago(2) }), startedAt: started(5) }
+    ];
+    const byId = (id: string) => sessions.find(s => s.id === id)!;
+    const tui = await startTui({ sessions, lang: 'fr', theme: 'dark', background: 'dark' });
+    const has = (s: string) => strip(tui.frame()).includes(s);
+    const frames: Array<{ file: string; key: string; caption: string }> = [];
+    const shot = async (key: string, caption: string) => {
+      await new Promise(r => setTimeout(r, 350));
+      const n = String(frames.length + 1).padStart(2, '0');
+      const f = tui.frame();
+      writeFileSync(`${OUT}/f${n}.ansi`, f);
+      writeFileSync(`${OUT}/f${n}.txt`, strip(f));
+      frames.push({ file: `f${n}.png`, key, caption });
+    };
+    try {
+      await tui.resize(100, 30);
+      tui.daemon.preview('otto', ['● La liste suit maintenant le store du daemon.', '', '● Bash(npm test)', '  ⎿  Running…', '', '  Do you want to proceed?', '  ❯ 1. Yes', '    2. Yes, and don’t ask again for npm test', '    3. No, and tell Claude what to do differently']);
+      tui.daemon.preview('luna', ['● Le serveur de dev doit écouter sur un port libre.', '', '  Quel port pour le serveur de dev ?', '  ❯ 1. 3000', '    2. 5173', '    3. 8080', '    4. Type something.']);
+      const iris1 = ['• Je mesure la page d’accueil avant de modifier.', '', '$ pnpm lighthouse http://localhost:5173', '  Performance 71 · Accessibilité 94 · SEO 100', ''];
+      const iris2 = [...iris1, '• Le LCP vient de l’image d’en-tête (1,8 Mo).', '', '• Edited src/components/Hero.astro (+6 -2)', ''];
+      const iris3 = [...iris2, '$ pnpm lighthouse http://localhost:5173', '  Performance 96 · Accessibilité 94 · SEO 100', '', '• Performance au vert. Reste le pied de page.'];
+      tui.daemon.preview('iris', iris1);
+      tui.daemon.thread('iris', [
+        { kind: 'prompt', id: 'p1', at: T(0), turn: 1, text: 'Passe Lighthouse au vert sur la page d’accueil.' },
+        { kind: 'message', id: 'm1', at: T(15), turn: 1, text: 'Je mesure la page d’accueil avant de toucher au code.' },
+        { kind: 'tool', id: 't1', at: T(20), turn: 1, tool: 'Bash', label: 'pnpm lighthouse http://localhost:5173', status: 'success', durationMs: 8400, files: [] },
+        { kind: 'message', id: 'm2', at: T(40), turn: 1, text: 'Le LCP vient de l’image d’en-tête (1,8 Mo, non dimensionnée).' },
+        { kind: 'tool', id: 't2', at: T(50), turn: 1, tool: 'Edit', label: 'src/components/Hero.astro', status: 'success', durationMs: 210, files: [] },
+        { kind: 'tool', id: 't3', at: T(60), turn: 1, tool: 'Bash', label: 'pnpm lighthouse http://localhost:5173', status: 'success', durationMs: 7900, files: [] },
+        { kind: 'message', id: 'm3', at: T(80), turn: 1, text: 'Performance au vert (96). Je passe aux contrastes du pied de page.' }
+      ] as never);
+      await until(() => has('Veut exécuter') && has('Nova → Otto') && has('Do you want to proceed?'));
+      await shot('', 'La flotte au repos : deux sessions t’attendent.');
+
+      await tui.press('y');
+      await until(() => sent(tui.daemon.received, 'session.decide').length === 1);
+      tui.daemon.upsert({ ...byId('otto'), state: 'working', pending: undefined, lastActivityAt: ago(0) });
+      tui.daemon.preview('otto', ['● La liste suit maintenant le store du daemon.', '', '● Bash(npm test)', '  ⎿  Running…', '', '  ✓ test/tui-overview.test.tsx (12)', '  ✓ test/tui-screens.test.tsx (48)']);
+      await until(() => has('✓ Otto : autorisé') && has('À TOI · 1'));
+      await shot('y', 'Otto est autorisé à lancer npm test : il repart au travail.');
+
+      await until(() => !has('✓ Otto : autorisé'), 15000);
+      await tui.press('\t');
+      await until(() => has('Demande : Quel port pour le serveur de dev ?'));
+      await shot('tab', 'Tab passe à la suivante : Luna pose une question.');
+
+      await tui.press('2');
+      await until(() => sent(tui.daemon.received, 'session.reply').length === 1);
+      tui.daemon.upsert({ ...byId('luna'), state: 'working', pending: undefined, lastActivityAt: ago(0) });
+      tui.daemon.preview('luna', ['● Le serveur de dev doit écouter sur un port libre.', '', '  Quel port pour le serveur de dev ?', '  ❯ 2. 5173', '', '● Bash(pnpm dev --port 5173)', '  ⎿  Local: http://localhost:5173/']);
+      await until(() => !has('t’attend') || has('Personne'));
+      await shot('2', 'Un chiffre répond : port 5173. Plus personne n’attend.');
+
+      await until(() => !has('✓ Luna'), 15000);
+      await tui.press('j');
+      await until(() => has('IRIS · PASSER') && has('Performance 71'));
+      await shot('j', 'j descend sur Iris : son terminal en direct.');
+      tui.daemon.preview('iris', iris2);
+      await until(() => has('Hero.astro'));
+      await shot('', 'Iris avance : elle corrige l’image d’en-tête.');
+      tui.daemon.preview('iris', iris3);
+      await until(() => has('Performance 96'));
+      await shot('', 'Lighthouse repasse au vert.');
+
+      await tui.press('\r');
+      await until(() => has('Performance au vert (96)'));
+      await shot('↵', 'Entrée ouvre le fil de la session.');
+
+      await tui.press('\x1b');
+      await until(() => has('PROJETS'));
+      await shot('esc', 'Retour à la vue d’ensemble.');
+
+      await tui.press('/');
+      await until(() => has('LEDGE · OPÉRATEUR'));
+      await tui.press('Où en sont les autres ?');
+      await shot('/', 'Demander à Ledge : une question sur toute la flotte.');
+      await tui.press('\r');
+      await until(() => sent(tui.daemon.received, 'chat.ask').length === 1);
+      const { qid } = sent(tui.daemon.received, 'chat.ask')[0]!;
+      tui.daemon.push({ type: 'chat.step', qid, step: { kind: 'sessions' } });
+      const answer = 'Tout le monde travaille :\n- **Otto** lance `npm test` sur la liste des sessions.\n- **Nova** a reconnecté le fleet en ssh.\n- **Milo** diffuse un message à la flotte.\n- **Luna** démarre le serveur de dev sur 5173.\n- **Iris** a passé Lighthouse à 96.\n\nBix est disponible.';
+      tui.daemon.push({ type: 'chat.delta', qid, text: answer });
+      tui.daemon.push({ type: 'chat.done', qid, text: answer, at: new Date().toISOString(), proposals: [] });
+      await until(() => has('Bix est disponible'));
+      await shot('↵', 'Ledge lit les sessions et résume où en est chacune.');
+
+      await tui.press('\x1b');
+      await new Promise(r => setTimeout(r, 300));
+      if (!has('PROJETS')) await tui.press('\x1b');
+      await until(() => has('PROJETS'));
+      await tui.press('+');
+      await until(() => has('NOUVELLE SESSION'));
+      await until(() => sent(tui.daemon.received, 'models.list').length >= 1);
+      for (const ask of sent(tui.daemon.received, 'models.list')) tui.daemon.push({ type: 'models.listing', requestId: ask.requestId, tool: 'claude', models: [{ id: 'opus', label: 'Opus', efforts: ['low', 'medium', 'high'] }, { id: 'sonnet', label: 'Sonnet' }] } as never);
+      await until(() => !has('chargement…'));
+      await tui.press('Ajoute un test de bout en bout pour la reconnexion ssh');
+      await until(() => has('reconnexion ssh'));
+      await shot('+', 'Nouvelle session : une instruction, un agent, un projet.');
+      await tui.press('\x1b');
+      await new Promise(r => setTimeout(r, 300));
+      if (!has('PROJETS')) await tui.press('\x1b');
+      await until(() => has('PROJETS'));
+      await shot('esc', 'Retour à la vue d’ensemble : toute la flotte travaille.');
+      writeFileSync(`${OUT}/frames.json`, JSON.stringify(frames, null, 2));
+    } finally { writeFileSync(`${OUT}/frames.partial.json`, JSON.stringify(frames, null, 2)); writeFileSync(`${OUT}/last.txt`, strip(tui.frame())); await tui.cleanup(); }
+  }, 60_000);
+});

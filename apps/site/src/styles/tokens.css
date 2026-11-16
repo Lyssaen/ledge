@@ -1,0 +1,120 @@
+/* The design tokens of the approved mockup: its palette, type, radii and spacing, named once and used by `site.css`. */
+:root {
+  /* The floor of the workshop and the ink written on it. */
+  --floor: #10120d;
+  --floor-line: rgba(243, 238, 226, 0.04);
+  --floor-cell: 72px;
+  --ink: #f3eee2;
+  --ink-soft: #cfc9b8;
+  --ink-muted: #b9b3a3;
+  --ink-dim: #8f8a7c;
+  --ink-inverse: #14160f;
+  --line: #34372c;
+  --line-strong: #3a3d31;
+  --link-hover: #ffb4a8;
+  --focus: #ff8a7a;
+
+  /* Screens and terminals. */
+  --black: #000000;
+  --screen: #0a0a0a;
+  --terminal: #0c0c0d;
+  --terminal-line: #2a2a2a;
+  --terminal-ink: #e5e5e5;
+  --prompt: #4ade9a;
+  --amber: #fbbf24;
+  --ok: #5fe0a6;
+  --player-line: #262626;
+  --player-ink: #fafafa;
+  --player-soft: #d4d4d4;
+  --player-muted: #a3a3a3;
+  --player-progress: #f07a62;
+  --player-button: #1a1a1a;
+  --player-button-line: #3a3a3a;
+  --keycap-shadow: #8a8a8a;
+
+  /* The four states of an agent, each a small room of its own colour. */
+  --red-room: #2a1414;
+  --red-line: #5c2326;
+  --red-title: #ff9a8f;
+  --red-ink: #e4c9c4;
+  --red-ink-soft: #ecd6d1;
+  --red-frame: #120a0a;
+  --amber-room: #2a2210;
+  --amber-line: #5e4a16;
+  --amber-ink: #e6dcc0;
+  --blue-room: #141d30;
+  --blue-line: #2b3d66;
+  --blue-title: #8fbcff;
+  --blue-ink: #c9d4ea;
+  --green-room: #11261c;
+  --green-line: #24503b;
+  --green-ink: #c4e2d3;
+
+  /* The large rooms: a day in Ledge (navy), OpenRig (violet), the terminal (green), the notch (olive). */
+  --navy-room: #161d33;
+  --navy-line: #2a355c;
+  --navy-line-strong: #44517f;
+  --navy-frame: #3a4775;
+  --navy-ink: #dfe4f3;
+  --navy-hint: #aab3d6;
+  --violet-room: #1d1730;
+  --violet-line: #3b2f63;
+  --violet-line-strong: #4a3c7a;
+  --violet-ink: #ded8f0;
+  --violet-ink-soft: #cbc4e2;
+  --violet-hint: #b3abcf;
+  --violet-frame: #120e1f;
+  --violet-outline: #5a4c8a;
+  --forest-room: #13261d;
+  --forest-line: #24483a;
+  --forest-frame: #2f5a48;
+  --forest-ink: #cfe3d8;
+  --olive-room: #1b1c17;
+  --phone-outline: #55584a;
+
+  /* The install table: tan wood, dark cards laid on it. */
+  --table: #c8ad82;
+  --table-ink: #1c1710;
+  --table-ink-soft: #3b3222;
+
+  /* Type. */
+  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', 'Geist Variable', 'Geist', sans-serif;
+  --font-body: 'Geist Variable', 'Geist', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace;
+  --text-base: 17px;
+  --leading-base: 1.55;
+  --text-hero: clamp(42px, 6.2vw, 88px);
+  --text-title: clamp(34px, 4.6vw, 64px);
+  --text-heading: clamp(28px, 3.2vw, 44px);
+  --text-panel: clamp(28px, 3vw, 40px);
+  --text-lead: clamp(18px, 1.5vw, 21px);
+  --text-term: 18px;
+  --text-detail: 16px;
+  --text-small: 15px;
+  --text-note: 14px;
+  --text-tiny: 13px;
+
+  /* Radii. */
+  --radius-room: 32px;
+  --radius-card: 22px;
+  --radius-step: 20px;
+  --radius-hero: 18px;
+  --radius-frame: 16px;
+  --radius-field: 12px;
+  --radius-code: 10px;
+  --radius-pill: 999px;
+  --radius-phone: 13% / 6%;
+
+  /* Spacing. */
+  --gutter: max(20px, 4vw);
+  --page-width: 1200px;
+  --section-gap: 120px;
+  --room-pad: clamp(24px, 4vw, 56px);
+  --tap: 44px;
+
+  /* Shadows. */
+  --shadow-frame: 0 40px 90px -40px rgba(0, 0, 0, 0.9);
+  --shadow-phone: 0 30px 70px rgba(0, 0, 0, 0.7);
+  --shadow-hero: 0 50px 140px -30px rgba(96, 165, 250, 0.38), 0 30px 80px -40px rgba(255, 100, 103, 0.35);
+  --shadow-rig: 0 40px 110px -40px rgba(167, 139, 250, 0.55);
+}

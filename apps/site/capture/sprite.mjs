@@ -1,0 +1,13 @@
+import { createRequire } from 'node:module';
+import fs from 'node:fs';
+const [dir, pw] = process.argv.slice(2);
+const { chromium } = createRequire(import.meta.url)(pw);
+const files = fs.readdirSync(dir).filter(f => /^f\d+\.png$/.test(f)).sort();
+const html = `<body style="margin:0;background:#0c0c0d">${files.map(f => `<img src="file://${dir}/${f}" style="display:block;width:875px;height:528px">`).join('')}</body>`;
+fs.writeFileSync(`${dir}/sprite.html`, html);
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 875, height: 528 }, deviceScaleFactor: 2 });
+await p.goto(`file://${dir}/sprite.html`);
+await p.screenshot({ path: `${dir}/tui-sprite.png`, fullPage: true });
+await b.close();
+console.log(files.length, 'frames');

@@ -1,0 +1,41 @@
+---
+import { site } from '../config.ts';
+import { mediaFor } from '../data/media.ts';
+import { code, rich, type Catalogue } from '../i18n/index.ts';
+import LoopVideo from './LoopVideo.astro';
+
+// OpenRig: whole teams of agents, driven from Ledge.
+interface Props {
+  t: Catalogue;
+}
+const { t } = Astro.props;
+const facts = ['launch', 'tune', 'answer', 'control'] as const;
+const media = mediaFor(Astro.currentLocale);
+---
+
+<section id="openrig" class="section">
+  <div class="page stack room rig">
+    <div class="stack rig__head">
+      <h2 class="title">{t.openrig.title}</h2>
+      <p class="lead rig__lead">{t.openrig.lead}</p>
+    </div>
+    <div class="rig-wrap">
+      <div class="scroller">
+        <LoopVideo class="wide rig__video" file="rig.mp4" poster="desktop-rigs.png" label={t.openrig.videoLabel} />
+      </div>
+      <div class="rig-phone">
+        <img src={media('phone-rig-detail.png')} alt={t.openrig.phoneAlt} width="1170" height="2532" loading="lazy" />
+      </div>
+    </div>
+    <p class="hint">{t.showcase.scrollHint}</p>
+    <dl class="rig__facts">
+      {facts.map(fact => (
+        <div class="rig__fact">
+          <dt>{t.openrig[fact].term}</dt>
+          <dd set:html={rich(t.openrig[fact].text, fact === 'control' ? { rig: code('rig', 'amber') } : {})} />
+        </div>
+      ))}
+    </dl>
+    <p class="rig__note">{t.openrig.note} <a class="rig__link" href={site.openrigUrl}>{t.openrig.link}</a></p>
+  </div>
+</section>

@@ -1,0 +1,30 @@
+---
+import { mediaFor } from '../data/media.ts';
+
+// A silent capture that loops. It starts by itself, and `scripts/videos.ts` then plays it only while it is on screen and
+// never when the visitor asked for reduced motion. A `held` video waits for the page to show it (a hidden showcase tab).
+interface Props {
+  file: string;
+  poster: string;
+  label: string;
+  class?: string;
+  held?: boolean;
+  shot?: boolean;
+}
+const { file, poster, label, class: className, held = false, shot = false } = Astro.props;
+const media = mediaFor(Astro.currentLocale);
+---
+
+<video
+  class={className}
+  data-loop
+  data-shot={shot ? '' : undefined}
+  data-held={held ? '' : undefined}
+  src={media(file)}
+  poster={media(poster)}
+  aria-label={label}
+  autoplay={!held}
+  muted
+  loop
+  playsinline
+  preload="metadata"></video>

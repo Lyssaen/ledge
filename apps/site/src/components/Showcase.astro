@@ -1,0 +1,41 @@
+---
+import { mediaFor } from '../data/media.ts';
+import type { Catalogue } from '../i18n/index.ts';
+import LoopVideo from './LoopVideo.astro';
+
+// « Une journée dans Ledge »: five moments, one large capture. The first moment is the one built into the page, so it
+// reads without JavaScript; `scripts/showcase.ts` switches between them.
+interface Props {
+  t: Catalogue;
+}
+const { t } = Astro.props;
+const moments = [
+  { id: 'decide', video: 'session.mp4', image: 'desktop-split.png' },
+  { id: 'yourTurn', image: 'desktop-for-you.png' },
+  { id: 'point', video: 'chat.mp4', image: 'desktop-chat.png' },
+  { id: 'launch', image: 'desktop-launch.png' },
+  { id: 'review', image: 'desktop-session-changes.png' }
+] as const;
+const media = mediaFor(Astro.currentLocale);
+---
+
+<section id="journee" class="section">
+  <div class="page stack room showcase" data-showcase>
+    <h2 class="title">{t.showcase.title}</h2>
+    <div class="tabs" role="group" aria-label={t.showcase.tabsLabel}>
+      {moments.map((moment, i) => (
+        <button type="button" class="tab press" data-tab data-text={t.showcase[moment.id].text} aria-pressed={i === 0 ? 'true' : 'false'}>{t.showcase[moment.id].tab}</button>
+      ))}
+    </div>
+    <p class="showcase__text" aria-live="polite" data-showcase-text>{t.showcase[moments[0].id].text}</p>
+    <div class="scroller">
+      <div class="wide stage">
+        {moments.map((moment, i) => 'video' in moment
+          ? <LoopVideo class={i === 0 ? 'shot is-active' : 'shot'} shot held={i !== 0} file={moment.video} poster={moment.image} label={t.showcase[moment.id].media} />
+          : <img class:list={['shot', { 'is-active': i === 0 }]} data-shot src={media(moment.image)} alt={t.showcase[moment.id].media} width="2880" height="1800" loading="lazy" />
+        )}
+      </div>
+    </div>
+    <p class="hint">{t.showcase.scrollHint}</p>
+  </div>
+</section>

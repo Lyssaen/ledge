@@ -1,0 +1,43 @@
+---
+import { DOWNLOAD_PLACEHOLDER, site } from '../config.ts';
+import type { Catalogue } from '../i18n/index.ts';
+
+// « Installez-vous »: the workshop's table, with the three steps laid on it.
+interface Props {
+  t: Catalogue;
+}
+const { t } = Astro.props;
+const notes = ['platforms', 'readOnly', 'phone', 'relay'] as const;
+---
+
+<section id="installer" class="section section--install">
+  <div class="page stack table">
+    <div class="stack table__head">
+      <h2 class="title table__title">{t.install.title}</h2>
+      <p class="table__needs">{t.install.requirements}</p>
+    </div>
+    <ol class="steps">
+      <li class="step">
+        <span class="step__number">1</span>
+        <h3 class="step__title">{t.install.daemon.title}</h3>
+        <div class="step__code"><code>{site.installCommand}</code></div>
+        <p class="step__text">{t.install.daemon.text}</p>
+      </li>
+      <li class="step">
+        <span class="step__number">2</span>
+        <h3 class="step__title">{t.install.desktop.title}</h3>
+        <a class="pill press step__download" href={site.downloadUrl ?? '#installer'}>{t.install.desktop.download}</a>
+        <p class="step__text">{t.install.desktop.text}{site.downloadUrl === null && ` ${DOWNLOAD_PLACEHOLDER}`}</p>
+      </li>
+      <li class="step">
+        <span class="step__number">3</span>
+        <h3 class="step__title">{t.install.session.title}</h3>
+        <div class="step__code"><code>{site.firstSessionCommand}</code></div>
+        <p class="step__text">{t.install.session.text}</p>
+      </li>
+    </ol>
+    <ul class="table__notes">
+      {notes.map(note => <li>{t.install.notes[note]}</li>)}
+    </ul>
+  </div>
+</section>
