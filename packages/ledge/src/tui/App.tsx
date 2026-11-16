@@ -23,6 +23,7 @@ import { RigLaunchScreen } from './screens/RigLaunch.js';
 import { MIN } from './ui/Frame.js';
 import { usePairingDialogOf } from './ui/pairingDialog.js';
 import { waitingPairings } from './model/mobile.js';
+import { useMobileToasts } from './model/mobileToasts.js';
 import { setTone, tone as toneNow, toneFor, type ThemeChoice, type Tone } from './theme.js';
 
 /** How long a toast stays. */
@@ -152,6 +153,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     toast, lastToast, actions, editing, setEditing, small, attach, runInTerminal, env, keys, kept,
     readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
+
+  useMobileToasts(tui);
 
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {

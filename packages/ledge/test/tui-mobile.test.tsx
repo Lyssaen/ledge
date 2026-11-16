@@ -263,6 +263,14 @@ describe('Accès mobile › the access box', () => {
     await tui.press('\r');
     await until(() => tui!.frame().includes('Le daemon local est hors ligne : rien n’a changé.'));
   });
+
+  it('says the daemon is too old when the send throws DaemonOutdated', async () => {
+    tui = await startTui({ mobile: state() });
+    await open(tui);
+    tui.client.fleet!.sendMobile = () => { throw Object.assign(new Error('old'), { name: 'DaemonOutdated' }); };
+    await tui.press('\r');
+    await until(() => tui!.frame().includes('trop ancien pour l’accès mobile'));
+  });
 });
 
 const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();

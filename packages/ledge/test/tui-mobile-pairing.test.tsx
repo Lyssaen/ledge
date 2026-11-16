@@ -166,3 +166,33 @@ describe('the pairing alert and « Lier un appareil »', () => {
     await until(() => tui!.frame().includes('La demande a expiré.'));
   });
 });
+
+describe('recovery toasts and daemon refusals', () => {
+  const devices = () => base({ pairings: [], devices: [{ ...iphone, name: undefined }] } as Partial<MobileState>);
+  const recovery = (event: string) => ({ type: 'mobile.recovery', event, id: 'd1', at: new Date().toISOString() }) as never;
+
+  it('toasts a recovered device', async () => {
+    tui = await startTui({ mobile: devices() });
+    tui.daemon.push(recovery('recovered'));
+    await until(() => tui!.frame().includes('L’iPhone s’est reconnecté avec sa passkey'));
+  });
+
+  it('toasts a refused recovery', async () => {
+    tui = await startTui({ mobile: devices() });
+    tui.daemon.push(recovery('refused'));
+    await until(() => tui!.frame().includes('Reconnexion avec la passkey de l’iPhone refusée'));
+  });
+
+  it('shows no toast for a blocked recovery', async () => {
+    tui = await startTui({ mobile: devices() });
+    tui.daemon.push({ type: 'mobile.recovery', event: 'blocked', at: new Date().toISOString() } as never);
+    await new Promise(r => setTimeout(r, 200));
+    expect(tui.frame()).not.toContain('passkey');
+  });
+
+  it('toasts the message of a refused mobile command', async () => {
+    tui = await startTui({ mobile: devices() });
+    tui.daemon.push({ type: 'error', request: 'mobile.set', message: 'Relay URL refused' } as never);
+    await until(() => tui!.frame().includes('Relay URL refused'));
+  });
+});
