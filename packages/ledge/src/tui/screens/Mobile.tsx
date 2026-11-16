@@ -1,12 +1,14 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Box, Text, useStdout } from 'ink';
 import { useMobile } from '@ledge/fleet';
-import { RelayUrlSchema, type MobileState } from '@ledge/protocol';
+import { DeviceNameSchema, RelayUrlSchema, type MobileState } from '@ledge/protocol';
 import { copyText } from '../clipboard.js';
 import { useEditing, useScreenKeys, useTui } from '../context.js';
-import { sendMobile } from '../model/mobile.js';
+import { deviceName, sendMobile, waitingPairings } from '../model/mobile.js';
 import { C } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
+import { DevicesBox, type DeviceField } from '../ui/MobileDevices.js';
+import { usePairingDialog } from '../ui/pairingDialog.js';
 import { useNow } from '../ui/now.js';
 import { TextInput } from '../ui/TextInput.js';
 import { TitledBox } from '../ui/TitledBox.js';
@@ -24,9 +26,18 @@ export function Mobile() {
   const m = useMobile(tui.client);
   const { stdout } = useStdout();
   const now = useNow();
-  const [at, setAt] = useState(0);
+  // Null until the user moves: the cursor then sits on the row the state asks about.
+  const [moved, setMoved] = useState<number | null>(null);
   const [relay, setRelay] = useState<{ value: string; bad: boolean } | null>(null);
-  useEditing(relay !== null);
+  const [rename, setRename] = useState<DeviceField | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const pairing = usePairingDialog();
+  const renamed = rename !== null && m?.devices.some(d => d.id === rename.id) === true;
+  const revokable = revoking !== null && m?.devices.some(d => d.id === revoking) === true;
+  // A device that leaves the state while its field or its question is open takes them with it, unsent.
+  useEffect(() => { if (rename && !renamed) setRename(null); }, [rename, renamed]);
+  useEffect(() => { if (revoking && !revokable) setRevoking(null); }, [revoking, revokable]);
+  useEditing(relay !== null || renamed);
   const send = (msg: Parameters<typeof sendMobile>[1]) => sendMobile(tui, msg);
 
   const service = m === undefined || m.link.state === 'unavailable';
@@ -40,9 +51,33 @@ export function Mobile() {
     out.push({ id: 'account', action: s.signin ? undefined : s.link.state !== 'signed_out' && s.account && s.signinError !== 'not_allowed' ? () => send({ type: 'mobile.signout' }) : signin });
     out.push({ id: 'status', action: s.link.state === 'offline' ? () => send({ type: 'mobile.retry' }) : undefined });
     if (s.terminalInput !== undefined) out.push({ id: 'terminal', action: () => send({ type: 'mobile.terminal', input: !s.terminalInput }) });
+    for (const row of deviceRows(s)) out.push(row);
     return out;
   }
-  const cur = Math.min(at, Math.max(0, rows.length - 1));
+  /** The devices box's rows: a blocked recovery, the pairings waiting, then the devices; each one's action is what ↵ does there. */
+  function deviceRows(s: MobileState): MobileRow[] {
+    const out: MobileRow[] = [];
+    if (s.recovery?.blocked) out.push({ id: 'blocked', action: () => send({ type: 'mobile.recovery.unblock' }) });
+    for (const p of waitingPairings(s)) out.push({ id: `pair:${p.id}`, action: () => pairing.open(p.id) });
+    for (const d of s.devices) {
+      out.push({ id: `dev:${d.id}`, action: d.recovered?.pending ? () => send({ type: 'mobile.device.ack', id: d.id, what: 'recovered' }) : d.refused ? () => send({ type: 'mobile.device.ack', id: d.id, what: 'refused' }) : undefined });
+    }
+    return out;
+  }
+  // The cursor opens on the row the state asks about: the account when it needs a sign-in, the state when offline, else the first.
+  const wanted = (() => {
+    if (!m || !m.enabled) return 0;
+    const i = rows.findIndex(r => r.id === (m.signin || m.signinError || m.link.state === 'signed_out' || !m.account ? 'account' : m.link.state === 'offline' ? 'status' : 'access'));
+    return Math.max(0, i);
+  })();
+  const cur = Math.min(moved ?? wanted, Math.max(0, rows.length - 1));
+  const device = rows[cur]?.id.startsWith('dev:') ? m?.devices.find(d => `dev:${d.id}` === rows[cur]!.id) : undefined;
+
+  const submitRename = () => {
+    if (!rename) return;
+    const r = DeviceNameSchema.safeParse(rename.value);
+    if (r.success && send({ type: 'mobile.device.rename', id: rename.id, name: r.data })) setRename(null);
+  };
 
   const submitRelay = (value: string) => {
     const r = RelayUrlSchema.safeParse(value.trim());
@@ -51,28 +86,39 @@ export function Mobile() {
   };
 
   useScreenKeys((input, key) => {
-    if (relay) return true;
+    if (relay || renamed) return true;
+    if (revokable) {
+      const d = m?.devices.find(x => x.id === revoking);
+      if (input === 'y' && d && send({ type: 'mobile.device.revoke', id: d.id })) { tui.toast({ text: t.mobile.revokedT(deviceName(d)), tone: 'ok' }); setRevoking(null); }
+      else if (input === 'n' || key.escape) setRevoking(null);
+      return true;
+    }
     if (m?.signin && key.escape) { send({ type: 'mobile.signin.cancel' }); return true; }
     if (m?.signin && input === 'c') { copyText(m.signin.userCode, s => stdout.write(s)); tui.toast({ text: t.mobile.copiedT, tone: 'ok' }); return true; }
-    if (key.upArrow || input === 'k') { setAt(Math.max(0, cur - 1)); return true; }
-    if (key.downArrow || input === 'j') { setAt(Math.min(rows.length - 1, cur + 1)); return true; }
+    if (key.upArrow || input === 'k') { setMoved(Math.max(0, cur - 1)); return true; }
+    if (key.downArrow || input === 'j') { setMoved(Math.min(rows.length - 1, cur + 1)); return true; }
     if (key.return || input === ' ') { rows[cur]?.action?.(); return true; }
+    if (input === 'r' && device) { setRename({ id: device.id, value: deviceName(device) }); return true; }
+    if (input === 'x' && device) { setRevoking(device.id); return true; }
     return false;
   });
 
   const k = t.mobile.keys;
-  const keys: Array<[string, string]> = relay ? [['↵', k.save], ['esc', k.cancel]]
+  const hasDevice = rows.some(r => r.id.startsWith('dev:'));
+  const keys: Array<[string, string]> = relay || renamed ? [['↵', k.save], ['esc', k.cancel]]
+    : revokable ? [['y', k.yes], ['n', k.no]]
     : m?.signin ? [['c', k.copy], ['esc', k.cancel]]
-    : rows.length ? [['j k', k.move], ['↵', k.open], ['esc', k.back]] : [['esc', k.back]];
+    : rows.length ? [['j k', k.move], ['↵', k.open], ...(hasDevice ? [['r', k.rename], ['x', k.revoke]] as Array<[string, string]> : []), ['esc', k.back]] : [['esc', k.back]];
   const sel = (id: string) => rows[cur]?.id === id;
 
   return (
     <Frame crumb={t.mobile.title} keys={keys}>
-      <TitledBox title={t.mobile.title} flexGrow={1} paddingX={0}>
+      <TitledBox title={t.mobile.title} flexGrow={m && !service ? undefined : 1} paddingX={0}>
         {m === undefined ? <Line color={C.yellow}>{t.mobile.outdated}</Line>
           : m.link.state === 'unavailable' ? <><Line color={C.red}>{t.mobile.unavailable}</Line><Line color={C.red}>{m.link.error}</Line></>
           : <AccessBox m={m} now={now} sel={sel} relay={relay} setRelay={setRelay} submitRelay={submitRelay} />}
       </TitledBox>
+      {m && !service ? <DevicesBox m={m} now={now} sel={sel} rename={renamed ? rename : null} setRename={setRename} submitRename={submitRename} revoking={revokable ? revoking : null} /> : null}
     </Frame>
   );
 }

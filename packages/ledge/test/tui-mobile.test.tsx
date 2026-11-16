@@ -143,7 +143,7 @@ describe('Accès mobile › the access box', () => {
     await open(tui);
     expect(tui.frame()).toContain('Se connecter avec GitHub');
     expect(tui.frame()).toContain('Pas encore connecté');
-    await down(tui, 2);
+    // The cursor already sits on the account row, which the state asks about.
     await tui.press('\r');
     expect(tui.sentMobile()).toEqual([{ type: 'mobile.signin' }]);
   });
@@ -167,7 +167,7 @@ describe('Accès mobile › the access box', () => {
     tui = await startTui({ mobile: state({ account: null, link: { state: 'off' } as MobileState['link'], signinError: 'expired' }) });
     await open(tui);
     expect(tui.frame()).toContain('Le code a expiré. Recommence la connexion.');
-    await down(tui, 2);
+    // The cursor already sits on the account row, which the state asks about.
     await tui.press('\r');
     expect(tui.sentMobile()).toEqual([{ type: 'mobile.signin' }]);
   });
@@ -177,7 +177,7 @@ describe('Accès mobile › the access box', () => {
     await open(tui);
     expect(tui.frame()).toContain('Ce compte GitHub n’est pas autorisé sur ce relais.');
     expect(tui.frame()).toContain('Réessayer avec un autre compte');
-    await down(tui, 2);
+    // The cursor already sits on the account row, which the state asks about.
     await tui.press('\r');
     expect(tui.sentMobile()).toEqual([{ type: 'mobile.signin' }]);
   });
@@ -187,7 +187,7 @@ describe('Accès mobile › the access box', () => {
     await open(tui);
     expect(tui.frame()).toContain('Un compte n’a qu’un PC.');
     expect(tui.frame()).toContain('Se reconnecter');
-    await down(tui, 2);
+    // The cursor already sits on the account row, which the state asks about.
     await tui.press('\r');
     expect(tui.sentMobile()).toEqual([{ type: 'mobile.signin' }]);
   });
@@ -262,5 +262,180 @@ describe('Accès mobile › the access box', () => {
     tui.client.fleet!.sendMobile = () => { throw Object.assign(new Error('offline'), { name: 'DaemonOffline' }); };
     await tui.press('\r');
     await until(() => tui!.frame().includes('Le daemon local est hors ligne : rien n’a changé.'));
+  });
+});
+
+const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+const two = (): MobileState['devices'] => [
+  { id: 'd1', label: 'iPhone · Safari', name: 'iPhone perso', kind: 'phone', approvedAt: '2026-11-03T10:00:00.000Z', online: false, lastSeenAt: ago(2) },
+  { id: 'd2', label: 'iPad · Safari', kind: 'tablet', approvedAt: '2026-10-28T10:00:00.000Z', online: false, lastSeenAt: ago(30 * 60) }
+] as MobileState['devices'];
+/** Opens the screen and moves the cursor `n` rows down from its first row. */
+async function openAt(devices: MobileState['devices'], n: number, over: Partial<MobileState> = {}) {
+  tui = await startTui({ mobile: state({ devices, ...over }) });
+  await open(tui);
+  await down(tui, n);
+  return tui;
+}
+
+describe('Accès mobile › the devices box', () => {
+  it('lists the devices, counted, with glyph, name and hint', async () => {
+    tui = await startTui({ mobile: state({ devices: two() }) });
+    await open(tui);
+    const f = tui.frame();
+    expect(f).toContain('APPAREILS · 2');
+    expect(f).toMatch(/▯ iPhone perso\s+iPhone · Safari · lié le 3 nov · vu il y a 2 min/);
+    expect(f).toMatch(/▭ iPad · Safari\s+lié le 28 oct · vu hier/);
+  });
+
+  it('says the three lines of an empty box, with the relay host', async () => {
+    tui = await startTui({ mobile: state({ relayUrl: 'https://relais.example' }) });
+    await open(tui);
+    expect(tui.frame()).toContain('Aucun appareil lié.');
+    expect(tui.frame()).toContain('relais.example et connecte-toi');
+    expect(tui.frame()).toContain('Un code s’affichera ici');
+  });
+
+  it('shows a waiting pairing, and ↵ on it opens the dialog', async () => {
+    tui = await openAt(two(), 5, { pairings: online().pairings });
+    expect(tui.frame()).toContain('! Pixel 8 demande l’accès');
+    expect(tui.frame()).toContain('↵ comparer le code');
+    await tui.press('\r');
+    expect(tui.sentMobile()).toEqual([]);
+  });
+
+  it('renames on r then ↵, and keeps the field for an empty name', async () => {
+    tui = await openAt(two(), 4);
+    await tui.press('r');
+    await until(() => tui!.frame().includes('Nom [ iPhone perso'));
+    await tui.press('\x15');
+    await tui.press('\r');
+    expect(tui.sentMobile()).toEqual([]);
+    expect(tui.frame()).toContain('enregistrer');
+    await tui.stdin.write('Mon iPhone');
+    await until(() => tui!.frame().includes('Mon iPhone'));
+    await tui.press('\r');
+    await until(() => tui!.sentMobile().length === 1);
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.device.rename', id: 'd1', name: 'Mon iPhone' }]);
+  });
+
+  it('cancels the rename on esc, and the letters go to the field', async () => {
+    tui = await openAt(two(), 4);
+    await tui.press('r');
+    await tui.press('x');
+    expect(tui.frame()).toContain('iPhone persox');
+    await tui.press('\x1b');
+    await until(() => !tui!.frame().includes('enregistrer'));
+    expect(tui.sentMobile()).toEqual([]);
+    expect(tui.frame()).toContain('ACCÈS MOBILE');
+  });
+
+  it('closes the rename field, sending nothing, when its device vanishes', async () => {
+    tui = await openAt(two(), 4);
+    await tui.press('r');
+    tui.daemon.push({ type: 'mobile', state: state({ devices: two().slice(1) }) });
+    await until(() => !tui!.frame().includes('enregistrer'));
+    expect(tui.sentMobile()).toEqual([]);
+  });
+
+  it('revokes on x then y, and says so', async () => {
+    tui = await openAt(two(), 5);
+    await tui.press('x');
+    await until(() => tui!.frame().includes('Révoquer iPad · Safari ? Il perd l’accès tout de suite.'));
+    expect(tui.frame()).toContain('y / n');
+    await tui.press('y');
+    await until(() => tui!.frame().includes('iPad · Safari est révoqué.'));
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.device.revoke', id: 'd2' }]);
+  });
+
+  it('sends nothing on x then n, nor on x then esc', async () => {
+    tui = await openAt(two(), 4);
+    await tui.press('x');
+    await tui.press('n');
+    await until(() => !tui!.frame().includes('y / n'));
+    await tui.press('x');
+    await tui.press('\x1b');
+    await until(() => !tui!.frame().includes('y / n'));
+    expect(tui.sentMobile()).toEqual([]);
+    expect(tui.frame()).toContain('ACCÈS MOBILE');
+  });
+
+  it('shows a recovery to acknowledge, and ↵ sends the ack', async () => {
+    const d = two(); d[0] = { ...d[0]!, recovered: { at: ago(1), pending: true } } as never;
+    tui = await openAt(d, 4);
+    expect(tui.frame()).toContain('Reconnecté');
+    expect(tui.frame()).toContain('IPhone perso s’est reconnecté sans code');
+    expect(tui.frame()).toContain('C’était bien moi');
+    await tui.press('\r');
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.device.ack', id: 'd1', what: 'recovered' }]);
+  });
+
+  it('shows a refused attempt to acknowledge, and ↵ sends the ack', async () => {
+    const d = two(); d[0] = { ...d[0]!, refused: { at: new Date().toISOString() } } as never;
+    tui = await openAt(d, 4);
+    expect(tui.frame()).toContain('Tentative refusée');
+    expect(tui.frame()).toMatch(/Aujourd’hui à \d\d:\d\d, un autre appareil/);
+    await tui.press('\r');
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.device.ack', id: 'd1', what: 'refused' }]);
+  });
+
+  it('shows a blocked recovery first, and ↵ unblocks', async () => {
+    tui = await openAt(two(), 4, { recovery: { blocked: { since: new Date().toISOString(), failures: 3 } } });
+    expect(tui.frame()).toContain('⊘ Reconnexion par passkey bloquée : 3 vérifications');
+    expect(tui.frame()).toContain('Débloquer');
+    await tui.press('\r');
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.recovery.unblock' }]);
+  });
+
+  it('dims the box when access is off, with its well, and gives the devices no cursor', async () => {
+    tui = await startTui({ mobile: state({ enabled: false, devices: two(), link: { state: 'off' } as MobileState['link'] }) });
+    await open(tui);
+    expect(tui.frame()).toContain('Accès désactivé : tes appareils liés ne peuvent pas se connecter.');
+    await down(tui, 4);
+    await tui.press('x');
+    await tui.press('r');
+    expect(tui.frame()).not.toContain('Révoquer');
+    expect(tui.frame()).not.toContain('Nom [');
+    expect(tui.sentMobile()).toEqual([]);
+  });
+
+  it('keeps every line within 72 columns for a 40-character name', async () => {
+    const d = two(); d[0] = { ...d[0]!, name: 'N'.repeat(40) };
+    tui = await startTui({ mobile: state({ devices: d }) });
+    await tui.resize(72, 40);
+    await open(tui);
+    const lines = tui.frame().split('\n');
+    const box = lines.filter(l => l.startsWith('│') || l.startsWith('╭') || l.startsWith('╰'));
+    expect(box.length).toBeGreaterThan(8);
+    for (const l of lines) expect([...l].length).toBeLessThanOrEqual(72);
+    for (const l of box) expect(l[71]).toMatch(/[│╮╯]/);
+  });
+});
+
+describe('Accès mobile › where the cursor opens', () => {
+  it('on the account when it needs a sign-in', async () => {
+    tui = await startTui({ mobile: state({ account: null, link: { state: 'off' } as MobileState['link'] }) });
+    await open(tui);
+    await tui.press('\r');
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.signin' }]);
+  });
+
+  it('on État when offline, and on Accès otherwise', async () => {
+    tui = await startTui({ mobile: state({ link: { state: 'offline', retryAt: at(1), error: 'x' } }) });
+    await open(tui);
+    await tui.press('\r');
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.retry' }]);
+    await tui.cleanup();
+    tui = await startTui({ mobile: state() });
+    await open(tui);
+    await tui.press('\r');
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.set', enabled: false, relayUrl: 'https://app.kl-ledge.dev' }]);
+  });
+
+  it('stays on Accès with a blocked recovery or a pairing waiting', async () => {
+    tui = await startTui({ mobile: state({ devices: two(), pairings: online().pairings, recovery: { blocked: { since: ago(5), failures: 3 } } }) });
+    await open(tui);
+    await tui.press('\r');
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.set', enabled: false, relayUrl: 'https://app.kl-ledge.dev' }]);
   });
 });
