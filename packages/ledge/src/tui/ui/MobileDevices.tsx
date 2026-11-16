@@ -19,13 +19,13 @@ function Line({ selected, children }: { selected?: boolean; children: ReactNode 
   return (
     <Box backgroundColor={selected ? C.sel : undefined} overflow="hidden">
       <Text color={selected ? C.coral : C.faint}>{selected ? '▌' : ' '}</Text>
-      <Box flexGrow={1} flexShrink={1} overflow="hidden">{children}</Box>
+      <Box flexGrow={1} flexShrink={1} overflow="hidden" paddingRight={1}>{children}</Box>
     </Box>
   );
 }
 
 /** A line hanging under a device in its indent; it never takes the cursor. */
-const Under = ({ color, children }: { color: string; children: string }) => <Text wrap="truncate"><Text>{'   '}</Text><Text color={color}>{children}</Text></Text>;
+const Under = ({ color, children }: { color: string; children: string }) => <Box paddingRight={1}><Text wrap="truncate"><Text>{'   '}</Text><Text color={color}>{children}</Text></Text></Box>;
 
 /** The keys that answer a well, as the mockup draws them: ↵ the acknowledgement, x the revocation. */
 function Answers({ ack, revoke }: { ack: string; revoke: string }) {
@@ -63,7 +63,7 @@ export function DevicesBox({ m, now, sel, rename, setRename, submitRename, revok
       return (
         <Line key={d.id} selected>
           <Text color={C.fg}>{glyph} </Text><Text color={C.dim}>{c.nameLabel} </Text>
-          <Box flexGrow={1} flexShrink={1} overflow="hidden"><Text color={C.fg}>[ </Text><TextInput value={rename.value} onChange={v => setRename({ id: d.id, value: v })} onSubmit={submitRename} onEscape={() => setRename(null)} active /><Text color={C.fg}> ]</Text></Box>
+          <Box flexShrink={1} overflow="hidden"><Text color={C.fg}>[ </Text><Box minWidth={22}><TextInput value={rename.value} onChange={v => setRename({ id: d.id, value: v })} onSubmit={submitRename} onEscape={() => setRename(null)} active /></Box><Text color={C.fg}> ]</Text></Box>
           <Box flexShrink={0}>{faint(`  ↵ ${c.keys.save}  esc ${c.keys.cancel}`)}</Box>
         </Line>
       );

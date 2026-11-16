@@ -117,7 +117,7 @@ describe('the pairing alert and « Lier un appareil »', () => {
     await tui.press('L');
     await until(() => tui!.frame().includes('LIER UN APPAREIL'));
     tui.daemon.push({ type: 'mobile', state: base({ pairings: [{ id: 'p1', label: 'Pixel 8', code: '472 915 308', expiresAt: at(5), state: 'approved' }] }) });
-    await until(() => tui!.frame().includes('Confirme maintenant sur Pixel 8.'));
+    await until(() => tui!.frame().includes('Confirme maintenant sur le Pixel 8.'));
     expect(tui.frame()).not.toContain('4 7 2');
     expect(tui.frame()).not.toContain('expire dans');
   });
@@ -200,5 +200,26 @@ describe('recovery toasts and daemon refusals', () => {
     tui = await startTui({ mobile: devices() });
     tui.daemon.push({ type: 'error', request: 'mobile.set', message: 'Relay URL refused' } as never);
     await until(() => tui!.frame().includes('Relay URL refused'));
+  });
+});
+
+describe('« Lier un appareil » as the mockup draws it', () => {
+  it('sets the code at the mockup\'s indent, names the device with its article and indents the keys', async () => {
+    tui = await startTui({ mobile: base() });
+    await tui.press('L');
+    await until(() => tui!.frame().includes('LIER UN APPAREIL'));
+    const f = tui.frame();
+    expect(f).toMatch(/│ {11}4 7 2 · 9 1 5 · 3 0 8 +│/);
+    expect(f).toContain('Vérifie que le Pixel 8 affiche exactement ce code.');
+    expect(f).toMatch(/│ {4}y {2}approuver {2}n {2}refuser {2}esc {2}fermer +│/);
+  });
+
+  it('says the device with its article in English too, and after approval', async () => {
+    tui = await startTui({ mobile: base(), lang: 'en' });
+    await tui.press('L');
+    await until(() => tui!.frame().includes('LINK A DEVICE'));
+    expect(tui.frame()).toContain('Check that the Pixel 8 shows exactly this code.');
+    tui.daemon.push({ type: 'mobile', state: base({ pairings: [{ id: 'p1', label: 'Pixel 8', code: '472 915 308', expiresAt: at(5), state: 'approved' }] }) } as never);
+    await until(() => tui!.frame().includes('Confirm on the Pixel 8 now.'));
   });
 });

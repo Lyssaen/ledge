@@ -16,8 +16,8 @@ export const MIN = { columns: 60, rows: 16 } as const;
 
 /** One screen: the status bar, the screen's body, the last toast and the screen's keys, the whole terminal high. The crumb
  *  shortens to `crumbShort` when it does not fit, then goes; `kept` says a draft waits in the screen. */
-export function Frame({ crumb, crumbShort, keys, kept, children }: {
-  crumb: string; crumbShort?: string; keys: ReadonlyArray<readonly [string, string]>; kept?: boolean; children: ReactNode;
+export function Frame({ crumb, crumbShort, keys, kept, noHelp, children }: {
+  crumb: string; crumbShort?: string; keys: ReadonlyArray<readonly [string, string]>; kept?: boolean; /** The bar leaves « ? aide » out (the key still works), so a screen's own keys all fit at 72 columns. */ noHelp?: boolean; children: ReactNode;
 }) {
   const { d, machines, t, g, lastToast, editing, client, screen } = useTui();
   const linking = waitingPairings(useMobile(client)).length;
@@ -60,7 +60,7 @@ export function Frame({ crumb, crumbShort, keys, kept, children }: {
       <Box flexGrow={1} flexDirection="column" overflow="hidden">{children}<PairingDialog /></Box>
       {lastToast ? <Box paddingX={1} height={1}><Text wrap="truncate" color={lastToast.tone === 'error' ? C.red : lastToast.tone === 'ok' ? C.green : lastToast.tone === 'quiet' ? C.dim : C.yellow}>{lastToast.text}</Text></Box> : null}
       <UsageLine columns={columns} />
-      <KeyBar keys={fitKeys(linking > 0 && screen !== 'mobile' && !keys.some(k => k[0] === 'L') ? [...keys.slice(0, 2), ['L', t.mobile.keys.pair], ...keys.slice(2)] : keys, columns, editing ? null : ['?', t.keys.help])} />
+      <KeyBar keys={fitKeys(linking > 0 && screen !== 'mobile' && !keys.some(k => k[0] === 'L') ? [...keys.slice(0, 2), ['L', t.mobile.keys.pair], ...keys.slice(2)] : keys, columns, editing || noHelp ? null : ['?', t.keys.help])} />
     </Box>
   );
 }

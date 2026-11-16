@@ -46,7 +46,7 @@ export function Settings() {
     return true;
   });
   return (
-    <Frame crumb={t.settings.title} keys={[['↑ ↓', t.keys.navigate], ['← →', t.keys.change], ['esc', t.keys.back]]}>
+    <Frame crumb={t.settings.title} keys={[['↑ ↓', t.keys.navigate], ['← →', t.keys.change], ...(rows[at]!.id === 'mobile' ? [['↵', t.mobile.keys.open] as const] : []), ['esc', t.keys.back]]}>
       <TitledBox title={t.settings.title} flexGrow={1}>
         {rows.map((r, i) => (
           <Box key={r.id} backgroundColor={i === at ? C.sel : undefined}>
@@ -57,7 +57,7 @@ export function Settings() {
               : r.id === 'theme'
               ? <Text>{THEMES.map(x => <Text key={x} color={x === theme ? C.fg : C.dim} bold={x === theme}>{x === theme ? `${g.radioOn} ` : `${g.radioOff} `}{x === 'auto' && background ? t.settings.themeAuto(background) : t.settings.themes[x]}{'     '}</Text>)}</Text>
               : r.id === 'mobile'
-              ? <Text color={summary.kind === 'online' ? C.green : summary.kind === 'off' || summary.kind === 'offline' || summary.kind === 'signedOut' ? C.dim : C.faint}>{summaryText(summary, t.mobile)}</Text>
+              ? <Text><Text color={summary.kind === 'online' ? C.green : summary.kind === 'off' || summary.kind === 'offline' || summary.kind === 'signedOut' ? C.dim : C.faint}>{summaryText(summary, t.mobile)}</Text>{i === at ? <Text color={C.faint}>{'  ↵'}</Text> : null}</Text>
               : r.id === 'usage'
               ? <Text><Text color={usage.size ? C.fg : C.faint} bold={!!usage.size}>◂ {Math.round(limits.threshold * 100)} % ▸</Text><Text color={C.faint}>   {usage.size ? t.usage.settingHint : t.usage.settingUnknown}</Text></Text>
               : <Text><Text color={C.fg} bold>◂ {Math.round(near * 100)} % ▸</Text><Text color={C.faint}>   {known ? t.settings.contextHint : t.settings.contextUnknown}</Text></Text>}

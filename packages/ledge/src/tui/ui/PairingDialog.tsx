@@ -68,9 +68,9 @@ export function PairingDialog() {
   const left = Math.max(0, Math.ceil((Date.parse(shown.expiresAt) - Date.now()) / 1000));
   const line = (...segs: Array<[string, string, boolean?]>) => <Row key={segs.map(s => s[0]).join('')} width={inner + 1} used={segs.reduce((n, s) => n + cells(s[0]), 0)}>{segs.map(([s, color, bold], i) => <Text key={i} color={color} bold={bold}>{s}</Text>)}</Row>;
   const blank = (i: number) => <Row key={`b${i}`} width={inner + 1} used={0} />;
-  const caps = (list: Array<[string, string, string]>) => (
-    <Row key="caps" width={inner + 1} used={list.reduce((n, [k, l]) => n + cells(` ${k} `) + cells(` ${l} `), 0)}>
-      {list.map(([k, l, color]) => <Text key={k}><Text color={C.fg} backgroundColor={C.key}> {k} </Text><Text color={color}> {l} </Text></Text>)}
+  const caps = (list: Array<[string, string, string]>, indent = 0) => (
+    <Row key="caps" width={inner + 1} used={indent + list.reduce((n, [k, l]) => n + cells(` ${k} `) + cells(` ${l} `), 0)}>
+      {indent ? <Text>{' '.repeat(indent)}</Text> : null}{list.map(([k, l, color]) => <Text key={k}><Text color={C.fg} backgroundColor={C.key}> {k} </Text><Text color={color}> {l} </Text></Text>)}
     </Row>
   );
 
@@ -82,7 +82,7 @@ export function PairingDialog() {
     const code = spacedCode(shown.code);
     body = [
       line([intro1, C.fg]), line([intro2, C.fg]), blank(1),
-      line([c.pairCode, C.dim]), line([' '.repeat(Math.max(0, Math.floor((inner - cells(code)) / 2))) + code, C.yellow, true]), blank(2)
+      line([c.pairCode, C.dim]), line([' '.repeat(10) + code, C.yellow, true]), blank(2)
     ];
     body.push(
       line([check1, C.dim]), line([check2, C.dim]),
@@ -96,11 +96,11 @@ export function PairingDialog() {
         line(['    ' + c.replaceH(seen, c.linkedOn(shortDate(old.approvedAt, lang))), C.faint]), blank(4)
       );
     }
-    body.push(caps([['y', c.approve, C.green], ['n', c.deny, C.red], ...(old ? [['r', c.untick, C.dim] as [string, string, string]] : []), ['esc', c.later, C.dim]]));
+    body.push(caps([['y', c.approve, C.green], ['n', c.deny, C.red], ...(old ? [['r', c.untick, C.dim] as [string, string, string]] : []), ['esc', c.later, C.dim]], old ? 0 : 2));
   } else {
     const [a = '', b = ''] = shown.state === 'approved' ? c.approvedL(shown.label) : shown.state === 'linked' ? c.linkedL(shown.label) : c.expiredL;
     const color = shown.state === 'expired' ? C.yellow : C.green;
-    body = [line([(shown.state === 'expired' ? '⊘ ' : g.ok + ' '), color], [a, color, true]), line(['  ' + b, C.fg]), blank(1), caps([['esc', c.close, C.dim]])];
+    body = [line([(shown.state === 'expired' ? '⊘ ' : g.ok + ' '), color], [a, color, true]), line(['  ' + b, C.fg]), blank(1), caps([['esc', c.close, C.dim]], 2)];
   }
   return (
     <Box position="absolute" marginLeft={x} marginTop={1} width={w}>

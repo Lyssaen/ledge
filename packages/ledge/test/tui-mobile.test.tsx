@@ -473,3 +473,58 @@ describe('Accès mobile › the cursor stays on its row', () => {
     expect(tui.sentMobile().some(m => m.type === 'mobile.set')).toBe(false);
   });
 });
+
+describe('Accès mobile › as the mockup draws it at 72 columns', () => {
+  const flowless = { account: null, link: { state: 'off' } as MobileState['link'] };
+
+  it('keeps the label and the margin of a row whose hint is cut, with « … » before the right margin', async () => {
+    tui = await startTui({ mobile: state({ ...flowless, devices: two() }) });
+    await tui.resize(72, 40);
+    await open(tui);
+    const f = tui.frame();
+    expect(f).toContain('│ État                  ○ Pas encore connecté  démarre une fois le co… │');
+    expect(f).not.toContain('connecté         confirmé');
+  });
+
+  it('shows « Pas encore connecté » alone when another PC signed this one out', async () => {
+    tui = await startTui({ mobile: state({ account: null, link: { state: 'signed_out', reason: 'other_pc' } as MobileState['link'], devices: two() }) });
+    await tui.resize(72, 40);
+    await open(tui);
+    expect(tui.frame()).toMatch(/État\s+○ Pas encore connecté\s+│/);
+    expect(tui.frame()).not.toContain('démarre une fois');
+  });
+
+  it('cuts a text that fills the box before its right margin, as in the mockup', async () => {
+    tui = await startTui({ mobile: state({ account: null, link: { state: 'off' } as MobileState['link'], signinError: 'not_allowed', devices: two() }) });
+    await tui.resize(72, 40);
+    await open(tui);
+    expect(tui.frame()).toContain('│                       Ce compte GitHub n’est pas autorisé sur ce re… │');
+  });
+
+  it('keeps « esc retour » on the key bar: the screen leaves « ? aide » out', async () => {
+    tui = await startTui({ mobile: state({ devices: two() }) });
+    await tui.resize(72, 40);
+    await open(tui);
+    const bar = tui.frame().split('\n').find(l => l.includes('naviguer'))!;
+    expect(bar).toContain('j k  naviguer   ↵  ouvrir   r  renommer   x  révoquer   esc  retour');
+    expect(bar).not.toContain('aide');
+  });
+
+  it('puts the rename keys right after the field', async () => {
+    tui = await openAt(two(), 4);
+    await tui.press('r');
+    await until(() => tui!.frame().includes('Nom ['));
+    expect(tui.frame()).toMatch(/Nom \[ iPhone perso\s{11}\]  ↵ enregistrer  esc annuler/);
+  });
+});
+
+describe('Réglages › the Accès mobile row as the mockup draws it', () => {
+  it('ends the selected row with ↵ and offers ↵ ouvrir on the key bar only there', async () => {
+    tui = await startTui({ mobile: state({ devices: two() }) });
+    await tui.press(',');
+    expect(tui.frame()).not.toMatch(/↵\s+ouvrir/);
+    await down(tui, 4);
+    expect(tui.frame()).toMatch(/Accès mobile\s+● En ligne · 2 appareils\s+↵/);
+    expect(tui.frame()).toMatch(/← →\s+changer\s+(L\s+lier\s+)?↵\s+ouvrir\s+esc\s+retour/);
+  });
+});

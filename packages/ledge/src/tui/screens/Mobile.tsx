@@ -116,7 +116,7 @@ export function Mobile() {
   const sel = (id: string) => rows[cur]?.id === id;
 
   return (
-    <Frame crumb={t.mobile.title} keys={keys}>
+    <Frame crumb={t.mobile.title} keys={keys} noHelp>
       <TitledBox title={t.mobile.title} flexGrow={m && !service ? undefined : 1} paddingX={0}>
         {m === undefined ? <Line color={C.yellow}>{t.mobile.outdated}</Line>
           : m.link.state === 'unavailable' ? <><Line color={C.red}>{t.mobile.unavailable}</Line><Line color={C.red}>{m.link.error}</Line></>
@@ -128,22 +128,22 @@ export function Mobile() {
 }
 
 function Line({ color, children }: { color: string; children: ReactNode }) {
-  return <Text wrap="truncate"><Text> </Text><Text color={color}>{children}</Text></Text>;
+  return <Box paddingRight={1}><Text wrap="truncate"><Text> </Text><Text color={color}>{children}</Text></Text></Box>;
 }
 
 /** A row of the box: the cursor mark, the label, then the values; the selected row takes the selection's background. */
-function Row({ selected, label, children }: { selected: boolean; label: string; children: ReactNode }) {
+function Row({ selected, label, children, raw }: { selected: boolean; label: string; children: ReactNode; /** A field takes its own boxes: its content is not wrapped in one truncating line. */ raw?: boolean }) {
   return (
     <Box backgroundColor={selected ? C.sel : undefined} overflow="hidden">
-      <Text color={selected ? C.coral : C.faint}>{selected ? '▌' : ' '}</Text>
-      <Text color={selected ? C.fg : C.dim}>{label.padEnd(LABEL)}</Text>
-      <Box flexGrow={1} flexShrink={1} overflow="hidden">{children}</Box>
+      <Box flexShrink={0}><Text color={selected ? C.coral : C.faint}>{selected ? '▌' : ' '}</Text></Box>
+      <Box flexShrink={0}><Text color={selected ? C.fg : C.dim}>{label.padEnd(LABEL)}</Text></Box>
+      <Box flexGrow={1} flexShrink={1} overflow="hidden" paddingRight={1}>{raw ? children : <Text wrap="truncate">{children}</Text>}</Box>
     </Box>
   );
 }
 
 /** The lines hanging under a row, in the label's indent. */
-const Under = ({ color, lines }: { color: string; lines: readonly string[] }) => <>{lines.map(l => <Text key={l} wrap="truncate"><Text>{' '.repeat(LABEL + 1)}</Text><Text color={color}>{l}</Text></Text>)}</>;
+const Under = ({ color, lines }: { color: string; lines: readonly string[] }) => <>{lines.map(l => <Box key={l} paddingRight={1}><Text wrap="truncate"><Text>{' '.repeat(LABEL + 1)}</Text><Text color={color}>{l}</Text></Text></Box>)}</>;
 
 /** The first box: access, relay, GitHub account, link state and the terminal switch, as the daemon's state says them. */
 function AccessBox({ m, now, sel, relay, setRelay, submitRelay }: {
@@ -163,7 +163,7 @@ function AccessBox({ m, now, sel, relay, setRelay, submitRelay }: {
     const where = m.signin.verificationUri.replace(/^https?:\/\//i, '').replace(/\/$/, '');
     account = <><Text color={C.fg}>{c.flowLead} </Text><Text color={C.blue} underline>{where}</Text></>;
     accountUnder = <>
-      <Text wrap="truncate"><Text>{' '.repeat(LABEL + 1)}</Text><Text color={C.fg}>{c.flowAnd} </Text><Text color={C.yellow} bold>{m.signin.userCode}</Text></Text>
+      <Box paddingRight={1}><Text wrap="truncate"><Text>{' '.repeat(LABEL + 1)}</Text><Text color={C.fg}>{c.flowAnd} </Text><Text color={C.yellow} bold>{m.signin.userCode}</Text></Text></Box>
       <Under color={C.faint} lines={[c.flowWait(min)]} />
     </>;
   } else if (m.signinError === 'not_allowed') {
@@ -185,14 +185,14 @@ function AccessBox({ m, now, sel, relay, setRelay, submitRelay }: {
     : m.link.state === 'online' ? <><Text color={C.green}>● </Text><Text color={C.fg}>{c.online}</Text></>
     : m.link.state === 'connecting' ? <><Text color={C.yellow}>◌ </Text><Text color={C.fg}>{c.connecting}</Text></>
     : offline ? <><Text color={C.yellow}>● </Text><Text color={C.fg}>{c.retryIn(secs)}</Text>{faint(`  ↵ ${c.retry}`)}</>
-    : <><Text color={C.faint}>○ </Text><Text color={C.fg}>{c.idle}</Text>{!m.signin && !m.signinError && !m.account ? faint(`  ${c.idleH}`) : null}</>;
+    : <><Text color={C.faint}>○ </Text><Text color={C.fg}>{c.idle}</Text>{!m.signin && !m.signinError && !m.account && m.link.state !== 'signed_out' ? faint(`  ${c.idleH}`) : null}</>;
 
   return (
     <>
       <Row selected={sel('access')} label={c.access}>
         {m.enabled ? <><Text color={C.green}>● </Text><Text color={C.fg}>{c.on}</Text></> : <><Text color={C.faint}>○ </Text><Text color={C.fg}>{c.offW}</Text></>}{faint(`  ${c.accessH}`)}
       </Row>
-      <Row selected={sel('relay')} label={c.relay}>
+      <Row selected={sel('relay')} label={c.relay} raw={relay !== null}>
         {relay
           ? <Box flexGrow={1}><Text color={C.fg}>[ </Text><TextInput value={relay.value} onChange={x => setRelay({ value: x, bad: false })} onSubmit={submitRelay} onEscape={() => setRelay(null)} active /><Text color={C.fg}> ]</Text></Box>
           : <Text color={v}>{host(m.relayUrl)}</Text>}
