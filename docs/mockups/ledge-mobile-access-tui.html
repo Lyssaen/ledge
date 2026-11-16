@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledge · Accès mobile dans la TUI</title>
+<!--
+  Maquette : Réglages › Accès mobile dans `ledge tui`, pour un PC sans Ledge Desktop (2026-11-17).
+  Mêmes réglages et mêmes messages au daemon que Desktop (docs/mockups/ledge-mobile-access.html) ; seule l'interface change.
+  Choix du propriétaire : une ligne « Accès mobile » dans Réglages ouvre un écran dédié (B) ; une demande de liaison
+  s'annonce par une ligne d'alerte et un badge, `m` ouvre « Lier un appareil » (B).
+  Paramètres : ?st=<état> &theme=dark|light &lang=fr|en &w=72|100
+-->
+<style>
+:root, :root[data-theme="light"] {
+  --page: #f4f4f3; --chrome: #ffffff; --fg: #1d1d1f; --muted: #6b6b70; --border: #e2e1de; --accent: #c2412d;
+  --t-bg: #fbfbfa; --t-bar: #ecebe8; --t-fg: #1d1d1f; --t-dim: #5d5d62; --t-faint: #9a9aa0; --t-line: #c9c8c4; --t-sel: #e6e4df;
+  --t-coral: #c2412d; --t-red: #b91c1c; --t-yellow: #9a6700; --t-green: #1a7f37; --t-blue: #0550ae; --t-violet: #6639ba; --t-key: #e2e0db;
+  --shadow: 0 20px 40px -12px rgba(0,0,0,.25);
+}
+:root[data-theme="dark"] {
+  --page: #0b0b0b; --chrome: #141414; --fg: #ededed; --muted: #9a9a9a; --border: #ffffff1a; --accent: #ff7a63;
+  --t-bg: #0f0f10; --t-bar: #1b1b1d; --t-fg: #e8e8e8; --t-dim: #9a9a9a; --t-faint: #5f5f63; --t-line: #3a3a3d; --t-sel: #26262a;
+  --t-coral: #ff7a63; --t-red: #f87171; --t-yellow: #facc15; --t-green: #4ade80; --t-blue: #7cb3fb; --t-violet: #bc8cff; --t-key: #2c2c30;
+  --shadow: 0 20px 40px -12px rgba(0,0,0,.7);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.bar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 10px 16px; background: var(--chrome); border-bottom: 1px solid var(--border); }
+.bar b { font-weight: 600; margin-right: 4px; }
+.grp { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.grp span { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.bar button { font: inherit; font-size: 12.5px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--fg); cursor: pointer; }
+.bar button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+main { padding: 24px 16px 48px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+h1 { font-size: 15px; font-weight: 600; margin: 0; max-width: 900px; width: 100%; }
+.note { max-width: 900px; width: 100%; color: var(--muted); font-size: 13px; margin: 0; }
+.term { background: var(--t-bg); color: var(--t-fg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; box-shadow: var(--shadow); max-width: 100%; overflow-x: auto; }
+.term pre { font: 12.5px/17px 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace; white-space: pre; margin: 0; }
+.term .fg{color:var(--t-fg)}.term .dim{color:var(--t-dim)}.term .faint{color:var(--t-faint)}.term .line{color:var(--t-line)}
+.term .coral{color:var(--t-coral)}.term .red{color:var(--t-red)}.term .yellow{color:var(--t-yellow)}.term .green{color:var(--t-green)}
+.term .blue{color:var(--t-blue)}.term .b{font-weight:700}.term .u{text-decoration:underline}
+.term .barbg{background:var(--t-bar)}.term .selbg{background:var(--t-sel)}.term .key{background:var(--t-key)}
+.term .w1{display:inline-block;width:1ch;text-align:center;overflow:visible;vertical-align:top}
+ul.rules { max-width: 900px; width: 100%; margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: 13px; }
+ul.rules li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<main id="main"></main>
+<script>
+const P = new URLSearchParams(location.search);
+const S = { st: P.get('st') || 'online', theme: P.get('theme') || 'dark', lang: P.get('lang') || 'fr', w: Number(P.get('w')) || 72 };
+document.documentElement.dataset.theme = S.theme;
+document.documentElement.lang = S.lang;
+
+const STATES = ['settings', 'off', 'signin', 'flow', 'refused', 'online', 'empty', 'offline', 'signedout', 'relay', 'rename', 'revoke', 'recovered', 'blocked', 'alert', 'pair', 'approved', 'linked', 'expired'];
+
+const T = {
+  fr: {
+    page: 'Accès mobile dans ledge tui',
+    states: { settings: 'Réglages', off: 'Désactivé', signin: 'Pas connecté', flow: 'Code GitHub', refused: 'Compte refusé', online: 'En ligne', empty: 'Aucun appareil', offline: 'Hors ligne', signedout: 'Déconnecté', relay: 'Changer le relais', rename: 'Renommer', revoke: 'Révoquer', recovered: 'Reconnecté (passkey)', blocked: 'Récupération bloquée', alert: 'Alerte ailleurs', pair: 'Lier · code', approved: 'Lier · approuvé', linked: 'Lier · lié', expired: 'Lier · expiré' },
+    notes: {
+      settings: 'Réglages : la ligne « Accès mobile » résume l’état et ↵ ouvre l’écran dédié.',
+      off: 'Accès coupé : le reste de l’écran est en retrait, les appareils ne peuvent pas se connecter.',
+      signin: 'Accès activé, compte pas encore connecté : ↵ sur « Compte GitHub » lance la connexion.',
+      flow: 'Connexion GitHub : le code et l’adresse à ouvrir, sur n’importe quel appareil (la TUI tourne peut-être en SSH). c copie le code, esc annule.',
+      refused: 'Le relais refuse ce compte GitHub : ↵ recommence avec un autre compte.',
+      online: 'Cas courant : une liaison en attente en tête des appareils, puis les appareils liés.',
+      empty: 'Aucun appareil lié : comment en lier un.',
+      offline: 'Le relais ne répond pas : Ledge réessaie seul, ↵ sur « État » réessaie tout de suite.',
+      signedout: 'Un autre PC s’est connecté avec ce compte : ↵ se reconnecte.',
+      relay: 'Changer le relais : un champ en ligne, vérifié à l’entrée.',
+      rename: 'Renommer un appareil : un champ en ligne.',
+      revoke: 'Révoquer : une confirmation y / n sur la ligne même.',
+      recovered: 'Un appareil s’est reconnecté par passkey : à confirmer (↵ « C’était bien moi ») ou révoquer.',
+      blocked: 'Récupération par passkey bloquée : ↵ débloque.',
+      alert: 'Un téléphone demande à se lier pendant qu’on est ailleurs : ligne d’alerte, badge, m compare le code.',
+      pair: '« Lier un appareil » : le code à comparer, y approuve, n refuse, esc ferme sans décider.',
+      approved: 'Approuvé sur le PC : il reste à confirmer sur le téléphone.',
+      linked: 'Lié : l’appareil apparaît dans Appareils.',
+      expired: 'La demande a expiré.'
+    },
+    status: { sessions: '4 sessions · 1 machine', local: 'local ●' },
+    set: 'RÉGLAGES', setLang: 'Langue', setTheme: 'Thème', setCtx: 'Contexte max', setCtxH: 'au-delà : passer le relais', setLim: 'Alerte de limite', setLimH: 'au-delà : À toi prévient',
+    mob: 'Accès mobile', mobSum: { on: (n, p) => `En ligne · ${n} appareil${n > 1 ? 's' : ''}${p ? ` · ${p} demande` : ''}`, off: 'Désactivé', offline: 'Hors ligne' },
+    title: 'RÉGLAGES › ACCÈS MOBILE', access: 'Accès', on: 'Activé', offW: 'Désactivé', accessH: 'sortant, aucun port ouvert',
+    relay: 'Relais', relayH: 'l’adresse que tes appareils ouvrent',
+    account: 'Compte GitHub', signin: 'Se connecter avec GitHub', signout: 'se déconnecter', otherAccount: 'Réessayer avec un autre compte', reconnect: 'Se reconnecter',
+    statusL: 'État', online: 'Connecté au relais', idle: 'Pas encore connecté', idleH: 'démarre une fois le compte confirmé', retryIn: s => `Hors ligne · nouvel essai dans ${s} s`, retry: 'réessayer',
+    term: 'Taper dans les term.', no: 'Non', termH: 'un appareil lié peut prendre la main',
+    devices: n => `APPAREILS · ${n}`, devicesNone: 'APPAREILS',
+    asks: 'demande l’accès', compare: 'comparer le code',
+    seen: { now: 'vu à l’instant', min: 'vu il y a 2 min', yest: 'vu hier' }, linkedOn: d => `lié le ${d}`, d1: '3 nov', d2: '28 oct',
+    iphone: 'iPhone perso', ipad: 'iPad', pixel: 'Pixel 8',
+    flowLead: 'Ouvre', flowUrl: 'github.com/login/device', flowAnd: 'et saisis ce code :', flowCode: 'WDJB-MJHT', flowWait: 'En attente de GitHub… · expire dans 14 min',
+    notAllowed: ['Ce compte GitHub n’est pas autorisé sur ce relais.', 'Demande à son administrateur de l’ajouter.'],
+    signedOut: ['Ce PC a été déconnecté : un autre PC s’est connecté', 'avec ce compte. Un compte n’a qu’un PC.'],
+    unreachable: ['Le relais ne répond pas. Vérifie l’adresse et ta connexion ;', 'Ledge réessaie tout seul.'],
+    offWell: 'Accès désactivé : tes appareils liés ne peuvent pas se connecter.',
+    empty: ['Aucun appareil lié. Sur ton téléphone ou ta tablette, ouvre', 'app.kl-ledge.dev et connecte-toi avec le même compte GitHub.', 'Un code s’affichera ici et sur l’appareil.'],
+    relayBad: 'Refusée : https:// (http:// pour localhost), sans chemin.',
+    nameLabel: 'Nom', revokeAsk: n => `Révoquer ${n} ? Il perd l’accès tout de suite.`,
+    recTag: 'Reconnecté', recWell: ['Cet iPhone s’est reconnecté sans code, avec sa passkey, après', 'une réinstallation de l’app. Si ce n’était pas toi, révoque-le.'], recAck: 'C’était bien moi',
+    blocked: ['Reconnexion par passkey bloquée : 3 vérifications', 'ont échoué depuis 09:12. Les appareils liés marchent,', 'la liaison par code aussi.'], unblock: 'Débloquer',
+    alert: n => `${n} demande à se lier à ton PC`, alertCompare: 'comparer le code', alertLater: 'masquer',
+    pairT: 'LIER UN APPAREIL', pairIntro: ['Un appareil connecté avec @octocat', 'demande l’accès à tes agents.'], pairCode: 'Code de liaison', pairCheck: ['Vérifie que le Pixel 8 affiche exactement ce code.', 'Approuve ici, puis confirme sur le téléphone.'], pairWarn: ['Si les codes diffèrent, refuse : quelqu’un', 'd’autre tente de se lier.'], expires: 'expire dans 4:32',
+    approve: 'approuver', deny: 'refuser', later: 'fermer',
+    approvedL: ['Approuvé sur ce PC.', 'Confirme maintenant sur le Pixel 8.'], linkedL: ['Pixel 8 est lié.', 'Il apparaît dans Réglages › Accès mobile.'], expiredL: ['La demande a expiré.', 'Recommence depuis le téléphone.'], close: 'fermer',
+    keys: { move: 'naviguer', change: 'changer', open: 'ouvrir', back: 'retour', rename: 'renommer', revoke: 'révoquer', save: 'enregistrer', cancel: 'annuler', copy: 'copier le code', yes: 'oui', no: 'non', settings: 'réglages', help: 'aide', pair: 'lier' },
+    overview: { yours: 'À TOI · 1', projects: 'PROJETS', otto: 'attend ton accord', s: ['Trier la liste', 'Ajouter le filtre', 'Relire la PR #212'], sess: 'OTTO · CLAUDE CODE', you: 'Vous  10:45', msg: 'Trie la liste par activité.', wait: '→ attend' },
+    rules: [
+      'Tout ce que montre l’écran vient de l’état mobile du daemon local ; chaque action est un message mobile.* au daemon, comme dans Desktop.',
+      'Lignes : j k ou ↑ ↓. ↵ ou espace fait l’action de la ligne (basculer, ouvrir le champ, lancer la connexion, comparer le code, confirmer). esc revient à Réglages.',
+      'Sur une ligne d’appareil : r renomme, x révoque (confirmation y / n sur la ligne).',
+      'Un refus du daemon s’affiche en toast, avec ses propres mots.',
+      'La ligne d’alerte et le badge apparaissent sur tous les écrans tant qu’une liaison attend sa comparaison ; m ouvre « Lier un appareil » de partout.'
+    ]
+  },
+  en: {
+    page: 'Mobile access in ledge tui',
+    states: { settings: 'Settings', off: 'Off', signin: 'Not signed in', flow: 'GitHub code', refused: 'Account refused', online: 'Online', empty: 'No device', offline: 'Offline', signedout: 'Signed out', relay: 'Change relay', rename: 'Rename', revoke: 'Revoke', recovered: 'Reconnected (passkey)', blocked: 'Recovery blocked', alert: 'Alert elsewhere', pair: 'Link · code', approved: 'Link · approved', linked: 'Link · linked', expired: 'Link · expired' },
+    notes: {
+      settings: 'Settings: the “Mobile access” row sums up the state and ↵ opens its own screen.',
+      off: 'Access off: the rest of the screen is dimmed, linked devices cannot connect.',
+      signin: 'Access on, account not signed in yet: ↵ on “GitHub account” starts the sign-in.',
+      flow: 'GitHub sign-in: the code and the address to open, on any device (the TUI may run over SSH). c copies the code, esc cancels.',
+      refused: 'The relay refuses this GitHub account: ↵ starts over with another account.',
+      online: 'Usual case: a pairing waiting at the top of the devices, then the linked devices.',
+      empty: 'No linked device: how to link one.',
+      offline: 'The relay does not answer: Ledge retries by itself, ↵ on “Status” retries now.',
+      signedout: 'Another PC signed in with this account: ↵ signs in again.',
+      relay: 'Change the relay: an inline field, checked on enter.',
+      rename: 'Rename a device: an inline field.',
+      revoke: 'Revoke: a y / n confirmation on the row itself.',
+      recovered: 'A device reconnected with its passkey: confirm (↵ “That was me”) or revoke.',
+      blocked: 'Passkey recovery blocked: ↵ unblocks.',
+      alert: 'A phone asks to link while you are elsewhere: alert line, badge, m compares the code.',
+      pair: '“Link a device”: the code to compare, y approves, n denies, esc closes without deciding.',
+      approved: 'Approved on the PC: confirm on the phone now.',
+      linked: 'Linked: the device shows in Devices.',
+      expired: 'The request expired.'
+    },
+    status: { sessions: '4 sessions · 1 machine', local: 'local ●' },
+    set: 'SETTINGS', setLang: 'Language', setTheme: 'Theme', setCtx: 'Context max', setCtxH: 'above: hand over', setLim: 'Limit alert', setLimH: 'above: For you warns',
+    mob: 'Mobile access', mobSum: { on: (n, p) => `Online · ${n} device${n > 1 ? 's' : ''}${p ? ` · ${p} request` : ''}`, off: 'Off', offline: 'Offline' },
+    title: 'SETTINGS › MOBILE ACCESS', access: 'Access', on: 'On', offW: 'Off', accessH: 'outgoing, no port opened',
+    relay: 'Relay', relayH: 'the address your devices open',
+    account: 'GitHub account', signin: 'Sign in with GitHub', signout: 'sign out', otherAccount: 'Try another account', reconnect: 'Sign in again',
+    statusL: 'Status', online: 'Connected to the relay', idle: 'Not connected yet', idleH: 'starts once the account is confirmed', retryIn: s => `Offline · retrying in ${s} s`, retry: 'retry',
+    term: 'Type in terminals', no: 'No', termH: 'a linked device can take over',
+    devices: n => `DEVICES · ${n}`, devicesNone: 'DEVICES',
+    asks: 'asks for access', compare: 'compare the code',
+    seen: { now: 'seen just now', min: 'seen 2 min ago', yest: 'seen yesterday' }, linkedOn: d => `linked ${d}`, d1: 'Nov 3', d2: 'Oct 28',
+    iphone: 'Personal iPhone', ipad: 'iPad', pixel: 'Pixel 8',
+    flowLead: 'Open', flowUrl: 'github.com/login/device', flowAnd: 'and enter this code:', flowCode: 'WDJB-MJHT', flowWait: 'Waiting for GitHub… · expires in 14 min',
+    notAllowed: ['This GitHub account is not allowed on this relay.', 'Ask its administrator to add it.'],
+    signedOut: ['This PC was signed out: another PC signed in', 'with this account. An account has one PC.'],
+    unreachable: ['The relay does not answer. Check the address and your', 'connection; Ledge retries by itself.'],
+    offWell: 'Access is off: your linked devices cannot connect.',
+    empty: ['No linked device. On your phone or tablet, open', 'app.kl-ledge.dev and sign in with the same GitHub account.', 'A code will show here and on the device.'],
+    relayBad: 'Refused: https:// (http:// for localhost), no path.',
+    nameLabel: 'Name', revokeAsk: n => `Revoke ${n}? It loses access at once.`,
+    recTag: 'Reconnected', recWell: ['This iPhone reconnected without a code, with its passkey, after', 'the app was reinstalled. If it was not you, revoke it.'], recAck: 'That was me',
+    blocked: ['Passkey reconnection blocked: 3 checks failed', 'since 09:12. Linked devices keep working, and so', 'does linking with a code.'], unblock: 'Unblock',
+    alert: n => `${n} asks to link to your PC`, alertCompare: 'compare the code', alertLater: 'hide',
+    pairT: 'LINK A DEVICE', pairIntro: ['A device signed in as @octocat', 'asks for access to your agents.'], pairCode: 'Pairing code', pairCheck: ['Check that the Pixel 8 shows exactly this code.', 'Approve here, then confirm on the phone.'], pairWarn: ['If the codes differ, deny: someone else', 'is trying to link.'], expires: 'expires in 4:32',
+    approve: 'approve', deny: 'deny', later: 'close',
+    approvedL: ['Approved on this PC.', 'Confirm on the Pixel 8 now.'], linkedL: ['Pixel 8 is linked.', 'It shows in Settings › Mobile access.'], expiredL: ['The request expired.', 'Start again from the phone.'], close: 'close',
+    keys: { move: 'move', change: 'change', open: 'open', back: 'back', rename: 'rename', revoke: 'revoke', save: 'save', cancel: 'cancel', copy: 'copy the code', yes: 'yes', no: 'no', settings: 'settings', help: 'help', pair: 'link' },
+    overview: { yours: 'FOR YOU · 1', projects: 'PROJECTS', otto: 'waits for your approval', s: ['Sort the list', 'Add the filter', 'Review PR #212'], sess: 'OTTO · CLAUDE CODE', you: 'You  10:45', msg: 'Sort the list by activity.', wait: '→ waits' },
+    rules: [
+      'Everything on screen comes from the local daemon’s mobile state; every action is a mobile.* message to the daemon, as in Desktop.',
+      'Rows: j k or ↑ ↓. ↵ or space does the row’s action (toggle, open the field, start the sign-in, compare the code, confirm). esc goes back to Settings.',
+      'On a device row: r renames, x revokes (y / n confirmation on the row).',
+      'A refusal from the daemon shows as a toast, in its own words.',
+      'The alert line and the badge show on every screen while a pairing waits for its comparison; m opens “Link a device” from anywhere.'
+    ]
+  }
+};
+const t = T[S.lang];
+
+/* ---------- terminal grid ---------- */
+const len = s => [...s].length;
+const lenSegs = segs => segs.reduce((x, [s]) => x + len(s), 0);
+function padSegs(segs, w, fill = '') {
+  const out = []; let n = 0;
+  for (const [txt, c] of segs) {
+    if (n >= w) break;
+    let s = txt;
+    if (n + len(s) > w) s = [...s].slice(0, Math.max(0, w - n - 1)).join('') + '…';
+    out.push([s, c]); n += len(s);
+  }
+  if (n < w) out.push([' '.repeat(w - n), fill]);
+  return out;
+}
+function box(title, rows, w, color = 'line', tcolor = 'dim') {
+  const inner = w - 4;
+  const top = [['╭─ ', color], [title, tcolor], [' ' + '─'.repeat(Math.max(0, w - 5 - len(title))) + '╮', color]];
+  return [top, ...rows.map(r => r.sel
+    ? [['│', color], ['▌', 'coral selbg'], ...padSegs(r.segs, inner + 1, 'selbg').map(([s, c]) => [s, (c ? c + ' ' : '') + 'selbg']), ['│', color]]
+    : [['│ ', color], ...padSegs(r.segs || r, inner), [' │', color]]), [['╰' + '─'.repeat(w - 2) + '╯', color]]];
+}
+const esc = s => [...s].map(ch => ch === '&' ? '&amp;' : ch === '<' ? '&lt;' : ch).join('');
+function renderTerm(lines, w) {
+  return `<div class="term"><pre>${lines.map(segs => padSegs(segs, w).map(([s, c]) => c ? `<span class="${c}">${esc(s)}</span>` : esc(s)).join('')).join('\n')}</pre></div>`;
+}
+function status(w, badge) {
+  const left = [[' ◖ ledge', 'coral'], [`  ${t.status.sessions}`, 'dim']];
+  if (badge) left.push([' · ', 'dim'], ['▯ 1', 'yellow b']);
+  const gap = w - lenSegs(left) - len(t.status.local) - 1;
+  return [...left, [' '.repeat(Math.max(1, gap)), ''], [t.status.local + ' ', 'dim']].map(([s, c]) => [s, (c ? c + ' ' : '') + 'barbg']);
+}
+const keys = list => list.flatMap(([k, a]) => [[` ${k} `, 'key fg'], [` ${a}  `, 'dim']]);
+const L = 22;
+const lab = (s, c = 'dim') => [s.padEnd(L), c];
+const row = (label, ...v) => [lab(label), ...v];
+const sel = (label, ...v) => ({ sel: true, segs: [[label.padEnd(L), 'fg'], ...v] });
+
+/* ---------- screens ---------- */
+function settingsScreen(W) {
+  const rows = [
+    row(t.setLang, [S.lang === 'fr' ? 'Français' : 'English', 'fg']),
+    row(t.setTheme, ['Auto', 'fg']),
+    row(t.setCtx, ['‹ 85 % ›', 'fg'], [`  ${t.setCtxH}`, 'faint']),
+    row(t.setLim, ['‹ 80 % ›', 'fg'], [`  ${t.setLimH}`, 'faint']),
+    sel(t.mob, ['● ', 'green'], [t.mobSum.on(2, 1), 'fg'], ['  ↵', 'faint'])
+  ];
+  return [status(W, true), alertLine(W), ...box(t.set, rows, W), keys([['j k', t.keys.move], ['← →', t.keys.change], ['↵', t.keys.open], ['esc', t.keys.back]])];
+}
+function alertLine(W) {
+  const k = [[' m ', 'key fg'], [` ${t.alertCompare}  `, 'fg'], [' x ', 'key fg'], [` ${t.alertLater} `, 'fg']];
+  const left = [[' ● ', 'yellow'], [t.alert(t.pixel), 'fg']];
+  const gap = W - lenSegs(left) - lenSegs(k);
+  return [...left, [' '.repeat(Math.max(1, gap)), ''], ...k].map(([s, c]) => [s, (c ? c + ' ' : '') + 'selbg']);
+}
+function deviceRows(opts = {}) {
+  const r = [];
+  if (opts.pending) r.push(opts.selPending ? { sel: true, segs: [['! ', 'yellow'], [`${t.pixel} ${t.asks}`, 'fg b'], ['   ↵ ' + t.compare, 'faint']] } : [['! ', 'yellow'], [`${t.pixel} ${t.asks}`, 'yellow'], ['   ↵ ' + t.compare, 'faint']]);
+  const iphone = opts.renaming
+    ? { sel: true, segs: [['▯ ', 'fg'], [t.nameLabel + ' ', 'dim'], ['[ iPhone perso▏          ]'.replace('iPhone perso', S.lang === 'fr' ? 'iPhone perso' : 'Personal iPhone'), 'fg'], ['  ↵ ' + t.keys.save + '  esc ' + t.keys.cancel, 'faint']] }
+    : opts.revoking
+      ? { sel: true, segs: [['▯ ', 'fg'], [t.revokeAsk(t.iphone), 'red'], ['  y / n', 'fg b']] }
+      : opts.recovered
+        ? { sel: true, segs: [['▯ ', 'fg'], [t.iphone.padEnd(18), 'fg'], [` ${t.recTag} `, 'blue b'], ['  ' + t.seen.now, 'faint']] }
+        : opts.selIphone ? { sel: true, segs: [['▯ ', 'fg'], [t.iphone.padEnd(18), 'fg'], [`${t.linkedOn(t.d1)} · ${t.seen.min}`, 'faint']] }
+          : [['▯ ', 'fg'], [t.iphone.padEnd(18), 'fg'], [`${t.linkedOn(t.d1)} · ${t.seen.min}`, 'faint']];
+  r.push(iphone);
+  if (opts.recovered) { r.push([['  ' + t.recWell[0], 'blue']]); r.push([['  ' + t.recWell[1], 'blue']]); r.push([['  ↵ ', 'faint'], [t.recAck, 'fg u'], ['   x ', 'faint'], [t.keys.revoke, 'fg']]); }
+  r.push([['▭ ', 'fg'], [t.ipad.padEnd(18), 'fg'], [`${t.linkedOn(t.d2)} · ${t.seen.yest}`, 'faint']]);
+  return r;
+}
+function mobileScreen(W, st) {
+  const dimmed = st === 'off';
+  const D = dimmed ? 'faint' : 'fg';
+  const access = st === 'off' ? sel(t.access, ['○ ', 'faint'], [t.offW, 'fg'], [`  ${t.accessH}`, 'faint']) : row(t.access, ['● ', 'green'], [t.on, 'fg'], [`  ${t.accessH}`, 'faint']);
+  const relay = st === 'relay'
+    ? sel(t.relay, ['[ http://relais.example/ledge▏ ]', 'fg'])
+    : row(t.relay, ['app.kl-ledge.dev', D]);
+  let account, statusRow, extra = [];
+  if (st === 'signin') { account = sel(t.account, [t.signin, 'fg b'], ['  ↵', 'faint']); statusRow = row(t.statusL, ['○ ', 'faint'], [t.idle, 'fg'], [`  ${t.idleH}`, 'faint']); }
+  else if (st === 'flow') {
+    account = sel(t.account, [t.flowLead + ' ', 'fg'], [t.flowUrl, 'blue u']);
+    extra = [[[' '.repeat(L), ''], [t.flowAnd + ' ', 'fg'], [t.flowCode, 'yellow b']], [[' '.repeat(L), ''], [t.flowWait, 'faint']]];
+    statusRow = row(t.statusL, ['○ ', 'faint'], [t.idle, 'fg']);
+  } else if (st === 'refused') {
+    account = sel(t.account, [t.otherAccount, 'fg b'], ['  ↵', 'faint']);
+    extra = [[[' '.repeat(L), ''], [t.notAllowed[0], 'red']], [[' '.repeat(L), ''], [t.notAllowed[1], 'red']]];
+    statusRow = row(t.statusL, ['○ ', 'faint'], [t.idle, 'fg']);
+  } else if (st === 'signedout') {
+    account = sel(t.account, [t.reconnect, 'fg b'], ['  ↵', 'faint']);
+    extra = [[[' '.repeat(L), ''], [t.signedOut[0], 'yellow']], [[' '.repeat(L), ''], [t.signedOut[1], 'yellow']]];
+    statusRow = row(t.statusL, ['○ ', 'faint'], [t.idle, 'fg']);
+  } else {
+    account = row(t.account, ['@octocat', D], [`  · ${t.signout}`, 'faint']);
+    statusRow = st === 'offline'
+      ? sel(t.statusL, ['● ', 'yellow'], [t.retryIn(12), 'fg'], ['  ↵ ' + t.retry, 'faint'])
+      : st === 'off' ? row(t.statusL, ['○ ', 'faint'], [t.offW, 'faint']) : row(t.statusL, ['● ', 'green'], [t.online, 'fg']);
+    if (st === 'offline') extra = [[[' '.repeat(L), ''], [t.unreachable[0], 'yellow']], [[' '.repeat(L), ''], [t.unreachable[1], 'yellow']]];
+  }
+  const relayErr = st === 'relay' ? [[[' '.repeat(L), ''], [t.relayBad, 'red']], [[' '.repeat(L), ''], ['↵ ' + t.keys.save + '   esc ' + t.keys.cancel, 'faint']]] : [];
+  const accountBlock = st === 'flow' || st === 'refused' || st === 'signedout' ? [account, ...extra, statusRow] : st === 'offline' ? [account, statusRow, ...extra] : [account, statusRow];
+  const rows = [access, relay, ...relayErr, ...accountBlock, row(t.term, [t.no, D], [`  ${t.termH}`, 'faint'])];
+  const lines = [status(W, st === 'online'), ...(st === 'online' ? [alertLine(W)] : []), ...box(t.title, rows, W)];
+  // Devices
+  if (st === 'off') lines.push(...box(t.devices(2), [[[t.offWell, 'faint']], [['▯ ', 'faint'], [t.iphone, 'faint']], [['▭ ', 'faint'], [t.ipad, 'faint']]], W));
+  else if (st === 'empty') lines.push(...box(t.devicesNone, t.empty.map(s => [[s, 'dim']]), W));
+  else if (['signin', 'flow', 'refused', 'signedout'].includes(st)) lines.push(...box(t.devices(2), deviceRows(), W));
+  else if (st === 'blocked') lines.push(...box(t.devices(2), [{ sel: true, segs: [['⊘ ', 'red'], [t.blocked[0], 'red']] }, [['  ' + t.blocked[1], 'red']], [['  ' + t.blocked[2], 'red']], [['  ↵ ', 'faint'], [t.unblock, 'fg u']], ...deviceRows()], W));
+  else lines.push(...box(t.devices(2), deviceRows({ pending: st === 'online', selPending: false, renaming: st === 'rename', revoking: st === 'revoke', recovered: st === 'recovered' }), W));
+  const k = ['rename', 'relay'].includes(st) ? [['↵', t.keys.save], ['esc', t.keys.cancel]]
+    : st === 'revoke' ? [['y', t.keys.yes], ['n', t.keys.no]]
+      : st === 'flow' ? [['c', t.keys.copy], ['esc', t.keys.cancel]]
+        : [['j k', t.keys.move], ['↵', t.keys.open], ['r', t.keys.rename], ['x', t.keys.revoke], ['esc', t.keys.back]];
+  lines.push(keys(k));
+  return lines;
+}
+function overviewLines(W) {
+  const left = 32, right = W - left;
+  const o = t.overview;
+  const L1 = [...box(o.yours, [[['! ', 'red'], ['Otto ', 'fg'], [o.otto, 'dim']]], left, 'red', 'red'),
+    ...box(o.projects, [[['ledge', 'fg']], [['! ', 'red'], ['Otto   ', 'fg'], [o.s[0], 'dim']], [['● ', 'blue'], ['Nova   ', 'fg'], [o.s[1], 'dim']], [['○ ', 'green'], ['Pim    ', 'fg'], [o.s[2], 'dim']]], left)];
+  const R1 = box(o.sess, [[[o.you, 'dim']], [['  ' + o.msg, 'fg']], [['◆ ', 'red'], ['Bash   ', 'dim'], ['npm test', 'fg'], ['  ' + o.wait, 'red']], [], [], [], []], right);
+  const n = Math.max(L1.length, R1.length);
+  return Array.from({ length: n }, (_, i) => [...(L1[i] || [[' '.repeat(left), '']]), ...(R1[i] || [])]);
+}
+function overlay(base, dlg, W) {
+  const dw = lenSegs(dlg[0]), x = Math.floor((W - dw) / 2), y = 3;
+  return base.map((segs, i) => {
+    const d = dlg[i - y];
+    if (!d) return segs;
+    const flat = padSegs(segs, W);
+    // cut base at x and x + dw, keeping colors
+    const out = []; let n = 0;
+    for (const [s, c] of flat) {
+      for (const ch of [...s]) {
+        if (n < x || n >= x + dw) out.push([ch, c ? c + ' faint' : 'faint']);
+        if (n === x) out.push(...d);
+        n++;
+      }
+    }
+    return out;
+  });
+}
+function pairDialog(st) {
+  const w = 58, inner = w - 4;
+  let body;
+  if (st === 'pair') body = [
+    [[t.pairIntro[0], 'fg']], [[t.pairIntro[1], 'fg']], [],
+    [[t.pairCode, 'dim']], [['          4 7 2 · 9 1 5 · 3 0 8', 'yellow b']], [],
+    [[t.pairCheck[0], 'dim']], [[t.pairCheck[1], 'dim']],
+    [[t.pairWarn[0], 'red']], [[t.pairWarn[1], 'red'], [' '.repeat(Math.max(1, inner - len(t.pairWarn[1]) - len(t.expires))), ''], [t.expires, 'faint']], [],
+    [['  ', ''], [' y ', 'key fg'], [` ${t.approve}   `, 'green'], [' n ', 'key fg'], [` ${t.deny}   `, 'red'], [' esc ', 'key fg'], [` ${t.later}`, 'dim']]
+  ];
+  else {
+    const [a, b] = st === 'approved' ? t.approvedL : st === 'linked' ? t.linkedL : t.expiredL;
+    const c = st === 'expired' ? 'yellow' : 'green';
+    body = [[[st === 'expired' ? '⊘ ' : '✓ ', c], [a, c + ' b']], [['  ' + b, 'fg']], [], [['  ', ''], [' esc ', 'key fg'], [` ${t.close}`, 'dim']]];
+  }
+  return box(t.pairT, body, w, 'yellow', 'yellow b').map(r => r.map(([s, c]) => [s, c]));
+}
+
+/* ---------- page ---------- */
+function screen() {
+  const W = S.w;
+  if (S.st === 'settings') return settingsScreen(W);
+  if (S.st === 'alert') return [status(W, true), alertLine(W), ...overviewLines(W), keys([['j k', t.keys.move], ['↵', t.keys.open], ['m', t.keys.pair], [',', t.keys.settings], ['?', t.keys.help]])];
+  if (['pair', 'approved', 'linked', 'expired'].includes(S.st)) {
+    const dlg = pairDialog(S.st);
+    const top = [status(W, S.st === 'pair'), ...(S.st === 'pair' ? [alertLine(W)] : [[]]), ...overviewLines(W)];
+    while (top.length < dlg.length + 4) top.push([]);
+    const base = [...top, keys([['j k', t.keys.move], ['↵', t.keys.open], ['m', t.keys.pair], [',', t.keys.settings], ['?', t.keys.help]])];
+    return overlay(base, dlg, W);
+  }
+  return mobileScreen(W, S.st);
+}
+function link(k, v) { const p = new URLSearchParams(location.search); p.set(k, v); return '?' + p.toString(); }
+function renderBar() {
+  const btn = (k, v, label) => `<button aria-pressed="${String(S[k]) === String(v)}" onclick="location.search='${link(k, v)}'">${label}</button>`;
+  document.getElementById('bar').innerHTML = `<b>${t.page}</b>
+    <div class="grp"><span>${S.lang === 'fr' ? 'État' : 'State'}</span>${STATES.map(s => btn('st', s, t.states[s])).join('')}</div>
+    <div class="grp">${btn('theme', 'dark', S.lang === 'fr' ? 'Sombre' : 'Dark')}${btn('theme', 'light', S.lang === 'fr' ? 'Clair' : 'Light')}</div>
+    <div class="grp">${btn('lang', 'fr', 'FR')}${btn('lang', 'en', 'EN')}</div>
+    <div class="grp">${btn('w', 72, '72 col')}${btn('w', 100, '100 col')}</div>`;
+}
+function render() {
+  renderBar();
+  document.getElementById('main').innerHTML = `<h1>${t.states[S.st]}</h1><p class="note">${t.notes[S.st]}</p>${renderTerm(screen(), S.w)}<ul class="rules">${t.rules.map(r => `<li>${r}</li>`).join('')}</ul>`;
+}
+render();
+</script>
+</body>
+</html>
