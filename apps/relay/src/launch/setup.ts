@@ -26,6 +26,16 @@ async function askRequired(io: SetupIo, question: string, def?: string): Promise
   }
 }
 
+/** Asks a yes/no question whose empty answer is yes, until the answer is one of them. */
+async function confirm(io: SetupIo, question: string): Promise<boolean> {
+  for (;;) {
+    const a = (await io.ask(question)).trim().toLowerCase();
+    if (a === '' || a === 'y' || a === 'yes') return true;
+    if (a === 'n' || a === 'no') return false;
+    io.say('Answer y or n.');
+  }
+}
+
 /** The questions of a first launch, answered through `io`; returns the settings to save and writes nothing itself. */
 export async function runSetup(
   io: SetupIo,
@@ -60,14 +70,19 @@ export async function runSetup(
   let githubId: string;
   for (;;) {
     const login = await askRequired(io, 'GitHub login (or numeric id) allowed to use this relay', current.allowedGithubIds?.[0]);
+    let r: { id: string; login?: string };
     try {
-      const r = await resolveId(login);
-      githubId = r.id;
-      io.say(r.login ? `GitHub account ${r.login} = id ${r.id}` : `GitHub account id ${r.id}`);
-      break;
+      r = await resolveId(login);
     } catch (e) {
       if (!(e instanceof GithubIdError)) throw e;
       io.say(`${e.reason === 'not_found' ? `GitHub has no account named ${login}.` : 'GitHub could not be reached.'} A numeric id also works.`);
+      continue;
+    }
+    io.say(r.login ? `GitHub account ${r.login} = id ${r.id}` : `GitHub account id ${r.id}`);
+    // The account is shown back before it is kept, since a typo in a login can name someone else's account.
+    if (await confirm(io, 'Is this the right account? [Y/n]')) {
+      githubId = r.id;
+      break;
     }
   }
 

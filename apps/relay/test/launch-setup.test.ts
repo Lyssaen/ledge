@@ -26,7 +26,7 @@ const resolveOk = async (input: string) => ({ id: '4242', login: input });
 
 describe('runSetup', () => {
   it('collects the settings and says the OAuth App block', async () => {
-    const { io, said } = scripted(['https://relay.example', 'cid', 'csecret', 'octo', 'ops@relay.example']);
+    const { io, said } = scripted(['https://relay.example', 'cid', 'csecret', 'octo', '', 'ops@relay.example']);
     const out = await runSetup(io, {}, { resolveId: resolveOk });
     expect(out).toMatchObject({
       publicUrl: 'https://relay.example',
@@ -42,7 +42,7 @@ describe('runSetup', () => {
 
   it('asks the public URL again with the reason until it is valid', async () => {
     const { io, said, asked } = scripted([
-      'https://relay.example/', 'http://relay.example', 'https://relay.example', 'cid', 'sec', 'octo', 'a@b.c'
+      'https://relay.example/', 'http://relay.example', 'https://relay.example', 'cid', 'sec', 'octo', 'y', 'a@b.c'
     ]);
     await runSetup(io, {}, { resolveId: resolveOk });
     expect(asked.filter((a) => /public URL/i.test(a.question))).toHaveLength(3);
@@ -53,7 +53,7 @@ describe('runSetup', () => {
     const resolveId = vi.fn()
       .mockRejectedValueOnce(new GithubIdError('not_found'))
       .mockResolvedValueOnce({ id: '7', login: 'real' });
-    const { io, said, asked } = scripted(['https://relay.example', 'cid', 'sec', 'ghost', 'real', 'a@b.c']);
+    const { io, said, asked } = scripted(['https://relay.example', 'cid', 'sec', 'ghost', 'real', '', 'a@b.c']);
     const out = await runSetup(io, {}, { resolveId });
     expect(out.allowedGithubIds).toEqual(['7']);
     expect(asked.filter((a) => /GitHub (login|account)/i.test(a.question))).toHaveLength(2);
@@ -61,7 +61,7 @@ describe('runSetup', () => {
   });
 
   it('asks the secret with secret: true and never says it', async () => {
-    const { io, said, asked } = scripted(['https://relay.example', 'cid', 'top-secret-value', 'octo', 'a@b.c']);
+    const { io, said, asked } = scripted(['https://relay.example', 'cid', 'top-secret-value', 'octo', '', 'a@b.c']);
     await runSetup(io, {}, { resolveId: resolveOk });
     expect(asked.find((a) => /secret/i.test(a.question))?.secret).toBe(true);
     expect(said.join('\n')).not.toContain('top-secret-value');
@@ -71,7 +71,7 @@ describe('runSetup', () => {
     const current: LaunchFile = {
       publicUrl: 'https://relay.example', githubClientId: 'cid', githubClientSecret: 'kept', allowedGithubIds: ['4242']
     };
-    const { io, asked } = scripted(['', '', '', '4242', '']);
+    const { io, asked } = scripted(['', '', '', '4242', '', '']);
     const out = await runSetup(io, current, { resolveId: resolveOk });
     expect(out.githubClientSecret).toBe('kept');
     expect(out.publicUrl).toBe('https://relay.example');
@@ -80,7 +80,7 @@ describe('runSetup', () => {
   });
 
   it('prefixes a bare address with mailto: and refuses other contacts', async () => {
-    const { io, said } = scripted(['https://relay.example', 'cid', 'sec', 'octo', 'ftp://x', 'me@x.y']);
+    const { io, said } = scripted(['https://relay.example', 'cid', 'sec', 'octo', '', 'ftp://x', 'me@x.y']);
     const out = await runSetup(io, {}, { resolveId: resolveOk });
     expect(out.vapid?.subject).toBe('mailto:me@x.y');
     expect(said.some((l) => /mailto:/.test(l) && /https:\/\//.test(l))).toBe(true);
@@ -88,21 +88,33 @@ describe('runSetup', () => {
 
   it('keeps the VAPID keys when only the subject changes', async () => {
     const vapid = { publicKey: 'pub', privateKey: 'priv', subject: 'mailto:old@x.y' };
-    const { io } = scripted(['https://relay.example', 'cid', 'sec', 'octo', 'new@x.y']);
+    const { io } = scripted(['https://relay.example', 'cid', 'sec', 'octo', '', 'new@x.y']);
     const out = await runSetup(io, { vapid }, { resolveId: resolveOk });
     expect(out.vapid).toEqual({ publicKey: 'pub', privateKey: 'priv', subject: 'mailto:new@x.y' });
   });
 
   it('keeps the other allowed ids, the answered one first, and says so', async () => {
     const current: LaunchFile = { publicUrl: 'https://relay.example', githubClientId: 'cid', githubClientSecret: 's', allowedGithubIds: ['1', '2', '3'] };
-    const { io, said } = scripted(['', '', '', '2', '']);
+    const { io, said } = scripted(['', '', '', '2', '', '']);
     const out = await runSetup(io, current, { resolveId: async (i) => ({ id: i }) });
     expect(out.allowedGithubIds).toEqual(['2', '1', '3']);
     expect(said.join('\n')).toContain('2 other allowed GitHub accounts are kept');
     expect(said.join('\n')).toContain('GitHub account id 2');
-    const { io: io2 } = scripted(['', '', '', '9', '']);
+    const { io: io2 } = scripted(['', '', '', '9', '', '']);
     const out2 = await runSetup(io2, current, { resolveId: async (i) => ({ id: i }) });
     expect(out2.allowedGithubIds).toEqual(['9', '1', '2', '3']);
+  });
+
+  it('shows the resolved account back and asks the account again when it is not the right one', async () => {
+    const resolveId = async (input: string) => ({ id: input === 'octo' ? '1' : '7', login: input });
+    const { io, said, asked } = scripted(['https://relay.example', 'cid', 'sec', 'octo', 'n', 'real', 'maybe', 'Y', 'a@b.c']);
+    const out = await runSetup(io, {}, { resolveId });
+    expect(out.allowedGithubIds).toEqual(['7']);
+    expect(asked.filter((a) => /GitHub login/i.test(a.question))).toHaveLength(2);
+    expect(asked.filter((a) => a.question === 'Is this the right account? [Y/n]')).toHaveLength(3);
+    expect(said).toContain('GitHub account octo = id 1');
+    expect(said).toContain('GitHub account real = id 7');
+    expect(said).toContain('Answer y or n.');
   });
 
   it('rejects when the input ends in the middle of the questions', async () => {

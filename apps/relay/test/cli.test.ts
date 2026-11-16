@@ -129,7 +129,7 @@ describe('ledge-relay', { timeout: 60_000 }, () => {
 
   it('saves the answers of a complete dialogue and never prints the client secret', async () => {
     const github = fakeGitHub();
-    const h = await harness({}, { isTTY: true, io: () => scripted(['https://relay.example', 'cid', 'top-secret-xyz', '4242', 'ops@relay.example']) });
+    const h = await harness({}, { isTTY: true, io: () => scripted(['https://relay.example', 'cid', 'top-secret-xyz', '4242', '', 'ops@relay.example']) });
     const deps = h.deps();
     const run = main(['launch', '--port', '0'], { ...deps, github });
     const until = Date.now() + 20_000;
