@@ -418,7 +418,7 @@ export async function startHarness(opts: { webDir?: string } = {}): Promise<Harn
     const jwk = keys.privateKey.export({ format: 'jwk' });
     const publicKey = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x!, 'base64url'), Buffer.from(jwk.y!, 'base64url')]).toString('base64url');
     const cfg: AccountsConfig = {
-      mode: 'accounts', port, databaseUrl: 'pglite://memory', clientId: 'fake', clientSecret: 'fake',
+      mode: 'accounts', port, database: { kind: 'postgres', url: 'unused' }, clientId: 'fake', clientSecret: 'fake',
       allowed: new Set([USER.id]), publicUrl: url, webDir,
       vapid: { publicKey, privateKey: createPrivateKey({ key: jwk, format: 'jwk' }), subject: 'mailto:e2e@example.com' }
     };

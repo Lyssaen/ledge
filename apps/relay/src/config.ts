@@ -14,10 +14,13 @@ export class ConfigError extends Error {
   }
 }
 
+/** Where accounts are kept: a Postgres server, or an embedded pglite database in a directory. */
+export type DatabaseConfig = { kind: 'postgres'; url: string } | { kind: 'pglite'; dir: string };
+
 export interface AccountsConfig {
   mode: 'accounts';
   port: number;
-  databaseUrl: string;
+  database: DatabaseConfig;
   clientId: string;
   clientSecret: string;
   /** GitHub numeric ids, in decimal. */
@@ -64,7 +67,7 @@ function parseAllowed(raw: string): Set<string> {
   return new Set(parts);
 }
 
-function parsePublicUrl(raw: string, production: boolean): string {
+export function parsePublicUrl(raw: string, production: boolean): string {
   const bad = () => new ConfigError('LEDGE_RELAY_PUBLIC_URL must be an http(s) origin without a path, e.g. https://relay.example');
   let u: URL;
   try { u = new URL(raw); } catch { throw bad(); }
@@ -117,13 +120,20 @@ function parseVapid(env: NodeJS.ProcessEnv): Vapid | undefined {
   }
 }
 
-/** `DATABASE_URL` selects the accounts mode; without it the relay runs on dev tokens, which production refuses. */
-export function loadConfig(env: NodeJS.ProcessEnv): Config {
-  const production = env.NODE_ENV === 'production';
+/**
+ * `DATABASE_URL` (Postgres, which wins) or a pglite directory selects the accounts mode; without either the relay runs
+ * on dev tokens, which production refuses. `opts.production` forces the production rules whatever `NODE_ENV` says.
+ */
+export function loadConfig(env: NodeJS.ProcessEnv, opts: { production?: boolean; pgliteDir?: string } = {}): Config {
+  const production = opts.production ?? env.NODE_ENV === 'production';
   const port = parsePort(env);
   const webDir = env.LEDGE_RELAY_WEB_DIR ? { webDir: env.LEDGE_RELAY_WEB_DIR } : {};
 
-  if (env.DATABASE_URL) {
+  const database: DatabaseConfig | undefined = env.DATABASE_URL
+    ? { kind: 'postgres', url: env.DATABASE_URL }
+    : opts.pgliteDir ? { kind: 'pglite', dir: opts.pgliteDir } : undefined;
+
+  if (database) {
     const githubWeb = optionalBase(env, 'LEDGE_RELAY_GITHUB_WEB_URL', production);
     const githubApi = optionalBase(env, 'LEDGE_RELAY_GITHUB_API_URL', production);
     if (production) {
@@ -138,7 +148,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     return {
       mode: 'accounts',
       port,
-      databaseUrl: env.DATABASE_URL,
+      database,
       clientId: required(env, 'GITHUB_CLIENT_ID'),
       clientSecret: required(env, 'GITHUB_CLIENT_SECRET'),
       allowed: parseAllowed(required(env, 'LEDGE_RELAY_ALLOWED_GITHUB_IDS')),

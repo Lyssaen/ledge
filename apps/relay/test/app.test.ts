@@ -15,7 +15,7 @@ beforeAll(async () => { db = new PGlite(); }, 30_000);
 afterAll(async () => { await db.close(); });
 
 const cfg: AccountsConfig = {
-  mode: 'accounts', port: 0, databaseUrl: 'unused', clientId: 'id', clientSecret: 'secret',
+  mode: 'accounts', port: 0, database: { kind: 'postgres', url: 'unused' }, clientId: 'id', clientSecret: 'secret',
   allowed: new Set(['1']), publicUrl: 'http://127.0.0.1:0'
 };
 

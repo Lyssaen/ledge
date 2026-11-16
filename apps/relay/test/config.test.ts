@@ -48,7 +48,7 @@ describe('loadConfig, accounts mode', () => {
   it('reads a full environment', () => {
     const cfg = loadConfig(FULL);
     expect(cfg).toMatchObject({
-      mode: 'accounts', port: 8787, databaseUrl: FULL.DATABASE_URL, clientId: 'cid', clientSecret: 'csecret',
+      mode: 'accounts', port: 8787, database: { kind: 'postgres', url: FULL.DATABASE_URL }, clientId: 'cid', clientSecret: 'csecret',
       publicUrl: 'https://relay.example'
     });
     if (cfg.mode !== 'accounts') throw new Error('mode');
@@ -149,6 +149,27 @@ describe('loadConfig, accounts mode', () => {
     expect(e.message).not.toContain('s3cr3t');
     expect(e.message).not.toContain('hunter2');
     expect(e.message).not.toContain('abc');
+  });
+});
+
+describe('loadConfig, embedded database and forced production', () => {
+  it('selects pglite when only a pglite directory is given', () => {
+    const cfg = loadConfig({ ...productionEnv(), DATABASE_URL: undefined }, { pgliteDir: '/d' });
+    expect(cfg).toMatchObject({ mode: 'accounts', database: { kind: 'pglite', dir: '/d' } });
+  });
+
+  it('prefers postgres when DATABASE_URL is set as well', () => {
+    const cfg = loadConfig(productionEnv(), { pgliteDir: '/d' });
+    expect(cfg).toMatchObject({ database: { kind: 'postgres', url: FULL.DATABASE_URL } });
+  });
+
+  it('applies the production rules when forced, whatever NODE_ENV says', () => {
+    const env = { ...productionEnv(), NODE_ENV: undefined, LEDGE_RELAY_PUBLIC_URL: 'http://relay.example' };
+    expect(() => loadConfig(env, { production: true, pgliteDir: '/d' })).toThrow('LEDGE_RELAY_PUBLIC_URL must be https when NODE_ENV=production');
+  });
+
+  it('refuses dev tokens when production is forced', () => {
+    expect(() => loadConfig({ LEDGE_RELAY_DEV_TOKENS: '{}' }, { production: true })).toThrow('DATABASE_URL is not set: refusing to start with dev tokens in production');
   });
 });
 

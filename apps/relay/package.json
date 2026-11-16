@@ -1,8 +1,21 @@
 {
-  "name": "@ledge/relay",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@paradow/ledge-relay",
+  "version": "0.60.0",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lyssaen/ledge.git",
+    "directory": "apps/relay"
+  },
+  "homepage": "https://github.com/Lyssaen/ledge#readme",
   "type": "module",
+  "bin": {
+    "ledge-relay": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "web"
+  ],
   "engines": {
     "node": ">=22"
   },
@@ -11,15 +24,16 @@
     "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "pack:web": "node scripts/copy-web.mjs",
     "vapid-keys": "node scripts/vapid-keys.mjs"
   },
   "dependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "pg": "^8.23.1",
     "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.10",
     "@ledge/protocol": "workspace:*",
     "@ledge/seal": "workspace:*",
     "@types/node": "^22.7.0",

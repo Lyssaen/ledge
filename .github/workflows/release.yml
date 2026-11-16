@@ -53,6 +53,14 @@ jobs:
           name: pwa-build
           path: apps/mobile/dist/build.json
           if-no-files-found: error
+      # The relay package carries the phone build just made: its web/build.json must be the uploaded one.
+      - run: pnpm --filter @paradow/ledge-relay test
+      - run: pnpm --filter @paradow/ledge-relay build
+      - run: pnpm --filter @paradow/ledge-relay pack:web
+      - name: Check the relay package
+        run: |
+          (cd apps/relay && npm pack --dry-run --json > "$RUNNER_TEMP/relay-pack.json")
+          node scripts/relay-pack.mjs check "$RUNNER_TEMP/relay-pack.json"
       # Trusted Publishing: npm accepts the workflow's OIDC identity (id-token: write) instead of a token. It needs
       # npm 11.5.1 or later, newer than the one Node 22 ships.
       - name: Publish to npm
@@ -69,6 +77,22 @@ jobs:
         if: env.PUBLISH != 'true'
         working-directory: packages/ledge
         run: npm pack --dry-run
+      # The relay's two one-time owner actions: pick a licence in apps/relay/package.json (it is UNLICENSED, so this step
+      # publishes nothing), then publish the first version by hand and add the Trusted Publisher on npm, so the
+      # workflow can publish the next ones. See apps/relay/README.md.
+      - name: Publish the relay to npm
+        if: env.PUBLISH == 'true'
+        run: |
+          # Captured first: a crash of the script stops the step (bash -e) instead of reading as a licence.
+          publishable="$(node scripts/relay-pack.mjs publishable)"
+          if [ "$publishable" != "true" ]; then
+            echo "@paradow/ledge-relay not published: no licence yet"; exit 0
+          fi
+          cd apps/relay
+          v="${VERSION_TAG#v}"
+          # A re-run of the same tag must not fail on a version npm already has.
+          if npm view "@paradow/ledge-relay@$v" version >/dev/null 2>&1; then echo "@paradow/ledge-relay@$v already published"; exit 0; fi
+          npm publish --access public --provenance
 
   # Railway deploys the branch `production`: the relay and the phone app at app.kl-ledge.dev (apps/relay/README.md,
   # "Deploy on Railway"). A real tag only, once the release is whole: the daemon on npm and the installer with the phone

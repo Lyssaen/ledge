@@ -15,7 +15,7 @@ each project below has its own `AGENTS.md`, read it before working there.
 | `apps/desktop` (`desktop`) | Ledge Desktop: Tauri 2 + React; hosts the notch window |
 | `apps/overlay` (`overlay`) | The island's web app, built into Desktop's notch window |
 | `apps/mobile` (`@ledge/mobile`) | The phone/tablet PWA |
-| `apps/relay` (`@ledge/relay`) | The relay: routes encrypted bodies it cannot read |
+| `apps/relay` (`@paradow/ledge-relay`) | The relay: routes encrypted bodies it cannot read |
 | `crates/ledge-native` | Win32 helpers shared by Desktop and the island |
 
 ## The owner
