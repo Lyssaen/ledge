@@ -54,7 +54,23 @@ describe('Réglages › Accès mobile', () => {
   it('says « indisponible » for a daemon that says nothing of mobile access', async () => {
     tui = await startTui();
     await tui.press(',');
-    expect(tui.frame()).toContain('indisponible');
+    await until(() => tui!.frame().includes('indisponible'));
     expect(tui.sentMobile()).toEqual([]);
   });
+
+  it('keeps Réglages\' own back target, with or without a detour by the help', async () => {
+    tui = await startTui({ mobile: online() });
+    await open(tui);
+    await tui.press('\x1b');
+    await tui.press('\x1b');
+    await until(() => tui!.frame().includes('Otto'));
+    await open(tui);
+    await tui.press('?');
+    await tui.press('\x1b');
+    await until(() => tui!.frame().includes('ACCÈS MOBILE'));
+    await tui.press('\x1b');
+    await until(() => tui!.frame().includes('Langue'));
+    await tui.press('\x1b');
+    await until(() => tui!.frame().includes('Otto') && !tui!.frame().includes('Langue'));
+  }, 20_000);
 });

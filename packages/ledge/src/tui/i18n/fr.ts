@@ -2,7 +2,6 @@ import { formatBytes } from '@ledge/ui/images/encode';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import { pointCopy } from '@ledge/ui/chat/pointCopy';
-
 import type { DeviceWord } from '@ledge/fleet';
 
 /** French counts 0 and 1 as singular; a device in a sentence takes its article (« l’iPad », « cet iPad », « de l’iPad »), a name the user gave is said bare. */
@@ -353,7 +352,7 @@ export const fr = {
     devices: (n: number) => `APPAREILS · ${n}`, devicesNone: 'APPAREILS',
     empty: ['Aucun appareil lié. Sur ton téléphone ou ta tablette, ouvre', 'app.kl-ledge.dev et connecte-toi avec le même compte GitHub.', 'Un code s’affichera ici et sur l’appareil.'],
     asks: 'demande l’accès', compare: 'comparer le code',
-    seenNow: 'vu à l’instant', seenAgo: (a: string) => `vu il y a ${a}`, linkedOn: (d: string) => `lié le ${d}`,
+    seenNow: 'vu à l’instant', seenYesterday: 'vu hier', seenAgo: (a: string) => `vu il y a ${a}`, linkedOn: (d: string) => `lié le ${d}`,
     nameLabel: 'Nom', revokeAsk: (n: string) => `Révoquer ${n} ? Il perd l’accès tout de suite.`,
     recTag: 'Reconnecté', recWell: (d: DeviceWord) => [`${upFirst(thisDevice(d))} s’est reconnecté sans code, avec sa passkey, après`, 'une réinstallation de l’app. Si ce n’était pas toi, révoque-le.'], recAck: 'C’était bien moi',
     attTag: 'Tentative refusée', attWell: (at: string, d: DeviceWord) => [`${at}, un autre appareil a tenté de prendre la place`, `${ofDevice(d)} avec sa passkey. Refusé : ${theDevice(d)} était connecté.`, `Si ce n’était pas toi, révoque ${thisDevice(d)}.`], attAck: 'Compris',

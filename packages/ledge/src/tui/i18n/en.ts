@@ -2,7 +2,6 @@ import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import { pointCopy } from '@ledge/ui/chat/pointCopy';
 import { formatBytes } from '@ledge/ui/images/encode';
 import type { Messages } from './lang.js';
-
 import type { DeviceWord } from '@ledge/fleet';
 
 /** A device in a sentence: a name the user gave is said bare, a model takes « the » or « this ». */
@@ -337,7 +336,7 @@ export const en: Messages = {
     devices: n => `DEVICES · ${n}`, devicesNone: 'DEVICES',
     empty: ['No linked device. On your phone or tablet, open', 'app.kl-ledge.dev and sign in with the same GitHub account.', 'A code will show here and on the device.'],
     asks: 'asks for access', compare: 'compare the code',
-    seenNow: 'seen just now', seenAgo: a => `seen ${a} ago`, linkedOn: d => `linked ${d}`,
+    seenNow: 'seen just now', seenYesterday: 'seen yesterday', seenAgo: a => `seen ${a} ago`, linkedOn: d => `linked ${d}`,
     nameLabel: 'Name', revokeAsk: n => `Revoke ${n}? It loses access at once.`,
     recTag: 'Reconnected', recWell: d => [`${upFirst(thisDevice(d))} reconnected without a code, with its passkey, after`, 'the app was reinstalled. If it was not you, revoke it.'], recAck: 'That was me',
     attTag: 'Attempt refused', attWell: (at, d) => [`${at}, another device tried to take ${thisDevice(d)}’s place`, `with its passkey. Refused: ${theDevice(d)} was connected.`, `If it was not you, revoke ${thisDevice(d)}.`], attAck: 'Got it',

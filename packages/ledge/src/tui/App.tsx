@@ -69,6 +69,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const t = MESSAGES[lang];
   const [screen, setScreen] = useState<Screen>('overview');
   const [back, setBack] = useState<Screen>('overview');
+  /** Help opened from « Accès mobile » returns there; Réglages' own back target stays untouched meanwhile. */
+  const [helpFromMobile, setHelpFromMobile] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lastToast, setToast] = useState<Toast | null>(null);
   const [editing, setEditingState] = useState(false);
@@ -109,7 +111,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
 
   const go = useCallback((next: Screen) => {
     // Back from « Accès mobile » to Réglages keeps where Réglages itself goes back to.
-    setScreen(cur => { if (cur === 'mobile' && next === 'settings') return next; if (next === 'help' || next === 'settings') setBack(cur === 'help' || cur === 'settings' ? 'overview' : cur); return next; });
+    setScreen(cur => { setHelpFromMobile(cur === 'mobile' && next === 'help'); if (cur === 'mobile' && (next === 'settings' || next === 'help')) return next; if (next === 'help' || next === 'settings') setBack(cur === 'help' || cur === 'settings' ? 'overview' : cur); return next; });
   }, []);
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
@@ -166,7 +168,7 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (small && !key.escape && input !== 'q') return;
     if (keys.current?.(input, key)) return;
     if (input === 'q') { exit(); return; }
-    if (key.escape) { go(screen === 'mobile' ? 'settings' : screen === 'help' || screen === 'settings' ? back : 'overview'); return; }
+    if (key.escape) { go(screen === 'mobile' ? 'settings' : screen === 'help' && helpFromMobile ? 'mobile' : screen === 'help' || screen === 'settings' ? back : 'overview'); return; }
     if (input === '?') { go('help'); return; }
     if (input === ',') { go('settings'); return; }
     if (input === '/') { go('ask'); return; }
