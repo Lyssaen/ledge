@@ -158,7 +158,7 @@ export const fr = {
   },
   help: {
     title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig', rigLaunch: 'Lancer un rig',
-    screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
+    screens: 'changer d’écran', link: 'lier un appareil', field: 'Saisie', wordBefore: 'effacer le mot avant',
     writeHere: 'écrire à cette session', replySender: "répondre à l'expéditeur du message sélectionné", rigRaw: "afficher ou masquer le texte brut d'un message OpenRig",
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },

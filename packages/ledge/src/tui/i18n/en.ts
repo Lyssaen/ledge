@@ -150,7 +150,7 @@ export const en: Messages = {
     efforts: { low: 'low', medium: 'medium', high: 'high', xhigh: 'extra high', max: 'max', ultra: 'ultra' } as Record<string, string>,
     limits: 'LIMITS'
   },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig', rigLaunch: 'Launch a rig', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig', rigLaunch: 'Launch a rig', screens: 'switch screen', link: 'link a device', field: 'Typing', wordBefore: 'delete the word before',
     writeHere: 'write to this session', replySender: 'reply to the sender of the selected message', rigRaw: "show or hide an OpenRig message's raw text",
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
