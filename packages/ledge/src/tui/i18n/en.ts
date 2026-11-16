@@ -332,6 +332,7 @@ export const en: Messages = {
     signinEnded: { failed: 'The GitHub sign-in failed. Check the relay, then try again.', expired: 'The code expired. Start the sign-in again.', denied: 'The sign-in was refused on GitHub.' },
     unreachable: ['The relay does not answer. Check the address and your', 'connection; Ledge retries by itself.'],
     unavailable: 'Mobile access did not start on this PC:', outdated: 'The local daemon is too old for mobile access: update it.',
+    localOffline: 'The local daemon is offline.',
     offWell: 'Access is off: your linked devices cannot connect.',
     devices: n => `DEVICES · ${n}`, devicesNone: 'DEVICES',
     empty: host => ['No linked device. On your phone or tablet, open', `${host} and sign in with the same GitHub account.`, 'A code will show here and on the device.'],

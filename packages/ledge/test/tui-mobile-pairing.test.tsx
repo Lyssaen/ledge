@@ -223,3 +223,25 @@ describe('« Lier un appareil » as the mockup draws it', () => {
     await until(() => tui!.frame().includes('Confirm on the Pixel 8 now.'));
   });
 });
+
+describe('« Lier un appareil » over a screen with its own keys', () => {
+  it('leaves Ask\'s tab, ctrl+n and ctrl+r alone while it is open', async () => {
+    tui = await startTui({ mobile: base() });
+    const sent: string[] = [];
+    tui.daemon.onMessage(m => { sent.push(m.type); });
+    await tui.press('/');
+    await tui.press('\t');
+    await tui.press('L');
+    await until(() => tui!.frame().includes('LIER UN APPAREIL'));
+    await tui.press('\x0e');
+    await tui.press('\x12');
+    await tui.press('\t');
+    await tui.press('y');
+    await new Promise(r => setTimeout(r, 100));
+    await tui.press('\x1b');
+    await until(() => !tui!.frame().includes('LIER UN APPAREIL'));
+    expect(sent.filter(t => t.startsWith('chat.'))).toEqual([]);
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.pairing.approve', id: 'p1' }]);
+    expect(tui.frame()).not.toMatch(/❯ y/);
+  });
+});

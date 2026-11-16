@@ -348,6 +348,7 @@ export const fr = {
     signinEnded: { failed: 'La connexion à GitHub a échoué. Vérifie le relais, puis réessaie.', expired: 'Le code a expiré. Recommence la connexion.', denied: 'La connexion a été refusée sur GitHub.' },
     unreachable: ['Le relais ne répond pas. Vérifie l’adresse et ta connexion ;', 'Ledge réessaie tout seul.'],
     unavailable: 'L’accès mobile n’a pas démarré sur ce PC :', outdated: 'Le daemon local est trop ancien pour l’accès mobile : mets-le à jour.',
+    localOffline: 'Le daemon local est hors ligne.',
     offWell: 'Accès désactivé : tes appareils liés ne peuvent pas se connecter.',
     devices: (n: number) => `APPAREILS · ${n}`, devicesNone: 'APPAREILS',
     empty: (host: string) => ['Aucun appareil lié. Sur ton téléphone ou ta tablette, ouvre', `${host} et connecte-toi avec le même compte GitHub.`, 'Un code s’affichera ici et sur l’appareil.'],

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useStdout } from 'ink';
 import { useMobile } from '@ledge/fleet';
 import { DeviceNameSchema, RelayUrlSchema, type MobileState } from '@ledge/protocol';
@@ -32,15 +32,19 @@ export function Mobile() {
   const [rename, setRename] = useState<DeviceField | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
   const pairing = usePairingDialog();
-  const renamed = rename !== null && m?.devices.some(d => d.id === rename.id) === true;
-  const revokable = revoking !== null && m?.devices.some(d => d.id === revoking) === true;
-  // A device that leaves the state while its field or its question is open takes them with it, unsent.
+  const service = m === undefined || m.link.state === 'unavailable';
+  // A field or a question is open only while it is drawn: the relay field with the access box, a device's field or question
+  // with its device in a box that access on keeps live. Undrawn, it would take keys the user cannot see go anywhere.
+  const relayOpen = relay !== null && !service;
+  const renamed = rename !== null && !service && m.enabled && m.devices.some(d => d.id === rename.id);
+  const revokable = revoking !== null && !service && m.enabled && m.devices.some(d => d.id === revoking);
+  // What stops being drawn goes, unsent, so it does not come back by surprise with the state that hid it.
+  useEffect(() => { if (relay && !relayOpen) setRelay(null); }, [relay, relayOpen]);
   useEffect(() => { if (rename && !renamed) setRename(null); }, [rename, renamed]);
   useEffect(() => { if (revoking && !revokable) setRevoking(null); }, [revoking, revokable]);
-  useEditing(relay !== null || renamed);
+  useEditing(relayOpen || renamed);
   const send = (msg: Parameters<typeof sendMobile>[1]) => sendMobile(tui, msg);
 
-  const service = m === undefined || m.link.state === 'unavailable';
   const rows: MobileRow[] = m === undefined || service ? [] : accessRows(m);
   function accessRows(s: MobileState): MobileRow[] {
     const out: MobileRow[] = [{ id: 'access', action: () => send({ type: 'mobile.set', enabled: !s.enabled, relayUrl: s.relayUrl }) }];
@@ -71,10 +75,15 @@ export function Mobile() {
     return Math.max(0, i);
   })();
   const kept = movedId === null ? -1 : rows.findIndex(r => r.id === movedId);
-  const cur = Math.min(kept >= 0 ? kept : wanted, Math.max(0, rows.length - 1));
-  // The row the state asked for becomes the kept one as soon as there is a row, so the cursor does not follow later changes of state.
+  // Where the cursor last stood: when its row goes (a device revoked), the row now at that place takes it, never the first,
+  // so a reflex ↵ does not turn access off.
+  const lastAt = useRef(0);
+  const cur = Math.min(kept >= 0 ? kept : movedId !== null ? lastAt.current : wanted, Math.max(0, rows.length - 1));
+  useEffect(() => { if (rows.length) lastAt.current = cur; });
+  // The row the state asked for, or the one that took a vanished row's place, becomes the kept one as soon as there is a
+  // row, so the cursor does not follow later changes of state.
   const curId = rows[cur]?.id;
-  useEffect(() => { if (movedId === null && curId !== undefined) setMovedId(curId); }, [movedId, curId]);
+  useEffect(() => { if ((movedId === null || kept < 0) && curId !== undefined) setMovedId(curId); }, [movedId, kept, curId]);
   const device = rows[cur]?.id.startsWith('dev:') ? m?.devices.find(d => `dev:${d.id}` === rows[cur]!.id) : undefined;
 
   const submitRename = () => {
@@ -90,7 +99,9 @@ export function Mobile() {
   };
 
   useScreenKeys((input, key) => {
-    if (relay || renamed) return true;
+    // ctrl+c stays the app's (quit, or the draft's warning) whatever is open here.
+    if (key.ctrl && input === 'c') return false;
+    if (relayOpen || renamed) return true;
     if (revokable) {
       const d = m?.devices.find(x => x.id === revoking);
       if (input === 'y' && d && send({ type: 'mobile.device.revoke', id: d.id })) { tui.toast({ text: t.mobile.revokedT(deviceName(d)), tone: 'ok' }); setRevoking(null); }
@@ -109,7 +120,7 @@ export function Mobile() {
 
   const k = t.mobile.keys;
   const hasDevice = rows.some(r => r.id.startsWith('dev:'));
-  const keys: Array<[string, string]> = relay || renamed ? [['↵', k.save], ['esc', k.cancel]]
+  const keys: Array<[string, string]> = relayOpen || renamed ? [['↵', k.save], ['esc', k.cancel]]
     : revokable ? [['y', k.yes], ['n', k.no]]
     : m?.signin ? [['c', k.copy], ['esc', k.cancel]]
     : rows.length ? [['j k', k.move], ['↵', k.open], ...(hasDevice ? [['r', k.rename], ['x', k.revoke]] as Array<[string, string]> : []), ['esc', k.back]] : [['esc', k.back]];
@@ -118,9 +129,9 @@ export function Mobile() {
   return (
     <Frame crumb={t.mobile.title} keys={keys} noHelp>
       <TitledBox title={t.mobile.title} flexGrow={m && !service ? undefined : 1} paddingX={0}>
-        {m === undefined ? <Line color={C.yellow}>{t.mobile.outdated}</Line>
+        {m === undefined ? <Line color={C.yellow}>{tui.d.status === 'open' ? t.mobile.outdated : t.mobile.localOffline}</Line>
           : m.link.state === 'unavailable' ? <><Line color={C.red}>{t.mobile.unavailable}</Line><Line color={C.red}>{m.link.error}</Line></>
-          : <AccessBox m={m} now={now} sel={sel} relay={relay} setRelay={setRelay} submitRelay={submitRelay} />}
+          : <AccessBox m={m} now={now} sel={sel} relay={relayOpen ? relay : null} setRelay={setRelay} submitRelay={submitRelay} />}
       </TitledBox>
       {m && !service ? <DevicesBox m={m} now={now} sel={sel} rename={renamed ? rename : null} setRename={setRename} submitRename={submitRename} revoking={revokable ? revoking : null} /> : null}
     </Frame>

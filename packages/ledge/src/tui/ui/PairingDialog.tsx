@@ -54,7 +54,8 @@ export function PairingDialog() {
   useInput((input, key) => {
     if (!shown) return;
     if (key.escape) { dialog.close(); return; }
-    if (shown.state !== 'confirm') return;
+    // ctrl+n or ctrl+r come as n or r with ctrl: they are another screen's keys, not an answer.
+    if (shown.state !== 'confirm' || key.ctrl || key.meta) return;
     if (input === 'y' || input === 'n') {
       if (answered.current === shown.id) return;
       const sent = sendMobile(tui, input === 'y' ? { type: 'mobile.pairing.approve', id: shown.id, ...(replacing && old ? { replaces: old.id } : {}) } : { type: 'mobile.pairing.deny', id: shown.id });

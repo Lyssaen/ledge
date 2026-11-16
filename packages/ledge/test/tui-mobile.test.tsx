@@ -528,3 +528,102 @@ describe('Réglages › the Accès mobile row as the mockup draws it', () => {
     expect(tui.frame()).toMatch(/← →\s+changer\s+(L\s+lier\s+)?↵\s+ouvrir\s+esc\s+retour/);
   });
 });
+
+describe('Accès mobile › a field or a question holds the keys only while it is drawn', () => {
+  it('lets esc leave once access is turned off elsewhere under an open rename field', async () => {
+    tui = await openAt(two(), 4);
+    await tui.press('r');
+    await until(() => tui!.frame().includes('Nom ['));
+    tui.daemon.push({ type: 'mobile', state: state({ enabled: false, devices: two(), link: { state: 'off' } as MobileState['link'] }) });
+    await until(() => tui!.frame().includes('Accès désactivé'));
+    await tui.press('\x1b');
+    await until(() => tui!.frame().includes('Langue'));
+    await tui.press('\x1b');
+    await until(() => !tui!.frame().includes('Langue'));
+    expect(tui.sentMobile()).toEqual([]);
+  });
+
+  it('lets the keys through once the service stops under an open relay field', async () => {
+    tui = await startTui({ mobile: state() });
+    await open(tui);
+    await down(tui, 1);
+    await tui.press('\r');
+    await until(() => tui!.frame().includes('enregistrer'));
+    tui.daemon.push({ type: 'mobile', state: state({ link: { state: 'unavailable', error: 'EADDRINUSE' } }) });
+    await until(() => tui!.frame().includes('EADDRINUSE'));
+    await tui.press('\x1b');
+    await until(() => tui!.frame().includes('Langue'));
+  });
+
+  it('drops an open revoke question when access is turned off: y then sends nothing', async () => {
+    tui = await openAt(two(), 5);
+    await tui.press('x');
+    await until(() => tui!.frame().includes('y / n'));
+    tui.daemon.push({ type: 'mobile', state: state({ enabled: false, devices: two(), link: { state: 'off' } as MobileState['link'] }) });
+    await until(() => tui!.frame().includes('Accès désactivé'));
+    await tui.press('y');
+    tui.daemon.push({ type: 'mobile', state: state({ devices: two() }) });
+    await until(() => tui!.frame().includes('iPad · Safari'));
+    expect(tui.frame()).not.toContain('y / n');
+    await tui.press('y');
+    expect(tui.sentMobile()).toEqual([]);
+  });
+
+  it('never takes ctrl+c, even with a field open', async () => {
+    tui = await startTui({ mobile: state({ devices: two() }) });
+    await tui.press('/');
+    await tui.stdin.write('brouillon');
+    await until(() => tui!.frame().includes('brouillon'));
+    // A draft keeps the field on esc: tab leaves it for the conversation, where the global keys work.
+    await tui.press('\t');
+    await open(tui);
+    await down(tui, 4);
+    await tui.press('r');
+    await until(() => tui!.frame().includes('Nom ['));
+    await tui.press('\x03');
+    await until(() => tui!.frame().includes('Brouillon en cours'));
+  });
+});
+
+describe('Accès mobile › with the local daemon down', () => {
+  it('says the daemon is offline, not too old, when it never spoke of mobile access and is not connected', async () => {
+    tui = await startTui();
+    await tui.daemon.close();
+    await until(() => tui!.client.status() !== 'open');
+    await open(tui);
+    await until(() => tui!.frame().includes('Le daemon local est hors ligne.'));
+    expect(tui.frame()).not.toContain('trop ancien');
+  });
+
+  it('says it in English too', async () => {
+    tui = await startTui({ lang: 'en' });
+    await tui.daemon.close();
+    await until(() => tui!.client.status() !== 'open');
+    await open(tui);
+    await until(() => tui!.frame().includes('The local daemon is offline.'));
+  });
+});
+
+describe('Accès mobile › the cursor after its row vanishes', () => {
+  it('lands on the neighbouring device after revoking the last one, not on Accès', async () => {
+    tui = await openAt(two(), 5);
+    await tui.press('x');
+    await tui.press('y');
+    tui.daemon.push({ type: 'mobile', state: state({ devices: two().slice(0, 1) }) });
+    await until(() => tui!.frame().includes('APPAREILS · 1'));
+    await tui.press('\r');
+    await tui.press('r');
+    expect(tui.sentMobile()).toEqual([{ type: 'mobile.device.revoke', id: 'd2' }]);
+    await until(() => tui!.frame().includes('Nom [ iPhone perso'));
+  });
+
+  it('lands on the next device after revoking the first one', async () => {
+    tui = await openAt(two(), 4);
+    tui.daemon.push({ type: 'mobile', state: state({ devices: two().slice(1) }) });
+    await until(() => tui!.frame().includes('APPAREILS · 1'));
+    await tui.press('\r');
+    await tui.press('r');
+    expect(tui.sentMobile()).toEqual([]);
+    await until(() => tui!.frame().includes('Nom [ iPad · Safari'));
+  });
+});
