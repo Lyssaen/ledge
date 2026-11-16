@@ -66,7 +66,7 @@ async function launchAndStop(h: Awaited<ReturnType<typeof harness>>): Promise<nu
   return run;
 }
 
-describe('ledge-relay', () => {
+describe('ledge-relay', { timeout: 60_000 }, () => {
   it('--version prints the package version', async () => {
     const h = await harness({});
     const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };

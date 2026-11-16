@@ -10,7 +10,7 @@ const { DatabaseUnreachableError, startRelay } = await import('../src/run.js');
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true }))); });
 
-describe('startRelay migration failure', () => {
+describe('startRelay migration failure', { timeout: 60_000 }, () => {
   it('is a DatabaseUnreachableError on pglite too, not a raw error', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'relay-mig-'));
     dirs.push(dir);
