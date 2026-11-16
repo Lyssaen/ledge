@@ -22,10 +22,10 @@ The relay can run on your own server, with no database to install: `ledge-relay 
    The first time, it asks in the terminal and saves the answers in `config.json`:
    - the public URL of the relay (`https`, no path), for example `https://relay.example.com`;
    - the GitHub OAuth App values. It prints them for you: create the App in GitHub, Settings, Developer settings, OAuth Apps, with Homepage URL `<public URL>`, Authorization callback URL `<public URL>/auth/github/callback`, and "Enable Device Flow" ticked (no permission is needed). Then it asks for the App's client id and client secret;
-   - the GitHub login (or numeric id) allowed to use the relay;
+   - the GitHub login (or numeric id) allowed to use the relay; it shows the account it found and asks you to confirm it;
    - a contact for Web Push (an email address, a `mailto:` address or an `https://` URL).
 
-   It generates the Web Push keys itself, then starts the relay. The next launches ask nothing. Without a terminal (a service), it never asks: it exits with `missing settings: ...` unless the settings are in `config.json` or in the environment variables below.
+   It generates the Web Push keys itself, then starts the relay. Ctrl-C during the questions saves nothing (`setup interrupted, nothing saved`). The next launches ask nothing. Without a terminal (a service), it never asks: it exits with `missing settings: ...` unless the settings are in `config.json` or in the environment variables below.
 4. **HTTPS proxy.** Any proxy works; with Caddy, which gets the certificate by itself:
 
    ```
@@ -34,13 +34,15 @@ The relay can run on your own server, with no database to install: `ledge-relay 
    }
    ```
 
-5. **Keep it running with systemd.** Create a dedicated user and its data directory, answer the questions once as that user, then install the service:
+5. **Keep it running with systemd.** Install Node system-wide for the service (your distribution's package, or NodeSource), not through nvm: `sudo` resets `PATH` (`secure_path`), and the service user cannot read another user's `~/.nvm`. Install `@paradow/ledge-relay` with that Node, create a dedicated user and its data directory, answer the questions once as that user, then install the service:
 
    ```sh
    sudo useradd --system --no-create-home ledge-relay
    sudo install -d -m 0700 -o ledge-relay /var/lib/ledge-relay
    sudo -u ledge-relay "$(command -v ledge-relay)" launch --data /var/lib/ledge-relay
    ```
+
+   When Node lives in a directory every user can read but `sudo` does not search (for example `/opt/node/bin`), give it the path: `sudo -u ledge-relay env PATH=/opt/node/bin:/usr/bin:/bin ledge-relay launch --data /var/lib/ledge-relay`.
 
    Stop that first run with Ctrl-C, then write `/etc/systemd/system/ledge-relay.service`. `ExecStart` takes the absolute path `command -v ledge-relay` printed (typically `/usr/bin/ledge-relay` or `/usr/local/bin/ledge-relay`):
 
@@ -53,6 +55,7 @@ The relay can run on your own server, with no database to install: `ledge-relay 
    [Service]
    ExecStart=/usr/local/bin/ledge-relay launch --data /var/lib/ledge-relay
    StateDirectory=ledge-relay
+   StateDirectoryMode=0700
    Restart=on-failure
    RestartSec=5
    User=ledge-relay
@@ -61,15 +64,16 @@ The relay can run on your own server, with no database to install: `ledge-relay 
    WantedBy=multi-user.target
    ```
 
-   Then `systemctl enable --now ledge-relay`. `StateDirectory=` makes systemd create `/var/lib/ledge-relay` for the user if it is missing. `ledge-relay` starts through `/usr/bin/env node`: when Node comes from nvm, add an `Environment=PATH=<node's bin directory>:/usr/bin:/bin` line to `[Service]`.
+   Then `systemctl enable --now ledge-relay`. `StateDirectory=` makes systemd create `/var/lib/ledge-relay` for the user if it is missing, private with `StateDirectoryMode=0700`. `ledge-relay` starts through `/usr/bin/env node`: when Node is not in `/usr/bin` or `/usr/local/bin` (for example in `/opt/node/bin`), add an `Environment=PATH=/opt/node/bin:/usr/bin:/bin` line to `[Service]`. To answer the questions again (`--setup`), stop the service first.
 6. **In Ledge Desktop.** Settings, Mobile access (in French, Réglages › Accès mobile): enter the relay address (your public URL), then sign in with GitHub. On the phone, open the same address.
 
 ### Data directory and options
 
-The data directory is `--data <dir>`, else the `LEDGE_RELAY_HOME` environment variable, else `~/.ledge-relay`. It is created with mode `0700` and holds:
+The data directory is `--data <dir>`, else the `LEDGE_RELAY_HOME` environment variable, else `~/.ledge-relay`. It is created with mode `0700`, or tightened to it when it exists, and holds:
 
 - `config.json` (mode `0600`): `publicUrl`, `githubClientId`, `githubClientSecret`, `allowedGithubIds`, `vapid`. It contains secrets: keep it private.
 - `db/`: the embedded database (pglite) with accounts, sessions, linked phones and push subscriptions. Set `DATABASE_URL` to use Postgres instead.
+- `ledge-relay.lock`: the process id of the `ledge-relay` using the directory. A second `ledge-relay` on the same directory exits with `another ledge-relay is using <dir>`, so the database is never opened twice; a lock left by a process that is gone is taken over.
 
 The environment variables of the sections below override `config.json`.
 
@@ -78,9 +82,9 @@ The environment variables of the sections below override `config.json`.
 | `--port <port>` | Port to listen on (default `8787`, or `PORT`). |
 | `--host <host>` | Address to listen on (default `127.0.0.1`). |
 | `--data <dir>` | The data directory. |
-| `--setup` | Ask the questions again, with the saved answers as defaults (needs a terminal). |
+| `--setup` | Ask the questions again, with the saved answers as defaults (needs a terminal, and the relay stopped). |
 
-`ledge-relay --version` prints the version. `launch` always applies the production rules: an `https` public URL, the phone app present, Web Push keys present. If `config.json` is not valid, it exits naming the file and leaves it untouched; fix it or run `ledge-relay launch --setup`.
+`ledge-relay --version` prints the version. `launch` always applies the production rules: an `https` public URL, the phone app present, Web Push keys present. It always serves the phone app packed with it and ignores `LEDGE_RELAY_WEB_DIR`. If `config.json` is not valid, it exits naming the file and leaves it untouched; fix it or run `ledge-relay launch --setup`.
 
 ### Letting someone else in
 
@@ -92,17 +96,23 @@ The relay exits with `cannot open the embedded database at <data>/db`, and never
 
 ### Publishing (owner)
 
-Do these three steps, in this order, before the next release tag. Otherwise the `npm` job of the release fails at the relay publish (no Trusted Publisher yet) and blocks the production deploy.
+Do these three steps, in this order, once a release containing the relay package exists, and before the release tag that follows the licence choice. Otherwise the `npm` job of that release fails at the relay publish (no Trusted Publisher yet) and blocks the production deploy.
 
-1. Choose the licence: set `license` in `apps/relay/package.json` (it is `UNLICENSED`, and while it is, the release publishes nothing and only runs `npm pack --dry-run`), and add the `LICENSE` file.
-2. Publish once by hand, from a checkout, after building the phone app, the relay and its copy:
+1. Choose the licence: set `license` in `apps/relay/package.json` (it is `UNLICENSED`, and while it is, the release publishes nothing and only runs `npm pack --dry-run`), and add the `LICENSE` file. Tag no release until step 3 is done.
+2. Publish once by hand the version of the last release, from a checkout of its tag (`vX.Y.Z`, where `X.Y.Z` is the `version` in `apps/relay/package.json` at that tag), on Linux or WSL, so that the packed `web/build.json` equals the release's `ledge-mobile-build.json`. Set the same `license` and `LICENSE` in that checkout, then build the phone app, the relay and its copy, check the package and publish:
 
    ```sh
+   git checkout vX.Y.Z
+   pnpm install
    pnpm --filter @ledge/mobile build
    pnpm --filter @paradow/ledge-relay build
    pnpm --filter @paradow/ledge-relay pack:web
-   cd apps/relay && npm publish --access public
+   cd apps/relay
+   npm pack --dry-run --json > /tmp/relay-pack.json && node ../../scripts/relay-pack.mjs check /tmp/relay-pack.json
+   npm publish --access public
    ```
+
+   To compare with the release itself: `gh release download vX.Y.Z -p ledge-mobile-build.json`, then `diff ledge-mobile-build.json web/build.json`.
 
 3. On npmjs.com, in the package's settings, add a Trusted Publisher: this repository, workflow `release.yml`.
 
