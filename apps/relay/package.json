@@ -1,6 +1,6 @@
 {
   "name": "@paradow/ledge-relay",
-  "version": "0.1.0",
+  "version": "0.60.0",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
@@ -24,6 +24,7 @@
     "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "pack:web": "node scripts/copy-web.mjs",
     "vapid-keys": "node scripts/vapid-keys.mjs"
   },
   "dependencies": {

@@ -10,7 +10,7 @@ const read = (f: string) => readFileSync(join(ROOT, f), 'utf8');
 const FILES = [
   'apps/overlay/package.json',
   'apps/desktop/package.json', 'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/Cargo.toml',
-  'crates/ledge-native/Cargo.toml', 'Cargo.lock', 'packages/ledge/package.json'
+  'crates/ledge-native/Cargo.toml', 'Cargo.lock', 'packages/ledge/package.json', 'apps/relay/package.json'
 ];
 
 describe('version', () => {
@@ -25,6 +25,7 @@ describe('version', () => {
     expect(JSON.parse(read('apps/desktop/package.json')).version).toBe(pkg);
     expect(JSON.parse(read('apps/desktop/src-tauri/tauri.conf.json')).version).toBe(pkg);
     expect(JSON.parse(read('packages/ledge/package.json')).version).toBe(pkg);
+    expect(JSON.parse(read('apps/relay/package.json')).version).toBe(pkg);
   });
   it('is the same in the two crates and their lock entries', () => {
     expect(crate('apps/desktop/src-tauri/Cargo.toml', 'ledge-desktop')).toBe(true);
@@ -45,7 +46,7 @@ describe('version', () => {
   const run = (dir: string, v: string) =>
     spawnSync('node', [join(ROOT, 'scripts/set-version.mjs'), v], { cwd: dir, env: { ...process.env, LEDGE_VERSION_ROOT: dir }, encoding: 'utf8' });
 
-  it('stamps all eight targets, once each', () => {
+  it('stamps all nine targets, once each', () => {
     const dir = copyTree();
     const r = run(dir, 'v9.9.9');
     expect(r.status).toBe(0);
