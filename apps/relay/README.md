@@ -34,23 +34,34 @@ The relay can run on your own server, with no database to install: `ledge-relay 
    }
    ```
 
-5. **Keep it running with systemd.** Run `ledge-relay launch` once by hand as the dedicated user (to answer the questions), then `/etc/systemd/system/ledge-relay.service`:
+5. **Keep it running with systemd.** Create a dedicated user and its data directory, answer the questions once as that user, then install the service:
+
+   ```sh
+   sudo useradd --system --no-create-home ledge-relay
+   sudo install -d -m 0700 -o ledge-relay /var/lib/ledge-relay
+   sudo -u ledge-relay "$(command -v ledge-relay)" launch --data /var/lib/ledge-relay
+   ```
+
+   Stop that first run with Ctrl-C, then write `/etc/systemd/system/ledge-relay.service`. `ExecStart` takes the absolute path `command -v ledge-relay` printed (typically `/usr/bin/ledge-relay` or `/usr/local/bin/ledge-relay`):
 
    ```ini
    [Unit]
    Description=Ledge relay
+   Wants=network-online.target
    After=network-online.target
 
    [Service]
-   ExecStart=<path of ledge-relay, from `which ledge-relay`> launch
+   ExecStart=/usr/local/bin/ledge-relay launch --data /var/lib/ledge-relay
+   StateDirectory=ledge-relay
    Restart=on-failure
+   RestartSec=5
    User=ledge-relay
 
    [Install]
    WantedBy=multi-user.target
    ```
 
-   Then `systemctl enable --now ledge-relay`. The service reads `~/.ledge-relay` of its `User`. `ledge-relay` starts through `/usr/bin/env node`: when Node comes from nvm, add an `Environment=PATH=<node's bin directory>:/usr/bin:/bin` line to `[Service]`.
+   Then `systemctl enable --now ledge-relay`. `StateDirectory=` makes systemd create `/var/lib/ledge-relay` for the user if it is missing. `ledge-relay` starts through `/usr/bin/env node`: when Node comes from nvm, add an `Environment=PATH=<node's bin directory>:/usr/bin:/bin` line to `[Service]`.
 6. **In Ledge Desktop.** Settings, Mobile access (in French, Réglages › Accès mobile): enter the relay address (your public URL), then sign in with GitHub. On the phone, open the same address.
 
 ### Data directory and options
