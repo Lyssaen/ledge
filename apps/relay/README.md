@@ -2,6 +2,101 @@
 
 Relay between phones and a PC. It routes opaque end-to-end-encrypted bodies and never decrypts them; no content is stored or logged. Websocket path: `/ws`; health check: `GET /healthz` answers `ok`.
 
+## Run your own relay
+
+The relay can run on your own server, with no database to install: `ledge-relay launch` keeps everything in one data directory.
+
+1. **Requirements.** Node 22 or later, a domain name, and an HTTPS reverse proxy in front of the relay (the relay speaks plain HTTP and listens on `127.0.0.1` by default).
+2. **Install.**
+
+   ```sh
+   npm i -g @paradow/ledge-relay
+   ```
+
+3. **Launch.**
+
+   ```sh
+   ledge-relay launch
+   ```
+
+   The first time, it asks in the terminal and saves the answers in `config.json`:
+   - the public URL of the relay (`https`, no path), for example `https://relay.example.com`;
+   - the GitHub OAuth App values. It prints them for you: create the App in GitHub, Settings, Developer settings, OAuth Apps, with Homepage URL `<public URL>`, Authorization callback URL `<public URL>/auth/github/callback`, and "Enable Device Flow" ticked (no permission is needed). Then it asks for the App's client id and client secret;
+   - the GitHub login (or numeric id) allowed to use the relay;
+   - a contact for Web Push (an email address, a `mailto:` address or an `https://` URL).
+
+   It generates the Web Push keys itself, then starts the relay. The next launches ask nothing. Without a terminal (a service), it never asks: it exits with `missing settings: ...` unless the settings are in `config.json` or in the environment variables below.
+4. **HTTPS proxy.** Any proxy works; with Caddy, which gets the certificate by itself:
+
+   ```
+   relay.example.com {
+     reverse_proxy 127.0.0.1:8787
+   }
+   ```
+
+5. **Keep it running with systemd.** Run `ledge-relay launch` once by hand as the dedicated user (to answer the questions), then `/etc/systemd/system/ledge-relay.service`:
+
+   ```ini
+   [Unit]
+   Description=Ledge relay
+   After=network-online.target
+
+   [Service]
+   ExecStart=<path of ledge-relay, from `which ledge-relay`> launch
+   Restart=on-failure
+   User=ledge-relay
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   Then `systemctl enable --now ledge-relay`. The service reads `~/.ledge-relay` of its `User`. `ledge-relay` starts through `/usr/bin/env node`: when Node comes from nvm, add an `Environment=PATH=<node's bin directory>:/usr/bin:/bin` line to `[Service]`.
+6. **In Ledge Desktop.** Settings, Mobile access (in French, Réglages › Accès mobile): enter the relay address (your public URL), then sign in with GitHub. On the phone, open the same address.
+
+### Data directory and options
+
+The data directory is `--data <dir>`, else the `LEDGE_RELAY_HOME` environment variable, else `~/.ledge-relay`. It is created with mode `0700` and holds:
+
+- `config.json` (mode `0600`): `publicUrl`, `githubClientId`, `githubClientSecret`, `allowedGithubIds`, `vapid`. It contains secrets: keep it private.
+- `db/`: the embedded database (pglite) with accounts, sessions, linked phones and push subscriptions. Set `DATABASE_URL` to use Postgres instead.
+
+The environment variables of the sections below override `config.json`.
+
+| Option | Meaning |
+| --- | --- |
+| `--port <port>` | Port to listen on (default `8787`, or `PORT`). |
+| `--host <host>` | Address to listen on (default `127.0.0.1`). |
+| `--data <dir>` | The data directory. |
+| `--setup` | Ask the questions again, with the saved answers as defaults (needs a terminal). |
+
+`ledge-relay --version` prints the version. `launch` always applies the production rules: an `https` public URL, the phone app present, Web Push keys present. If `config.json` is not valid, it exits naming the file and leaves it untouched; fix it or run `ledge-relay launch --setup`.
+
+### Letting someone else in
+
+Edit `allowedGithubIds` in `config.json` (numeric GitHub ids, as strings), then restart the relay. A login's id is at `https://api.github.com/users/<login>` (field `id`). Removing an id and restarting cuts that account.
+
+### If the database cannot be opened after an upgrade
+
+The relay exits with `cannot open the embedded database at <data>/db`, and never touches that directory itself. To start afresh, stop the relay and move `<data>/db` aside (rename it), then launch again. A fresh database loses the accounts, sessions, linked phones and push subscriptions: each phone must sign in and link again. `config.json` is kept.
+
+### Publishing (owner)
+
+Do these three steps, in this order, before the next release tag. Otherwise the `npm` job of the release fails at the relay publish (no Trusted Publisher yet) and blocks the production deploy.
+
+1. Choose the licence: set `license` in `apps/relay/package.json` (it is `UNLICENSED`, and while it is, the release publishes nothing and only runs `npm pack --dry-run`), and add the `LICENSE` file.
+2. Publish once by hand, from a checkout, after building the phone app, the relay and its copy:
+
+   ```sh
+   pnpm --filter @ledge/mobile build
+   pnpm --filter @paradow/ledge-relay build
+   pnpm --filter @paradow/ledge-relay pack:web
+   cd apps/relay && npm publish --access public
+   ```
+
+3. On npmjs.com, in the package's settings, add a Trusted Publisher: this repository, workflow `release.yml`.
+
+From then on, every release publishes the relay with its phone build (`.github/workflows/release.yml`).
+
 ## Modes
 
 `DATABASE_URL` selects the mode. Present: accounts mode. Absent: dev mode, which is refused when `NODE_ENV=production`.
