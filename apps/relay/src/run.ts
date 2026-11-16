@@ -16,7 +16,7 @@ export class ListenError extends Error {
   }
 }
 
-/** The Postgres database is unreachable or its migration failed. */
+/** The database is unreachable or its migration failed. */
 export class DatabaseUnreachableError extends Error {
   constructor(readonly code?: string) {
     super('the database is unreachable or its migration failed');
@@ -53,7 +53,6 @@ export async function startRelay(
       stop = async () => { await app.close(); await database.close(); };
     } catch (e) {
       await database.close().catch(() => {});
-      if (cfg.database.kind !== 'postgres') throw e;
       const code = (e as { code?: unknown }).code;
       throw new DatabaseUnreachableError(typeof code === 'string' ? code : undefined);
     }

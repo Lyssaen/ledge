@@ -3,11 +3,11 @@ FROM node:22-bookworm-slim AS build
 RUN corepack enable
 WORKDIR /repo
 COPY . .
-RUN pnpm install --frozen-lockfile --filter @ledge/relay... --filter @ledge/mobile...
-RUN pnpm --filter @ledge/relay build
+RUN pnpm install --frozen-lockfile --filter @paradow/ledge-relay... --filter @ledge/mobile...
+RUN pnpm --filter @paradow/ledge-relay build
 RUN pnpm --filter @ledge/mobile build
 # The relay bundles its workspace packages; only pg, ws and zod are needed at runtime.
-RUN pnpm --filter @ledge/relay deploy --prod --legacy /prod/relay
+RUN pnpm --filter @paradow/ledge-relay deploy --prod --legacy /prod/relay
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production

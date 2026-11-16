@@ -1,4 +1,4 @@
-# @ledge/relay
+# @paradow/ledge-relay
 
 Relay between phones and a PC. It routes opaque end-to-end-encrypted bodies and never decrypts them; no content is stored or logged. Websocket path: `/ws`; health check: `GET /healthz` answers `ok`.
 
@@ -26,7 +26,7 @@ In production, every missing required variable is reported at once (`missing in 
 ### Dev mode
 
 ```sh
-LEDGE_RELAY_DEV_TOKENS='{"tok-pc-0123456789abcdef":{"accountId":"me","peer":"pc"}}' pnpm --filter @ledge/relay dev
+LEDGE_RELAY_DEV_TOKENS='{"tok-pc-0123456789abcdef":{"accountId":"me","peer":"pc"}}' pnpm --filter @paradow/ledge-relay dev
 curl -s localhost:8787/healthz   # ok
 ```
 
@@ -49,7 +49,7 @@ Generate a client secret and set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
 
 ```sh
 docker run --name ledge-pg -e POSTGRES_PASSWORD=ledge -p 5432:5432 -d postgres:16
-pnpm --filter @ledge/relay build
+pnpm --filter @paradow/ledge-relay build
 DATABASE_URL=postgres://postgres:ledge@localhost:5432/postgres \
 GITHUB_CLIENT_ID=<id> GITHUB_CLIENT_SECRET=<secret> \
 LEDGE_RELAY_ALLOWED_GITHUB_IDS=<your numeric id> \
@@ -64,7 +64,7 @@ For a local callback, register `http://localhost:8787/auth/github/callback` in t
 
 Production runbook: one Docker image (`apps/relay/Dockerfile`, build context = the repository root) holds the relay and the built phone app, served at `https://app.kl-ledge.dev`. Run exactly one replica: the socket routing hub lives in memory.
 
-1. **VAPID keys.** `pnpm --filter @ledge/relay vapid-keys <contact email>` prints three lines (from a checkout without `pnpm install`, `node apps/relay/scripts/vapid-keys.mjs <contact email>` works too: it only imports `node:crypto`). They go into Railway variables only, never into the repository.
+1. **VAPID keys.** `pnpm --filter @paradow/ledge-relay vapid-keys <contact email>` prints three lines (from a checkout without `pnpm install`, `node apps/relay/scripts/vapid-keys.mjs <contact email>` works too: it only imports `node:crypto`). They go into Railway variables only, never into the repository.
 2. **GitHub OAuth App.** Homepage URL `https://app.kl-ledge.dev`, Authorization callback URL `https://app.kl-ledge.dev/auth/github/callback`, tick "Enable Device Flow", then generate a client secret.
 3. **Railway project.** Hobby plan, region `europe-west4`. Create the service from the repository root (not `apps/relay`) and set its config file to `apps/relay/railway.json` (Dockerfile build, one replica, `/healthz` check, restart on failure). Add a Postgres. Once step 6 has created the branch `production`, point the service at it, with auto-deploy.
 4. **Service variables.**

@@ -1,4 +1,4 @@
-# apps/relay — `@ledge/relay`
+# apps/relay — `@paradow/ledge-relay`
 
 The relay between phones and PCs (Node ≥22, `ws`, `pg`, zod, tsup). It routes opaque encrypted bodies on `/ws`, answers
 `GET /healthz`, and serves the phone app's build. Deployed with Docker on Railway
@@ -6,10 +6,10 @@ The relay between phones and PCs (Node ≥22, `ws`, `pg`, zod, tsup). It routes 
 
 ## Commands
 
-- `pnpm --filter @ledge/relay test` (Postgres through pglite), `typecheck`, `build`.
-- Dev mode, without a database: `LEDGE_RELAY_DEV_TOKENS='{…}' pnpm --filter @ledge/relay dev` (port 8787 unless
+- `pnpm --filter @paradow/ledge-relay test` (Postgres through pglite), `typecheck`, `build`.
+- Dev mode, without a database: `LEDGE_RELAY_DEV_TOKENS='{…}' pnpm --filter @paradow/ledge-relay dev` (port 8787 unless
   `PORT`).
-- `pnpm --filter @ledge/relay vapid-keys` makes push keys.
+- `pnpm --filter @paradow/ledge-relay vapid-keys` makes push keys.
 
 ## Configuration
 

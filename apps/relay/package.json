@@ -1,8 +1,21 @@
 {
-  "name": "@ledge/relay",
+  "name": "@paradow/ledge-relay",
   "version": "0.1.0",
-  "private": true,
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lyssaen/ledge.git",
+    "directory": "apps/relay"
+  },
+  "homepage": "https://github.com/Lyssaen/ledge#readme",
   "type": "module",
+  "bin": {
+    "ledge-relay": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "web"
+  ],
   "engines": {
     "node": ">=22"
   },
