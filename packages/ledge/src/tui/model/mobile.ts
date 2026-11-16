@@ -31,7 +31,4 @@ export function deviceGlyph(kind: DeviceKind | undefined, g: Glyphs, label = '')
 /** The name the user gave a device, or else its label. */
 export const deviceName = (d: Device): string => d.name ?? d.label;
 
-/** A device as a sentence names it: the name the user gave, said bare, or else its model (the label's first part), which the copy gives an article. */
-export function deviceWord(d: Pick<Device, 'name' | 'label'> | undefined): { text: string; named: boolean } | null {
-  return d === undefined ? null : d.name ? { text: d.name, named: true } : { text: d.label.split(' · ')[0] || d.label, named: false };
-}
+export { deviceWord } from '@ledge/fleet';
