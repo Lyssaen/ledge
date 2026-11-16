@@ -55,12 +55,12 @@ const S = { st: P.get('st') || 'online', theme: P.get('theme') || 'dark', lang: 
 document.documentElement.dataset.theme = S.theme;
 document.documentElement.lang = S.lang;
 
-const STATES = ['settings', 'off', 'signin', 'flow', 'refused', 'online', 'empty', 'offline', 'signedout', 'relay', 'rename', 'revoke', 'recovered', 'blocked', 'alert', 'pair', 'approved', 'linked', 'expired'];
+const STATES = ['settings', 'off', 'signin', 'flow', 'copied', 'ended', 'refused', 'connecting', 'online', 'empty', 'offline', 'signedout', 'unavailable', 'outdated', 'relay', 'rename', 'revoke', 'revoked', 'recovered', 'attempt', 'blocked', 'alert', 'toast', 'pair', 'replace', 'approved', 'linked', 'expired'];
 
 const T = {
   fr: {
     page: 'Accès mobile dans ledge tui',
-    states: { settings: 'Réglages', off: 'Désactivé', signin: 'Pas connecté', flow: 'Code GitHub', refused: 'Compte refusé', online: 'En ligne', empty: 'Aucun appareil', offline: 'Hors ligne', signedout: 'Déconnecté', relay: 'Changer le relais', rename: 'Renommer', revoke: 'Révoquer', recovered: 'Reconnecté (passkey)', blocked: 'Récupération bloquée', alert: 'Alerte ailleurs', pair: 'Lier · code', approved: 'Lier · approuvé', linked: 'Lier · lié', expired: 'Lier · expiré' },
+    states: { settings: 'Réglages', off: 'Désactivé', signin: 'Pas connecté', flow: 'Code GitHub', refused: 'Compte refusé', online: 'En ligne', empty: 'Aucun appareil', offline: 'Hors ligne', signedout: 'Déconnecté', relay: 'Changer le relais', rename: 'Renommer', revoke: 'Révoquer', revoked: 'Révoqué', recovered: 'Reconnecté (passkey)', attempt: 'Tentative refusée', blocked: 'Récupération bloquée', alert: 'Alerte ailleurs', toast: 'Toast reconnexion', copied: 'Code copié', ended: 'Connexion expirée', connecting: 'Connexion…', unavailable: 'Pas démarré', outdated: 'Daemon trop ancien', pair: 'Lier · code', replace: 'Lier · remplacer', approved: 'Lier · approuvé', linked: 'Lier · lié', expired: 'Lier · expiré' },
     notes: {
       settings: 'Réglages : la ligne « Accès mobile » résume l’état et ↵ ouvre l’écran dédié.',
       off: 'Accès coupé : le reste de l’écran est en retrait, les appareils ne peuvent pas se connecter.',
@@ -76,7 +76,16 @@ const T = {
       revoke: 'Révoquer : une confirmation y / n sur la ligne même.',
       recovered: 'Un appareil s’est reconnecté par passkey : à confirmer (↵ « C’était bien moi ») ou révoquer.',
       blocked: 'Récupération par passkey bloquée : ↵ débloque.',
-      alert: 'Un téléphone demande à se lier pendant qu’on est ailleurs : ligne d’alerte, badge, m compare le code.',
+      alert: 'Un téléphone demande à se lier pendant qu’on est ailleurs : ligne d’alerte, badge, L compare le code. La ligne part quand la demande est décidée ou expire. Elle n’est pas affichée sur l’écran Accès mobile, où la demande est en tête des appareils.',
+      toast: 'Un appareil se reconnecte par passkey : un toast sur l’écran courant. Il reste signalé sur sa ligne dans Accès mobile.',
+      copied: 'c a copié le code : toast « Copié ».',
+      ended: 'La dernière connexion GitHub n’a pas abouti : le motif (expiré ici ; échec et refus ont leur texte), ↵ recommence.',
+      connecting: 'Connexion au relais en cours.',
+      unavailable: 'Le service mobile n’a pas démarré sur ce PC : tout l’écran se résume à l’erreur.',
+      outdated: 'Le daemon local est trop ancien pour l’accès mobile (ou hors ligne : « Le daemon local est hors ligne »).',
+      revoked: 'Après une révocation : toast « iPad est révoqué ».',
+      attempt: 'Un autre appareil a tenté de prendre la place de l’iPhone avec sa passkey : ↵ « Compris » ou x révoquer.',
+      replace: 'Un appareil hors ligne porte le même nom : « Remplacer l’ancien », coché par défaut, r décoche. L’ancien est révoqué à l’approbation.',
       pair: '« Lier un appareil » : le code à comparer, y approuve, n refuse, esc ferme sans décider.',
       approved: 'Approuvé sur le PC : il reste à confirmer sur le téléphone.',
       linked: 'Lié : l’appareil apparaît dans Appareils.',
@@ -104,7 +113,12 @@ const T = {
     nameLabel: 'Nom', revokeAsk: n => `Révoquer ${n} ? Il perd l’accès tout de suite.`,
     recTag: 'Reconnecté', recWell: ['Cet iPhone s’est reconnecté sans code, avec sa passkey, après', 'une réinstallation de l’app. Si ce n’était pas toi, révoque-le.'], recAck: 'C’était bien moi',
     blocked: ['Reconnexion par passkey bloquée : 3 vérifications', 'ont échoué depuis 09:12. Les appareils liés marchent,', 'la liaison par code aussi.'], unblock: 'Débloquer',
-    alert: n => `${n} demande à se lier à ton PC`, alertCompare: 'comparer le code', alertLater: 'masquer',
+    alert: n => `${n} demande à se lier à ton PC`, alertCompare: 'comparer le code',
+    connectingL: 'Connexion…', unavailableL: ['L’accès mobile n’a pas démarré sur ce PC :', 'EADDRINUSE 127.0.0.1:7781'], outdatedL: 'Le daemon local est trop ancien pour l’accès mobile : mets-le à jour.',
+    endedL: 'Le code a expiré. Recommence la connexion.', signinAgain: 'Se connecter avec GitHub',
+    copiedT: 'Copié', revokedT: 'iPad est révoqué.', recToast: 'L’iPhone s’est reconnecté avec sa passkey',
+    attTag: 'Tentative refusée', attWell: ['Aujourd’hui à 10:12, un autre appareil a tenté de prendre la place', 'de l’iPhone avec sa passkey. Refusé : l’iPhone était connecté.', 'Si ce n’était pas toi, révoque cet iPhone.'], attAck: 'Compris',
+    model: 'iPhone', replaceL: n => `Remplacer l’ancien « ${n} »`, replaceH: 'vu il y a 12 j · lié le 3 nov · il sera révoqué', untick: 'décocher',
     pairT: 'LIER UN APPAREIL', pairIntro: ['Un appareil connecté avec @octocat', 'demande l’accès à tes agents.'], pairCode: 'Code de liaison', pairCheck: ['Vérifie que le Pixel 8 affiche exactement ce code.', 'Approuve ici, puis confirme sur le téléphone.'], pairWarn: ['Si les codes diffèrent, refuse : quelqu’un', 'd’autre tente de se lier.'], expires: 'expire dans 4:32',
     approve: 'approuver', deny: 'refuser', later: 'fermer',
     approvedL: ['Approuvé sur ce PC.', 'Confirme maintenant sur le Pixel 8.'], linkedL: ['Pixel 8 est lié.', 'Il apparaît dans Réglages › Accès mobile.'], expiredL: ['La demande a expiré.', 'Recommence depuis le téléphone.'], close: 'fermer',
@@ -115,12 +129,12 @@ const T = {
       'Lignes : j k ou ↑ ↓. ↵ ou espace fait l’action de la ligne (basculer, ouvrir le champ, lancer la connexion, comparer le code, confirmer). esc revient à Réglages.',
       'Sur une ligne d’appareil : r renomme, x révoque (confirmation y / n sur la ligne).',
       'Un refus du daemon s’affiche en toast, avec ses propres mots.',
-      'La ligne d’alerte et le badge apparaissent sur tous les écrans tant qu’une liaison attend sa comparaison ; m ouvre « Lier un appareil » de partout.'
+      'La ligne d’alerte et le badge apparaissent sur tous les écrans tant qu’une liaison attend sa comparaison ; L ouvre « Lier un appareil » de partout. Les toasts s’affichent sur la ligne au-dessus des touches, comme les autres toasts de la TUI.'
     ]
   },
   en: {
     page: 'Mobile access in ledge tui',
-    states: { settings: 'Settings', off: 'Off', signin: 'Not signed in', flow: 'GitHub code', refused: 'Account refused', online: 'Online', empty: 'No device', offline: 'Offline', signedout: 'Signed out', relay: 'Change relay', rename: 'Rename', revoke: 'Revoke', recovered: 'Reconnected (passkey)', blocked: 'Recovery blocked', alert: 'Alert elsewhere', pair: 'Link · code', approved: 'Link · approved', linked: 'Link · linked', expired: 'Link · expired' },
+    states: { settings: 'Settings', off: 'Off', signin: 'Not signed in', flow: 'GitHub code', refused: 'Account refused', online: 'Online', empty: 'No device', offline: 'Offline', signedout: 'Signed out', relay: 'Change relay', rename: 'Rename', revoke: 'Revoke', revoked: 'Revoked', recovered: 'Reconnected (passkey)', attempt: 'Attempt refused', blocked: 'Recovery blocked', alert: 'Alert elsewhere', toast: 'Reconnection toast', copied: 'Code copied', ended: 'Sign-in expired', connecting: 'Connecting…', unavailable: 'Not started', outdated: 'Daemon too old', pair: 'Link · code', replace: 'Link · replace', approved: 'Link · approved', linked: 'Link · linked', expired: 'Link · expired' },
     notes: {
       settings: 'Settings: the “Mobile access” row sums up the state and ↵ opens its own screen.',
       off: 'Access off: the rest of the screen is dimmed, linked devices cannot connect.',
@@ -136,7 +150,16 @@ const T = {
       revoke: 'Revoke: a y / n confirmation on the row itself.',
       recovered: 'A device reconnected with its passkey: confirm (↵ “That was me”) or revoke.',
       blocked: 'Passkey recovery blocked: ↵ unblocks.',
-      alert: 'A phone asks to link while you are elsewhere: alert line, badge, m compares the code.',
+      alert: 'A phone asks to link while you are elsewhere: alert line, badge, L compares the code. The line goes when the request is decided or expires. It is not shown on the Mobile access screen, where the request heads the devices.',
+      toast: 'A device reconnects with its passkey: a toast on the current screen. It stays flagged on its row in Mobile access.',
+      copied: 'c copied the code: toast “Copied”.',
+      ended: 'The last GitHub sign-in did not finish: the reason (expired here; failed and denied have their text), ↵ starts over.',
+      connecting: 'Connecting to the relay.',
+      unavailable: 'The mobile service did not start on this PC: the whole screen is the error.',
+      outdated: 'The local daemon is too old for mobile access (or offline: “The local daemon is offline”).',
+      revoked: 'After a revoke: toast “iPad is revoked”.',
+      attempt: 'Another device tried to take the iPhone’s place with its passkey: ↵ “Got it” or x revoke.',
+      replace: 'An offline device has the same name: “Replace the old one”, ticked by default, r unticks. The old one is revoked on approval.',
       pair: '“Link a device”: the code to compare, y approves, n denies, esc closes without deciding.',
       approved: 'Approved on the PC: confirm on the phone now.',
       linked: 'Linked: the device shows in Devices.',
@@ -164,7 +187,12 @@ const T = {
     nameLabel: 'Name', revokeAsk: n => `Revoke ${n}? It loses access at once.`,
     recTag: 'Reconnected', recWell: ['This iPhone reconnected without a code, with its passkey, after', 'the app was reinstalled. If it was not you, revoke it.'], recAck: 'That was me',
     blocked: ['Passkey reconnection blocked: 3 checks failed', 'since 09:12. Linked devices keep working, and so', 'does linking with a code.'], unblock: 'Unblock',
-    alert: n => `${n} asks to link to your PC`, alertCompare: 'compare the code', alertLater: 'hide',
+    alert: n => `${n} asks to link to your PC`, alertCompare: 'compare the code',
+    connectingL: 'Connecting…', unavailableL: ['Mobile access did not start on this PC:', 'EADDRINUSE 127.0.0.1:7781'], outdatedL: 'The local daemon is too old for mobile access: update it.',
+    endedL: 'The code expired. Start the sign-in again.', signinAgain: 'Sign in with GitHub',
+    copiedT: 'Copied', revokedT: 'iPad is revoked.', recToast: 'The iPhone reconnected with its passkey',
+    attTag: 'Attempt refused', attWell: ['Today at 10:12, another device tried to take the iPhone’s place', 'with its passkey. Refused: the iPhone was connected.', 'If it was not you, revoke this iPhone.'], attAck: 'Got it',
+    model: 'iPhone', replaceL: n => `Replace the old “${n}”`, replaceH: 'seen 12 days ago · linked Nov 3 · will be revoked', untick: 'untick',
     pairT: 'LINK A DEVICE', pairIntro: ['A device signed in as @octocat', 'asks for access to your agents.'], pairCode: 'Pairing code', pairCheck: ['Check that the Pixel 8 shows exactly this code.', 'Approve here, then confirm on the phone.'], pairWarn: ['If the codes differ, deny: someone else', 'is trying to link.'], expires: 'expires in 4:32',
     approve: 'approve', deny: 'deny', later: 'close',
     approvedL: ['Approved on this PC.', 'Confirm on the Pixel 8 now.'], linkedL: ['Pixel 8 is linked.', 'It shows in Settings › Mobile access.'], expiredL: ['The request expired.', 'Start again from the phone.'], close: 'close',
@@ -175,7 +203,7 @@ const T = {
       'Rows: j k or ↑ ↓. ↵ or space does the row’s action (toggle, open the field, start the sign-in, compare the code, confirm). esc goes back to Settings.',
       'On a device row: r renames, x revokes (y / n confirmation on the row).',
       'A refusal from the daemon shows as a toast, in its own words.',
-      'The alert line and the badge show on every screen while a pairing waits for its comparison; m opens “Link a device” from anywhere.'
+      'The alert line and the badge show on every screen while a pairing waits for its comparison; L opens “Link a device” from anywhere. Toasts show on the line above the keys, like the TUI’s other toasts.'
     ]
   }
 };
@@ -230,11 +258,12 @@ function settingsScreen(W) {
   return [status(W, true), alertLine(W), ...box(t.set, rows, W), keys([['j k', t.keys.move], ['← →', t.keys.change], ['↵', t.keys.open], ['esc', t.keys.back]])];
 }
 function alertLine(W) {
-  const k = [[' m ', 'key fg'], [` ${t.alertCompare}  `, 'fg'], [' x ', 'key fg'], [` ${t.alertLater} `, 'fg']];
+  const k = [[' L ', 'key fg'], [` ${t.alertCompare} `, 'fg']];
   const left = [[' ● ', 'yellow'], [t.alert(t.pixel), 'fg']];
   const gap = W - lenSegs(left) - lenSegs(k);
   return [...left, [' '.repeat(Math.max(1, gap)), ''], ...k].map(([s, c]) => [s, (c ? c + ' ' : '') + 'selbg']);
 }
+const toastLine = (text, c = 'yellow') => [[' ' + text, c]];
 function deviceRows(opts = {}) {
   const r = [];
   if (opts.pending) r.push(opts.selPending ? { sel: true, segs: [['! ', 'yellow'], [`${t.pixel} ${t.asks}`, 'fg b'], ['   ↵ ' + t.compare, 'faint']] } : [['! ', 'yellow'], [`${t.pixel} ${t.asks}`, 'yellow'], ['   ↵ ' + t.compare, 'faint']]);
@@ -245,10 +274,13 @@ function deviceRows(opts = {}) {
       : opts.recovered
         ? { sel: true, segs: [['▯ ', 'fg'], [t.iphone.padEnd(18), 'fg'], [` ${t.recTag} `, 'blue b'], ['  ' + t.seen.now, 'faint']] }
         : opts.selIphone ? { sel: true, segs: [['▯ ', 'fg'], [t.iphone.padEnd(18), 'fg'], [`${t.linkedOn(t.d1)} · ${t.seen.min}`, 'faint']] }
-          : [['▯ ', 'fg'], [t.iphone.padEnd(18), 'fg'], [`${t.linkedOn(t.d1)} · ${t.seen.min}`, 'faint']];
+          : opts.attempt
+            ? { sel: true, segs: [['▯ ', 'fg'], [t.iphone.padEnd(18), 'fg'], [` ${t.attTag} `, 'yellow b'], ['  ' + t.seen.min, 'faint']] }
+            : [['▯ ', 'fg'], [t.iphone.padEnd(18), 'fg'], [`${t.model} · ${t.linkedOn(t.d1)} · ${t.seen.min}`, 'faint']];
   r.push(iphone);
+  if (opts.attempt) { t.attWell.forEach(x => r.push([['  ' + x, 'yellow']])); r.push([['  ↵ ', 'faint'], [t.attAck, 'fg u'], ['   x ', 'faint'], [t.keys.revoke, 'fg']]); }
   if (opts.recovered) { r.push([['  ' + t.recWell[0], 'blue']]); r.push([['  ' + t.recWell[1], 'blue']]); r.push([['  ↵ ', 'faint'], [t.recAck, 'fg u'], ['   x ', 'faint'], [t.keys.revoke, 'fg']]); }
-  r.push([['▭ ', 'fg'], [t.ipad.padEnd(18), 'fg'], [`${t.linkedOn(t.d2)} · ${t.seen.yest}`, 'faint']]);
+  if (!opts.noIpad) r.push([['▭ ', 'fg'], [t.ipad.padEnd(18), 'fg'], [`${t.linkedOn(t.d2)} · ${t.seen.yest}`, 'faint']]);
   return r;
 }
 function mobileScreen(W, st) {
@@ -260,13 +292,17 @@ function mobileScreen(W, st) {
     : row(t.relay, ['app.kl-ledge.dev', D]);
   let account, statusRow, extra = [];
   if (st === 'signin') { account = sel(t.account, [t.signin, 'fg b'], ['  ↵', 'faint']); statusRow = row(t.statusL, ['○ ', 'faint'], [t.idle, 'fg'], [`  ${t.idleH}`, 'faint']); }
-  else if (st === 'flow') {
+  else if (st === 'flow' || st === 'copied') {
     account = sel(t.account, [t.flowLead + ' ', 'fg'], [t.flowUrl, 'blue u']);
     extra = [[[' '.repeat(L), ''], [t.flowAnd + ' ', 'fg'], [t.flowCode, 'yellow b']], [[' '.repeat(L), ''], [t.flowWait, 'faint']]];
     statusRow = row(t.statusL, ['○ ', 'faint'], [t.idle, 'fg']);
   } else if (st === 'refused') {
     account = sel(t.account, [t.otherAccount, 'fg b'], ['  ↵', 'faint']);
     extra = [[[' '.repeat(L), ''], [t.notAllowed[0], 'red']], [[' '.repeat(L), ''], [t.notAllowed[1], 'red']]];
+    statusRow = row(t.statusL, ['○ ', 'faint'], [t.idle, 'fg']);
+  } else if (st === 'ended') {
+    account = sel(t.account, [t.signinAgain, 'fg b'], ['  ↵', 'faint']);
+    extra = [[[' '.repeat(L), ''], [t.endedL, 'yellow']]];
     statusRow = row(t.statusL, ['○ ', 'faint'], [t.idle, 'fg']);
   } else if (st === 'signedout') {
     account = sel(t.account, [t.reconnect, 'fg b'], ['  ↵', 'faint']);
@@ -276,25 +312,32 @@ function mobileScreen(W, st) {
     account = row(t.account, ['@octocat', D], [`  · ${t.signout}`, 'faint']);
     statusRow = st === 'offline'
       ? sel(t.statusL, ['● ', 'yellow'], [t.retryIn(12), 'fg'], ['  ↵ ' + t.retry, 'faint'])
-      : st === 'off' ? row(t.statusL, ['○ ', 'faint'], [t.offW, 'faint']) : row(t.statusL, ['● ', 'green'], [t.online, 'fg']);
+      : st === 'off' ? row(t.statusL, ['○ ', 'faint'], [t.offW, 'faint']) : st === 'connecting' ? row(t.statusL, ['◌ ', 'yellow'], [t.connectingL, 'fg']) : row(t.statusL, ['● ', 'green'], [t.online, 'fg']);
     if (st === 'offline') extra = [[[' '.repeat(L), ''], [t.unreachable[0], 'yellow']], [[' '.repeat(L), ''], [t.unreachable[1], 'yellow']]];
   }
   const relayErr = st === 'relay' ? [[[' '.repeat(L), ''], [t.relayBad, 'red']], [[' '.repeat(L), ''], ['↵ ' + t.keys.save + '   esc ' + t.keys.cancel, 'faint']]] : [];
-  const accountBlock = st === 'flow' || st === 'refused' || st === 'signedout' ? [account, ...extra, statusRow] : st === 'offline' ? [account, statusRow, ...extra] : [account, statusRow];
+  const accountBlock = ['flow', 'copied', 'refused', 'signedout', 'ended'].includes(st) ? [account, ...extra, statusRow] : st === 'offline' ? [account, statusRow, ...extra] : [account, statusRow];
   const rows = [access, relay, ...relayErr, ...accountBlock, row(t.term, [t.no, D], [`  ${t.termH}`, 'faint'])];
-  const lines = [status(W, st === 'online'), ...(st === 'online' ? [alertLine(W)] : []), ...box(t.title, rows, W)];
+  const lines = [status(W, st === 'online'), ...box(t.title, rows, W)];
   // Devices
   if (st === 'off') lines.push(...box(t.devices(2), [[[t.offWell, 'faint']], [['▯ ', 'faint'], [t.iphone, 'faint']], [['▭ ', 'faint'], [t.ipad, 'faint']]], W));
   else if (st === 'empty') lines.push(...box(t.devicesNone, t.empty.map(s => [[s, 'dim']]), W));
-  else if (['signin', 'flow', 'refused', 'signedout'].includes(st)) lines.push(...box(t.devices(2), deviceRows(), W));
+  else if (['signin', 'flow', 'copied', 'refused', 'signedout', 'ended'].includes(st)) lines.push(...box(t.devices(2), deviceRows(), W));
+  else if (st === 'revoked') lines.push(...box(t.devices(1), deviceRows({ noIpad: true }), W));
   else if (st === 'blocked') lines.push(...box(t.devices(2), [{ sel: true, segs: [['⊘ ', 'red'], [t.blocked[0], 'red']] }, [['  ' + t.blocked[1], 'red']], [['  ' + t.blocked[2], 'red']], [['  ↵ ', 'faint'], [t.unblock, 'fg u']], ...deviceRows()], W));
-  else lines.push(...box(t.devices(2), deviceRows({ pending: st === 'online', selPending: false, renaming: st === 'rename', revoking: st === 'revoke', recovered: st === 'recovered' }), W));
+  else lines.push(...box(t.devices(2), deviceRows({ pending: st === 'online', selPending: false, renaming: st === 'rename', revoking: st === 'revoke', recovered: st === 'recovered', attempt: st === 'attempt' }), W));
   const k = ['rename', 'relay'].includes(st) ? [['↵', t.keys.save], ['esc', t.keys.cancel]]
     : st === 'revoke' ? [['y', t.keys.yes], ['n', t.keys.no]]
-      : st === 'flow' ? [['c', t.keys.copy], ['esc', t.keys.cancel]]
+      : st === 'flow' || st === 'copied' ? [['c', t.keys.copy], ['esc', t.keys.cancel]]
         : [['j k', t.keys.move], ['↵', t.keys.open], ['r', t.keys.rename], ['x', t.keys.revoke], ['esc', t.keys.back]];
+  if (st === 'copied') lines.push(toastLine(t.copiedT, 'green'));
+  if (st === 'revoked') lines.push(toastLine(t.revokedT, 'green'));
   lines.push(keys(k));
   return lines;
+}
+function serviceScreen(W, st) {
+  const body = st === 'unavailable' ? [[[t.unavailableL[0], 'red']], [[t.unavailableL[1], 'red']]] : [[[t.outdatedL, 'yellow']]];
+  return [status(W, false), ...box(t.title, body, W), keys([['esc', t.keys.back]])];
 }
 function overviewLines(W) {
   const left = 32, right = W - left;
@@ -326,12 +369,13 @@ function overlay(base, dlg, W) {
 function pairDialog(st) {
   const w = 58, inner = w - 4;
   let body;
-  if (st === 'pair') body = [
+  if (st === 'pair' || st === 'replace') body = [
     [[t.pairIntro[0], 'fg']], [[t.pairIntro[1], 'fg']], [],
     [[t.pairCode, 'dim']], [['          4 7 2 · 9 1 5 · 3 0 8', 'yellow b']], [],
     [[t.pairCheck[0], 'dim']], [[t.pairCheck[1], 'dim']],
     [[t.pairWarn[0], 'red']], [[t.pairWarn[1], 'red'], [' '.repeat(Math.max(1, inner - len(t.pairWarn[1]) - len(t.expires))), ''], [t.expires, 'faint']], [],
-    [['  ', ''], [' y ', 'key fg'], [` ${t.approve}   `, 'green'], [' n ', 'key fg'], [` ${t.deny}   `, 'red'], [' esc ', 'key fg'], [` ${t.later}`, 'dim']]
+    ...(st === 'replace' ? [[['[x] ', 'fg b'], [t.replaceL(t.iphone), 'fg']], [['    ' + t.replaceH, 'faint']], []] : []),
+    [[st === 'replace' ? '' : '  ', ''], [' y ', 'key fg'], [` ${t.approve} `, 'green'], [' n ', 'key fg'], [` ${t.deny} `, 'red'], ...(st === 'replace' ? [[' r ', 'key fg'], [` ${t.untick} `, 'dim']] : []), [' esc ', 'key fg'], [` ${t.later}`, 'dim']]
   ];
   else {
     const [a, b] = st === 'approved' ? t.approvedL : st === 'linked' ? t.linkedL : t.expiredL;
@@ -345,12 +389,15 @@ function pairDialog(st) {
 function screen() {
   const W = S.w;
   if (S.st === 'settings') return settingsScreen(W);
-  if (S.st === 'alert') return [status(W, true), alertLine(W), ...overviewLines(W), keys([['j k', t.keys.move], ['↵', t.keys.open], ['m', t.keys.pair], [',', t.keys.settings], ['?', t.keys.help]])];
-  if (['pair', 'approved', 'linked', 'expired'].includes(S.st)) {
+  if (S.st === 'unavailable' || S.st === 'outdated') return serviceScreen(W, S.st);
+  if (S.st === 'toast') return [status(W, false), ...overviewLines(W), toastLine(t.recToast), keys([['j k', t.keys.move], ['↵', t.keys.open], [',', t.keys.settings], ['?', t.keys.help]])];
+  if (S.st === 'alert') return [status(W, true), alertLine(W), ...overviewLines(W), keys([['j k', t.keys.move], ['↵', t.keys.open], ['L', t.keys.pair], [',', t.keys.settings], ['?', t.keys.help]])];
+  if (['pair', 'replace', 'approved', 'linked', 'expired'].includes(S.st)) {
     const dlg = pairDialog(S.st);
-    const top = [status(W, S.st === 'pair'), ...(S.st === 'pair' ? [alertLine(W)] : [[]]), ...overviewLines(W)];
+    const waiting = S.st === 'pair' || S.st === 'replace';
+    const top = [status(W, waiting), ...(waiting ? [alertLine(W)] : [[]]), ...overviewLines(W)];
     while (top.length < dlg.length + 4) top.push([]);
-    const base = [...top, keys([['j k', t.keys.move], ['↵', t.keys.open], ['m', t.keys.pair], [',', t.keys.settings], ['?', t.keys.help]])];
+    const base = [...top, keys([['j k', t.keys.move], ['↵', t.keys.open], ['L', t.keys.pair], [',', t.keys.settings], ['?', t.keys.help]])];
     return overlay(base, dlg, W);
   }
   return mobileScreen(W, S.st);
