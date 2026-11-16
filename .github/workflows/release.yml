@@ -83,7 +83,9 @@ jobs:
       - name: Publish the relay to npm
         if: env.PUBLISH == 'true'
         run: |
-          if [ "$(node scripts/relay-pack.mjs publishable)" = "false" ]; then
+          # Captured first: a crash of the script stops the step (bash -e) instead of reading as a licence.
+          publishable="$(node scripts/relay-pack.mjs publishable)"
+          if [ "$publishable" != "true" ]; then
             echo "@paradow/ledge-relay not published: no licence yet"; exit 0
           fi
           cd apps/relay

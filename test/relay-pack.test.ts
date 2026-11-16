@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 // @ts-expect-error plain ESM script without types
 import { relayPublishable, checkRelayPack } from '../scripts/relay-pack.mjs';
 
@@ -24,5 +26,12 @@ describe('checkRelayPack', () => {
   });
   it('reports a packed build that is not the phone build', () => {
     expect(checkRelayPack({ files: ALL, packedBuild: 'a', mobileBuild: 'b' })).toHaveLength(1);
+  });
+});
+
+describe('relay-pack publishable', () => {
+  it('prints false for the package as it is, UNLICENSED', () => {
+    const out = execFileSync('node', ['scripts/relay-pack.mjs', 'publishable'], { cwd: resolve(__dirname, '..'), encoding: 'utf8' });
+    expect(out.trim()).toBe('false');
   });
 });
