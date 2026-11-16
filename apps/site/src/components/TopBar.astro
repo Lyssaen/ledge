@@ -1,0 +1,39 @@
+---
+import { local, mediaFor } from '../data/media.ts';
+import { localeList, locales, type Catalogue, type Locale } from '../i18n/index.ts';
+
+// The top edge of the page is the top edge of the screen: the real notch hangs from it, between the logo and the links.
+interface Props {
+  t: Catalogue;
+  lang: Locale;
+}
+const { t, lang } = Astro.props;
+const media = mediaFor(Astro.currentLocale);
+---
+
+<nav class="topbar" aria-label={t.nav.label}>
+  <div class="tb-logo">
+    <a class="brand" href="#top">
+      <svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#000000"></rect><rect x="12" y="12" width="13" height="40" rx="3" fill="#FAFAFA"></rect><rect x="28" y="42" width="24" height="10" rx="3" fill="#FAFAFA"></rect><circle cx="40" cy="26" r="6" fill="#FF6467"></circle></svg>
+      Ledge
+    </a>
+    <ul class="lang" aria-label={t.nav.language}>
+      {localeList.map(l => (
+        <li class="lang__item">
+          <a class="lang__link" href={local(locales[l].path)} hreflang={l} lang={l} aria-label={locales[l].name} aria-current={l === lang ? 'true' : undefined}>{locales[l].code}</a>
+        </li>
+      ))}
+    </ul>
+  </div>
+  <div class="tb-notch" role="img" aria-label={t.hero.notchLabel}>
+    <img class="n-handle" src={media('notch60-handle.png')} alt="" width="1016" height="108" />
+    <img class="n-ask" src={media('notch60-ask.png')} alt="" width="944" height="310" />
+    <img class="n-done" src={media('notch60-point.png')} alt="" width="944" height="248" />
+  </div>
+  <div class="tb-links">
+    <a class="nl" href="#journee">{t.nav.inLedge}</a>
+    <a class="nl" href="#openrig">{t.nav.openrig}</a>
+    <a class="nl" href="#partout">{t.nav.everywhere}</a>
+    <a class="pill press tb-install" href="#installer">{t.nav.install}</a>
+  </div>
+</nav>

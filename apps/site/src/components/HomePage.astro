@@ -1,0 +1,36 @@
+---
+import Base from '../layouts/Base.astro';
+import { locales, type Locale } from '../i18n/index.ts';
+import AgentsTalk from './AgentsTalk.astro';
+import AndAlso from './AndAlso.astro';
+import Everywhere from './Everywhere.astro';
+import Footer from './Footer.astro';
+import Hero from './Hero.astro';
+import Install from './Install.astro';
+import OpenRig from './OpenRig.astro';
+import Security from './Security.astro';
+import Showcase from './Showcase.astro';
+import States from './States.astro';
+
+// The one page of the site, in the language asked for: `/` renders it in French and `/en/` in English.
+interface Props {
+  lang: Locale;
+}
+const { lang } = Astro.props;
+const t = locales[lang].copy;
+---
+
+<Base lang={lang}>
+  <Hero t={t} lang={lang} />
+  <main>
+    <States t={t} />
+    <Showcase t={t} />
+    <OpenRig t={t} />
+    <AgentsTalk t={t} />
+    <AndAlso t={t} />
+    <Everywhere t={t} />
+    <Security t={t} />
+    <Install t={t} />
+  </main>
+  <Footer t={t} />
+</Base>

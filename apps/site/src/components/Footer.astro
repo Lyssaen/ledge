@@ -1,0 +1,24 @@
+---
+import { site } from '../config.ts';
+import { rich, type Catalogue } from '../i18n/index.ts';
+
+// A link whose address is not filled in yet in `src/config.ts` goes back to the top of the page, as in the mockup.
+interface Props {
+  t: Catalogue;
+}
+const { t } = Astro.props;
+const links = [
+  { label: t.footer.tour, href: site.guideUrl },
+  { label: t.footer.news, href: site.releasesUrl },
+  { label: t.footer.github, href: site.githubUrl }
+];
+---
+
+<footer class="footer">
+  <div class="page footer__inner">
+    <span set:html={rich(t.footer.tagline, { version: site.version })} />
+    <div class="footer__links">
+      {links.map(link => <a class="footer__link" href={link.href ?? '#top'}>{link.label}</a>)}
+    </div>
+  </div>
+</footer>

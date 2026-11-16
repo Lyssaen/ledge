@@ -1,0 +1,24 @@
+# AWS Amplify Hosting builds the marketing site (apps/site) and serves its static output.
+# The Amplify app must be created as a monorepo app with the root `apps/site`
+# (environment variable AMPLIFY_MONOREPO_APP_ROOT=apps/site).
+version: 1
+applications:
+  - appRoot: apps/site
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - nvm install 24
+            - nvm use 24
+            - corepack enable
+            - pnpm install --frozen-lockfile --filter @ledge/site
+        build:
+          commands:
+            - pnpm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*

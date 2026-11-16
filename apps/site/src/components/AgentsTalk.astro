@@ -1,0 +1,43 @@
+---
+import { finalStep, leftLines, rightLines, showsAt, steps, type SceneLine } from '../data/scene.ts';
+import { code, rich, type Catalogue } from '../i18n/index.ts';
+
+// « Vos agents se parlent »: two terminals played step by step by `scripts/scene.ts`. The page is built at the end of the
+// story, with every line already in it, so the scene reads whole without JavaScript.
+interface Props {
+  t: Catalogue;
+}
+const { t } = Astro.props;
+const terminals = [
+  { agent: 'Claude Code', session: 'otto · ledge', lines: leftLines.map(line => ({ line, text: t.talk.left[line.text] })) },
+  { agent: 'Codex CLI', session: 'nova · ledge', lines: rightLines.map(line => ({ line, text: t.talk.right[line.text] })) }
+] satisfies { agent: string; session: string; lines: { line: SceneLine<string>; text: string }[] }[];
+const sceneSteps = steps.map(step => ({ ms: step.ms, caption: t.talk.captions[step.caption] }));
+---
+
+<section class="section">
+  <div class="page stack talk__inner" data-scene data-steps={JSON.stringify(sceneSteps)}>
+    <div class="stack talk__head">
+      <h2 class="title">{t.talk.title}</h2>
+      <p class="lead talk__lead" set:html={rich(t.talk.lead, { who: code('ledge who', 'amber-inline'), send: code('ledge send', 'amber-inline') })} />
+    </div>
+    <div class="terms">
+      {terminals.map(terminal => (
+        <div class="term">
+          <div class="term__bar"><span class="term__agent">{terminal.agent}</span><span class="term__session">{terminal.session}</span></div>
+          <div class="term__lines">
+            {terminal.lines.map(({ line, text }) => (
+              <div class:list={['ln', `ln--${line.tone}`, { 'ln--card': line.card }]} data-from={line.from} data-until={line.until} hidden={!showsAt(line, finalStep)}>{text}</div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+    <div class="scene__controls">
+      <button type="button" class="text-button" data-scene-toggle data-label-play={t.talk.play} data-label-pause={t.talk.pause}>{t.talk.play}</button>
+      <button type="button" class="text-button" data-scene-replay>{t.talk.replay}</button>
+      <span class="scene__caption" data-scene-caption>{t.talk.captions[steps[finalStep]!.caption]}</span>
+      <span set:html={rich(t.talk.legend, { amber: `<span class="scene__amber">${rich(t.talk.legendAmber)}</span>` })} />
+    </div>
+  </div>
+</section>

@@ -1,0 +1,32 @@
+---
+import { mediaFor } from '../data/media.ts';
+import type { Catalogue } from '../i18n/index.ts';
+
+// The four states of an agent, each carried by the real mascot in that state.
+interface Props {
+  t: Catalogue;
+}
+const { t } = Astro.props;
+const states = [
+  { id: 'approval', motion: 'breathe' },
+  { id: 'question', motion: 'breathe' },
+  { id: 'working', motion: 'hop' },
+  { id: 'idle', motion: '' }
+] as const;
+const media = mediaFor(Astro.currentLocale);
+---
+
+<section class="section" aria-label={t.states.label}>
+  <div class="page stack states__inner">
+    <h2 class="heading states__title">{t.states.title}</h2>
+    <div class="states__grid">
+      {states.map(state => (
+        <div class={`state state--${state.id}`}>
+          <img class:list={['state__bot', state.motion]} src={media(`mascot-state-${state.id}.png`)} alt="" width="320" height="276" loading="lazy" />
+          <span class="state__title">{t.states[state.id].title}</span>
+          <span class="state__text">{t.states[state.id].text}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

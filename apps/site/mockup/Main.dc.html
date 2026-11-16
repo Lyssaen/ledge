@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Ledge, page d'accueil</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0;background:#10120d}
+a{color:#f3eee2}a:hover{color:#ffb4a8}
+button{font-family:inherit}
+a:focus-visible,button:focus-visible{outline:2px solid #ff8a7a;outline-offset:3px}
+/* Le sol de l'atelier : un quadrillage discret, comme dans l'application. */
+.floor{background-color:#10120d;background-image:linear-gradient(rgba(243,238,226,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(243,238,226,.04) 1px,transparent 1px);background-size:72px 72px}
+.topbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:start;column-gap:16px}
+.tb-notch{height:56px}
+.hero-phone{width:19%;bottom:-9%}
+.rig-wrap{margin-bottom:4%}
+.rig-phone{width:17%;bottom:-7%}
+.hint{display:none}
+@media (max-width:1260px){
+.topbar{grid-template-columns:auto minmax(0,1fr);row-gap:4px}
+.topbar .tb-notch{grid-column:1 / -1;grid-row:1;justify-self:center;height:132px}
+.topbar .tb-logo,.topbar .tb-links{padding-top:0!important}
+}
+@media (max-width:700px){
+.scroller{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:16px}
+.scroller>.wide{min-width:680px}
+.hint{display:block}
+.hero-wrap{margin-bottom:30%}
+.hero-phone{width:34%;bottom:-38%}
+.rig-wrap{margin-bottom:0}
+.rig-phone{display:none}
+.topbar .tb-notch{height:118px}
+}
+@media (max-width:560px){
+.tb-links .nl{display:none!important}
+}
+.press{transition:transform .15s ease,background-color .15s ease}
+.press:hover{transform:translateY(-2px)}
+.shot{transition:opacity .45s ease}
+.n-handle{opacity:0;animation:nHandle 14s infinite}
+.n-ask{opacity:1;transform-origin:top center;animation:nAsk 14s infinite}
+.n-done{opacity:0;transform-origin:top center;animation:nDone 14s infinite}
+@keyframes nHandle{0%,20%{opacity:1}24%,58%{opacity:0}62%,68%{opacity:1}72%,96%{opacity:0}100%{opacity:1}}
+@keyframes nAsk{0%,20%{opacity:0;transform:scale(.9,.42)}25%,57%{opacity:1;transform:scale(1)}61%,100%{opacity:0;transform:scale(.9,.42)}}
+@keyframes nDone{0%,68%{opacity:0;transform:scale(.9,.5)}73%,95%{opacity:1;transform:scale(1)}99%,100%{opacity:0;transform:scale(.9,.5)}}
+.hop{animation:hop 4s ease-in-out infinite}
+@keyframes hop{0%,82%,100%{transform:translateY(0)}90%{transform:translateY(-9px)}}
+.breathe{animation:breathe 2.6s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+.blink{animation:blink 1.1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.ln{animation:ln .28s ease-out}
+@keyframes ln{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.typing{width:0;animation:typing 9s steps(46) infinite}
+@keyframes typing{0%{width:0}55%,92%{width:46ch}100%{width:0}}
+.pop{animation:pop .4s cubic-bezier(.2,.8,.2,1)}
+@keyframes pop{0%{transform:translateY(-6px) scale(1.25);opacity:0}45%{transform:translateY(2px) scale(.94);opacity:1}100%{transform:none}}
+@media (prefers-reduced-motion: reduce){
+.n-handle,.n-ask,.n-done,.hop,.breathe,.blink,.pop,.ln{animation:none}
+.typing{animation:none;width:46ch}
+.press,.shot{transition:none}
+}
+</style>
+</helmet>
+<div class="floor" style="color: #f3eee2; font-family: 'Geist', 'Segoe UI', system-ui, sans-serif; font-size: 17px; line-height: 1.55; overflow-x: hidden">
+
+<!-- HAUT DE PAGE : le bord supérieur est celui de l'écran, la vraie encoche s'y étire et se replie -->
+<header style="padding: 0 max(20px, 4vw) 120px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px">
+
+<nav class="topbar" aria-label="Navigation principale">
+<div class="tb-logo" style="padding-top: 12px; display: flex"><a href="#top" style="display: flex; align-items: center; gap: 10px; text-decoration: none; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: 24px; min-height: 44px">
+<svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#000000"/><rect x="12" y="12" width="13" height="40" rx="3" fill="#FAFAFA"/><rect x="28" y="42" width="24" height="10" rx="3" fill="#FAFAFA"/><circle cx="40" cy="26" r="6" fill="#FF6467"/></svg>
+Ledge
+</a></div>
+<div class="tb-notch" role="img" aria-label="L'encoche de Ledge : au repos elle montre l'activité des agents, puis s'étire en bulle quand Otto attend votre accord, et quand Ledge fait le point" style="position: relative; z-index: 2; width: 360px; max-width: 100%; display: grid; justify-items: center; align-items: start">
+<img class="n-handle" src="/_blob/fc0f9176e45d2f3a296d2efec68787fe" alt="" style="grid-area: 1 / 1; width: 388px; max-width: 108%; height: auto">
+<img class="n-ask" src="/_blob/4a7c7c6c7ba71a1f5ddd6ae558deb76f" alt="" style="grid-area: 1 / 1; width: 360px; max-width: 100%; height: auto">
+<img class="n-done" src="/_blob/94e37ca7e7e20901a33744fa362e8b48" alt="" style="grid-area: 1 / 1; width: 360px; max-width: 100%; height: auto">
+</div>
+<div class="tb-links" style="display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 4px 16px; white-space: nowrap; font-size: 16px; padding-top: 12px">
+<a class="nl" href="#journee" style="text-decoration: none; color: #cfc9b8; min-height: 44px; display: flex; align-items: center">Dans Ledge</a>
+<a class="nl" href="#openrig" style="text-decoration: none; color: #cfc9b8; min-height: 44px; display: flex; align-items: center">OpenRig</a>
+<a class="nl" href="#partout" style="text-decoration: none; color: #cfc9b8; min-height: 44px; display: flex; align-items: center">Partout</a>
+<a class="press" href="#installer" style="text-decoration: none; background: #f3eee2; color: #14160f; font-weight: 600; padding: 0 20px; border-radius: 999px; min-height: 44px; display: flex; align-items: center">Installer</a>
+</div>
+</nav>
+
+<h1 id="top" style="margin: 0; padding-top: 72px; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: clamp(42px, 6.2vw, 88px); line-height: 0.98; letter-spacing: -0.025em; max-width: 1080px">Vos agents travaillent.<br>Ledge vous dit quand<br>c'est à vous.</h1>
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 32px 56px">
+<div style="flex: 3 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 26px">
+<p style="margin: 0; font-size: clamp(18px, 1.5vw, 21px); line-height: 1.5; color: #cfc9b8; max-width: 620px">Un atelier pour tous vos agents de code, sur votre PC et vos serveurs. Vous voyez ce que fait chacun, et vous répondez à ses demandes sans ouvrir son terminal.</p>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<div style="display: flex; align-items: center; gap: 12px; background: #000000; border: 1px solid #3a3d31; border-radius: 12px; padding: 0 18px; min-height: 52px; max-width: 100%; box-sizing: border-box; overflow-x: auto">
+<span style="color: #4ade9a; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 15px" aria-hidden="true">$</span>
+<code style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 15px; white-space: nowrap">npm i -g @paradow/ledge &amp;&amp; ledge setup</code>
+<span class="blink" aria-hidden="true" style="width: 8px; height: 19px; background: #f3eee2; flex-shrink: 0"></span>
+</div>
+<a href="#journee" style="min-height: 52px; display: flex; align-items: center; padding: 0 6px; font-weight: 500">Voir ce qu'il fait</a>
+</div>
+</div>
+<ul aria-label="Agents pris en charge" style="flex: 1 1 300px; min-width: 0; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px">
+<li style="display: flex; flex-direction: column; align-items: center; gap: 0; text-align: center; font-size: 13px; color: #cfc9b8"><img class="hop" src="/_blob/55055ae8db8d95b41cc5d037f5ecbe1a" alt="" style="width: 100%; max-width: 104px; height: auto">Claude Code</li>
+<li style="display: flex; flex-direction: column; align-items: center; gap: 0; text-align: center; font-size: 13px; color: #cfc9b8"><img class="hop" src="/_blob/c3c127ee97ce0aa05347dda0fdf5ca8e" alt="" style="width: 100%; max-width: 104px; height: auto; animation-delay: -1s">Codex</li>
+<li style="display: flex; flex-direction: column; align-items: center; gap: 0; text-align: center; font-size: 13px; color: #cfc9b8"><img class="hop" src="/_blob/da7016e69bc09f291c99eaf3e108db84" alt="" style="width: 100%; max-width: 104px; height: auto; animation-delay: -2.1s">Cursor Agent</li>
+<li style="display: flex; flex-direction: column; align-items: center; gap: 0; text-align: center; font-size: 13px; color: #cfc9b8"><img class="hop" src="/_blob/053917f356779d99eb1e5eeeb7ed1864" alt="" style="width: 100%; max-width: 104px; height: auto; animation-delay: -3s">OMP</li>
+</ul>
+</div>
+
+<!-- La composition : Ledge Desktop en grand, le téléphone posé devant -->
+<div class="hero-wrap" style="position: relative; margin-top: 28px">
+<video data-loop="1" src="/_blob/0a81e7fa6c9c9d7114a802452efc37af" poster="/_blob/48a35d2767f7061beac188bf8935fb31" aria-label="L'atelier de Ledge Desktop en vidéo : les agents travaillent, Otto demande un accord et passe au rouge, on l'approuve dans À toi, il repart, puis il écrit à Nova et Bix termine" style="display: block; width: 100%; height: auto; aspect-ratio: 1440 / 900; object-fit: cover; border-radius: 18px; border: 1px solid #3a3d31; box-shadow: 0 50px 140px -30px rgba(96, 165, 250, 0.38), 0 30px 80px -40px rgba(255, 100, 103, 0.35)"></video>
+<div class="hero-phone" style="position: absolute; right: 4%; min-width: 96px; box-sizing: border-box; border: 6px solid #1b1c17; outline: 1px solid #55584a; border-radius: 13% / 6%; overflow: hidden; background: #0a0a0a; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.7)">
+<video data-loop="1" src="/_blob/bd8a41c17f009543437474c58647a1f6" poster="/_blob/8c762dcd39080dc23f45c8894c4f2e0b" aria-label="Ledge sur le téléphone, en vidéo : une question reçoit sa réponse, une commande est autorisée, puis les sessions et le point de Ledge où l'on règle une demande sur place" style="display: block; width: 100%; height: auto; aspect-ratio: 780 / 1688; object-fit: cover"></video>
+</div>
+</div>
+
+</div>
+</header>
+
+<!-- LES QUATRE ÉTATS, portés par les vraies mascottes -->
+<section aria-label="Les états d'un agent" style="padding: 0 max(20px, 4vw) 120px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 36px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 700; font-size: clamp(28px, 3.2vw, 44px); line-height: 1.05; letter-spacing: -0.02em; max-width: 760px; text-wrap: balance">Un coup d'œil suffit : la lumière d'un agent dit ce qu'il attend.</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: clamp(10px, 1.4vw, 16px)">
+<div style="background: #2a1414; border: 1px solid #5c2326; border-radius: 22px; padding: 8px clamp(14px, 2vw, 22px) clamp(16px, 2vw, 24px); display: flex; flex-direction: column; gap: 4px">
+<img class="breathe" src="/_blob/763443ae84a33efd39cdd747b33afe85" alt="" style="width: 132px; max-width: 90%; height: auto; margin-left: -12px">
+<span style="font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 700; font-size: clamp(19px, 5.2vw, 24px); line-height: 1.15; color: #ff9a8f">Votre accord</span>
+<span style="font-size: 15px; color: #e4c9c4">Il veut lancer une commande ou appliquer un plan.</span>
+</div>
+<div style="background: #2a2210; border: 1px solid #5e4a16; border-radius: 22px; padding: 8px clamp(14px, 2vw, 22px) clamp(16px, 2vw, 24px); display: flex; flex-direction: column; gap: 4px">
+<img class="breathe" src="/_blob/c0588876d664080c12b4195ac2e5f794" alt="" style="width: 132px; max-width: 90%; height: auto; margin-left: -12px; animation-delay: -1.3s">
+<span style="font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 700; font-size: clamp(19px, 5.2vw, 24px); line-height: 1.15; color: #fbbf24">Une question</span>
+<span style="font-size: 15px; color: #e6dcc0">Il a besoin que vous choisissiez pour continuer.</span>
+</div>
+<div style="background: #141d30; border: 1px solid #2b3d66; border-radius: 22px; padding: 8px clamp(14px, 2vw, 22px) clamp(16px, 2vw, 24px); display: flex; flex-direction: column; gap: 4px">
+<img class="hop" src="/_blob/33c746d3491b46d20577e542cfc2bf28" alt="" style="width: 132px; max-width: 90%; height: auto; margin-left: -12px">
+<span style="font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 700; font-size: clamp(19px, 5.2vw, 24px); line-height: 1.15; color: #8fbcff">Au travail</span>
+<span style="font-size: 15px; color: #c9d4ea">Il avance. Rien à faire, sinon suivre son fil.</span>
+</div>
+<div style="background: #11261c; border: 1px solid #24503b; border-radius: 22px; padding: 8px clamp(14px, 2vw, 22px) clamp(16px, 2vw, 24px); display: flex; flex-direction: column; gap: 4px">
+<img src="/_blob/bdfd6fc2e71d36f4e7f2ad0b26da1298" alt="" style="width: 132px; max-width: 90%; height: auto; margin-left: -12px">
+<span style="font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 700; font-size: clamp(19px, 5.2vw, 24px); line-height: 1.15; color: #5fe0a6">Disponible</span>
+<span style="font-size: 15px; color: #c4e2d3">Il a fini son tour et attend votre consigne.</span>
+</div>
+</div>
+</div>
+</section>
+
+<!-- DANS LEDGE : six moments, une capture en grand -->
+<section id="journee" style="padding: 0 max(20px, 4vw) 120px">
+<div style="max-width: 1200px; margin: 0 auto; background: #161d33; border: 1px solid #2a355c; border-radius: 32px; padding: clamp(24px, 4vw, 56px); box-sizing: border-box; display: flex; flex-direction: column; gap: 28px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: clamp(34px, 4.6vw, 64px); line-height: 1; letter-spacing: -0.03em; text-wrap: balance">Une journée dans Ledge</h2>
+<div role="group" aria-label="Moments de la journée" style="display: flex; flex-wrap: wrap; gap: 8px">
+<button type="button" class="press" onClick="{{ pick0 }}" aria-pressed="{{ on0 }}" style="min-height: 46px; padding: 0 18px; border-radius: 999px; border: 1px solid #44517f; font-size: 15px; font-weight: 500; cursor: pointer; background: {{ bg0 }}; color: {{ fg0 }}">Décider</button>
+<button type="button" class="press" onClick="{{ pick1 }}" aria-pressed="{{ on1 }}" style="min-height: 46px; padding: 0 18px; border-radius: 999px; border: 1px solid #44517f; font-size: 15px; font-weight: 500; cursor: pointer; background: {{ bg1 }}; color: {{ fg1 }}">Tout ce qui vous attend</button>
+<button type="button" class="press" onClick="{{ pick2 }}" aria-pressed="{{ on2 }}" style="min-height: 46px; padding: 0 18px; border-radius: 999px; border: 1px solid #44517f; font-size: 15px; font-weight: 500; cursor: pointer; background: {{ bg2 }}; color: {{ fg2 }}">Le point de Ledge</button>
+<button type="button" class="press" onClick="{{ pick3 }}" aria-pressed="{{ on3 }}" style="min-height: 46px; padding: 0 18px; border-radius: 999px; border: 1px solid #44517f; font-size: 15px; font-weight: 500; cursor: pointer; background: {{ bg3 }}; color: {{ fg3 }}">Lancer</button>
+<button type="button" class="press" onClick="{{ pick4 }}" aria-pressed="{{ on4 }}" style="min-height: 46px; padding: 0 18px; border-radius: 999px; border: 1px solid #44517f; font-size: 15px; font-weight: 500; cursor: pointer; background: {{ bg4 }}; color: {{ fg4 }}">Relire</button>
+</div>
+<p aria-live="polite" style="margin: 0; font-size: clamp(18px, 1.6vw, 22px); line-height: 1.45; color: #dfe4f3; max-width: 860px; min-height: 2.9em">{{ shotText }}</p>
+<div class="scroller">
+<div class="wide" style="display: grid; border: 1px solid #3a4775; border-radius: 16px; overflow: hidden; background: #0a0a0a; aspect-ratio: 1440 / 900; max-width: 100%; box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.9)">
+<video class="shot" data-loop="1" data-shot="0" src="/_blob/f57cfdc892cd49ba3c2fa3b3567529ae" poster="/_blob/c412859ac025bc1072b652b3ca9c39ca" aria-label="Une session en vidéo : le fil d'Otto avance, la demande d'accord arrive, on clique Autoriser, la commande tourne et les tests passent" style="grid-area: 1 / 1; width: 100%; height: 100%; object-fit: cover; display: block; opacity: {{ o0 }}"></video>
+<img class="shot" src="/_blob/d2759cb8fff9d07c6ef59d819ffb0266" alt="La page À toi : demandes des sessions, questions des rigs, MR et PR à corriger ou fusionner, travaux terminés" style="grid-area: 1 / 1; width: 100%; height: 100%; object-fit: cover; display: block; opacity: {{ o1 }}">
+<video class="shot" data-loop="1" data-shot="2" src="/_blob/51b028af134434e223cff5316c12de09" poster="/_blob/9e4ed5da5c34dab0dafb93e83a094044" aria-label="Le point de Ledge en vidéo : Ledge poste de lui-même ce qui attend, ce qui est terminé, ce qui est en cours et les rigs, une décision est réglée sur place, puis une question tapée reçoit sa réponse avec une carte pour passer le relais de Nova" style="grid-area: 1 / 1; width: 100%; height: 100%; object-fit: cover; display: block; opacity: {{ o2 }}"></video>
+<img class="shot" src="/_blob/75c38f9e5d2b9221258d31adcbc3f2ca" alt="Nouvelle session : le projet, l'agent, le modèle et le premier message" style="grid-area: 1 / 1; width: 100%; height: 100%; object-fit: cover; display: block; opacity: {{ o3 }}">
+<img class="shot" src="/_blob/f9edbcb5e82b24fe66c47e112fdbfe51" alt="Le fil d'Otto à gauche, ses modifications à droite avec le diff d'un fichier" style="grid-area: 1 / 1; width: 100%; height: 100%; object-fit: cover; display: block; opacity: {{ o4 }}">
+</div>
+</div>
+<p class="hint" style="margin: 0; font-size: 14px; color: #aab3d6">Faites glisser pour voir tout l'écran.</p>
+</div>
+</section>
+
+<!-- OPENRIG : des équipes entières, pilotées depuis Ledge -->
+<section id="openrig" style="padding: 0 max(20px, 4vw) 120px">
+<div style="max-width: 1200px; margin: 0 auto; background: #1d1730; border: 1px solid #3b2f63; border-radius: 32px; padding: clamp(24px, 4vw, 56px); box-sizing: border-box; display: flex; flex-direction: column; gap: 32px">
+<div style="display: flex; flex-direction: column; gap: 14px; max-width: 820px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: clamp(34px, 4.6vw, 64px); line-height: 1; letter-spacing: -0.03em; text-wrap: balance">Une équipe entière, avec OpenRig.</h2>
+<p style="margin: 0; font-size: clamp(18px, 1.5vw, 21px); color: #ded8f0">OpenRig fait travailler plusieurs agents comme une équipe : un pilote, des développeurs, une revue. Ledge en est le poste de pilotage. Vous lancez l'équipe, vous la voyez s'organiser, et ses questions vous arrivent comme celles de n'importe quel agent.</p>
+</div>
+<div class="rig-wrap" style="position: relative">
+<div class="scroller"><video class="wide" data-loop="1" src="/_blob/957abe21ccb20c518519acc5697469dc" poster="/_blob/e703c8621abe147353aa081ceb6ceecd" aria-label="OpenRig dans Ledge Desktop, en vidéo : clic sur Lancer, choix de la spec equipe-produit, un siège ajouté, l'équipe s'assemble siège par siège dans la topologie, puis une question du pilote arrive dans À toi et reçoit sa réponse" style="display: block; width: 100%; height: auto; aspect-ratio: 1440 / 900; object-fit: cover; border-radius: 16px; border: 1px solid #4a3c7a; box-shadow: 0 40px 110px -40px rgba(167, 139, 250, 0.55)"></video></div>
+<div class="rig-phone" style="position: absolute; right: 4%; min-width: 92px; box-sizing: border-box; border: 6px solid #120e1f; outline: 1px solid #5a4c8a; border-radius: 13% / 6%; overflow: hidden; background: #0a0a0a; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.7)">
+<img src="/_blob/cb2c38ac834025bb538779ff25a34a79" alt="Le même rig sur le téléphone : ses cinq sièges, ses permissions, sa topologie et sa file" style="display: block; width: 100%; height: auto">
+</div>
+</div>
+<p class="hint" style="margin: 0; font-size: 14px; color: #b3abcf">Faites glisser pour voir tout l'écran.</p>
+<dl style="margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px 40px">
+<div style="border-top: 1px solid #4a3c7a; padding-top: 16px"><dt style="font-weight: 600; font-size: 18px">Lancer</dt><dd style="margin: 6px 0 0; color: #cbc4e2; font-size: 16px">Depuis une spec enregistrée, un rig arrêté, ou en décrivant le besoin : l'operator propose l'équipe.</dd></div>
+<div style="border-top: 1px solid #4a3c7a; padding-top: 16px"><dt style="font-weight: 600; font-size: 18px">Régler</dt><dd style="margin: 6px 0 0; color: #cbc4e2; font-size: 16px">Le nombre de sièges par rôle, leur agent, leur modèle et leurs permissions, même quand le rig tourne.</dd></div>
+<div style="border-top: 1px solid #4a3c7a; padding-top: 16px"><dt style="font-weight: 600; font-size: 18px">Répondre</dt><dd style="margin: 6px 0 0; color: #cbc4e2; font-size: 16px">Les décisions et les questions de l'équipe arrivent dans « À toi », sur le PC comme sur le téléphone.</dd></div>
+<div style="border-top: 1px solid #4a3c7a; padding-top: 16px"><dt style="font-weight: 600; font-size: 18px">Garder la main</dt><dd style="margin: 6px 0 0; color: #cbc4e2; font-size: 16px">Chaque action affiche la commande <code style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 15px; color: #fbbf24">rig</code> qu'elle lance. Un instantané permet de revenir en arrière.</dd></div>
+</dl>
+<p style="margin: 0; font-size: 15px; color: #b3abcf">OpenRig s'installe à part. Ledge le pilote, il ne le remplace pas. <a href="https://openrig.dev/" style="color: #ded8f0; display: inline-block; padding: 12px 0">Découvrir OpenRig</a></p>
+</div>
+</section>
+
+<!-- LES AGENTS SE PARLENT : deuxième scène jouée en direct -->
+<section style="padding: 0 max(20px, 4vw) 120px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 12px; max-width: 760px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: clamp(34px, 4.6vw, 64px); line-height: 1; letter-spacing: -0.03em; text-wrap: balance">Vos agents se parlent.</h2>
+<p style="margin: 0; font-size: clamp(18px, 1.5vw, 21px); color: #cfc9b8">Un agent en trouve un autre avec <code style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 0.9em; color: #fbbf24">ledge who</code> et lui écrit avec <code style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 0.9em; color: #fbbf24">ledge send</code>. Ledge remet le message au prochain moment libre du destinataire, sans l'interrompre.</p>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px">
+<div style="background: #0c0c0d; border: 1px solid #34372c; border-radius: 16px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; min-height: 300px; min-width: 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px; line-height: 1.55">
+<div style="display: flex; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid #2a2a2a"><span style="font-weight: 500; color: #f3eee2">Claude Code</span><span style="color: #8f8a7c">otto · ledge</span></div>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<sc-for list="{{ bLeft }}" as="l" hint-placeholder-count="3"><div class="ln" style="white-space: pre-wrap; overflow-wrap: anywhere; color: {{ l.c }}; background: {{ l.bg }}; padding: {{ l.p }}; border-radius: 6px">{{ l.t }}</div></sc-for>
+</div>
+</div>
+<div style="background: #0c0c0d; border: 1px solid #34372c; border-radius: 16px; padding: 14px 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; min-height: 300px; min-width: 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px; line-height: 1.55">
+<div style="display: flex; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid #2a2a2a"><span style="font-weight: 500; color: #f3eee2">Codex CLI</span><span style="color: #8f8a7c">nova · ledge</span></div>
+<div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<sc-for list="{{ bRight }}" as="l" hint-placeholder-count="3"><div class="ln" style="white-space: pre-wrap; overflow-wrap: anywhere; color: {{ l.c }}; background: {{ l.bg }}; padding: {{ l.p }}; border-radius: 6px">{{ l.t }}</div></sc-for>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; font-size: 14px; color: #b9b3a3">
+<button type="button" onClick="{{ bToggle }}" style="min-height: 44px; padding: 0; border: 0; background: none; color: #f3eee2; font-size: 14px; text-decoration: underline; text-underline-offset: 4px; cursor: pointer">{{ bToggleLabel }}</button>
+<button type="button" onClick="{{ bReplay }}" style="min-height: 44px; padding: 0; border: 0; background: none; color: #f3eee2; font-size: 14px; text-decoration: underline; text-underline-offset: 4px; cursor: pointer">Rejouer</button>
+<span style="flex: 1; min-width: 200px">{{ bCaption }}</span>
+<span><span style="color: #fbbf24">En ambre</span>, les commandes de Ledge.</span>
+</div>
+</div>
+</section>
+
+<!-- ET AUSSI -->
+<section style="padding: 0 max(20px, 4vw) 120px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 32px 72px">
+<h2 style="flex: 1 1 260px; min-width: 0; margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 700; font-size: clamp(28px, 3.2vw, 44px); line-height: 1.05; letter-spacing: -0.02em; text-wrap: balance">Et pendant ce temps, Ledge s'occupe du reste.</h2>
+<dl style="flex: 3 1 560px; min-width: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 48px">
+<div style="padding: 18px 0; border-top: 1px solid #34372c"><dt style="font-weight: 600; font-size: 18px">Archiver, reprendre</dt><dd style="margin: 4px 0 0; color: #b9b3a3; font-size: 16px">Une session archivée reprend plus tard sur la même conversation, avec un autre modèle si vous voulez.</dd></div>
+<div style="padding: 18px 0; border-top: 1px solid #34372c"><dt style="font-weight: 600; font-size: 18px">Le relais de contexte</dt><dd style="margin: 4px 0 0; color: #b9b3a3; font-size: 16px">Contexte presque plein ? La session rédige un brief, une neuve reprend là où elle s'arrête.</dd></div>
+<div style="padding: 18px 0; border-top: 1px solid #34372c"><dt style="font-weight: 600; font-size: 18px">MR et PR</dt><dd style="margin: 4px 0 0; color: #b9b3a3; font-size: 16px">GitHub et GitLab : le pipeline, le job qui échoue, « demander à l'agent de corriger », fusionner.</dd></div>
+<div style="padding: 18px 0; border-top: 1px solid #34372c"><dt style="font-weight: 600; font-size: 18px">Vos serveurs aussi</dt><dd style="margin: 4px 0 0; color: #b9b3a3; font-size: 16px">Jusqu'à 20 machines Linux par leur alias SSH, sans ouvrir un seul port.</dd></div>
+<div style="padding: 18px 0; border-top: 1px solid #34372c"><dt style="font-weight: 600; font-size: 18px">Les quotas</dt><dd style="margin: 4px 0 0; color: #b9b3a3; font-size: 16px">Les limites de vos comptes Claude Code, Codex et Cursor, avec une alerte avant le mur.</dd></div>
+<div style="padding: 18px 0; border-top: 1px solid #34372c"><dt style="font-weight: 600; font-size: 18px">Vos notes</dt><dd style="margin: 4px 0 0; color: #b9b3a3; font-size: 16px">Des notes Markdown que les agents lisent, et qu'ils peuvent proposer de corriger.</dd></div>
+<div style="padding: 18px 0; border-top: 1px solid #34372c"><dt style="font-weight: 600; font-size: 18px">Le navigateur de l'agent</dt><dd style="margin: 4px 0 0; color: #b9b3a3; font-size: 16px">Son écran en direct quand il pilote un navigateur. Vous regardez, Ledge ne touche à rien.</dd></div>
+<div style="padding: 18px 0; border-top: 1px solid #34372c"><dt style="font-weight: 600; font-size: 18px">Des terminaux lisibles</dt><dd style="margin: 4px 0 0; color: #b9b3a3; font-size: 16px">Chaque commande de vos shells est marquée : réussie, échouée, sa durée, et un clic pour la relancer.</dd></div>
+</dl>
+</div>
+</section>
+
+<!-- PARTOUT AVEC VOUS -->
+<section id="partout" style="padding: 0 max(20px, 4vw) 120px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px">
+<h2 style="margin: 0 0 16px; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: clamp(34px, 4.6vw, 64px); line-height: 1; letter-spacing: -0.03em; max-width: 900px; text-wrap: balance">La demande arrive là où vous êtes.</h2>
+
+<!-- Le terminal : la démonstration image par image -->
+<div style="background: #13261d; border: 1px solid #24483a; border-radius: 32px; padding: clamp(24px, 4vw, 56px); box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 32px 56px">
+<div style="flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+<h3 style="margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 700; font-size: clamp(28px, 3vw, 40px); line-height: 1.05; letter-spacing: -0.02em">Dans un terminal</h3>
+<p style="margin: 0; color: #cfe3d8"><code style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 16px; color: #f3eee2">ledge tui</code> ouvre le même Ledge dans un onglet WSL, sur un serveur en SSH ou dans un volet tmux. Une touche suffit pour répondre.</p>
+</div>
+<div style="flex: 4 1 560px; min-width: 0; max-width: 876px; border: 1px solid #2f5a48; border-radius: 16px; overflow: hidden; background: #0c0c0d; box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.9)">
+<div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #262626; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px; color: #a3a3a3">
+<span style="color: #4ade9a" aria-hidden="true">$</span>
+<span style="color: #fafafa">ledge tui</span>
+</div>
+<div class="scroller">
+<div class="wide" style="aspect-ratio: 1750 / 1056; overflow: hidden">
+<img src="/_blob/5eb625aab517fa0f9aaa207df79ffaac" alt="Ledge dans un terminal, en treize images : la vue d'ensemble avec deux demandes, « y » autorise Otto, un chiffre répond à la question de Luna, le terminal d'Iris avance, son fil s'ouvre, puis Demander à Ledge et Nouvelle session" style="width: 100%; height: auto; display: block; transform: translateY({{ tuiY }})">
+</div>
+</div>
+<div style="height: 3px; background: #262626"><div style="height: 3px; background: #f07a62; width: {{ tuiProg }}; transition: width .25s linear"></div></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 8px 12px; min-height: 60px; box-sizing: border-box">
+<button type="button" class="press" onClick="{{ tuiToggle }}" aria-label="{{ tuiBtnLabel }}" style="flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; border: 1px solid #3a3a3a; background: #1a1a1a; color: #fafafa; cursor: pointer; display: flex; align-items: center; justify-content: center">
+<sc-if value="{{ tuiPlaying }}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="#fafafa"/><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="#fafafa"/></svg></sc-if>
+<sc-if value="{{ tuiPaused }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9-5.5z" fill="#fafafa"/></svg></sc-if>
+</button>
+<sc-if value="{{ tuiKeyA }}" hint-placeholder-val="{{ false }}"><kbd class="pop" style="flex-shrink: 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; color: #0a0a0a; background: #fafafa; border-radius: 7px; padding: 4px 10px; box-shadow: 0 2px 0 #8a8a8a">{{ tuiKey }}</kbd></sc-if>
+<sc-if value="{{ tuiKeyB }}" hint-placeholder-val="{{ false }}"><kbd class="pop" style="flex-shrink: 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; color: #0a0a0a; background: #fafafa; border-radius: 7px; padding: 4px 10px; box-shadow: 0 2px 0 #8a8a8a">{{ tuiKey }}</kbd></sc-if>
+<span style="flex: 1; min-width: 0; font-size: 14px; color: #d4d4d4">{{ tuiCaption }}</span>
+<span style="flex-shrink: 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: #a3a3a3; font-variant-numeric: tabular-nums">{{ tuiCount }}</span>
+</div>
+</div>
+</div>
+
+<!-- L'encoche -->
+<div style="background: #1b1c17; border: 1px solid #34372c; border-radius: 32px; padding: 0 clamp(16px, 4vw, 56px); box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 0 56px">
+<div style="flex: 3 1 420px; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-bottom: clamp(24px, 4vw, 48px)">
+<video data-loop="1" src="/_blob/6740b10f283bcdaa1eca937d5846b44d" poster="/_blob/2e536f0a06b994ffcd02e4a321670c46" aria-label="L'encoche en vidéo : une demande d'accord arrive tout de suite et on clique Autoriser, puis Ledge annonce en une fois que Bix et Pim ont fini et qu'une décision attend, puis la question urgente d'un rig reçoit sa réponse sur place" style="width: 620px; max-width: 100%; height: auto; aspect-ratio: 1240 / 460; display: block"></video>
+</div>
+<div style="flex: 2 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: clamp(24px, 4vw, 48px) 0">
+<h3 style="margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 700; font-size: clamp(28px, 3vw, 40px); line-height: 1.05; letter-spacing: -0.02em">En haut de l'écran</h3>
+<p style="margin: 0; color: #cfc9b8">L'encoche, sur Windows. Une demande d'accord y arrive tout de suite, avec ses deux réponses. Le reste, Ledge le regroupe et vous le dit en une fois, sans une bulle par agent. Vous continuez à taper là où vous étiez.</p>
+</div>
+</div>
+
+<!-- Le téléphone -->
+<div style="background: #2a1414; border: 1px solid #5c2326; border-radius: 32px; padding: clamp(24px, 4vw, 56px) clamp(16px, 4vw, 56px) 0; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 28px 56px; overflow: hidden">
+<div style="flex: 2 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 12px; padding-bottom: clamp(24px, 4vw, 56px)">
+<h3 style="margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 700; font-size: clamp(28px, 3vw, 40px); line-height: 1.05; letter-spacing: -0.02em">Dans la poche</h3>
+<p style="margin: 0; color: #ecd6d1">Une application à poser sur l'écran d'accueil, chiffrée de bout en bout. Décidez, suivez une session, lancez-en une, fusionnez une PR, menez vos rigs. Ce qui engage demande Face ID ou votre empreinte.</p>
+</div>
+<div style="flex: 4 1 460px; min-width: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(8px, 1.6vw, 20px); align-items: end">
+<img src="/_blob/9d5e0b65d1c86f9cd17e639176df543c" alt="L'onglet Sessions : la liste par projet, les filtres et le bouton Nouvelle" style="width: 100%; height: auto; display: block; box-sizing: border-box; border: 5px solid #120a0a; border-bottom: 0; border-radius: 22px 22px 0 0; margin-bottom: -28%">
+<video data-loop="1" src="/_blob/bd8a41c17f009543437474c58647a1f6" poster="/_blob/8c762dcd39080dc23f45c8894c4f2e0b" aria-label="L'application en vidéo : À toi, Sessions, le fil d'une session, puis le chat avec Ledge" style="width: 100%; height: auto; aspect-ratio: 780 / 1688; object-fit: cover; display: block; box-sizing: border-box; border: 5px solid #120a0a; border-bottom: 0; border-radius: 22px 22px 0 0; margin-bottom: -12%"></video>
+<img src="/_blob/0224301c4cc55c815cb8ac88d165f2da" alt="L'onglet MR et PR : trois demandes ouvertes avec l'état de leur pipeline" style="width: 100%; height: auto; display: block; box-sizing: border-box; border: 5px solid #120a0a; border-bottom: 0; border-radius: 22px 22px 0 0; margin-bottom: -28%">
+</div>
+</div>
+
+</div>
+</section>
+
+<!-- SÉCURITÉ -->
+<section id="securite" style="padding: 0 max(20px, 4vw) 120px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 32px 72px">
+<div style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: clamp(34px, 4.6vw, 64px); line-height: 1; letter-spacing: -0.03em; text-wrap: balance">Rien sans votre clic.</h2>
+<p style="margin: 0; color: #cfc9b8">Ledge propose, vous décidez. Et personne d'autre ne peut décider à votre place.</p>
+</div>
+<dl style="flex: 2 1 480px; min-width: 0; margin: 0; display: flex; flex-direction: column">
+<div style="display: flex; flex-wrap: wrap; gap: 4px 32px; padding: 20px 0; border-top: 1px solid #34372c">
+<dt style="flex: 0 0 230px; font-weight: 600">L'assistant lit, il n'agit pas</dt>
+<dd style="flex: 1 1 280px; min-width: 0; margin: 0; color: #b9b3a3">Il tourne en lecture seule. Chaque action passe par une carte que vous confirmez.</dd>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 4px 32px; padding: 20px 0; border-top: 1px solid #34372c">
+<dt style="flex: 0 0 230px; font-weight: 600">Tout reste chez vous</dt>
+<dd style="flex: 1 1 280px; min-width: 0; margin: 0; color: #b9b3a3">Le démon n'écoute que sur <code style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 15px; color: #f3eee2">127.0.0.1</code>. Vos serveurs sont joints par votre SSH.</dd>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 4px 32px; padding: 20px 0; border-top: 1px solid #34372c">
+<dt style="flex: 0 0 230px; font-weight: 600">Le relais ne lit rien</dt>
+<dd style="flex: 1 1 280px; min-width: 0; margin: 0; color: #b9b3a3">Entre le PC et le téléphone ne passent que des messages chiffrés. Vous pouvez héberger le relais.</dd>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 4px 32px; padding: 20px 0; border-top: 1px solid #34372c">
+<dt style="flex: 0 0 230px; font-weight: 600">Un code à comparer</dt>
+<dd style="flex: 1 1 280px; min-width: 0; margin: 0; color: #b9b3a3">Un appareil n'accède à rien avant que vous ayez vérifié le même code à six chiffres sur les deux écrans.</dd>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 4px 32px; padding: 20px 0; border-top: 1px solid #34372c; border-bottom: 1px solid #34372c">
+<dt style="flex: 0 0 230px; font-weight: 600">Vos agents restent libres</dt>
+<dd style="flex: 1 1 280px; min-width: 0; margin: 0; color: #b9b3a3">Ledge s'ajoute à leurs hooks et rend toujours la main. Sans lui, vos sessions continuent comme avant.</dd>
+</div>
+</dl>
+</div>
+</section>
+
+<!-- INSTALLER : la table de l'atelier -->
+<section id="installer" style="padding: 0 max(20px, 4vw) 96px">
+<div style="max-width: 1200px; margin: 0 auto; background: #c8ad82; color: #1c1710; border-radius: 32px; padding: clamp(24px, 4vw, 56px); box-sizing: border-box; display: flex; flex-direction: column; gap: 36px">
+<div style="display: flex; flex-direction: column; gap: 12px; max-width: 760px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: clamp(34px, 4.6vw, 64px); line-height: 1; letter-spacing: -0.03em">Installez-vous.</h2>
+<p style="margin: 0; color: #3b3222">Il vous faut Windows 10 ou 11 avec WSL2, Node 22.13 ou plus récent, Git et tmux, et au moins un agent déjà installé.</p>
+</div>
+<ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px">
+<li style="background: #1c1710; color: #f3eee2; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+<span style="font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: 40px; line-height: 1; color: #c8ad82">1</span>
+<h3 style="margin: 0; font-size: 20px; font-weight: 600">Le démon, dans WSL</h3>
+<div style="background: #000000; border-radius: 10px; padding: 12px 14px; overflow-x: auto"><code style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; white-space: nowrap">npm i -g @paradow/ledge &amp;&amp; ledge setup</code></div>
+<p style="margin: 0; color: #cfc9b8; font-size: 15px">Branche vos agents et démarre le service.</p>
+</li>
+<li style="background: #1c1710; color: #f3eee2; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+<span style="font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: 40px; line-height: 1; color: #c8ad82">2</span>
+<h3 style="margin: 0; font-size: 20px; font-weight: 600">Ledge Desktop, sur Windows</h3>
+<a class="press" href="#installer" style="text-decoration: none; background: #f3eee2; color: #14160f; font-weight: 600; padding: 0 18px; border-radius: 999px; min-height: 46px; padding-block: 8px; box-sizing: border-box; display: flex; align-items: center; align-self: flex-start">Télécharger pour Windows</a>
+<p style="margin: 0; color: #cfc9b8; font-size: 15px">L'encoche et la fenêtre, une seule application. [LIEN DE TÉLÉCHARGEMENT]</p>
+</li>
+<li style="background: #1c1710; color: #f3eee2; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+<span style="font-family: 'Bricolage Grotesque', 'Geist', sans-serif; font-weight: 800; font-size: 40px; line-height: 1; color: #c8ad82">3</span>
+<h3 style="margin: 0; font-size: 20px; font-weight: 600">Votre première session</h3>
+<div style="background: #000000; border-radius: 10px; padding: 12px 14px; overflow-x: auto"><code style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 14px; white-space: nowrap">ledge claude</code></div>
+<p style="margin: 0; color: #cfc9b8; font-size: 15px">Ou « Nouvelle session » dans Ledge Desktop.</p>
+</li>
+</ol>
+<ul style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 40px; color: #3b3222; font-size: 15px">
+<li>Ledge Desktop et l'encoche sont pour Windows. Le démon tourne sous Linux : WSL2 ou un serveur.</li>
+<li>Une session lancée sans Ledge reste visible, en lecture seule.</li>
+<li>Le téléphone agit sur le PC auquel il est lié, pas sur vos autres machines.</li>
+<li>Le relais hébergé est sur invitation. Vous pouvez héberger le vôtre.</li>
+</ul>
+</div>
+</section>
+
+<footer style="padding: 0 max(20px, 4vw) 48px">
+<div style="max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 32px; font-size: 15px; color: #b9b3a3">
+<span>Ledge 0.60.0. Une nouvelle façon de travailler avec vos agents.</span>
+<div style="display: flex; flex-wrap: wrap; gap: 4px 24px">
+<a href="#top" style="color: #cfc9b8; min-height: 44px; display: flex; align-items: center">Visite guidée</a>
+<a href="#top" style="color: #cfc9b8; min-height: 44px; display: flex; align-items: center">Nouveautés</a>
+<a href="#top" style="color: #cfc9b8; min-height: 44px; display: flex; align-items: center">GitHub</a>
+</div>
+</div>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"autoplay":{"editor":"boolean","default":true},"$preview":{"width":1440,"height":9450}}'>
+class Component extends DCLogic {
+constructor(props) {
+super(props);
+this.state = { shot: 0, touched: false, tui: 0, tuiPlay: false, a: 4, typed: 999, aPlay: false, b: 5, bPlay: false };
+this.t = {};
+this.prompt = 'Câble la liste des sessions sur le store, puis lance les tests.';
+this.dur = { a: [500, 700, 1000, 1100, 3000, 450, 1700, 1100, 3600, 2600], b: [1500, 900, 1300, 2000, 1400, 1800, 3400] };
+var W = '#e5e5e5', D = '#8f8a7c', G = '#5fe0a6', A = '#fbbf24', N = 'transparent', P0 = '0', P1 = '8px 10px';
+this.aScript = [
+{ f: 1, t: '❯ Vous\n' + this.prompt, c: W, bg: '#1d2126', p: P1 },
+{ f: 2, t: '● Je câble la liste sur le store du daemon.', c: W },
+{ f: 3, t: '● Update(src/list/SessionList.tsx)', c: W },
+{ f: 3, t: '  ⎿ 7 ajouts, 2 suppressions', c: D },
+{ f: 4, t: '● Bash(npm test)', c: W },
+{ f: 4, u: 5, t: '  Do you want to proceed?\n  ❯ 1. Yes\n    2. Yes, and don’t ask again for npm test\n    3. No, and tell Claude what to do differently', c: A },
+{ f: 6, u: 6, t: '  ⎿ Running…', c: D },
+{ f: 7, t: '  ⎿ 47 passed (1,8 s)', c: G },
+{ f: 8, t: '● Les tests passent. La liste est câblée.', c: W }
+];
+this.aCaptions = ['Vous donnez une consigne à Otto.', 'Vous donnez une consigne à Otto.', 'Otto travaille. Vous faites autre chose.', 'Otto travaille. Vous faites autre chose.', 'Otto a besoin de votre accord : la demande arrive dans l’encoche et sur le téléphone.', 'Vous autorisez depuis l’encoche.', 'Ledge tape la réponse dans le terminal d’Otto. Le téléphone le sait aussi.', 'Otto repart.', 'Otto a terminé : l’encoche vous le dit.', 'Otto attend votre prochaine consigne.'];
+this.nLines = ['Nova lit transport/ssh.ts', 'Nova lit transport/ssh.ts', 'Otto lit src/list/SessionList.tsx', 'Otto modifie SessionList.tsx', '', '', 'Otto lance npm test', 'Otto lance npm test', '', 'Otto est disponible'];
+this.bL = [
+{ f: 0, t: '● Les tests de l’overlay passent.', c: W },
+{ f: 1, t: '● Je préviens Nova, qui attend ça pour rebaser.', c: W },
+{ f: 2, t: '● Bash(ledge send nova "Les tests passent, tu peux rebaser")', c: A },
+{ f: 3, u: 4, t: '  ⎿ En attente : Nova travaille.', c: D },
+{ f: 5, t: '  ⎿ Remis à Nova.', c: G }
+];
+this.bR = [
+{ f: 0, t: '• Je corrige la reconnexion ssh du fleet.', c: W },
+{ f: 0, u: 3, t: '  ◦ pnpm vitest run fleet/reconnect', c: D },
+{ f: 4, t: '  ✓ 12 tests passent', c: G },
+{ f: 4, t: '• Reconnexion corrigée.', c: W },
+{ f: 5, t: '✉ Otto\nLes tests passent, tu peux rebaser', c: W, bg: '#2a2210', p: P1 },
+{ f: 6, t: '• Bien reçu. Je rebase sur main.', c: W }
+];
+this.bCaptions = ['Otto et Nova travaillent chacun de leur côté.', 'Otto et Nova travaillent chacun de leur côté.', 'Otto écrit à Nova.', 'Nova est occupée : le message attend.', 'Nova termine son tour.', 'Ledge remet le message à Nova.', 'Nova enchaîne.'];
+this.shots = [
+'Le fil d’un agent avance sous vos yeux. Quand il demande un accord, autorisez, refusez, ou refusez en expliquant quoi faire à la place.',
+'Une seule page pour tout ce qui attend votre décision : les demandes des sessions, les questions de vos équipes, les PR prêtes à fusionner.',
+'Ledge prend la parole le premier : ce qui vous attend, ce qui est terminé, ce qui est en cours, vos rigs. Chaque ligne se règle sur place. Posez-lui aussi vos questions : il cite ses sources et propose l’action en carte.',
+'Un premier message, puis l’agent, son modèle, le projet et la machine. La session rejoint sa table.',
+'Le fil d’un agent d’un côté, ses modifications de l’autre, fichier par fichier. Divisez l’écran comme dans un éditeur de code.'
+];
+this.tuiFrames = [
+{ k: '', ms: 2800, c: 'Deux sessions vous attendent.' },
+{ k: 'y', ms: 2400, c: '« y » autorise Otto : il repart au travail.' },
+{ k: 'tab', ms: 2400, c: 'Tab passe à la suivante : Luna pose une question.' },
+{ k: '2', ms: 2400, c: 'Un chiffre répond. Plus personne n’attend.' },
+{ k: 'j', ms: 1700, c: '« j » descend sur Iris : son terminal en direct.' },
+{ k: '', ms: 1500, c: 'Iris avance : elle corrige l’image d’en-tête.' },
+{ k: '', ms: 1900, c: 'Lighthouse repasse au vert.' },
+{ k: '↵', ms: 2800, c: 'Entrée ouvre le fil de la session.' },
+{ k: 'esc', ms: 1300, c: 'Retour à la vue d’ensemble.' },
+{ k: '/', ms: 2000, c: 'Demander à Ledge : une question sur toutes les sessions.' },
+{ k: '↵', ms: 3400, c: 'Ledge lit les sessions et résume où en est chacune.' },
+{ k: '+', ms: 3000, c: 'Nouvelle session : une consigne, un agent, un projet.' },
+{ k: 'esc', ms: 2400, c: 'Tout le monde travaille.' }
+];
+}
+tuiStep() {
+var self = this;
+if (this.tuiTimer) clearTimeout(this.tuiTimer);
+if (!this.state.tuiPlay) return;
+this.tuiTimer = setTimeout(function () {
+self.setState({ tui: (self.state.tui + 1) % self.tuiFrames.length }, function () { self.tuiStep(); });
+}, this.tuiFrames[this.state.tui].ms);
+}
+tick(key) {
+var self = this;
+if (this.t[key]) clearTimeout(this.t[key]);
+if (!this.state[key + 'Play']) return;
+var step = this.state[key];
+if (key === 'a' && step === 0 && this.state.typed < this.prompt.length) {
+this.t[key] = setTimeout(function () {
+self.setState({ typed: self.state.typed + 1 }, function () { self.tick(key); });
+}, 34);
+return;
+}
+this.t[key] = setTimeout(function () {
+var next = (self.state[key] + 1) % self.dur[key].length;
+var ns = {};
+ns[key] = next;
+if (key === 'a' && next === 0) ns.typed = 0;
+self.setState(ns, function () { self.tick(key); });
+}, this.dur[key][step]);
+}
+play(key, from) {
+var self = this;
+var ns = {};
+ns[key + 'Play'] = true;
+if (from === 0) { ns[key] = 0; if (key === 'a') ns.typed = 0; }
+this.setState(ns, function () { self.tick(key); });
+}
+componentDidMount() {
+var still = false;
+try { still = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+if (still || this.props.autoplay === false) return;
+var self = this;
+this.timer = setInterval(function () {
+if (self.state.touched) return;
+self.setState({ shot: (self.state.shot + 1) % self.shots.length });
+}, 21000);
+this.setState({ tuiPlay: true }, function () { self.tuiStep(); });
+this.play('b', 0);
+try { var vids = document.querySelectorAll('video[data-loop]'); for (var i = 0; i < vids.length; i++) { vids[i].muted = true; vids[i].loop = true; vids[i].playsInline = true; vids[i].setAttribute('playsinline', ''); var pr = vids[i].play(); if (pr && pr.catch) pr.catch(function () {}); } } catch (e) {}
+}
+componentDidUpdate(prevProps, prevState) {
+if (prevState && prevState.shot !== this.state.shot) {
+try {
+var v = document.querySelector('video[data-shot="' + this.state.shot + '"]');
+if (v) { v.currentTime = 0; var pr = v.play(); if (pr && pr.catch) pr.catch(function () {}); }
+} catch (e) {}
+}
+}
+componentWillUnmount() {
+if (this.timer) clearInterval(this.timer);
+if (this.tuiTimer) clearTimeout(this.tuiTimer);
+if (this.t.a) clearTimeout(this.t.a);
+if (this.t.b) clearTimeout(this.t.b);
+}
+renderVals() {
+var self = this;
+var s = (this.state && this.state.shot) || 0;
+var v = {};
+var n = this.tuiFrames.length;
+var t = (this.state && this.state.tui) || 0;
+var f = this.tuiFrames[t];
+var playing = !!(this.state && this.state.tuiPlay);
+v.tuiY = '-' + (t * 100 / n).toFixed(4) + '%';
+v.tuiProg = ((t + 1) * 100 / n).toFixed(2) + '%';
+v.tuiKey = f.k;
+v.tuiKeyA = f.k !== '' && t % 2 === 0;
+v.tuiKeyB = f.k !== '' && t % 2 === 1;
+v.tuiCaption = f.c;
+v.tuiCount = (t + 1) + ' / ' + n;
+v.tuiPlaying = playing;
+v.tuiPaused = !playing;
+v.tuiBtnLabel = playing ? 'Mettre la démonstration en pause' : 'Lire la démonstration';
+v.tuiToggle = function () {
+self.setState({ tuiPlay: !self.state.tuiPlay }, function () { self.tuiStep(); });
+};
+var st = this.state || {};
+var a = st.a || 0, b = st.b || 0;
+var vis = function (list, step) {
+return list.filter(function (l) { return step >= l.f && (l.u === undefined || step <= l.u); })
+.map(function (l) { return { t: l.t, c: l.c, bg: l.bg || 'transparent', p: l.p || '0' }; });
+};
+v.aLines = vis(this.aScript, a);
+v.aTyped = a === 0 ? this.prompt.slice(0, st.typed || 0) : '';
+v.aCaption = this.aCaptions[a];
+v.aToggleLabel = st.aPlay ? 'Pause' : 'Lecture';
+v.aToggle = function () { if (self.state.aPlay) { self.setState({ aPlay: false }, function () { self.tick('a'); }); } else { self.play('a'); } };
+v.aReplay = function () { self.play('a', 0); };
+v.aApprove = function () { if (self.state.a === 4) { self.setState({ a: 5, aPlay: true }, function () { self.tick('a'); }); } };
+var ask = a === 4 || a === 5, done = a === 8;
+v.nAsk = ask; v.nDone = done; v.nRest = !ask && !done;
+v.nLine = this.nLines[a];
+v.nW = ask || done ? '400px' : '300px';
+v.nH = ask ? '128px' : done ? '68px' : '38px';
+v.nBtn = a === 5 ? '#d11827' : '#a50f1a';
+v.nBtnT = a === 5 ? 'scale(0.94)' : 'none';
+v.pCard = ask; v.pTaken = a === 6; v.pEmpty = !ask && a !== 6;
+v.pCount = ask ? '1 demande' : '';
+v.bLeft = vis(this.bL, b);
+v.bRight = vis(this.bR, b);
+v.bCaption = this.bCaptions[b];
+v.bToggleLabel = st.bPlay ? 'Pause' : 'Lecture';
+v.bToggle = function () { if (self.state.bPlay) { self.setState({ bPlay: false }, function () { self.tick('b'); }); } else { self.play('b'); } };
+v.bReplay = function () { self.play('b', 0); };
+v.shotText = this.shots[s];
+for (var i = 0; i < this.shots.length; i++) {
+(function (k) {
+v['o' + k] = s === k ? 1 : 0;
+v['on' + k] = s === k ? 'true' : 'false';
+v['bg' + k] = s === k ? '#f3eee2' : 'transparent';
+v['fg' + k] = s === k ? '#14160f' : '#dfe4f3';
+v['pick' + k] = function () { self.setState({ shot: k, touched: true }); };
+})(i);
+}
+return v;
+}
+}
+</script>
+</body>
+</html>

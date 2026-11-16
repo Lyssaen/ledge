@@ -1,0 +1,54 @@
+---
+import { site } from '../config.ts';
+import { mediaFor } from '../data/media.ts';
+import type { Catalogue, Locale } from '../i18n/index.ts';
+import LoopVideo from './LoopVideo.astro';
+import TopBar from './TopBar.astro';
+
+interface Props {
+  t: Catalogue;
+  lang: Locale;
+}
+const { t, lang } = Astro.props;
+// The agents' names are product names: they read the same in every language.
+const agents = [
+  { name: 'Claude Code', bot: 'mascot-bot-claude.png' },
+  { name: 'Codex', bot: 'mascot-bot-codex.png' },
+  { name: 'Cursor Agent', bot: 'mascot-bot-cursor.png' },
+  { name: 'OMP', bot: 'mascot-bot-omp.png' }
+];
+const media = mediaFor(Astro.currentLocale);
+---
+
+<header class="hero">
+  <div class="page stack hero__inner">
+    <TopBar t={t} lang={lang} />
+
+    <h1 id="top" class="hero__title">{t.hero.titleLines.map((line, i) => <>{i > 0 && <br />}{line}</>)}</h1>
+    <div class="hero__row">
+      <div class="stack hero__pitch">
+        <p class="lead hero__lead">{t.hero.lead}</p>
+        <div class="hero__actions">
+          <div class="cmd">
+            <span class="cmd__prompt" aria-hidden="true">$</span>
+            <code class="cmd__text">{site.installCommand}</code>
+            <span class="cmd__caret blink" aria-hidden="true"></span>
+          </div>
+          <a class="hero__more" href="#journee">{t.hero.seeMore}</a>
+        </div>
+      </div>
+      <ul class="agents" aria-label={t.hero.agentsLabel}>
+        {agents.map(agent => (
+          <li class="agents__item"><img class="agents__bot hop" src={media(agent.bot)} alt="" width="624" height="624" />{agent.name}</li>
+        ))}
+      </ul>
+    </div>
+
+    <div class="hero-wrap">
+      <LoopVideo class="hero__video" file="atelier.mp4" poster="desktop-atelier.png" label={t.hero.desktopVideoLabel} />
+      <div class="hero-phone">
+        <LoopVideo class="phone-video" file="phone.mp4" poster="phone-a-toi.png" label={t.hero.phoneVideoLabel} />
+      </div>
+    </div>
+  </div>
+</header>

@@ -1,0 +1,75 @@
+---
+import { mediaFor } from '../data/media.ts';
+import { frames, sprite } from '../data/tui.ts';
+import { code, rich, type Catalogue } from '../i18n/index.ts';
+import LoopVideo from './LoopVideo.astro';
+
+// « La demande arrive là où vous êtes »: the three places a request reaches its owner, each in its own room: a terminal
+// (the `ledge tui` demonstration, frame by frame), the notch at the top of the screen, and the phone.
+interface Props {
+  t: Catalogue;
+}
+const { t } = Astro.props;
+const terminal = t.everywhere.terminal;
+const tuiFrames = frames.map(frame => ({ key: frame.key, ms: frame.ms, caption: terminal.frames[frame.caption] }));
+const first = tuiFrames[0]!;
+const media = mediaFor(Astro.currentLocale);
+---
+
+<section id="partout" class="section">
+  <div class="page stack everywhere__inner">
+    <h2 class="title everywhere__title">{t.everywhere.title}</h2>
+
+    <div class="room tui-room">
+      <div class="stack tui-room__copy">
+        <h3 class="panel-title">{terminal.title}</h3>
+        <p class="panel__text" set:html={rich(terminal.text, { tui: code('ledge tui') })} />
+      </div>
+      <div class="tui" data-tui data-frames={JSON.stringify(tuiFrames)} data-label-play={terminal.play} data-label-pause={terminal.pause}>
+        <div class="tui__bar">
+          <span class="tui__prompt" aria-hidden="true">$</span>
+          <span class="tui__command">ledge tui</span>
+        </div>
+        <div class="scroller">
+          <div class="wide tui__screen">
+            <img class="tui__sprite" data-tui-sprite src={media(sprite.file)} alt={terminal.spriteAlt} width={sprite.width} height={sprite.frameHeight * frames.length} loading="lazy" />
+          </div>
+        </div>
+        <div class="tui__track"><div class="tui__progress" data-tui-progress style={`width: ${(100 / frames.length).toFixed(2)}%`}></div></div>
+        <div class="tui__controls">
+          <button type="button" class="tui__toggle press" data-tui-toggle aria-label={terminal.play}>
+            <svg data-icon="pause" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="#fafafa"></rect><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="#fafafa"></rect></svg>
+            <svg data-icon="play" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9-5.5z" fill="#fafafa"></path></svg>
+          </button>
+          <kbd class="tui__key" data-tui-key hidden={first.key === ''}>{first.key}</kbd>
+          <span class="tui__caption" data-tui-caption>{first.caption}</span>
+          <span class="tui__count" data-tui-count>1 / {frames.length}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="room notch-room">
+      <div class="stack notch-room__media">
+        <div class="notch-room__frame">
+          <LoopVideo class="notch-room__video" file="notch.mp4" poster="notch-poster.png" label={t.everywhere.notch.videoLabel} />
+        </div>
+      </div>
+      <div class="stack notch-room__copy">
+        <h3 class="panel-title">{t.everywhere.notch.title}</h3>
+        <p class="panel__text">{t.everywhere.notch.text}</p>
+      </div>
+    </div>
+
+    <div class="room phone-room">
+      <div class="stack phone-room__copy">
+        <h3 class="panel-title">{t.everywhere.phone.title}</h3>
+        <p class="panel__text">{t.everywhere.phone.text}</p>
+      </div>
+      <div class="phones">
+        <img class="phones__screen" src={media('phone-sessions.png')} alt={t.everywhere.phone.sessionsAlt} width="1170" height="2532" loading="lazy" />
+        <LoopVideo class="phones__screen phones__screen--front" file="phone.mp4" poster="phone-a-toi.png" label={t.everywhere.phone.videoLabel} />
+        <img class="phones__screen" src={media('phone-forge.png')} alt={t.everywhere.phone.forgeAlt} width="1170" height="2532" loading="lazy" />
+      </div>
+    </div>
+  </div>
+</section>

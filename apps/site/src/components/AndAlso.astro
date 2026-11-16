@@ -1,0 +1,24 @@
+---
+import type { Catalogue } from '../i18n/index.ts';
+
+// « Et aussi »: what Ledge takes care of besides the day's main moments.
+interface Props {
+  t: Catalogue;
+}
+const { t } = Astro.props;
+const items = ['archive', 'handoff', 'forge', 'servers', 'quotas', 'notes', 'browser', 'terminals'] as const;
+---
+
+<section class="section">
+  <div class="page also__inner">
+    <h2 class="heading also__title">{t.also.title}</h2>
+    <dl class="also__list">
+      {items.map(item => (
+        <div class="also__item">
+          <dt>{t.also[item].term}</dt>
+          <dd>{t.also[item].text}</dd>
+        </div>
+      ))}
+    </dl>
+  </div>
+</section>
