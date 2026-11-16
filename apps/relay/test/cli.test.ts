@@ -105,6 +105,13 @@ describe('ledge-relay', { timeout: 60_000 }, () => {
     expect(existsSync(h.configPath)).toBe(false);
   });
 
+  it('--setup without a terminal says it needs one, even when nothing is missing', async () => {
+    const h = await harness(COMPLETE_ENV);
+    expect(await main(['launch', '--setup', '--port', '0'], h.deps())).toBe(1);
+    expect(h.err).toEqual(['ledge-relay: --setup needs a terminal']);
+    expect(existsSync(h.configPath)).toBe(false);
+  });
+
   it('writes nothing when the dialogue is interrupted', async () => {
     const h = await harness({}, { isTTY: true, io: () => scripted(['https://relay.example', new Error('ctrl-c')]) });
     expect(await main(['launch', '--port', '0'], h.deps())).toBe(1);

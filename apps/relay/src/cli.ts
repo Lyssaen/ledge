@@ -71,6 +71,10 @@ export async function main(argv: string[], deps: CliDeps): Promise<number> {
     const missing = missingSettings(launchEnv(file, deps.env, deps.webDir));
     if (values.setup || missing.length > 0) {
       if (!deps.isTTY) {
+        if (missing.length === 0) {
+          deps.err('ledge-relay: --setup needs a terminal');
+          return 1;
+        }
         deps.err(`ledge-relay: missing settings: ${missing.join(', ')}; run \`ledge-relay launch\` once in a terminal, or set these environment variables`);
         return 1;
       }
