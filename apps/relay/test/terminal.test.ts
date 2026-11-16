@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { terminalIo } from '../src/launch/terminal.js';
 
 function streams() {
-  const input = new PassThrough();
-  const output = new PassThrough();
+  // isTTY makes readline run in terminal mode, where it echoes typed characters: the only mode in which muting matters.
+  const input = Object.assign(new PassThrough(), { isTTY: true });
+  const output = Object.assign(new PassThrough(), { isTTY: true });
   let written = '';
   output.on('data', (c: Buffer) => { written += c.toString(); });
   const io = terminalIo(input as unknown as NodeJS.ReadStream, output as unknown as NodeJS.WriteStream);
@@ -29,6 +30,22 @@ describe('terminalIo', () => {
     expect(t.written()).toContain('Secret: ');
     expect(t.written()).not.toContain('hunter2');
     t.io.close();
+  });
+
+  it('echoes a normal answer in terminal mode, which proves the secret test can fail', async () => {
+    const t = streams();
+    const a = t.io.ask('Name');
+    t.input.write('visible-answer\n');
+    await a;
+    expect(t.written()).toContain('visible-answer');
+    t.io.close();
+  });
+
+  it('rejects a pending ask on Ctrl-C', async () => {
+    const t = streams();
+    const a = t.io.ask('Name');
+    t.input.write('\x03');
+    await expect(a).rejects.toThrow();
   });
 
   it('rejects a pending ask when the input ends, and any later one', async () => {
