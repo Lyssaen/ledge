@@ -1,4 +1,5 @@
-import { deviceKindOfLabel, type DeviceKind, type MobilePairing, type MobileState } from '@ledge/protocol';
+import { deviceKindOfLabel, type DeviceKind, type MobileClientMessage, type MobilePairing, type MobileState } from '@ledge/protocol';
+import type { Tui } from '../context.js';
 import type { Glyphs } from '../glyphs.js';
 
 type Device = MobileState['devices'][number];
@@ -32,3 +33,11 @@ export function deviceGlyph(kind: DeviceKind | undefined, g: Glyphs, label = '')
 export const deviceName = (d: Device): string => d.name ?? d.label;
 
 export { deviceWord } from '@ledge/fleet';
+
+/** Sends a mobile command to the local daemon; a refusal to send (offline, too old to know mobile access) is a toast, not a crash. True when sent. */
+export function sendMobile(tui: Pick<Tui, 'client' | 'toast' | 't'>, msg: MobileClientMessage): boolean {
+  try { tui.client.fleet?.sendMobile(msg); return true; } catch (e) {
+    tui.toast({ text: (e as Error).name === 'DaemonOutdated' ? tui.t.mobile.refusedOutdated : tui.t.mobile.refusedOffline, tone: 'error' });
+    return false;
+  }
+}
