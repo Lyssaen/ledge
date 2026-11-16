@@ -13,6 +13,8 @@ const UNICODE = {
   links: true as boolean,
   /** A task handed between sessions in « Échanges » (#92). */
   task: '▤',
+  /** A linked device in Mobile access: a phone, a tablet. */
+  phone: '▯', tablet: '▭',
   /** A role's value: written here, inherited, not declared, unknown; the margin's rail (docs/mockups/ledge-openrig-roles-tui.html). */
   pvHere: '●', pvInh: '↳', pvAbs: '○', pvUnk: '?', rail: '▎',
   /** OpenRig's blocks in a thread (docs/mockups/openrig-messages): a message, a queue row, a notice; the raw's box. */
@@ -30,6 +32,7 @@ const ASCII: Glyphs = {
   cross: '+',
   running: '~', held: '.', stale: '!',
   task: '[=]',
+  phone: '[]', tablet: '[=]',
   pvHere: '*', pvInh: '>', pvAbs: 'o', pvUnk: '?', rail: '|',
   markClaude: '*', markCodex: '>_', markCursor: '<>', barFull: '#', barEmpty: '.', reset: '@', gauge: '%',
   rigMessage: '@', rigRow: '=', rigNotice: '-', boxTL: '+', boxTR: '+', boxBL: '+', boxBR: '+', boxH: '-', boxV: '|',

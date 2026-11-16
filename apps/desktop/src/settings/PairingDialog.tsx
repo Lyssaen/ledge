@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type JSX } from 'react';
 import { deviceKindOfLabel, type DeviceKind, type MobileClientMessage, type MobilePairing, type MobileState } from '@ledge/protocol';
+import { replaceable } from '@ledge/fleet';
 import { Button } from '@ledge/ui/ui/Button';
 import { Icon, ICONS } from '@ledge/ui/ui/icons';
 import { useI18n } from '../i18n/lang';
@@ -13,12 +14,6 @@ export const PHONE = ['M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2
 /** A tablet, for a device whose kind says so (docs/mockups/mobile-multi-device.html, part 4). */
 export const TABLET = ['M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z', 'M11 18h2'];
 export const deviceGlyph = (kind: DeviceKind | undefined) => kind === 'tablet' ? TABLET : PHONE;
-
-/** The approved device a pairing most likely replaces: the same model (its label), offline, the one seen last. */
-export function replaceable(m: MobileState | undefined, label: string): MobileState['devices'][number] | null {
-  const same = (m?.devices ?? []).filter(d => !d.online && d.label === label);
-  return same.sort((a, b) => (b.lastSeenAt ?? b.approvedAt).localeCompare(a.lastSeenAt ?? a.approvedAt))[0] ?? null;
-}
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 /** The oldest request first: every pairing lives as long, so the one that expires first came first. */

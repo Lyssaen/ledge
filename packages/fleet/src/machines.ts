@@ -258,3 +258,9 @@ export function useTerminalHolders(client: DaemonClient): ReadonlyMap<string, st
 export function useMobileError(client: DaemonClient): MobileError | undefined {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.mobileError ?? undefinedSnapshot, undefinedSnapshot);
 }
+
+/** The approved device a pairing most likely replaces: the same model (its label), offline, the one seen last. */
+export function replaceable(m: MobileState | undefined, label: string): MobileState['devices'][number] | null {
+  const same = (m?.devices ?? []).filter(d => !d.online && d.label === label);
+  return same.sort((a, b) => (b.lastSeenAt ?? b.approvedAt).localeCompare(a.lastSeenAt ?? a.approvedAt))[0] ?? null;
+}

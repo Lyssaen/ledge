@@ -101,3 +101,8 @@ export async function readClipboardImage(env: NodeJS.ProcessEnv = process.env, r
     return env.WSL_DISTRO_NAME ? await fromWindows(run) : await fromLinux(run);
   } catch { return null; }
 }
+
+/** Copies text through the terminal itself (OSC 52), which reaches the local clipboard even over SSH. */
+export function copyText(text: string, write: (s: string) => void): void {
+  write(`\x1b]52;c;${Buffer.from(text).toString('base64')}\x07`);
+}
