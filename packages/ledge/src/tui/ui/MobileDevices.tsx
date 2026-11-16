@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import type { MobileState } from '@ledge/protocol';
 import { useTui } from '../context.js';
 import { clock } from '../model/time.js';
-import { deviceGlyph, deviceName, deviceWord, seenText, shortDate, waitingPairings, whenAt } from '../model/mobile.js';
+import { deviceGlyph, deviceName, deviceWord, sameDay, seenText, shortDate, waitingPairings, whenAt } from '../model/mobile.js';
 import { C } from '../theme.js';
 import { TextInput } from './TextInput.js';
 import { TitledBox } from './TitledBox.js';
@@ -53,7 +53,7 @@ export function DevicesBox({ m, now, sel, rename, setRename, submitRename, revok
 
   const blocked = m.recovery?.blocked;
   const pairings = waitingPairings(m);
-  const when = (iso: string) => (Date.parse(iso) > 0 && new Date(iso).toDateString() === new Date(now).toDateString() ? clock(iso) : `${shortDate(iso, lang)} ${clock(iso)}`);
+  const when = (iso: string) => (sameDay(Date.parse(iso), now) ? clock(iso) : `${shortDate(iso, lang)} ${clock(iso)}`);
 
   const device = (d: Device) => {
     const name = deviceName(d);

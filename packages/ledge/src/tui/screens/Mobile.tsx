@@ -26,8 +26,8 @@ export function Mobile() {
   const m = useMobile(tui.client);
   const { stdout } = useStdout();
   const now = useNow();
-  // Null until the user moves: the cursor then sits on the row the state asks about.
-  const [moved, setMoved] = useState<number | null>(null);
+  // The row the user moved to, kept by id so a state change cannot slide the cursor onto another row; null until the user moves.
+  const [movedId, setMovedId] = useState<string | null>(null);
   const [relay, setRelay] = useState<{ value: string; bad: boolean } | null>(null);
   const [rename, setRename] = useState<DeviceField | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
@@ -70,7 +70,11 @@ export function Mobile() {
     const i = rows.findIndex(r => r.id === (m.signin || m.signinError || m.link.state === 'signed_out' || !m.account ? 'account' : m.link.state === 'offline' ? 'status' : 'access'));
     return Math.max(0, i);
   })();
-  const cur = Math.min(moved ?? wanted, Math.max(0, rows.length - 1));
+  const kept = movedId === null ? -1 : rows.findIndex(r => r.id === movedId);
+  const cur = Math.min(kept >= 0 ? kept : wanted, Math.max(0, rows.length - 1));
+  // The row the state asked for becomes the kept one as soon as there is a row, so the cursor does not follow later changes of state.
+  const curId = rows[cur]?.id;
+  useEffect(() => { if (movedId === null && curId !== undefined) setMovedId(curId); }, [movedId, curId]);
   const device = rows[cur]?.id.startsWith('dev:') ? m?.devices.find(d => `dev:${d.id}` === rows[cur]!.id) : undefined;
 
   const submitRename = () => {
@@ -95,8 +99,8 @@ export function Mobile() {
     }
     if (m?.signin && key.escape) { send({ type: 'mobile.signin.cancel' }); return true; }
     if (m?.signin && input === 'c') { copyText(m.signin.userCode, s => stdout.write(s)); tui.toast({ text: t.mobile.copiedT, tone: 'ok' }); return true; }
-    if (key.upArrow || input === 'k') { setMoved(Math.max(0, cur - 1)); return true; }
-    if (key.downArrow || input === 'j') { setMoved(Math.min(rows.length - 1, cur + 1)); return true; }
+    if (key.upArrow || input === 'k') { setMovedId(rows[Math.max(0, cur - 1)]?.id ?? null); return true; }
+    if (key.downArrow || input === 'j') { setMovedId(rows[Math.min(rows.length - 1, cur + 1)]?.id ?? null); return true; }
     if (key.return || input === ' ') { rows[cur]?.action?.(); return true; }
     if (input === 'r' && device) { setRename({ id: device.id, value: deviceName(device) }); return true; }
     if (input === 'x' && device) { setRevoking(device.id); return true; }

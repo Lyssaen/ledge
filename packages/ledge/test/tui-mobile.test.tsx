@@ -266,9 +266,11 @@ describe('Accès mobile › the access box', () => {
 });
 
 const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+/** Yesterday at noon, local time: « hier » at any hour of the run. */
+const yesterdayNoon = () => { const d = new Date(); d.setDate(d.getDate() - 1); d.setHours(12, 0, 0, 0); return d.toISOString(); };
 const two = (): MobileState['devices'] => [
   { id: 'd1', label: 'iPhone · Safari', name: 'iPhone perso', kind: 'phone', approvedAt: '2026-11-03T10:00:00.000Z', online: false, lastSeenAt: ago(2) },
-  { id: 'd2', label: 'iPad · Safari', kind: 'tablet', approvedAt: '2026-10-28T10:00:00.000Z', online: false, lastSeenAt: ago(30 * 60) }
+  { id: 'd2', label: 'iPad · Safari', kind: 'tablet', approvedAt: '2026-10-28T10:00:00.000Z', online: false, lastSeenAt: yesterdayNoon() }
 ] as MobileState['devices'];
 /** Opens the screen and moves the cursor `n` rows down from its first row. */
 async function openAt(devices: MobileState['devices'], n: number, over: Partial<MobileState> = {}) {
@@ -399,16 +401,28 @@ describe('Accès mobile › the devices box', () => {
     expect(tui.sentMobile()).toEqual([]);
   });
 
-  it('keeps every line within 72 columns for a 40-character name', async () => {
+  it('keeps every line within 72 columns for a 40-character name, listed, renamed and revoked', async () => {
     const d = two(); d[0] = { ...d[0]!, name: 'N'.repeat(40) };
     tui = await startTui({ mobile: state({ devices: d }) });
     await tui.resize(72, 40);
     await open(tui);
-    const lines = tui.frame().split('\n');
-    const box = lines.filter(l => l.startsWith('│') || l.startsWith('╭') || l.startsWith('╰'));
-    expect(box.length).toBeGreaterThan(8);
-    for (const l of lines) expect([...l].length).toBeLessThanOrEqual(72);
-    for (const l of box) expect(l[71]).toMatch(/[│╮╯]/);
+    await down(tui, 4);
+    const fits = () => {
+      const lines = tui!.frame().split('\n');
+      const box = lines.filter(l => l.startsWith('│') || l.startsWith('╭') || l.startsWith('╰'));
+      expect(box.length).toBeGreaterThan(8);
+      for (const l of lines) expect([...l].length).toBeLessThanOrEqual(72);
+      for (const l of box) expect(l[71]).toMatch(/[│╮╯]/);
+    };
+    fits();
+    await tui.press('r');
+    await until(() => tui!.frame().includes('enregistrer'));
+    fits();
+    await tui.press('\x1b');
+    await until(() => !tui!.frame().includes('enregistrer'));
+    await tui.press('x');
+    await until(() => tui!.frame().includes('y / n'));
+    fits();
   });
 });
 
@@ -437,5 +451,17 @@ describe('Accès mobile › where the cursor opens', () => {
     await open(tui);
     await tui.press('\r');
     expect(tui.sentMobile()).toEqual([{ type: 'mobile.set', enabled: false, relayUrl: 'https://app.kl-ledge.dev' }]);
+  });
+});
+
+describe('Accès mobile › the cursor stays on its row', () => {
+  it('keeps the account row when the sign-in ends, so ↵ never toggles access', async () => {
+    const flow = { userCode: 'WDJB-MJHT', verificationUri: 'https://github.com/login/device', expiresAt: at(14) };
+    tui = await startTui({ mobile: state({ account: null, link: { state: 'off' } as MobileState['link'], signin: flow }) });
+    await open(tui);
+    tui.daemon.push({ type: 'mobile', state: state() });
+    await until(() => tui!.frame().includes('@octocat'));
+    await tui.press('\r');
+    expect(tui.sentMobile().some(m => m.type === 'mobile.set')).toBe(false);
   });
 });

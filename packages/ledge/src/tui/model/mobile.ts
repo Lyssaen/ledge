@@ -46,7 +46,7 @@ export function sendMobile(tui: Pick<Tui, 'client' | 'toast' | 't'>, msg: Mobile
   }
 }
 
-const sameDay = (a: number, b: number): boolean => new Date(a).toDateString() === new Date(b).toDateString();
+export const sameDay = (a: number, b: number): boolean => new Date(a).toDateString() === new Date(b).toDateString();
 
 /** « 3 nov » or « Nov 3 »: the day without its year, in the interface's language. */
 export function shortDate(iso: string, lang: Lang): string {
