@@ -27,14 +27,16 @@ export function terminalIo(input: NodeJS.ReadStream, output: NodeJS.WriteStream)
       if (ended) return Promise.reject(new Error('input ended'));
       return new Promise<string>((resolve, reject) => {
         rejectPending = reject;
-        output.write(`${question}${o?.default ? ` [${o.default}]` : ''}: `);
-        muted = Boolean(o?.secret);
-        rl.question('', (answer) => {
+        // The question is readline's own prompt: in terminal mode readline redraws its prompt line, so text written
+        // before it would be erased. The prompt is written synchronously here, so muting afterwards hides only keystrokes.
+        muted = false;
+        rl.question(`${question}${o?.default ? ` [${o.default}]` : ''}: `, (answer) => {
           muted = false;
           rejectPending = null;
           if (o?.secret) output.write('\n');
           resolve(answer);
         });
+        muted = Boolean(o?.secret);
       });
     },
     say(line) {

@@ -41,6 +41,29 @@ describe('terminalIo', () => {
     t.io.close();
   });
 
+  it('leaves the question on screen in terminal mode: nothing clears the line after it', async () => {
+    const t = streams();
+    const a = t.io.ask('Name', { default: 'bob' });
+    t.input.write('alicx\x7fe\n');
+    expect(await a).toBe('alice');
+    const after = t.written().slice(t.written().lastIndexOf('Name [bob]: '));
+    expect(after.startsWith('Name [bob]: ')).toBe(true);
+    expect(after).not.toContain('\x1b[0J');
+    t.io.close();
+  });
+
+  it('leaves a secret question on screen in terminal mode', async () => {
+    const t = streams();
+    const a = t.io.ask('Secret', { secret: true });
+    t.input.write('hunter2-secrex\x7ft\n');
+    expect(await a).toBe('hunter2-secret');
+    const after = t.written().slice(t.written().lastIndexOf('Secret: '));
+    expect(after.startsWith('Secret: ')).toBe(true);
+    expect(after).not.toContain('\x1b[0J');
+    expect(t.written()).not.toContain('hunter2');
+    t.io.close();
+  });
+
   it('rejects a pending ask on Ctrl-C', async () => {
     const t = streams();
     const a = t.io.ask('Name');
