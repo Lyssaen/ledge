@@ -17,13 +17,17 @@ const xt = vi.hoisted(() => {
     clearSelection = vi.fn(() => { this.selection = ''; });
     modes = { mouseTrackingMode: 'none', bracketedPasteMode: false };
     osc = new Map<number, (d: string) => boolean>();
+    esc = new Map<string, () => boolean>();
     csi = new Map<string, (p: (number | number[])[]) => boolean>();
     parser = {
       registerOscHandler: (n: number, fn: (d: string) => boolean) => { this.osc.set(n, fn); return { dispose() {} }; },
+      registerEscHandler: (id: { final: string }, fn: () => boolean) => { this.esc.set(id.final, fn); return { dispose() {} }; },
       registerCsiHandler: (id: { prefix?: string; final: string }, fn: (p: (number | number[])[]) => boolean) => { this.csi.set(`${id.prefix ?? ''}${id.final}`, fn); return { dispose() {} }; }
     };
     constructor(o: Record<string, unknown>) { this.options = { ...o }; terms.push(this); }
     attachCustomKeyEventHandler(fn: (e: KeyboardEvent) => boolean) { this.keys = fn; }
+    wheel: (e: WheelEvent) => boolean = () => true;
+    attachCustomWheelEventHandler(fn: (e: WheelEvent) => boolean) { this.wheel = fn; }
     onData(fn: (d: string) => void) { this.data.push(fn); return { dispose() {} }; }
     resized: ((e: { cols: number; rows: number }) => void)[] = [];
     onResize(fn: (e: { cols: number; rows: number }) => void) { this.resized.push(fn); return { dispose() {} }; }
@@ -329,4 +333,50 @@ it('#299: OSC 633 marks the commands; Ctrl ↑ / Ctrl ↓ reach the marks only w
   // A view that declines (no integration, a full-screen program): the shell has it.
   sh.onMarkKey(() => false);
   expect(t.keys(key({ code: 'ArrowDown', key: 'ArrowDown', ctrlKey: true }))).toBe(true);
+});
+
+// Spec 2026-11-17-terminal-wheel: over a program that tracks the mouse, a notch sends one wheel report per line, in one input.
+it('the wheel over a program that tracks the mouse writes one report per line, in the encoding the program asked', () => {
+  const { s, t } = surface();
+  const input = vi.fn();
+  s.onInput(input);
+  const screen = document.createElement('div');
+  screen.className = 'xterm-screen';
+  screen.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 480 }) as DOMRect;
+  s.host.appendChild(screen);
+  const wheel = (o: Partial<WheelEvent> = {}) => {
+    const e = { deltaY: -100, deltaMode: 0, clientX: 25, clientY: 45, shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn(), ...o } as unknown as WheelEvent;
+    return t.wheel(e);
+  };
+  // No mouse tracking: xterm scrolls its own scrollback.
+  expect(wheel()).toBe(true);
+  // X10 reports presses only.
+  t.modes.mouseTrackingMode = 'x10';
+  expect(wheel()).toBe(true);
+  t.modes.mouseTrackingMode = 'any';
+  // The default encoding until the program asks for SGR: 100 px over rows of 20 px, five reports at cell (3, 3).
+  expect(wheel()).toBe(false);
+  expect(input).toHaveBeenLastCalledWith(('\x1b[M' + String.fromCharCode(96, 35, 35)).repeat(5));
+  t.csi.get('?h')!([1000, 1006]);
+  expect(wheel({ deltaY: 40 })).toBe(false);
+  expect(input).toHaveBeenLastCalledWith('\x1b[<65;3;3M'.repeat(2));
+  expect(input).toHaveBeenCalledTimes(2);
+  // Shift held, an encoding Desktop does not write, a read-only screen: xterm's own way.
+  expect(wheel({ shiftKey: true })).toBe(true);
+  t.csi.get('?h')!([1016]);
+  expect(wheel()).toBe(true);
+  t.csi.get('?l')!([1016]);
+  expect(wheel()).toBe(false);
+  // A full reset goes back to the default encoding, as xterm does.
+  t.csi.get('?h')!([1006]);
+  t.esc.get('c')!();
+  expect(wheel()).toBe(false);
+  expect(input).toHaveBeenLastCalledWith(('\x1b[M' + String.fromCharCode(96, 35, 35)).repeat(5));
+  // Past column 95 the default encoding cannot travel: xterm's own way.
+  t.cols = 120;
+  expect(wheel({ clientX: 795 })).toBe(true);
+  expect(input).toHaveBeenCalledTimes(4);
+  s.setReadOnly(true);
+  expect(wheel()).toBe(true);
+  expect(input).toHaveBeenCalledTimes(4);
 });

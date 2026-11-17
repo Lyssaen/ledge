@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { termKey } from './keys';
 import { ShellMarks, type Mark } from './shellMarks';
+import { wheelLines, wheelReport, type WheelEncoding } from './wheel';
 import type { TermTheme } from './theme';
 
 /** One xterm and the element it lives in; the element is moved between containers, never re-created. */
@@ -123,6 +124,41 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
       return true;
     });
     t.parser.registerOscHandler(633, data => marks.handle(data));
+    // The mouse encoding the program asked for, followed as xterm follows it (the last one set wins, a reset goes back to the
+    // default): the wheel's reports are written in it. The handlers only watch, xterm still applies the mode.
+    let encoding: WheelEncoding = 'default';
+    const mouseEncoding = (on: boolean) => (params: (number | number[])[]) => {
+      for (const p of params) {
+        if (p !== 1006 && p !== 1016) continue;
+        encoding = !on ? 'default' : p === 1006 ? 'sgr' : 'other';
+      }
+      return false;
+    };
+    t.parser.registerCsiHandler({ prefix: '?', final: 'h' }, mouseEncoding(true));
+    t.parser.registerCsiHandler({ prefix: '?', final: 'l' }, mouseEncoding(false));
+    // A full reset (RIS) puts xterm's mouse encoding back to the default.
+    t.parser.registerEscHandler({ final: 'c' }, () => { encoding = 'default'; return false; });
+    // xterm sends one report per wheel event however far it goes, and a program holding the mouse (Claude Code) scrolls one step
+    // per report: one report per line instead, in one input. Without the wheel tracked, read-only, or with Shift, xterm's own way
+    // (its scrollback, or the arrows on the alternate screen); xterm cancels the event either way.
+    let partial = 0;
+    t.attachCustomWheelEventHandler(e => {
+      const mode = t.modes.mouseTrackingMode;
+      // X10 reports presses only, never the wheel.
+      if (readOnly || e.shiftKey || mode === 'none' || mode === 'x10' || encoding === 'other') return true;
+      const box = (host.querySelector('.xterm-screen') ?? host).getBoundingClientRect();
+      if (!box.width || !box.height) return true;
+      const cellW = box.width / t.cols, rowPx = box.height / t.rows;
+      const r = wheelLines(e, rowPx, t.rows, partial);
+      partial = r.partial;
+      if (r.lines === 0) return false;
+      const col = Math.min(t.cols, Math.max(1, Math.floor((e.clientX - box.left) / cellW) + 1));
+      const row = Math.min(t.rows, Math.max(1, Math.floor((e.clientY - box.top) / rowPx) + 1));
+      const one = wheelReport(r.lines < 0 ? -1 : 1, col, row, { shift: false, alt: e.altKey, ctrl: e.ctrlKey }, encoding);
+      if (one === null) return true;
+      send(one.repeat(Math.abs(r.lines)));
+      return false;
+    });
     t.onScroll(viewChanged);
     t.onRender(viewChanged);
     t.onResize(viewChanged);
