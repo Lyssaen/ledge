@@ -8,7 +8,7 @@ import { deviceName, sendMobile, waitingPairings } from '../model/mobile.js';
 import { C } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { DevicesBox, type DeviceField } from '../ui/MobileDevices.js';
-import { usePairingDialog } from '../ui/pairingDialog.js';
+import { usePairingDialog } from '../ui/pairingDialogState.js';
 import { useNow } from '../ui/now.js';
 import { TextInput } from '../ui/TextInput.js';
 import { TitledBox } from '../ui/TitledBox.js';

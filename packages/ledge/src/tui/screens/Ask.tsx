@@ -18,7 +18,7 @@ import { Button } from '../ui/SessionCard.js';
 import { Lines } from '../ui/Lines.js';
 import { useThrottled } from '../ui/throttle.js';
 import { Field } from '../ui/Field.js';
-import { usePairingDialog } from '../ui/pairingDialog.js';
+import { usePairingDialog } from '../ui/pairingDialogState.js';
 import { TitledBox } from '../ui/TitledBox.js';
 import { ActionBox, appliable, deniable } from '../ui/ActionBox.js';
 

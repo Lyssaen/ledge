@@ -7,7 +7,7 @@ import { cells } from '../model/cells.js';
 import { deviceName, seenText, sendMobile, shortDate } from '../model/mobile.js';
 import { C } from '../theme.js';
 import { TitledBox } from './TitledBox.js';
-import { usePairingDialog } from './pairingDialog.js';
+import { usePairingDialog } from './pairingDialogState.js';
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 

@@ -21,7 +21,7 @@ import { Help } from './screens/Help.js';
 import { OpenRigScreen } from './screens/OpenRig.js';
 import { RigLaunchScreen } from './screens/RigLaunch.js';
 import { MIN } from './ui/Frame.js';
-import { usePairingDialogOf } from './ui/pairingDialog.js';
+import { usePairingDialogOf } from './ui/pairingDialogState.js';
 import { waitingPairings } from './model/mobile.js';
 import { useMobileToasts } from './model/mobileToasts.js';
 import { setTone, tone as toneNow, toneFor, type ThemeChoice, type Tone } from './theme.js';
