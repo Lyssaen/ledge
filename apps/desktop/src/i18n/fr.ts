@@ -357,6 +357,10 @@ export const fr = {
       alertLess: 'Baisser le seuil d’alerte de 5 %', alertMore: 'Monter le seuil d’alerte de 5 %',
       terminals: 'Terminaux', webglBefore: 'Rendu rapide (WebGL) pour', webglAfter: 'terminaux visibles au plus',
       webglLess: 'Un terminal de moins en WebGL', webglMore: 'Un terminal de plus en WebGL', webglSaved: (n: number) => `Rendu rapide (WebGL) : ${n} terminaux visibles au plus`,
+      wheel: 'Défilement à la molette', wheelHint: 'Dans l’historique d’un terminal comme dans un programme qui garde la souris (Claude Code en plein écran).',
+      wheelSystem: 'Comme Windows', wheelFixed: 'Un nombre de lignes par cran', wheelStep: 'Lignes par cran', wheelAfter: 'lignes par cran',
+      wheelLess: 'Une ligne de moins par cran', wheelMore: 'Une ligne de plus par cran',
+      wheelLines: (n: number) => `${n} ligne${n > 1 ? 's' : ''} par cran`, wheelSaved: (what: string) => `Défilement à la molette : ${what}`, wheelSavedSystem: 'comme Windows',
       /** « Ouvrir dans… » (lot 11, docs/mockups/ledge-ide-open-in.html): the editor, what this PC lacks, Zed's limit. */
       openIn: 'Ouvrir dans…', notInstalled: 'non installé', zedNoWsl: 'pas les dossiers WSL',
       openInSaved: (editor: string) => `Ouvrir dans… : ${editor}`,

@@ -1,0 +1,75 @@
+<!doctype html>
+<!-- Settings › Workspace › Terminaux: the wheel's speed (spec 2026-11-17-terminal-wheel). Built on Desktop's own styles. -->
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Défilement à la molette</title>
+<link rel="stylesheet" href="../../../packages/ui/src/styles/tokens.css">
+<link rel="stylesheet" href="../../../apps/desktop/src/styles/settings.css">
+<style>
+  body{margin:0;background:var(--background);color:var(--foreground);font:13px/1.4 Geist,system-ui,sans-serif}
+  button{background:none;border:0;font:inherit;color:inherit;padding:0}
+  .frame{display:flex;flex-direction:column;gap:28px;padding:28px 32px;max-width:760px}
+  .state{font:11px 'Geist Mono',monospace;color:var(--muted-foreground);margin:0 0 8px;text-transform:uppercase;letter-spacing:.5px}
+  .set-control{display:flex;justify-content:flex-end}
+  .wheel{flex-direction:column;align-items:flex-start;gap:8px}
+  .wheel label.off .set-step{opacity:.5}
+  .toast{display:inline-block;margin-top:10px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--sidebar);font-size:12px}
+</style>
+</head>
+<body>
+<div class="frame">
+  <section>
+    <p class="state">1 · Par défaut : comme Windows</p>
+    <div class="set-card">
+      <h2>Terminaux</h2>
+      <div class="set-rows">
+        <div class="set-row">
+          <div class="set-copy"><span class="set-label">Rendu rapide (WebGL) pour</span></div>
+          <div class="set-control"><span class="set-step-line"><span class="set-step"><button aria-disabled="false">−</button><output>12</output><button aria-disabled="false">+</button></span>terminaux visibles au plus</span></div>
+        </div>
+        <div class="set-row">
+          <div class="set-copy">
+            <span class="set-label">Défilement à la molette</span>
+            <span class="set-hint">Dans l'historique d'un terminal comme dans un programme qui garde la souris (Claude Code en plein écran).</span>
+          </div>
+          <div class="set-control">
+            <div class="set-radios wheel" role="radiogroup">
+              <label><input type="radio" name="w1" checked>Comme Windows</label>
+              <label class="off"><input type="radio" name="w1"><span class="set-step-line"><span class="set-step"><button aria-disabled="true">−</button><output>3</output><button aria-disabled="true">+</button></span>lignes par cran</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="state">2 · Une vitesse choisie (1 à 20 lignes par cran), et ce que Ledge confirme</p>
+    <div class="set-card">
+      <h2>Terminaux</h2>
+      <div class="set-rows">
+        <div class="set-row">
+          <div class="set-copy"><span class="set-label">Rendu rapide (WebGL) pour</span></div>
+          <div class="set-control"><span class="set-step-line"><span class="set-step"><button aria-disabled="false">−</button><output>12</output><button aria-disabled="false">+</button></span>terminaux visibles au plus</span></div>
+        </div>
+        <div class="set-row">
+          <div class="set-copy">
+            <span class="set-label">Défilement à la molette</span>
+            <span class="set-hint">Dans l'historique d'un terminal comme dans un programme qui garde la souris (Claude Code en plein écran).</span>
+          </div>
+          <div class="set-control">
+            <div class="set-radios wheel" role="radiogroup">
+              <label><input type="radio" name="w2">Comme Windows</label>
+              <label><input type="radio" name="w2" checked><span class="set-step-line"><span class="set-step"><button aria-disabled="false">−</button><output>8</output><button aria-disabled="false">+</button></span>lignes par cran</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <span class="toast">Défilement à la molette : 8 lignes par cran</span>
+  </section>
+</div>
+</body>
+</html>

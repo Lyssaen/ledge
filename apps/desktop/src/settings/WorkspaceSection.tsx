@@ -8,6 +8,8 @@ import { useShowUsage } from '../workspace/prefs';
 import { useOpenSession, type OpenSession } from '../workspace/openPrefs';
 import { useWebglMax } from '../term/webglPrefs';
 import { WEBGL_MAX, WEBGL_MIN } from '../term/webgl';
+import { useWheel, WHEEL_MAX, WHEEL_MIN } from '../term/wheelPrefs';
+import type { WheelPref } from '../term/wheel';
 import { EDITORS, EDITOR_NAMES, useEditor, useEditorsInstalled } from '../ide/openIn';
 import { bootShown, loadCurrent, remove, saveBoot, saveCurrent, saveDispositions, shapeOf, useBoot, useDispositions, type Boot } from '../workspace/dispositions';
 import { Card, Row } from './controls';
@@ -33,6 +35,8 @@ export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element
   const [editor, setEditor] = useEditor();
   const installed = useEditorsInstalled();
   const [webgl, setWebgl] = useWebglMax();
+  const [wheel, setWheelPref] = useWheel();
+  const wheelName = useId();
   const [showUsage, setShowUsage] = useShowUsage();
   // The usage alert: the same threshold as General's (one for every window and harness, kept by each machine's daemon), by 5 %.
   const usage = useUsage(ctx.client);
@@ -57,6 +61,13 @@ export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element
     saveDispositions(remove(list, name));
     // The status bar names no disposition that is gone.
     if (loadCurrent()?.name === name) saveCurrent(null);
+  };
+  const setWheel = (p: WheelPref) => { setWheelPref(p); ctx.saved(w.wheelSaved(p.mode === 'system' ? w.wheelSavedSystem : w.wheelLines(p.lines))); };
+  // The stepper is greyed while Windows decides: it keeps the speed for the next time one is chosen.
+  const stepWheel = (d: number) => {
+    const n = Math.max(WHEEL_MIN, Math.min(WHEEL_MAX, wheel.lines + d));
+    if (wheel.mode !== 'fixed' || n === wheel.lines) return;
+    setWheel({ mode: 'fixed', lines: n });
   };
   const step = (d: number) => { const n = Math.max(WEBGL_MIN, Math.min(WEBGL_MAX, webgl + d)); if (n === webgl) return; setWebgl(n); ctx.saved(w.webglSaved(n)); };
   return (
@@ -148,6 +159,24 @@ export function WorkspaceSection({ ctx }: { ctx: SettingsContext }): JSX.Element
           </span>
           {w.webglAfter}
         </span>
+      </Row>
+      <Row label={w.wheel} hint={w.wheelHint}>
+        {describedBy => (
+          <div className="set-radios set-wheel" role="radiogroup" aria-label={w.wheel} aria-describedby={describedBy}>
+            <label><input type="radio" name={wheelName} checked={wheel.mode === 'system'} onChange={() => setWheel({ mode: 'system', lines: wheel.lines })} />{w.wheelSystem}</label>
+            <span className={wheel.mode === 'fixed' ? 'set-wheel-fixed' : 'set-wheel-fixed off'}>
+              <input type="radio" name={wheelName} aria-label={w.wheelFixed} checked={wheel.mode === 'fixed'} onChange={() => setWheel({ mode: 'fixed', lines: wheel.lines })} />
+              <span className="set-step-line">
+                <span className="set-step" role="group" aria-label={w.wheelStep}>
+                  <button type="button" aria-label={w.wheelLess} aria-disabled={wheel.mode !== 'fixed' || wheel.lines <= WHEEL_MIN} onClick={() => stepWheel(-1)}>−</button>
+                  <output aria-live="polite">{wheel.lines}</output>
+                  <button type="button" aria-label={w.wheelMore} aria-disabled={wheel.mode !== 'fixed' || wheel.lines >= WHEEL_MAX} onClick={() => stepWheel(1)}>+</button>
+                </span>
+                {w.wheelAfter}
+              </span>
+            </span>
+          </div>
+        )}
       </Row>
     </Card>
     </>

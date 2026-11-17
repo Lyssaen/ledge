@@ -6,6 +6,7 @@ import '@xterm/xterm/css/xterm.css';
 import { termKey } from './keys';
 import { ShellMarks, type Mark } from './shellMarks';
 import { wheelLines, wheelReport, type WheelEncoding } from './wheel';
+import { loadWheel } from './wheelPrefs';
 import type { TermTheme } from './theme';
 
 /** One xterm and the element it lives in; the element is moved between containers, never re-created. */
@@ -138,18 +139,30 @@ export function createSurface(opts: { theme: TermTheme; onThread(): void; openUr
     t.parser.registerCsiHandler({ prefix: '?', final: 'l' }, mouseEncoding(false));
     // A full reset (RIS) puts xterm's mouse encoding back to the default.
     t.parser.registerEscHandler({ final: 'c' }, () => { encoding = 'default'; return false; });
-    // xterm sends one report per wheel event however far it goes, and a program holding the mouse (Claude Code) scrolls one step
-    // per report: one report per line instead, in one input. Without the wheel tracked, read-only, or with Shift, xterm's own way
-    // (its scrollback, or the arrows on the alternate screen); xterm cancels the event either way.
+    // The wheel moves the lines per notch Settings say (spec 2026-11-17-terminal-wheel). In the history, the view scrolls them. Over
+    // a program holding the mouse (Claude Code), xterm would send one report per wheel event however far it goes and the program
+    // scrolls one step per report: one report per line instead, in one input. Read-only over such a program, with Shift, or on
+    // the alternate screen without the mouse (xterm's arrows): xterm's own way.
     let partial = 0;
     t.attachCustomWheelEventHandler(e => {
+      if (e.shiftKey) return true;
       const mode = t.modes.mouseTrackingMode;
       // X10 reports presses only, never the wheel.
-      if (readOnly || e.shiftKey || mode === 'none' || mode === 'x10' || encoding === 'other') return true;
+      const tracked = mode !== 'none' && mode !== 'x10';
+      if (!tracked) {
+        if (t.buffer.active.type !== 'normal') return true;
+        const r = wheelLines(e, loadWheel(), t.rows, partial);
+        partial = r.partial;
+        // xterm lets an event it does not take go on to the page.
+        e.preventDefault();
+        if (r.lines !== 0) t.scrollLines(r.lines);
+        return false;
+      }
+      if (readOnly || encoding === 'other') return true;
       const box = (host.querySelector('.xterm-screen') ?? host).getBoundingClientRect();
       if (!box.width || !box.height) return true;
       const cellW = box.width / t.cols, rowPx = box.height / t.rows;
-      const r = wheelLines(e, rowPx, t.rows, partial);
+      const r = wheelLines(e, loadWheel(), t.rows, partial);
       partial = r.partial;
       if (r.lines === 0) return false;
       const col = Math.min(t.cols, Math.max(1, Math.floor((e.clientX - box.left) / cellW) + 1));

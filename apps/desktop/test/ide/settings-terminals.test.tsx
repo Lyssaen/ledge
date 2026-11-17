@@ -39,4 +39,43 @@ describe('Settings › Workspace › Terminals', () => {
     view();
     expect(webgl().textContent).toBe('11');
   });
+
+  // docs/mockups/terminal-wheel: like Windows by default, the stepper greyed; a speed chosen, 1 to 20, said saved.
+  it('chooses the wheel: like Windows, or a number of lines per notch kept between 1 and 20', async () => {
+    const saved = vi.fn();
+    view(saved);
+    const system = screen.getByRole('radio', { name: 'Comme Windows' });
+    const fixed = screen.getByRole('radio', { name: /lignes par cran/ });
+    const lines = () => within(screen.getByRole('group', { name: 'Lignes par cran' })).getByRole('status');
+    const more = screen.getByRole('button', { name: 'Une ligne de plus par cran' });
+    expect((system as HTMLInputElement).checked).toBe(true);
+    expect(lines().textContent).toBe('3');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    await userEvent.click(more);
+    expect(lines().textContent).toBe('3');
+    expect(saved).not.toHaveBeenCalled();
+    await userEvent.click(fixed);
+    expect(saved).toHaveBeenLastCalledWith('Défilement à la molette : 3 lignes par cran');
+    for (let i = 0; i < 20; i++) await userEvent.click(more);
+    expect(lines().textContent).toBe('20');
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    expect(saved).toHaveBeenLastCalledWith('Défilement à la molette : 20 lignes par cran');
+    expect(JSON.parse(localStorage.getItem('ledge.ide.wheel')!)).toEqual({ mode: 'fixed', lines: 20 });
+    await userEvent.click(system);
+    expect(saved).toHaveBeenLastCalledWith('Défilement à la molette : comme Windows');
+    // The number stays for the next time a speed is chosen.
+    cleanup();
+    view();
+    expect((screen.getByRole('radio', { name: 'Comme Windows' }) as HTMLInputElement).checked).toBe(true);
+    expect(within(screen.getByRole('group', { name: 'Lignes par cran' })).getByRole('status').textContent).toBe('20');
+  });
+
+  it('a single line per notch is the least', async () => {
+    view();
+    await userEvent.click(screen.getByRole('radio', { name: /lignes par cran/ }));
+    const less = screen.getByRole('button', { name: 'Une ligne de moins par cran' });
+    for (let i = 0; i < 4; i++) await userEvent.click(less);
+    expect(within(screen.getByRole('group', { name: 'Lignes par cran' })).getByRole('status').textContent).toBe('1');
+    expect(less.getAttribute('aria-disabled')).toBe('true');
+  });
 });

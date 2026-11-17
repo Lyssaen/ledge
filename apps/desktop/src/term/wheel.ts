@@ -1,28 +1,38 @@
-// The wheel over a program that tracks the mouse (spec 2026-11-17-terminal-wheel): xterm.js sends one report per wheel event,
-// however far it goes, so Desktop writes one per line instead.
+// The terminal's wheel (spec 2026-11-17-terminal-wheel, docs/mockups/terminal-wheel): as many lines per notch as Settings say,
+// in a terminal's history as in a program that tracks the mouse, where xterm.js would send one report per wheel event.
 
 /** How the program asked mouse reports to be written: `other` is one Desktop does not write (SGR pixels), left to xterm. */
 export type WheelEncoding = 'default' | 'sgr' | 'other';
 
 export interface WheelMods { shift: boolean; alt: boolean; ctrl: boolean }
 
+/** Settings › Workspace › Terminaux: like Windows, or `lines` per notch. `lines` is kept while Windows decides, for the stepper. */
+export interface WheelPref { mode: 'system' | 'fixed'; lines: number }
+
 const PIXEL = 0, PAGE = 2;
+/** Chromium on Windows turns a notch into 100/3 px for each line Windows scrolls (Settings › Mouse, 3 by default). */
+const PX_PER_WINDOWS_LINE = 100 / 3;
+/** A notch in `wheelDeltaY`, whatever Windows makes of it in pixels; 100 px when the event has none. */
+const NOTCH = 120, NOTCH_PX = 100;
 
 /**
- * The lines a wheel event is worth, counted as xterm counts them for its own scrollback: pixels over a row's height, the
- * remainder (`partial`) carried to the next event; lines as they are; a page as the screen. Never more than a screen.
- * Negative is up.
+ * The lines a wheel event is worth, negative up. Like Windows: its pixels in Windows lines, a page (« one screen at a time ») as
+ * the screen. A speed chosen: the notches times that speed. The fraction (a touchpad's small steps) is carried in `partial`;
+ * never more than a screen per event.
  */
-export function wheelLines(ev: { deltaY: number; deltaMode: number }, rowPx: number, rows: number, partial: number): { lines: number; partial: number } {
+export function wheelLines(ev: { deltaY: number; deltaMode: number; wheelDeltaY?: number }, pref: WheelPref, rows: number, partial: number): { lines: number; partial: number } {
   if (ev.deltaY === 0) return { lines: 0, partial };
-  let lines: number;
-  if (ev.deltaMode === PIXEL) {
-    partial += ev.deltaY / rowPx;
-    lines = Math.trunc(partial);
-    partial -= lines;
-  } else {
-    lines = Math.trunc(ev.deltaMode === PAGE ? ev.deltaY * rows : ev.deltaY);
-  }
+  if (ev.deltaMode === PAGE) return { lines: Math.sign(ev.deltaY) * rows, partial: 0 };
+  let amount: number;
+  if (pref.mode === 'system') amount = ev.deltaMode === PIXEL ? ev.deltaY / PX_PER_WINDOWS_LINE : ev.deltaY;
+  else if (ev.wheelDeltaY) amount = (-ev.wheelDeltaY / NOTCH) * pref.lines;
+  else amount = (ev.deltaMode === PIXEL ? ev.deltaY / NOTCH_PX : Math.sign(ev.deltaY)) * pref.lines;
+  // A fraction left the other way would swallow the first step back.
+  if (partial * amount < 0) partial = 0;
+  partial += amount;
+  // Chromium's pixels are rounded floats: a line may come as 0.99999996 of one, which must still be a line.
+  const lines = Math.trunc(partial + Math.sign(partial) * 1e-3);
+  partial -= lines;
   return { lines: Math.max(-rows, Math.min(rows, lines)), partial };
 }
 

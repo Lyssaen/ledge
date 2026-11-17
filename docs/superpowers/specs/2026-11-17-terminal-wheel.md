@@ -17,22 +17,29 @@ back. Two things make that round trip slow:
 
 ## What changes
 
-### A. Desktop: a notch sends one report per line (`apps/desktop/src/term/wheel.ts`, `surface.ts`)
+### A. Desktop: the lines per notch Settings say (`apps/desktop/src/term/wheel.ts`, `wheelPrefs.ts`, `surface.ts`)
 
-While the program tracks the mouse and the terminal is live (not read-only), Desktop answers the wheel itself through
-`attachCustomWheelEventHandler`:
+**Setting** (mockup `docs/mockups/terminal-wheel/`, approved by the owner on 2026-11-17): Settings › Workspace › Terminaux,
+« Défilement à la molette », under the WebGL budget:
 
-- the lines a wheel event is worth are counted as xterm counts them for its own scrollback: pixels divided by a row's
-  height with the remainder kept for the next event, lines as they are, a page as the screen's rows; at most one screen
-  per event;
-- that many wheel reports (button 64 up, 65 down, Shift/Alt/Ctrl in the button bits) are written at the cell under the
-  pointer, in one `term.input`;
-- the encoding follows what the program asked: SGR after `?1006h`, the default (X10) encoding otherwise; xterm keeps the
-  wheel for an encoding Desktop does not write (`?1016h`, SGR pixels) and for a default report past column or row 95
-  (the input travels as text and reaches tmux as UTF-8: a byte past 127 would become two); a full reset (`ESC c`)
-  goes back to the default encoding, as in xterm;
-- a vertical wheel with Shift held, a program that does not track the mouse, or a read-only terminal: xterm's own
-  behaviour, unchanged (its scrollback, or the arrows on the alternate screen).
+- **Comme Windows** (default): the lines Windows scrolls per notch (Settings › Mouse, 3 by default), read from the event's
+  pixels: Chromium on Windows makes 100/3 px of each such line; « one screen at a time » comes as a page, the screen's rows;
+- **N lignes par cran**, 1 to 20: the notches (`wheelDeltaY` / 120, or 100 px without it) times N. The stepper is greyed
+  while Windows decides and keeps its number (3 until one is chosen). Each change is said saved
+  (« Défilement à la molette : 8 lignes par cran »). Stored in `ledge.ide.wheel` as `{ mode, lines }`.
+
+Fractions (a touchpad's small steps) are carried to the next event; at most one screen per event.
+
+**Where it applies**, through `attachCustomWheelEventHandler`:
+
+- in a terminal's history (normal buffer, the program not tracking the mouse): the view scrolls that many lines, read-only
+  too;
+- over a program that tracks the wheel (`?1000h`, `?1002h`, `?1003h`) in a live terminal: that many wheel reports (button 64
+  up, 65 down, Alt/Ctrl in the button bits) at the cell under the pointer, in one `term.input`, in the encoding the
+  program asked: SGR after `?1006h`, the default one otherwise, up to column and row 95 (the input travels as text and
+  reaches tmux as UTF-8: a byte past 127 would become two); a full reset (`ESC c`) goes back to the default, as in xterm;
+- xterm's own way otherwise: Shift held, X10 (presses only), the alternate screen without the mouse (its arrows), a
+  read-only terminal over a program holding the mouse, SGR pixels (`?1016h`), a default report past column or row 95.
 
 ### B. Daemon: the keys waiting are typed together (`packages/ledge/src/term/pane.ts`)
 
@@ -42,9 +49,8 @@ burst of mouse reports is one round trip to tmux instead of one each. The phone'
 
 ## Not in scope
 
-- No setting and no visible change: no mockup needed. The speed per notch follows xterm's own line count; if it is too
-  fast or too slow in practice, a multiplier can follow with its mockup.
 - Pure motion reports (`?1003h` without a button) are still sent: Claude Code may use them; B makes them cheap.
+- The xterm option `fastScrollModifier` (Alt × 5) no longer applies where Desktop takes the wheel.
 
 ## Checks
 
@@ -53,5 +59,7 @@ burst of mouse reports is one round trip to tmux instead of one each. The phone'
 - `surface.ts`: the handler writes N reports in one input while the mouse is tracked, follows `?1006h/l`, leaves xterm
   alone otherwise.
 - `pane.ts`: several inputs arriving while one is typed are typed as one `send-keys`, in order.
-- Desktop in Tauri on Windows (WebView2's real wheel deltas) cannot be run from WSL: the feel per notch is for the owner
-  to try.
+- Settings: the radios and the stepper, its bounds, the toast, the value kept (vitest), and the card in light and dark
+  (`e2e/settings-wheel.spec.ts`, zoomed shots with `SHOTS=`).
+- Desktop in Tauri on Windows (WebView2's real wheel deltas, Chromium's 100/3 px per Windows line) cannot be run from WSL:
+  for the owner to try.
