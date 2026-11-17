@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { render } from 'ink-testing-library';
 import { attachClient, daemonStore, type DaemonClient } from '@ledge/fleet';
 import { createMockDaemon, fakeSession } from '@ledge/fleet/test/mockDaemon';
-import type { AttachmentErrorReason, ImageMime, Projects, Session } from '@ledge/protocol';
+import type { AttachmentErrorReason, ClientMessage, ImageMime, MobileState, Projects, Session } from '@ledge/protocol';
 import { App } from '../src/tui/App.js';
 import type { ClipboardImage } from '../src/tui/clipboard.js';
 import { createTuiFleet } from '../src/tui/fleet.js';
@@ -37,6 +37,9 @@ export const PROJECTS: Projects = {
 export async function startTui(o: { sessions?: Session[]; /** false: a daemon from before broadcast. */ broadcast?: boolean; projects?: Projects; lang?: Lang; run?: (argv: string[]) => Promise<number>; save?: (l: Lang) => void; theme?: ThemeChoice; background?: Tone; env?: NodeJS.ProcessEnv;
   /** The clipboard reader and the viewer launcher the TUI is given (none by default: no image, nothing opened). `refusePut`: the daemon's reason for refusing every `attachment.put`. */
   readImage?: () => Promise<ClipboardImage | null>; openFile?: (file: string) => Promise<void>; refusePut?: AttachmentErrorReason;
+  /** The local daemon's mobile state, pushed once the TUI is up (none: a daemon that says nothing of mobile access). */
+  mobile?: MobileState;
+  /** The ASCII glyphs, as `LEDGE_TUI_ASCII=1` gives them. */ ascii?: boolean;
   /** More of what the daemon says of itself in its snapshot (`openrigRows`…). */ daemonExtras?: Record<string, unknown> } = {}) {
   daemonStore.reset();
   const daemon = await createMockDaemon();
@@ -62,12 +65,17 @@ export async function startTui(o: { sessions?: Session[]; /** false: a daemon fr
   const detach = attachClient(client);
   client.connect();
   const saved: Lang[] = [], themes: ThemeChoice[] = [];
-  const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} theme={o.theme} background={o.background} saveTheme={x => { themes.push(x); }} notify="off" glyphs={glyphsFor({})} env={o.env ?? {}} run={o.run} readImage={o.readImage ?? (async () => null)} openFile={o.openFile ?? (async () => {})} />);
+  const ui = render(<App client={client} lang={o.lang ?? 'fr'} saveLang={l => { (o.save ?? (x => saved.push(x)))(l); }} theme={o.theme} background={o.background} saveTheme={x => { themes.push(x); }} notify="off" glyphs={glyphsFor(o.ascii ? { LEDGE_TUI_ASCII: '1' } : {})} env={o.env ?? {}} run={o.run} readImage={o.readImage ?? (async () => null)} openFile={o.openFile ?? (async () => {})} />);
   await until(() => daemonStore.getState().sessions.length > 0);
   await until(() => (ui.lastFrame() ?? '').includes('Otto') || (o.sessions !== undefined && o.sessions.length === 0));
+  if (o.mobile) { daemon.push({ type: 'mobile', state: o.mobile }); await until(() => client.fleet?.mobile() !== undefined); }
+  const sentMobile: ClientMessage[] = [];
+  daemon.onMessage(m => { if (m.type.startsWith('mobile.')) sentMobile.push(m); });
   const press = async (keys: string) => { ui.stdin.write(keys); await new Promise(r => setTimeout(r, 30)); };
   return {
     stdin: ui.stdin as { write(data: string): void }, daemon, client, attachments, saved, themes, press,
+    /** The `mobile.*` messages the TUI sent the daemon, in order. */
+    sentMobile: () => [...sentMobile],
     frame: () => ui.lastFrame() ?? '',
     /** All that went to the terminal, the frames and the sequences written beside them (a title, a bell). */
     written: () => ui.stdout.frames.join(''),

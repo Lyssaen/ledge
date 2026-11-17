@@ -9,8 +9,8 @@ import type { Glyphs } from './glyphs.js';
 import type { Lang, Messages } from './i18n/lang.js';
 import type { ThemeChoice, Tone } from './theme.js';
 
-export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'openrig' | 'rigLaunch' | 'help';
-/** The screens `1`…`6` go to, in order. */
+export type Screen = 'overview' | 'session' | 'ask' | 'launch' | 'settings' | 'mobile' | 'openrig' | 'rigLaunch' | 'help';
+/** The screens `1`…`6` go to, in order (`mobile` is reached from Réglages, not by a number). */
 export const SCREENS: readonly Screen[] = ['overview', 'session', 'ask', 'launch', 'settings', 'openrig'];
 
 /** What the fields keep while the TUI runs, a screen left or not: each one's draft and what it sent, by field (`ask`, or a
@@ -21,7 +21,9 @@ export interface Kept { drafts: Map<string, string>; sent: Map<string, string[]>
   /** The OpenRig screen's view, and the role open in its Roles view (`seat`: `rig/logicalId` it is seen from). */
   rigView?: 'rigs' | 'roles'; role?: { id: string; seat?: string };
   /** The session whose screen opens on its composer (key r on an OpenRig message: the reply to its sender), once. */
-  openReply?: string }
+  openReply?: string;
+  /** Réglages' row when it opened « Accès mobile », so coming back lands on it, once. */
+  settingsAt?: number }
 
 /** A screen's keys: true when it took the key (the global keys then leave it alone). */
 export type KeyHandler = (input: string, key: Key) => boolean;

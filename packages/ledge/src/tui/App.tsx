@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp, useInput, useStdout, useWindowSize } from 'ink';
-import { isPending, useDaemon, useMachines, useProjects, useTasks, type DaemonClient, type Fleet } from '@ledge/fleet';
+import { isPending, useDaemon, useMobile, useMachines, useProjects, useTasks, type DaemonClient, type Fleet } from '@ledge/fleet';
 import type { Session } from '@ledge/protocol';
 import { useActions, type Toast } from './actions.js';
 import { attachCommand, runAttached } from './attach.js';
@@ -16,10 +16,14 @@ import { SessionScreen } from './screens/Session.js';
 import { Ask } from './screens/Ask.js';
 import { Launch } from './screens/Launch.js';
 import { Settings } from './screens/Settings.js';
+import { Mobile } from './screens/Mobile.js';
 import { Help } from './screens/Help.js';
 import { OpenRigScreen } from './screens/OpenRig.js';
 import { RigLaunchScreen } from './screens/RigLaunch.js';
 import { MIN } from './ui/Frame.js';
+import { usePairingDialogOf } from './ui/pairingDialog.js';
+import { waitingPairings } from './model/mobile.js';
+import { useMobileToasts } from './model/mobileToasts.js';
 import { setTone, tone as toneNow, toneFor, type ThemeChoice, type Tone } from './theme.js';
 
 /** How long a toast stays. */
@@ -65,9 +69,13 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const projects = useProjects(client);
   const tasks = useTasks(client);
   const fleet = client.fleet as Fleet;
+  const mobile = useMobile(client);
+  const pairing = usePairingDialogOf(client);
   const t = MESSAGES[lang];
   const [screen, setScreen] = useState<Screen>('overview');
   const [back, setBack] = useState<Screen>('overview');
+  /** Help opened from « Accès mobile » returns there; Réglages' own back target stays untouched meanwhile. */
+  const [helpFromMobile, setHelpFromMobile] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lastToast, setToast] = useState<Toast | null>(null);
   const [editing, setEditingState] = useState(false);
@@ -107,7 +115,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
   const actions = useActions({ client, sessions: d.sessions, errors: d.errors, t, toast });
 
   const go = useCallback((next: Screen) => {
-    setScreen(cur => { if (next === 'help' || next === 'settings') setBack(cur === 'help' || cur === 'settings' ? 'overview' : cur); return next; });
+    // Back from « Accès mobile » to Réglages keeps where Réglages itself goes back to.
+    setScreen(cur => { setHelpFromMobile(cur === 'mobile' && next === 'help'); if (cur === 'mobile' && (next === 'settings' || next === 'help')) return next; if (next === 'help' || next === 'settings') setBack(cur === 'help' || cur === 'settings' ? 'overview' : cur); return next; });
   }, []);
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
@@ -145,6 +154,8 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     readImage: readImage ?? (() => readClipboardImage(env)), openFile: openFile ?? (file => openImage(file, env))
   };
 
+  useMobileToasts(tui);
+
   useInput((input, key) => {
     if (key.ctrl && input === 'c') {
       if (keys.current?.(input, key)) return;
@@ -162,9 +173,12 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (editing) { if (small && key.escape && !keys.current?.(input, key)) go('overview'); return; }
     // Too small, the screen is not drawn: y, n, a… would act on a request out of view. esc and q still go.
     if (small && !key.escape && input !== 'q') return;
+    // The dialog « Lier un appareil » takes its keys itself (it listens beside this handler): the screen's and the global ones stay off.
+    if (pairing.id !== null) return;
     if (keys.current?.(input, key)) return;
     if (input === 'q') { exit(); return; }
-    if (key.escape) { go(screen === 'help' || screen === 'settings' ? back : 'overview'); return; }
+    if (key.escape) { go(screen === 'mobile' ? 'settings' : screen === 'help' && helpFromMobile ? 'mobile' : screen === 'help' || screen === 'settings' ? back : 'overview'); return; }
+    if (input === 'L') { const first = waitingPairings(mobile)[0]; if (first) pairing.open(first.id); return; }
     if (input === '?') { go('help'); return; }
     if (input === ',') { go('settings'); return; }
     if (input === '/') { go('ask'); return; }
@@ -172,6 +186,6 @@ function Shell({ client, lang, setLang: setLangState, saveLang, theme, setThemeS
     if (/^[1-6]$/.test(input)) { go(SCREENS[Number(input) - 1]!); return; }
   });
 
-  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, openrig: OpenRigScreen, rigLaunch: RigLaunchScreen, help: Help }[screen];
+  const Body = { overview: Overview, session: SessionScreen, ask: Ask, launch: Launch, settings: Settings, mobile: Mobile, openrig: OpenRigScreen, rigLaunch: RigLaunchScreen, help: Help }[screen];
   return <TuiContext.Provider value={tui}><Body /></TuiContext.Provider>;
 }

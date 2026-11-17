@@ -258,3 +258,15 @@ export function useTerminalHolders(client: DaemonClient): ReadonlyMap<string, st
 export function useMobileError(client: DaemonClient): MobileError | undefined {
   return useSyncExternalStore(client.fleet?.subscribe ?? noopSubscribe, client.fleet?.mobileError ?? undefinedSnapshot, undefinedSnapshot);
 }
+
+/** The approved device a pairing most likely replaces: the same model (its label), offline, the one seen last. */
+export function replaceable(m: MobileState | undefined, label: string): MobileState['devices'][number] | null {
+  const same = (m?.devices ?? []).filter(d => !d.online && d.label === label);
+  return same.sort((a, b) => (b.lastSeenAt ?? b.approvedAt).localeCompare(a.lastSeenAt ?? a.approvedAt))[0] ?? null;
+}
+
+/** A device as a sentence names it (docs/mockups/ledge-mobile-passkey, 5 and 6): the name the user gave, said bare, or else its
+ *  model, the label's first part (`iPad` of `iPad · Safari`), which the copy gives an article (« l'iPad », « cet iPad »). */
+export interface DeviceWord { text: string; named: boolean }
+export const deviceWord = (d: Pick<MobileState['devices'][number], 'name' | 'label'> | undefined): DeviceWord | null =>
+  d === undefined ? null : d.name ? { text: d.name, named: true } : { text: d.label.split(' · ')[0] || d.label, named: false };

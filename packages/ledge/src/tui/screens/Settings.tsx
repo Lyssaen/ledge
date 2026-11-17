@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Box, Text } from 'ink';
-import { resetLong, span, useContextNear, useUsage, type UsageGroup } from '@ledge/fleet';
+import { resetLong, span, useContextNear, useMobile, useUsage, type UsageGroup } from '@ledge/fleet';
 import { CONTEXT_NEAR_MAX, CONTEXT_NEAR_MIN, USAGE_ALERT_MAX, USAGE_ALERT_MIN, type UsageWindow } from '@ledge/protocol';
+import { mobileSummary } from '../model/mobile.js';
 import { bars, cursorLabel, useUsageGroups } from '../ui/UsageLine.js';
 import { useScreenKeys, useTui } from '../context.js';
-import { LANGS } from '../i18n/lang.js';
+import { LANGS, type Messages } from '../i18n/lang.js';
 import { C, THEMES } from '../theme.js';
 import { Frame } from '../ui/Frame.js';
 import { TitledBox } from '../ui/TitledBox.js';
@@ -21,8 +22,10 @@ export function Settings() {
   // gives its limits. Below, every account's windows in full, each model's too (M10).
   const usage = useUsage(tui.client);
   const limits = useUsageGroups();
-  const rows = [{ id: 'lang', label: t.settings.language }, { id: 'theme', label: t.settings.theme }, { id: 'context', label: t.settings.context }, { id: 'usage', label: t.usage.setting }] as const;
-  const [at, setAt] = useState(0);
+  const rows = [{ id: 'lang', label: t.settings.language }, { id: 'theme', label: t.settings.theme }, { id: 'context', label: t.settings.context }, { id: 'usage', label: t.usage.setting }, { id: 'mobile', label: t.mobile.row }] as const;
+  const summary = mobileSummary(useMobile(tui.client));
+  // Back from « Accès mobile », the cursor is where it left, on its row; else it opens on the first.
+  const [at, setAt] = useState(() => { const i = tui.kept.settingsAt ?? 0; delete tui.kept.settingsAt; return i; });
   useScreenKeys((input, key) => {
     if (key.upArrow || input === 'k') { setAt(i => (i - 1 + rows.length) % rows.length); return true; }
     if (key.downArrow || input === 'j') { setAt(i => (i + 1) % rows.length); return true; }
@@ -30,6 +33,7 @@ export function Settings() {
     if (!by) return false;
     if (rows[at]!.id === 'lang') setLang(LANGS[(LANGS.indexOf(lang) + by + LANGS.length) % LANGS.length]!);
     else if (rows[at]!.id === 'theme') setTheme(THEMES[(THEMES.indexOf(theme) + by + THEMES.length) % THEMES.length]!);
+    else if (rows[at]!.id === 'mobile') { if (by > 0 || key.return) { tui.kept.settingsAt = at; tui.go('mobile'); } }
     else if (rows[at]!.id === 'usage') {
       if (!usage.size) return true;
       const pct = Math.min(USAGE_ALERT_MAX * 100, Math.max(USAGE_ALERT_MIN * 100, Math.round(limits.threshold * 100) + by * 5));
@@ -43,7 +47,7 @@ export function Settings() {
     return true;
   });
   return (
-    <Frame crumb={t.settings.title} keys={[['↑ ↓', t.keys.navigate], ['← →', t.keys.change], ['esc', t.keys.back]]}>
+    <Frame crumb={t.settings.title} keys={[['↑ ↓', t.keys.navigate], ['← →', t.keys.change], ...(rows[at]!.id === 'mobile' ? [['↵', t.mobile.keys.open] as const] : []), ['esc', t.keys.back]]}>
       <TitledBox title={t.settings.title} flexGrow={1}>
         {rows.map((r, i) => (
           <Box key={r.id} backgroundColor={i === at ? C.sel : undefined}>
@@ -53,6 +57,8 @@ export function Settings() {
               ? <Text>{LANGS.map(l => <Text key={l} color={l === lang ? C.fg : C.dim} bold={l === lang}>{l === lang ? `${g.radioOn} ` : `${g.radioOff} `}{t.lang[l]}{'     '}</Text>)}</Text>
               : r.id === 'theme'
               ? <Text>{THEMES.map(x => <Text key={x} color={x === theme ? C.fg : C.dim} bold={x === theme}>{x === theme ? `${g.radioOn} ` : `${g.radioOff} `}{x === 'auto' && background ? t.settings.themeAuto(background) : t.settings.themes[x]}{'     '}</Text>)}</Text>
+              : r.id === 'mobile'
+              ? <Text>{summary.kind === 'online' ? <><Text color={C.green}>{g.linkOn} </Text><Text color={C.fg}>{summaryText(summary, t.mobile)}</Text></> : <Text color={summary.kind === 'off' || summary.kind === 'offline' || summary.kind === 'signedOut' ? C.dim : C.faint}>{summaryText(summary, t.mobile)}</Text>}{i === at ? <Text color={C.faint}>{'  ↵'}</Text> : null}</Text>
               : r.id === 'usage'
               ? <Text><Text color={usage.size ? C.fg : C.faint} bold={!!usage.size}>◂ {Math.round(limits.threshold * 100)} % ▸</Text><Text color={C.faint}>   {usage.size ? t.usage.settingHint : t.usage.settingUnknown}</Text></Text>
               : <Text><Text color={C.fg} bold>◂ {Math.round(near * 100)} % ▸</Text><Text color={C.faint}>   {known ? t.settings.contextHint : t.settings.contextUnknown}</Text></Text>}
@@ -91,4 +97,10 @@ function UsageDetail({ x, o }: { x: UsageGroup; o: { threshold: number; now: num
           : w.kind === 'five_hour' ? u.five : w.kind === 'seven_day' ? u.week : w.model ?? '', w))}
     </Box>
   );
+}
+
+/** The Réglages row's value for mobile access: « En ligne · 2 appareils · 1 demande » (its mark is drawn before it), or the state's word. */
+function summaryText(s: ReturnType<typeof mobileSummary>, m: Messages['mobile']): string {
+  return s.kind === 'online' ? m.sumOnline(s.devices, s.requests) : s.kind === 'off' ? m.offW : s.kind === 'offline' ? m.sumOffline
+    : s.kind === 'signedOut' ? m.idle : m.sumUnavailable;
 }

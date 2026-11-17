@@ -2,6 +2,16 @@ import { formatBytes } from '@ledge/ui/images/encode';
 import type { BotState } from '@ledge/ui/bots/poseFor';
 import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import { pointCopy } from '@ledge/ui/chat/pointCopy';
+import type { DeviceWord } from '@ledge/fleet';
+
+/** French counts 0 and 1 as singular; a device in a sentence takes its article (« l’iPad », « cet iPad », « de l’iPad »), a name the user gave is said bare. */
+const vowel = (w: string) => /^[aeiouyhàâéèêîôûAEIOUYHÀÂÉÈÊÎÔÛ]/.test(w);
+const theDevice = (d: DeviceWord) => (d.named ? d.text : vowel(d.text) ? `l’${d.text}` : `le ${d.text}`);
+const thisDevice = (d: DeviceWord) => (d.named ? d.text : vowel(d.text) ? `cet ${d.text}` : `ce ${d.text}`);
+const ofDevice = (d: DeviceWord) => (d.named ? (vowel(d.text) ? `d’${d.text}` : `de ${d.text}`) : vowel(d.text) ? `de l’${d.text}` : `du ${d.text}`);
+const upFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** A device said at the start of a sentence: a model takes a capital, a name the user gave stays as written. */
+const startOf = (d: DeviceWord, s: string) => (d.named ? s : upFirst(s));
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 
@@ -150,7 +160,7 @@ export const fr = {
   },
   help: {
     title: 'Aide', global: 'Partout', overview: 'Vue d’ensemble', session: 'Session', ask: 'Demander à Ledge', launch: 'Nouvelle session', settings: 'Réglages', openrig: 'OpenRig', rigLaunch: 'Lancer un rig',
-    screens: 'changer d’écran', field: 'Saisie', wordBefore: 'effacer le mot avant',
+    screens: 'changer d’écran', link: 'lier un appareil', field: 'Saisie', wordBefore: 'effacer le mot avant',
     writeHere: 'écrire à cette session', replySender: "répondre à l'expéditeur du message sélectionné", rigRaw: "afficher ou masquer le texte brut d'un message OpenRig",
     more: (above: number, below: number) => [above ? `↑ ${above} plus haut` : '', below ? `↓ ${below} plus bas` : ''].filter(Boolean).join(' · ')
   },
@@ -324,6 +334,44 @@ export const fr = {
   small: {
     tooSmall: (w: number, h: number) => `Fenêtre trop petite : ${w}×${h}`, atLeast: (w: number, h: number) => `il faut au moins ${w}×${h}`,
     waits: (name: string, question: boolean) => (question ? `${name} a une question` : `${name} attend ton accord`), kept: 'brouillon gardé'
+  },
+  /** Réglages › Accès mobile (docs/mockups/ledge-mobile-access-tui.html): the texts of the row, the screen, its dialog, the alert line and the toasts. */
+  mobile: {
+    title: 'RÉGLAGES › ACCÈS MOBILE', row: 'Accès mobile',
+    sumOnline: (n: number, p: number) => `En ligne · ${n} appareil${n > 1 ? 's' : ''}${p ? ` · ${p} demande${p > 1 ? 's' : ''}` : ''}`, sumOffline: 'Hors ligne', sumUnavailable: 'indisponible',
+    access: 'Accès', on: 'Activé', offW: 'Désactivé', accessH: 'sortant, aucun port ouvert',
+    relay: 'Relais', relayH: 'l’adresse que tes appareils ouvrent', relayBad: 'Refusée : https:// (http:// pour localhost), sans chemin.',
+    account: 'Compte GitHub', signin: 'Se connecter avec GitHub', signinAgain: 'Se connecter avec GitHub', signout: 'se déconnecter', otherAccount: 'Réessayer avec un autre compte', reconnect: 'Se reconnecter',
+    statusL: 'État', online: 'Connecté au relais', idle: 'Pas encore connecté', idleH: 'démarre une fois le compte confirmé', retryIn: (s: number) => `Hors ligne · nouvel essai dans ${s} s`, retry: 'réessayer', connecting: 'Connexion…',
+    term: 'Taper dans les term.', no: 'Non', termH: 'un appareil lié peut prendre la main',
+    flowLead: 'Ouvre', flowAnd: 'et saisis ce code :', flowWait: (min: number) => `En attente de GitHub… · expire dans ${min} min`,
+    notAllowed: ['Ce compte GitHub n’est pas autorisé sur ce relais.', 'Demande à son administrateur de l’ajouter.'],
+    signedOut: { other_pc: ['Ce PC a été déconnecté : un autre PC s’est connecté', 'avec ce compte. Un compte n’a qu’un PC.'], session_invalid: ['Ce PC a été déconnecté : la session n’est plus valide.'] },
+    signinEnded: { failed: 'La connexion à GitHub a échoué. Vérifie le relais, puis réessaie.', expired: 'Le code a expiré. Recommence la connexion.', denied: 'La connexion a été refusée sur GitHub.' },
+    unreachable: ['Le relais ne répond pas. Vérifie l’adresse et ta connexion ;', 'Ledge réessaie tout seul.'],
+    unavailable: 'L’accès mobile n’a pas démarré sur ce PC :', outdated: 'Le daemon local est trop ancien pour l’accès mobile : mets-le à jour.',
+    localOffline: 'Le daemon local est hors ligne.',
+    offWell: 'Accès désactivé : tes appareils liés ne peuvent pas se connecter.',
+    devices: (n: number) => `APPAREILS · ${n}`, devicesNone: 'APPAREILS',
+    empty: (host: string) => ['Aucun appareil lié. Sur ton téléphone ou ta tablette, ouvre', `${host} et connecte-toi avec le même compte GitHub.`, 'Un code s’affichera ici et sur l’appareil.'],
+    todayAt: (time: string) => `Aujourd’hui à ${time}`, dateAt: (date: string, time: string) => `Le ${date} à ${time}`,
+    asks: 'demande l’accès', compare: 'comparer le code',
+    seenNow: 'vu à l’instant', seenYesterday: 'vu hier', seenAgo: (a: string) => `vu il y a ${a}`, linkedOn: (d: string) => `lié le ${d}`,
+    nameLabel: 'Nom', revokeAsk: (n: string) => `Révoquer ${n} ? Il perd l’accès tout de suite.`,
+    recTag: 'Reconnecté', recWell: (d: DeviceWord) => [`${startOf(d, thisDevice(d))} s’est reconnecté sans code, avec sa passkey, après`, 'une réinstallation de l’app. Si ce n’était pas toi, révoque-le.'], recAck: 'C’était bien moi',
+    attTag: 'Tentative refusée', attWell: (at: string, d: DeviceWord) => [`${at}, un autre appareil a tenté de prendre la place`, `${ofDevice(d)} avec sa passkey. Refusé : ${theDevice(d)} était connecté.`, `Si ce n’était pas toi, révoque ${thisDevice(d)}.`], attAck: 'Compris',
+    blocked: (n: number, since: string) => [`Reconnexion par passkey bloquée : ${n} vérifications`, `ont échoué depuis ${since}. Les appareils liés marchent,`, 'la liaison par code aussi.'], unblock: 'Débloquer',
+    alert: (n: string) => `${n} demande à se lier à ton PC`, alertCompare: 'comparer le code',
+    pairT: 'LIER UN APPAREIL', pairIntro: (login: string) => [`Un appareil connecté avec @${login}`, 'demande l’accès à tes agents.'], pairCode: 'Code de liaison',
+    pairCheck: (label: string) => [`Vérifie que ${theDevice({ text: label, named: false })} affiche exactement ce code.`, 'Approuve ici, puis confirme sur le téléphone.'], pairWarn: ['Si les codes diffèrent, refuse : quelqu’un', 'd’autre tente de se lier.'], expires: (mmss: string) => `expire dans ${mmss}`,
+    replaceL: (n: string) => `Remplacer l’ancien « ${n} »`, replaceH: (seen: string, linked: string) => `${seen} · ${linked} · il sera révoqué`,
+    approve: 'approuver', deny: 'refuser', later: 'fermer', untick: 'décocher',
+    approvedL: (label: string) => ['Approuvé sur ce PC.', `Confirme maintenant sur ${theDevice({ text: label, named: false })}.`], linkedL: (label: string) => [`${label} est lié.`, 'Il apparaît dans Réglages › Accès mobile.'], expiredL: ['La demande a expiré.', 'Recommence depuis le téléphone.'], close: 'fermer',
+    copiedT: 'Copié', revokedT: (n: string) => `${n} est révoqué.`, recToast: (d: DeviceWord) => `${startOf(d, theDevice(d))} s’est reconnecté avec sa passkey`,
+    refusedToast: (d: DeviceWord) => `Reconnexion avec la passkey ${ofDevice(d)} refusée : il est connecté`,
+    someDevice: 'appareil',
+    refusedOffline: 'Le daemon local est hors ligne : rien n’a changé.', refusedOutdated: 'Le daemon local est trop ancien pour l’accès mobile : mets-le à jour.',
+    keys: { move: 'naviguer', change: 'changer', open: 'ouvrir', back: 'retour', rename: 'renommer', revoke: 'révoquer', save: 'enregistrer', cancel: 'annuler', copy: 'copier le code', yes: 'oui', no: 'non', settings: 'réglages', help: 'aide', pair: 'lier' }
   },
   cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)', movedToTab: 'ledge tui s’ouvre dans l’onglet Ledge.', loadingProfile: 'Windows Terminal charge le profil Ledge…' }
 };

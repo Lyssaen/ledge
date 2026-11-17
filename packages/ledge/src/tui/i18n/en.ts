@@ -2,6 +2,14 @@ import { actionCopy } from '@ledge/ui/chat/actionCopy';
 import { pointCopy } from '@ledge/ui/chat/pointCopy';
 import { formatBytes } from '@ledge/ui/images/encode';
 import type { Messages } from './lang.js';
+import type { DeviceWord } from '@ledge/fleet';
+
+/** A device in a sentence: a name the user gave is said bare, a model takes « the » or « this ». */
+const theDevice = (d: DeviceWord) => (d.named ? d.text : `the ${d.text}`);
+const thisDevice = (d: DeviceWord) => (d.named ? d.text : `this ${d.text}`);
+const upFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** A device said at the start of a sentence: a model takes a capital, a name the user gave stays as written. */
+const startOf = (d: DeviceWord, s: string) => (d.named ? s : upFirst(s));
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
 
@@ -144,7 +152,7 @@ export const en: Messages = {
     efforts: { low: 'low', medium: 'medium', high: 'high', xhigh: 'extra high', max: 'max', ultra: 'ultra' } as Record<string, string>,
     limits: 'LIMITS'
   },
-  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig', rigLaunch: 'Launch a rig', screens: 'switch screen', field: 'Typing', wordBefore: 'delete the word before',
+  help: { title: 'Help', global: 'Everywhere', overview: 'Overview', session: 'Session', ask: 'Ask Ledge', launch: 'New session', settings: 'Settings', openrig: 'OpenRig', rigLaunch: 'Launch a rig', screens: 'switch screen', link: 'link a device', field: 'Typing', wordBefore: 'delete the word before',
     writeHere: 'write to this session', replySender: 'reply to the sender of the selected message', rigRaw: "show or hide an OpenRig message's raw text",
     more: (above, below) => [above ? `↑ ${above} above` : '', below ? `↓ ${below} below` : ''].filter(Boolean).join(' · ') },
   images: {
@@ -311,6 +319,43 @@ export const en: Messages = {
   small: {
     tooSmall: (w, h) => `Window too small: ${w}×${h}`, atLeast: (w, h) => `needs at least ${w}×${h}`,
     waits: (name, question) => (question ? `${name} has a question` : `${name} waits for your approval`), kept: 'draft kept'
+  },
+  mobile: {
+    title: 'SETTINGS › MOBILE ACCESS', row: 'Mobile access',
+    sumOnline: (n, p) => `Online · ${n} device${n === 1 ? '' : 's'}${p ? ` · ${p} request${p === 1 ? '' : 's'}` : ''}`, sumOffline: 'Offline', sumUnavailable: 'unavailable',
+    access: 'Access', on: 'On', offW: 'Off', accessH: 'outgoing, no port opened',
+    relay: 'Relay', relayH: 'the address your devices open', relayBad: 'Refused: https:// (http:// for localhost), no path.',
+    account: 'GitHub account', signin: 'Sign in with GitHub', signinAgain: 'Sign in with GitHub', signout: 'sign out', otherAccount: 'Try another account', reconnect: 'Sign in again',
+    statusL: 'Status', online: 'Connected to the relay', idle: 'Not connected yet', idleH: 'starts once the account is confirmed', retryIn: s => `Offline · retrying in ${s} s`, retry: 'retry', connecting: 'Connecting…',
+    term: 'Type in terminals', no: 'No', termH: 'a linked device can take over',
+    flowLead: 'Open', flowAnd: 'and enter this code:', flowWait: min => `Waiting for GitHub… · expires in ${min} min`,
+    notAllowed: ['This GitHub account is not allowed on this relay.', 'Ask its administrator to add it.'],
+    signedOut: { other_pc: ['This PC was signed out: another PC signed in', 'with this account. An account has one PC.'], session_invalid: ['This PC was signed out: the session is no longer valid.'] },
+    signinEnded: { failed: 'The GitHub sign-in failed. Check the relay, then try again.', expired: 'The code expired. Start the sign-in again.', denied: 'The sign-in was refused on GitHub.' },
+    unreachable: ['The relay does not answer. Check the address and your', 'connection; Ledge retries by itself.'],
+    unavailable: 'Mobile access did not start on this PC:', outdated: 'The local daemon is too old for mobile access: update it.',
+    localOffline: 'The local daemon is offline.',
+    offWell: 'Access is off: your linked devices cannot connect.',
+    devices: n => `DEVICES · ${n}`, devicesNone: 'DEVICES',
+    empty: host => ['No linked device. On your phone or tablet, open', `${host} and sign in with the same GitHub account.`, 'A code will show here and on the device.'],
+    todayAt: time => `Today at ${time}`, dateAt: (date, time) => `${date} at ${time}`,
+    asks: 'asks for access', compare: 'compare the code',
+    seenNow: 'seen just now', seenYesterday: 'seen yesterday', seenAgo: a => `seen ${a} ago`, linkedOn: d => `linked ${d}`,
+    nameLabel: 'Name', revokeAsk: n => `Revoke ${n}? It loses access at once.`,
+    recTag: 'Reconnected', recWell: d => [`${startOf(d, thisDevice(d))} reconnected without a code, with its passkey, after`, 'the app was reinstalled. If it was not you, revoke it.'], recAck: 'That was me',
+    attTag: 'Attempt refused', attWell: (at, d) => [`${at}, another device tried to take ${thisDevice(d)}’s place`, `with its passkey. Refused: ${theDevice(d)} was connected.`, `If it was not you, revoke ${thisDevice(d)}.`], attAck: 'Got it',
+    blocked: (n, since) => [`Passkey reconnection blocked: ${n} checks failed`, `since ${since}. Linked devices keep working, and so`, 'does linking with a code.'], unblock: 'Unblock',
+    alert: n => `${n} asks to link to your PC`, alertCompare: 'compare the code',
+    pairT: 'LINK A DEVICE', pairIntro: login => [`A device signed in as @${login}`, 'asks for access to your agents.'], pairCode: 'Pairing code',
+    pairCheck: label => [`Check that the ${label} shows exactly this code.`, 'Approve here, then confirm on the phone.'], pairWarn: ['If the codes differ, deny: someone else', 'is trying to link.'], expires: mmss => `expires in ${mmss}`,
+    replaceL: n => `Replace the old “${n}”`, replaceH: (seen, linked) => `${seen} · ${linked} · will be revoked`,
+    approve: 'approve', deny: 'deny', later: 'close', untick: 'untick',
+    approvedL: label => ['Approved on this PC.', `Confirm on the ${label} now.`], linkedL: label => [`${label} is linked.`, 'It shows in Settings › Mobile access.'], expiredL: ['The request expired.', 'Start again from the phone.'], close: 'close',
+    copiedT: 'Copied', revokedT: n => `${n} is revoked.`, recToast: d => `${startOf(d, theDevice(d))} reconnected with its passkey`,
+    refusedToast: d => `Passkey reconnection as ${theDevice(d)} refused: it’s connected`,
+    someDevice: 'device',
+    refusedOffline: 'The local daemon is offline: nothing changed.', refusedOutdated: 'The local daemon is too old for mobile access: update it.',
+    keys: { move: 'move', change: 'change', open: 'open', back: 'back', rename: 'rename', revoke: 'revoke', save: 'save', cancel: 'cancel', copy: 'copy the code', yes: 'yes', no: 'no', settings: 'settings', help: 'help', pair: 'link' }
   },
   cli: { notTty: 'ledge tui: needs a terminal (stdin and stdout must be a TTY)', movedToTab: 'ledge tui opens in the Ledge tab.', loadingProfile: 'Windows Terminal is loading the Ledge profile…' }
 };

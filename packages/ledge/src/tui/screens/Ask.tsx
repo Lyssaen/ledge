@@ -18,6 +18,7 @@ import { Button } from '../ui/SessionCard.js';
 import { Lines } from '../ui/Lines.js';
 import { useThrottled } from '../ui/throttle.js';
 import { Field } from '../ui/Field.js';
+import { usePairingDialog } from '../ui/pairingDialog.js';
 import { TitledBox } from '../ui/TitledBox.js';
 import { ActionBox, appliable, deniable } from '../ui/ActionBox.js';
 
@@ -241,11 +242,16 @@ export function Ask() {
   // ctrl+c stops the answer being written; ctrl+n starts a new conversation (once confirmed, when there is one); tab goes
   // round, from the field to the cards, the conversation and back; PgUp PgDn scroll the conversation, from the field too;
   // alt+v pastes an image in the field, alt+o opens the conversation's newest.
+  const pairing = usePairingDialog();
+  const pairingOpen = useRef(false);
+  pairingOpen.current = pairing.id !== null;
   const latest = useRef({ asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view, ignored, draft, turnImages });
   latest.current = { asking, cards, focus, confirm, turns: d.chat.length, scroll, up, view, ignored, draft, turnImages };
   useInput((input, key) => {
     // Too small, nothing is drawn: esc is the app's.
     if (small) return;
+    // « Lier un appareil » open over the screen has the keys: tab, ctrl+n or ctrl+r would act unseen under it.
+    if (pairingOpen.current) return;
     const l = latest.current;
     if (l.confirm) return;
     if (key.ctrl && input === 'n') { if (l.turns === 0) client.send({ type: 'chat.reset' }); else setConfirm(true); return; }

@@ -1,16 +1,10 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import type { Fleet } from '@ledge/fleet';
+import { deviceWord, type Fleet } from '@ledge/fleet';
 import type { MobileState } from '@ledge/protocol';
 import { useI18n } from '../i18n/lang';
 import type { ToastAction } from '../shell/Toast';
 
-type Device = MobileState['devices'][number];
-
-/** A device as a sentence names it (docs/mockups/ledge-mobile-passkey, 5 and 6): the name the user gave, said bare, or else its
- *  model, the label's first part (`iPad` of `iPad · Safari`), which the copy gives an article (« l'iPad », « cet iPad »). */
-export interface DeviceWord { text: string; named: boolean }
-export const deviceWord = (d: Pick<Device, 'name' | 'label'> | undefined): DeviceWord | null =>
-  d === undefined ? null : d.name ? { text: d.name, named: true } : { text: d.label.split(' · ')[0] || d.label, named: false };
+export { deviceWord, type DeviceWord } from '@ledge/fleet';
 
 /** What a passkey recovery leaves for the user to look at: a device back that nobody said « C'était bien moi » for, another
  *  device refused its place, recovery blocked. The tab's dot (P10) stays as long as one does; its label names it (P18). */
