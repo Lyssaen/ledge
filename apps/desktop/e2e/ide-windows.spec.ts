@@ -70,6 +70,29 @@ test('a tab torn out of the window opens alone in a new window, which takes the 
   await pop.screenshot({ path: shot('lot9-popout.png') });
 });
 
+// A screen that says its primary pointer is coarse (a touch screen, some Windows set-ups): dockview's « auto » strategy then
+// drags with its pointer backend, mouse included, and no HTML5 drag ever ends — the tear-out and the new-group zone read one.
+test('on a screen whose primary pointer is coarse, a tab torn out still opens in a new window', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = window.matchMedia.bind(window);
+    window.matchMedia = (q: string) => {
+      if (q === '(pointer: coarse)' || q === '(pointer: fine)') {
+        const matches = q === '(pointer: coarse)';
+        return { matches, media: q, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false } as MediaQueryList;
+      }
+      return real(q);
+    };
+  });
+  await boot(page);
+  await open(page, 'Otto');
+  await open(page, 'Nova');
+  const popped = page.context().waitForEvent('page', { timeout: 10_000 });
+  await tearOut(page, tabOf(page, 'Nova'));
+  const pop = await popped;
+  await expect(tabOf(pop, 'Nova')).toBeVisible();
+  await expect(tabOf(page, 'Nova')).toHaveCount(0);
+});
+
 /** A tab of a detached window dragged onto the main window's group `into` (its centre). The mouse cannot cross pages here:
  *  the drag is the browser's events, dispatched where each would fire (dockview reads the panel from its own transfer). */
 async function bringBack(pop: Page, page: Page, name: string, into: Locator): Promise<void> {

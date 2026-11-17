@@ -592,9 +592,11 @@ export function DockHost({ ws, store, title, body, label, alert, onTabMenu, onNe
           lets it overflow the editing area. */}
       <div className={`ide-dock-scroll${dragging ? ' tab-dragging' : ''}`}>
         <div className="ide-dock-sized" style={{ minWidth: `${groups.length * GROUP_MIN_WIDTH}px` }}>
+          {/* HTML5 drags only: on a screen whose primary pointer reads as coarse, dockview's « auto » drags the mouse with its
+              pointer backend, whose drag never ends in a dragend nor a drop — the tear-out and the new-group zone read those. */}
           <DockviewReact className="ide-dockview" components={COMPONENTS} defaultTabComponent={PanelTab} watermarkComponent={GroupWatermark}
             prefixHeaderActionsComponent={LinkSquare} rightHeaderActionsComponent={StripTools} onReady={onReady} theme={THEME}
-            dndEdges={false} disableFloatingGroups messages={messages} />
+            dndEdges={false} dndStrategy="html5" disableFloatingGroups messages={messages} />
         </div>
         <div className="ide-dropnew" onDragOver={onZoneOver} onDrop={onZoneDrop}><span>{t.ide.dropNew[0]}<br />{t.ide.dropNew[1]}</span></div>
       </div>
