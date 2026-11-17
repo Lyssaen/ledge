@@ -280,9 +280,13 @@ export function createPaneHost(deps: PaneDeps): PaneHost {
     } finally { lock?.delete(w.id); }
   };
 
+  // Each turn of the chain types everything waiting when it runs, as one piece: a burst of mouse reports (a wheel, a program
+  // tracking every move) is one round trip to tmux, not one each. A turn finding nothing does nothing.
   const drain = (w: Watch) => {
-    const next = w.queued.splice(0);
-    for (const data of next) w.typing = w.typing.then(() => typeKeys(w, data)).catch(() => {});
+    w.typing = w.typing.then(() => {
+      const data = w.queued.splice(0).join('');
+      return data ? typeKeys(w, data) : undefined;
+    }).catch(() => {});
   };
 
   const onEvent = (w: Watch, e: Exclude<ControlEvent, { kind: 'reply' }>) => {

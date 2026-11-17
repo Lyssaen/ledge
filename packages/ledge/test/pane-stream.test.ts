@@ -92,6 +92,27 @@ describe('pane host', () => {
     expect(proc.written.at(-1)).toBe('send-keys -t %0 -H 78');
   });
 
+  it('types the inputs waiting together: a burst of wheel reports is one send-keys, in order', async () => {
+    vi.useFakeTimers();
+    const { h, reply, tmux } = host();
+    h.watch(reply, { id: 'a', tmuxName: 'ledge-a' }, { cols: 80, rows: 24 });
+    await settle();
+    const proc = tmux.procs[0]!;
+    const keys = () => proc.written.filter(l => l.startsWith('send-keys'));
+    h.input(reply, 'a', 'x');
+    h.input(reply, 'a', 'y');
+    h.input(reply, 'a', 'z');
+    await settle();
+    expect(keys()).toEqual(['send-keys -t %0 -H 78 79 7a']);
+    // An input arriving while a send-keys waits for tmux goes with the ones after it, not alone.
+    h.input(reply, 'a', '1');
+    await Promise.resolve(); await Promise.resolve();
+    h.input(reply, 'a', '2');
+    h.input(reply, 'a', '3');
+    await settle();
+    expect(keys().slice(1)).toEqual(['send-keys -t %0 -H 31', 'send-keys -t %0 -H 32 33']);
+  });
+
   it('a read-only watch neither resizes nor types, and the last sizing watch gives the window back', async () => {
     vi.useFakeTimers();
     const { h, reply, tmux } = host();
